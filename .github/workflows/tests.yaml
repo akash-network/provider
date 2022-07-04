@@ -1,0 +1,54 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-bins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: git fetch --prune --unshallow
+      - uses: c-py/action-dotenv-to-setenv@v3
+        with:
+          env-file: .env
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "${{ env.GOLANG_VERSION }}"
+      - run: make provider-services
+      - run: make docker-image
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: git fetch --prune --unshallow
+      - uses: c-py/action-dotenv-to-setenv@v3
+        with:
+          env-file: .env
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "${{ env.GOLANG_VERSION }}"
+      - run: make test-full
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: git fetch --prune --unshallow
+      - uses: c-py/action-dotenv-to-setenv@v3
+        with:
+          env-file: .env
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "${{ env.GOLANG_VERSION }}"
+      - run: make modvendor
+      - run: make build
+      - run: make test-vet
+      - name: lint all
+        run: make test-lint-all
+      - name: lint make-sublinters
+        run: make test-sublinters 

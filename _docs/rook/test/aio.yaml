@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: rook-aio
+  namespace: rook-ceph
+spec:
+  selector:
+    matchLabels:
+      name: rook-aio
+  template:
+    metadata:
+      labels:
+        name: rook-aio
+    spec:
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      initContainers:
+        - name: create-sysctl-file
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command: ['/bin/sh', '-c', 'echo fs.aio-max-nr=1048576 > /etc/sysctl.d/98-rook-ceph-aio.conf']
+          volumeMounts:
+            - name: sysctld
+              mountPath: /etc/sysctl.d
+        - name: run-sysctl
+          image: alpine:3.6
+          imagePullPolicy: IfNotPresent
+          command: ['/bin/sh', '-c', 'sysctl -w fs.aio-max-nr=1048576']
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: sysctld
+              mountPath: /etc/sysctl.d
+            - name: modifysys
+              mountPath: /sys
+      containers:
+        - name: rook-aio
+          image: busybox
+          imagePullPolicy: IfNotPresent
+          command: ['/bin/tail']
+          args: ['-f','/dev/null']
+          volumeMounts:
+            - name: sysctld
+              mountPath: /etc/sysctl.d
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: sysctld
+          hostPath:
+            path: /etc/sysctl.d
+        - name: modifysys
+          hostPath:
+            path: /sys

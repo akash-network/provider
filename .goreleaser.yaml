@@ -1,0 +1,115 @@
+env:
+  - GO111MODULE=on
+  - DOCKER_CLI_EXPERIMENTAL="enabled"
+builds:
+  - id: provider-services-darwin
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - amd64
+      - arm64
+    goos:
+      - darwin
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "{{ .Env.STRIP_FLAGS }}"
+  - id: provider-services-linux
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - amd64
+      - arm64
+    goos:
+      - linux
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "{{ .Env.STRIP_FLAGS }}"
+universal_binaries:
+  - id: darwin-universal
+    ids:
+      - provider-services-darwin
+    replace: true
+archives:
+  - id: provider-services
+    builds:
+      - darwin-universal
+      - provider-services-linux
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: true
+    format: zip
+    files:
+      - none*
+
+dockers:
+  - dockerfile: Dockerfile
+    use: buildx
+    goarch: amd64
+    goos: linux
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url={{.GitURL}}
+      - --label=org.opencontainers.image.source={{.GitURL}}
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+    image_templates:
+      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-amd64'
+      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'ghcr.io/ovrclk/{{ .ProjectName }}:latest-amd64'
+  - dockerfile: Dockerfile
+    use: buildx
+    goarch: arm64
+    goos: linux
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url={{.GitURL}}
+      - --label=org.opencontainers.image.source={{.GitURL}}
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+    image_templates:
+      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-arm64'
+      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-arm64'
+      - 'ghcr.io/ovrclk/{{ .ProjectName }}:latest-arm64'
+docker_manifests:
+  - name_template: ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}
+    image_templates:
+      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-amd64
+      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-arm64
+  - name_template: ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}
+    image_templates:
+      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-arm64
+  - name_template: ghcr.io/ovrclk/{{ .ProjectName }}:latest
+    image_templates:
+      - ghcr.io/ovrclk/{{ .ProjectName }}:latest-amd64
+      - ghcr.io/ovrclk/{{ .ProjectName }}:latest-arm64
+
+nfpms:
+  - vendor: "Overclock Labs Inc."
+    homepage: "https://ovrclk.com"
+    maintainer: "Overclock Labs Inc. <hello@akash.network>"
+    formats:
+      - deb
+      - rpm
+    license: Apache 2.0
+
+release:
+  github:
+    owner: ovrclk
+    name: provider-services
+  prerelease: auto
+  mode: replace
+  draft: false

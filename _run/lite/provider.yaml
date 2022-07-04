@@ -1,0 +1,4 @@
+host: https://localhost:8443
+attributes:
+  - key: region
+    value: us-west

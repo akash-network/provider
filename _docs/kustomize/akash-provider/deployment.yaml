@@ -1,0 +1,376 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akash-provider
+spec:
+  selector:
+    matchLabels:
+      app: akash-provider
+  template:
+    metadata:
+      labels:
+        app: akash-provider
+    spec:
+      serviceAccountName: akash-provider
+      initContainers:
+        - name: import-keys
+          image: ghcr.io/ovrclk/akash:stable
+          imagePullPolicy: IfNotPresent
+          command: [ "/bin/sh" , "/boot/run.sh" ]
+          env:
+            ##
+            # boot config
+            ##
+
+            # location of key export. must contain two files:
+            #
+            # key.txt:      exported wallet key
+            # key-pass.txt: password used to encrypt exported key
+            - name: AKASH_BOOT_KEYS
+              value: /boot-keys
+            - name: AKASH_HOME
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: home
+            - name: AKASH_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: from
+            - name: AKASH_KEYRING_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: keyring-backend
+          volumeMounts:
+            - name: boot
+              mountPath: /boot
+              readOnly: true
+            - name: keys
+              mountPath: /boot-keys
+              readOnly: true
+      containers:
+        - name: akash-provider
+          image: ghcr.io/ovrclk/provider-services:stable
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - --cluster-k8s
+          env:
+            ##
+            # cosmos-sdk client config
+            ##
+
+            # --home
+            - name: AP_HOME
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: home
+
+            # --from
+            - name: AP_FROM
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: from
+
+            # --node
+            - name: AP_NODE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: node
+
+            # --chain-id
+            - name: AP_CHAIN_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: chain-id
+
+            # --keyring-backend
+            - name: AP_KEYRING_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: keyring-backend
+
+            # --trust-node
+            - name: AP_TRUST_NODE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-client-config
+                  key: trust-node
+
+            ##
+            # akash-provider config
+            ##
+
+            - name: AP_AUTH_PEM
+              valueFrom:
+                secretKeyRef:
+                  name: akash-provider-keys
+                  key: provider-cert.pem
+
+            # include unique hostnames for apps
+            - name: AP_DEPLOYMENT_RUNTIME_CLASS
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: deployment-runtime-class
+                  optional: true
+
+            # include unique hostnames for apps
+            - name: AP_DEPLOYMENT_INGRESS_STATIC_HOSTS
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: ingress-static-hosts
+                  optional: true
+
+            # domain to host unique app hostnames on
+            # (required if AKASH_DEPLOYMENT_INGRESS_STATIC_HOSTS is "true")
+            - name: AP_DEPLOYMENT_INGRESS_DOMAIN
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: ingress-domain
+                  optional: true
+
+            # return load balancer host in lease status command
+            - name: AP_DEPLOYMENT_INGRESS_EXPOSE_LB_HOSTS
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: ingress-expose-lb-hosts
+                  optional: true
+
+            # return load balancer host in lease status command
+            - name: AP_DEPLOYMENT_NETWORK_POLICIES_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: network-policies-enabled
+                  optional: true
+
+            - name: AP_MAX_UNIT_CPU
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-unit-cpu
+                  optional: true
+
+            - name: AP_MAX_UNIT_MEMORY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-unit-memory
+                  optional: true
+
+            - name: AP_MAX_UNIT_STORAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-unit-storage
+                  optional: true
+
+            - name: AP_MAX_UNIT_COUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-unit-count
+                  optional: true
+
+            - name: AP_MAX_UNIT_PRICE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-unit-price
+                  optional: true
+
+            - name: AP_MIN_UNIT_CPU
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: min-unit-cpu
+                  optional: true
+
+            - name: AP_MIN_UNIT_MEMORY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: min-unit-memory
+                  optional: true
+
+            - name: AP_MIN_UNIT_STORAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: min-unit-storage
+                  optional: true
+
+            - name: AP_MIN_UNIT_COUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: min-unit-count
+                  optional: true
+
+            - name: AP_MIN_UNIT_PRICE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: min-unit-price
+                  optional: true
+
+            - name: AP_MAX_GROUP_COUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-group-count
+                  optional: true
+
+            - name: AP_MAX_GROUP_UNITS
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-group-units
+                  optional: true
+
+            - name: AP_MAX_GROUP_CPU
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-group-cpu
+                  optional: true
+
+            - name: AP_MAX_GROUP_MEMORY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-group-memory
+                  optional: true
+
+            - name: AP_MAX_GROUP_STORAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: max-group-storage
+                  optional: true
+
+            - name: AP_MEM_PRICE_MIN
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: mem-price-min
+                  optional: true
+
+            - name: AP_CLUSTER_PUBLIC_HOSTNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: cluster-public-hostname
+                  optional: true
+
+            - name: AP_CLUSTER_NODE_PORT_QUANTITY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: cluster-node-port-quantity
+                  optional: true
+
+            - name: AP_CLUSTER_WAIT_READY_DURATION
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: cluster_wait-ready-duration
+                  optional: true
+
+            - name: AP_INVENTORY_RESOURCE_POLL_PERIOD
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: inventory-resource-poll-period
+                  optional: true
+
+            - name: AP_INVENTORY_RESOURCE_DEBUG_FREQUENCY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: inventory-resource-debug-freq
+                  optional: true
+
+            - name: AP_BID_PRICE_STRATEGY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-price-strategy
+                  optional: true
+
+            - name: AP_BID_PRICE_CPU_SCALE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-cpu-scale
+                  optional: true
+
+            - name: AP_BID_PRICE_MEMORY_SCALE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-memory-scale
+                  optional: true
+
+            - name: AP_BID_PRICE_STORAGE_SCALE
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-storage-scale
+                  optional: true
+
+            - name: AP_BID_PRICE_SCRIPT_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-script-path
+                  optional: true
+
+            - name: AP_BID_PRICE_SCRIPT_PROCESS_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-script-process-limit
+                  optional: true
+
+            - name: AP_BID_PRICE_SCRIPT_PROCESS_TIMEOUT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: bid-script-process-timeout
+                  optional: true
+
+            - name: AP_IP_OPERATOR
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: ip-operator
+                  optional: true
+          ports:
+            - name: gateway
+              containerPort: 8443
+          volumeMounts:
+            - name: boot
+              mountPath: /boot
+              readOnly: true
+            - name: keys
+              mountPath: /boot-keys
+              readOnly: true
+      volumes:
+        - name: boot
+          configMap:
+            name: akash-provider-boot
+        - name: keys
+          secret:
+            secretName: akash-provider-keys

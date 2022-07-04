@@ -1,0 +1,4 @@
+host: https://akash-provider.localhost
+attributes:
+  - key: region
+    value: us-west
