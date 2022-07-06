@@ -9,6 +9,8 @@ UNAME_OS                   := $(shell uname -s)
 UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 UNAME_ARCH                 := $(shell uname -m)
 
+GO_MOD_NAME                := $(shell go list -m)
+
 PROVIDER_SERVICES          ?= $(AP_DEVCACHE_BIN)/provider-services
 BINS                       := $(PROVIDER_SERVICES) akash
 
@@ -19,7 +21,6 @@ PATH                         := "$(PATH):$(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_B
 
 AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "github.com/ovrclk/akash")
 AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/ovrclk/akash")
-
 AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/ovrclk/akash | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
 PROTOC_SWAGGER_GEN_VERSION   := $(GRPC_GATEWAY_VERSION)

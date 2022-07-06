@@ -21,17 +21,19 @@ jobs:
       - uses: c-py/action-dotenv-to-setenv@v3
         with:
           env-file: .env
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
+        uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
       - name: branch name
         id: branch_name
         run: |
           echo ::set-output name=RELEASE_TAG::${GITHUB_REF#refs/tags/}
+      - name: show workdir content
+        run: git rev-parse  --is-inside-work-tree
       - if: (github.ref == 'refs/heads/main')
         name: release dry-run GORELEASER_SKIP_VALIDATE=true
         run: make release-dry-run GORELEASER_SKIP_VALIDATE=true

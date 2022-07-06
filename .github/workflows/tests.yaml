@@ -16,7 +16,7 @@ jobs:
       - uses: c-py/action-dotenv-to-setenv@v3
         with:
           env-file: .env
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
       - run: make provider-services
@@ -31,7 +31,7 @@ jobs:
       - uses: c-py/action-dotenv-to-setenv@v3
         with:
           env-file: .env
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
       - run: make test-full
@@ -45,7 +45,7 @@ jobs:
       - uses: c-py/action-dotenv-to-setenv@v3
         with:
           env-file: .env
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
       - run: make modvendor

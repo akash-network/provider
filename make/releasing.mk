@@ -1,6 +1,6 @@
 GORELEASER_SKIP_VALIDATE ?= false
 GORELEASER_DEBUG         ?= false
-GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser
+GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser:$(GORELEASER_VERSION)
 
 ifeq ($(OS),Windows_NT)
 $(error Windows, really?)
@@ -39,8 +39,8 @@ docker-image:
 		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
 		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
-		-v $(shell pwd):/go/src/github.com/ovrclk/provider-services \
-		-w /go/src/github.com/ovrclk/provider-services \
+		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
+		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
 		-f .goreleaser-docker.yaml \
 		--debug=$(GORELEASER_DEBUG) \
@@ -64,15 +64,15 @@ release-dry-run: modvendor gen-changelog
 		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
 		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
-		-v $(shell pwd):/go/src/github.com/ovrclk/provider-services \
-		-w /go/src/github.com/ovrclk/provider-services \
+		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
+		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
 		-f "$(GORELEASER_CONFIG)" \
 		--skip-validate=$(GORELEASER_SKIP_VALIDATE) \
 		--debug=$(GORELEASER_DEBUG) \
 		--rm-dist \
 		--skip-publish \
-		--release-notes=/go/src/github.com/ovrclk/provider-services/.cache/changelog.md
+		--release-notes=/go/src/$(GO_MOD_NAME)/.cache/changelog.md
 
 .PHONY: release
 release: modvendor gen-changelog
@@ -92,10 +92,10 @@ release: modvendor gen-changelog
 		-e HOMEBREW_CUSTOM="$(GORELEASER_HOMEBREW_CUSTOM)" \
 		--env-file .release-env \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v $(shell pwd):/go/src/github.com/ovrclk/provider-services \
-		-w /go/src/github.com/ovrclk/provider-services \
+		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
+		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
 		-f "$(GORELEASER_CONFIG)" release \
 		--debug=$(GORELEASER_DEBUG) \
 		--rm-dist \
-		--release-notes=/go/src/github.com/ovrclk/provider-services/.cache/changelog.md
+		--release-notes=/go/src/$(GO_MOD_NAME)/.cache/changelog.md

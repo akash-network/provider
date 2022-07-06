@@ -12,3 +12,4 @@ RUN \
 EXPOSE 8443
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/bin/provider-services"]
+CMD ["--help"]
