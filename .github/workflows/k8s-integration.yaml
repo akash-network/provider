@@ -12,8 +12,9 @@ jobs:
       KIND_NAME: kind
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - run: git fetch --prune --unshallow
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
       - uses: c-py/action-dotenv-to-setenv@v3
         with:
           env-file: .env
