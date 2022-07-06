@@ -186,5 +186,3 @@ replace (
 	github.com/tendermint/tendermint => github.com/ovrclk/tendermint v0.34.19-patches
 	google.golang.org/grpc => google.golang.org/grpc v1.33.2
 )
-
-replace github.com/ovrclk/akash => /Users/amr/go/src/github.com/ovrclk/akash
