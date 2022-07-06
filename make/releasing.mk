@@ -38,9 +38,8 @@ docker-image:
 		-e BUILD_TAGS="$(BUILD_TAGS)" \
 		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
-		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v `pwd`:/go/src/github.com/ovrclk/provider-services \
-		$(AKASH_BIND_LOCAL) \
+		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
+		-v $(shell pwd):/go/src/github.com/ovrclk/provider-services \
 		-w /go/src/github.com/ovrclk/provider-services \
 		$(GORELEASER_IMAGE) \
 		-f .goreleaser-docker.yaml \
@@ -64,9 +63,8 @@ release-dry-run: modvendor gen-changelog
 		-e BUILD_TAGS="$(BUILD_TAGS)" \
 		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
-		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v `pwd`:/go/src/github.com/ovrclk/provider-services \
-		-v /Users/amr/go/src:/Users/amr/go/src \
+		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
+		-v $(shell pwd):/go/src/github.com/ovrclk/provider-services \
 		-w /go/src/github.com/ovrclk/provider-services \
 		$(GORELEASER_IMAGE) \
 		-f "$(GORELEASER_CONFIG)" \
@@ -94,7 +92,7 @@ release: modvendor gen-changelog
 		-e HOMEBREW_CUSTOM="$(GORELEASER_HOMEBREW_CUSTOM)" \
 		--env-file .release-env \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v `pwd`:/go/src/github.com/ovrclk/provider-services \
+		-v $(shell pwd):/go/src/github.com/ovrclk/provider-services \
 		-w /go/src/github.com/ovrclk/provider-services \
 		$(GORELEASER_IMAGE) \
 		-f "$(GORELEASER_CONFIG)" release \
