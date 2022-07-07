@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"
+	atestutil "github.com/ovrclk/akash/testutil"
 )
 
 // RandManifestGenerator generates a manifest with random values
@@ -23,7 +24,7 @@ func (mg manifestGeneratorRand) Manifest(t testing.TB) manifest.Manifest {
 func (mg manifestGeneratorRand) Group(t testing.TB) manifest.Group {
 	t.Helper()
 	return manifest.Group{
-		Name: Name(t, "manifest-group"),
+		Name: atestutil.Name(t, "manifest-group"),
 		Services: []manifest.Service{
 			mg.Service(t),
 		},
@@ -37,7 +38,7 @@ func (mg manifestGeneratorRand) Service(t testing.TB) manifest.Service {
 		Image:     "quay.io/ovrclk/demo-app",
 		Args:      []string{"run"},
 		Env:       []string{"AKASH_TEST_SERVICE=true"},
-		Resources: ResourceUnits(t),
+		Resources: atestutil.ResourceUnits(t),
 		Count:     rand.Uint32(), // nolint: gosec
 		Expose: []manifest.ServiceExpose{
 			mg.ServiceExpose(t),
@@ -53,7 +54,7 @@ func (mg manifestGeneratorRand) ServiceExpose(t testing.TB) manifest.ServiceExpo
 		Service:      "svc",
 		Global:       true,
 		Hosts: []string{
-			Hostname(t),
+			atestutil.Hostname(t),
 		},
 	}
 }

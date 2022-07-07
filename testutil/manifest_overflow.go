@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"
+	atestutil "github.com/ovrclk/akash/testutil"
 	types "github.com/ovrclk/akash/types/v1beta2"
 )
 
@@ -23,7 +24,7 @@ func (mg manifestGeneratorOverflow) Manifest(t testing.TB) manifest.Manifest {
 func (mg manifestGeneratorOverflow) Group(t testing.TB) manifest.Group {
 	t.Helper()
 	return manifest.Group{
-		Name: Name(t, "manifest-group"),
+		Name: atestutil.Name(t, "manifest-group"),
 		Services: []manifest.Service{
 			mg.Service(t),
 		},
@@ -66,7 +67,7 @@ func (mg manifestGeneratorOverflow) ServiceExpose(t testing.TB) manifest.Service
 		Service:      "svc",
 		Global:       true,
 		Hosts: []string{
-			Hostname(t),
+			atestutil.Hostname(t),
 		},
 	}
 }
