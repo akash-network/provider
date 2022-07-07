@@ -29,6 +29,7 @@ import (
 	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
 	pmmock "github.com/ovrclk/provider-services/manifest/mocks"
 	pmock "github.com/ovrclk/provider-services/mocks"
+	ptestutil "github.com/ovrclk/provider-services/testutil"
 )
 
 func Test_router_Status(t *testing.T) {
@@ -350,7 +351,7 @@ func withServer(t testing.TB, addr sdk.Address, pclient provider.Client, qclient
 		certs = append(certs, crt.Cert...)
 	}
 
-	server := testutil.NewServer(t, qclient, router, certs)
+	server := ptestutil.NewServer(t, qclient, router, certs)
 	defer server.Close()
 
 	host := "https://" + server.Listener.Addr().String()
