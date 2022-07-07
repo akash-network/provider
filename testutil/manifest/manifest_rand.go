@@ -10,7 +10,7 @@ import (
 )
 
 // RandManifestGenerator generates a manifest with random values
-var RandManifestGenerator ManifestGenerator = manifestGeneratorRand{}
+var RandManifestGenerator Generator = manifestGeneratorRand{}
 
 type manifestGeneratorRand struct{}
 

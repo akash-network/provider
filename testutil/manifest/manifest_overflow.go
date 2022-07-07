@@ -10,7 +10,7 @@ import (
 )
 
 // OverflowManifestGenerator generates a manifest maximum integer values
-var OverflowManifestGenerator ManifestGenerator = manifestGeneratorOverflow{}
+var OverflowManifestGenerator Generator = manifestGeneratorOverflow{}
 
 type manifestGeneratorOverflow struct{}
 

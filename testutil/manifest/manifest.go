@@ -10,10 +10,10 @@ var (
 	// DefaultManifestGenerator is the default test manifest generator
 	DefaultManifestGenerator = RandManifestGenerator
 
-	// ManifestGenerators is a list of all available manifest generators
-	ManifestGenerators = []struct {
+	// Generators is a list of all available manifest generators
+	Generators = []struct {
 		Name      string
-		Generator ManifestGenerator
+		Generator Generator
 	}{
 		{"overflow", OverflowManifestGenerator},
 		{"random", RandManifestGenerator},
@@ -21,8 +21,8 @@ var (
 	}
 )
 
-// ManifestGenerator is an interface for generating test manifests
-type ManifestGenerator interface {
+// Generator is an interface for generating test manifests
+type Generator interface {
 	Manifest(t testing.TB) manifest.Manifest
 	Group(t testing.TB) manifest.Group
 	Service(t testing.TB) manifest.Service

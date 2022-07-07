@@ -12,8 +12,7 @@ import (
 )
 
 func Test_Manifest_encoding(t *testing.T) {
-	for _, spec := range mtestutil.ManifestGenerators {
-
+	for _, spec := range mtestutil.Generators {
 		// ensure decode(encode(obj)) == obj
 
 		var (

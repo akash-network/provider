@@ -10,7 +10,7 @@ import (
 )
 
 // AppManifestGenerator represents a real-world, deployable configuration.
-var AppManifestGenerator ManifestGenerator = manifestGeneratorApp{}
+var AppManifestGenerator Generator = manifestGeneratorApp{}
 
 type manifestGeneratorApp struct{}
 
