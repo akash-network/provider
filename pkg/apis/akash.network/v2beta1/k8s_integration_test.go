@@ -19,12 +19,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
-	"github.com/ovrclk/akash/testutil"
+	atestutil "github.com/ovrclk/akash/testutil"
 
 	clusterutil "github.com/ovrclk/provider-services/cluster/util"
-
 	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
 	akashclient "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
+	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
 )
 
 func TestWriteRead(t *testing.T) {
@@ -34,11 +34,11 @@ func TestWriteRead(t *testing.T) {
 		client, err := akashclient.NewForConfig(kcfg)
 		require.NoError(t, err)
 
-		for _, spec := range testutil.ManifestGenerators {
+		for _, spec := range mtestutil.Generators {
 			// ensure decode(encode(obj)) == obj
 
 			var (
-				lid   = testutil.LeaseID(t)
+				lid   = atestutil.LeaseID(t)
 				group = spec.Generator.Group(t)
 			)
 
