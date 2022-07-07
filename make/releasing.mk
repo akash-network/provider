@@ -86,6 +86,7 @@ release: modvendor gen-changelog
 		-e LINKMODE="$(GO_LINKMODE)" \
 		-e HOMEBREW_NAME="$(GORELEASER_HOMEBREW_NAME)" \
 		-e HOMEBREW_CUSTOM="$(GORELEASER_HOMEBREW_CUSTOM)" \
+		-e GITHUB_TOKEN="$(GITHUB_TOKEN)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
