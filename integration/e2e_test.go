@@ -544,7 +544,7 @@ func getKubernetesIP() string {
 
 func (s *E2EContainerToContainer) TestE2EContainerToContainer() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-c2c.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-c2c.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -617,7 +617,7 @@ func (s *E2EContainerToContainer) TestE2EContainerToContainer() {
 
 func (s *E2EAppNodePort) TestE2EAppNodePort() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-nodeport.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-nodeport.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -738,7 +738,7 @@ portLoop:
 
 func (s *E2EDeploymentUpdate) TestE2EDeploymentUpdate() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-updateA.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-updateA.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -806,7 +806,7 @@ func (s *E2EDeploymentUpdate) TestE2EDeploymentUpdate() {
 	appURL := fmt.Sprintf("http://%s:%s/", s.appHost, s.appPort)
 	queryAppWithHostname(s.T(), appURL, 50, "testupdatea.localhost")
 
-	deploymentPath, err = filepath.Abs("../x/deployment/testdata/deployment-v2-updateB.yaml")
+	deploymentPath, err = filepath.Abs("../testdata/deployment/deployment-v2-updateB.yaml")
 	s.Require().NoError(err)
 
 	res, err = deploycli.TxUpdateDeploymentExec(s.validator.ClientCtx,
@@ -834,7 +834,7 @@ func (s *E2EDeploymentUpdate) TestE2EDeploymentUpdate() {
 
 func (s *E2EApp) TestE2EApp() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2.yaml")
 	s.Require().NoError(err)
 
 	cctxJSON := s.validator.ClientCtx.WithOutputFormat("json")
@@ -1010,7 +1010,7 @@ func (s *E2EApp) TestE2EApp() {
 
 func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -1148,7 +1148,7 @@ func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
 
 func (s *E2EMigrateHostname) TestE2EMigrateHostname() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-migrate.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-migrate.yaml")
 	s.Require().NoError(err)
 
 	cctxJSON := s.validator.ClientCtx.WithOutputFormat("json")
@@ -1391,7 +1391,7 @@ func (s *E2EMigrateHostname) TestE2EMigrateHostname() {
 
 func (s *E2EIPAddress) TestIPAddressLease() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-ip-endpoint.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-ip-endpoint.yaml")
 	s.Require().NoError(err)
 
 	cctxJSON := s.validator.ClientCtx.WithOutputFormat("json")
