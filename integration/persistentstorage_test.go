@@ -34,7 +34,7 @@ type E2EPersistentStorageDeploymentUpdate struct {
 }
 
 func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-storage-default.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-storage-default.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -136,7 +136,7 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 }
 
 func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-storage-beta2.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-storage-beta2.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -238,7 +238,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 
 func (s *E2EPersistentStorageDeploymentUpdate) TestDeploymentUpdate() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../x/deployment/testdata/deployment-v2-storage-updateA.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-storage-updateA.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
@@ -306,7 +306,7 @@ func (s *E2EPersistentStorageDeploymentUpdate) TestDeploymentUpdate() {
 	appURL := fmt.Sprintf("http://%s:%s/", s.appHost, s.appPort)
 	queryAppWithHostname(s.T(), appURL, 50, "testupdatea.localhost")
 
-	deploymentPath, err = filepath.Abs("../x/deployment/testdata/deployment-v2-storage-updateB.yaml")
+	deploymentPath, err = filepath.Abs("../testdata/deployment/deployment-v2-storage-updateB.yaml")
 	s.Require().NoError(err)
 
 	res, err = deploycli.TxUpdateDeploymentExec(s.validator.ClientCtx,

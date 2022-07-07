@@ -1,6 +1,3 @@
-//go:build !mainnet
-// +build !mainnet
-
 package integration
 
 import (
@@ -1547,7 +1544,8 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2EJWTServer))
-	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+	// fixme engineering#357
+	// suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 
 func (s *IntegrationTestSuite) waitForBlocksCommitted(height int) error {
