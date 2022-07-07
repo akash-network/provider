@@ -76,10 +76,6 @@ release-dry-run: modvendor gen-changelog
 
 .PHONY: release
 release: modvendor gen-changelog
-	@if [ ! -f ".release-env" ]; then \
-		echo "\033[91m.release-env is required for release\033[0m";\
-		exit 1;\
-	fi
 	docker run \
 		--rm \
 		-e STABLE=$(IS_STABLE) \
@@ -90,7 +86,6 @@ release: modvendor gen-changelog
 		-e LINKMODE="$(GO_LINKMODE)" \
 		-e HOMEBREW_NAME="$(GORELEASER_HOMEBREW_NAME)" \
 		-e HOMEBREW_CUSTOM="$(GORELEASER_HOMEBREW_CUSTOM)" \
-		--env-file .release-env \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
