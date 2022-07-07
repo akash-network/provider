@@ -76,10 +76,6 @@ release-dry-run: modvendor gen-changelog
 
 .PHONY: release
 release: modvendor gen-changelog
-	@if [ ! -f ".release-env" ]; then \
-		echo "\033[91m.release-env is required for release\033[0m";\
-		exit 1;\
-	fi
 	docker run \
 		--rm \
 		-e STABLE=$(IS_STABLE) \
