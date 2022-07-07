@@ -15,7 +15,7 @@ import (
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 
 	providerCmd "github.com/ovrclk/provider-services/cmd/provider-services/cmd"
-	ptestutil "github.com/ovrclk/provider-services/testutil"
+	ptestutil "github.com/ovrclk/provider-services/testutil/provider"
 )
 
 type E2EEscrowMonitor struct {

@@ -18,7 +18,7 @@ import (
 	mcli "github.com/ovrclk/akash/x/market/client/cli"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 
-	ptestutil "github.com/ovrclk/provider-services/testutil"
+	ptestutil "github.com/ovrclk/provider-services/testutil/provider"
 )
 
 type E2EPersistentStorageDefault struct {

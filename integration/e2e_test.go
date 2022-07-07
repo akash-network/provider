@@ -50,7 +50,7 @@ import (
 	providerCmd "github.com/ovrclk/provider-services/cmd/provider-services/cmd"
 	gwrest "github.com/ovrclk/provider-services/gateway/rest"
 	akashclient "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
-	ptestutil "github.com/ovrclk/provider-services/testutil"
+	ptestutil "github.com/ovrclk/provider-services/testutil/provider"
 )
 
 // IntegrationTestSuite wraps testing components
@@ -389,7 +389,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	if s.ipMarketplace {
 		s.group.Go(func() error {
 			s.T().Logf("starting ip operator for test on %v", ipOperatorHost)
-			_, err := ptestutil.RunLocalIPOerator(s.ctx, cctx, ipOperatorHost, s.keyProvider.GetAddress())
+			_, err := ptestutil.RunLocalIPOperator(s.ctx, cctx, ipOperatorHost, s.keyProvider.GetAddress())
 			s.Assert().NoError(err)
 			return err
 		})

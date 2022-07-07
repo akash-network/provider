@@ -1,4 +1,4 @@
-package testutil
+package provider
 
 import (
 	"context"
@@ -106,7 +106,7 @@ func TestMigrateHostname(clientCtx client.Context, leaseID mtypes.LeaseID, dseq 
 
 // RunLocalProvider wraps up the Provider cobra command for testing and supplies
 // new default values to the flags.
-// prev: akashctl provider run --from=foo --cluster-k8s --gateway-listen-address=localhost:39729 --home=/tmp/akash_integration_TestE2EApp_324892307/.akashctl --node=tcp://0.0.0.0:41863 --keyring-backend test
+// prev: akash provider run --from=foo --cluster-k8s --gateway-listen-address=localhost:39729 --home=/tmp/akash_integration_TestE2EApp_324892307/.akash --node=tcp://0.0.0.0:41863 --keyring-backend test
 func RunLocalProvider(ctx context.Context, clientCtx cosmosclient.Context, chainID, nodeRPC, akashHome, from, gatewayListenAddress string, extraArgs ...string) (sdktest.BufferWriter,
 	error) {
 	takeCmdLock()
@@ -161,7 +161,7 @@ func RunLocalHostnameOperator(ctx context.Context, clientCtx cosmosclient.Contex
 	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)
 }
 
-func RunLocalIPOerator(ctx context.Context, clientCtx cosmosclient.Context, listenAddress string, providerAddress sdk.AccAddress) (sdktest.BufferWriter, error) {
+func RunLocalIPOperator(ctx context.Context, clientCtx cosmosclient.Context, listenAddress string, providerAddress sdk.AccAddress) (sdktest.BufferWriter, error) {
 	takeCmdLock()
 	cmd := ipoperator.Cmd()
 	releaseCmdLock()

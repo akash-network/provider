@@ -6,12 +6,6 @@ import (
 	"crypto/tls"
 	"testing"
 
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
@@ -22,14 +16,17 @@ import (
 	akashmanifest "github.com/ovrclk/akash/manifest/v2beta1"
 	"github.com/ovrclk/akash/testutil"
 	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 	providertypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
 
 	"github.com/ovrclk/provider-services"
 	pcmock "github.com/ovrclk/provider-services/cluster/mocks"
+	"github.com/ovrclk/provider-services/cluster/operatorclients"
 	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
 	pmmock "github.com/ovrclk/provider-services/manifest/mocks"
 	pmock "github.com/ovrclk/provider-services/mocks"
-	ptestutil "github.com/ovrclk/provider-services/testutil"
+	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	testutilrest "github.com/ovrclk/provider-services/testutil/rest"
 )
 
 func Test_router_Status(t *testing.T) {
@@ -351,7 +348,7 @@ func withServer(t testing.TB, addr sdk.Address, pclient provider.Client, qclient
 		certs = append(certs, crt.Cert...)
 	}
 
-	server := ptestutil.NewServer(t, qclient, router, certs)
+	server := testutilrest.NewServer(t, qclient, router, certs)
 	defer server.Close()
 
 	host := "https://" + server.Listener.Addr().String()

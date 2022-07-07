@@ -8,11 +8,11 @@ import (
 
 	atestutil "github.com/ovrclk/akash/testutil"
 
-	"github.com/ovrclk/provider-services/testutil"
+	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
 )
 
 func Test_Manifest_encoding(t *testing.T) {
-	for _, spec := range testutil.ManifestGenerators {
+	for _, spec := range mtestutil.ManifestGenerators {
 
 		// ensure decode(encode(obj)) == obj
 

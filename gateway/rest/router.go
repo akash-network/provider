@@ -85,7 +85,6 @@ type wsStreamConfig struct {
 }
 
 func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ipopclient operatorclients.IPOperatorClient, ctxConfig map[interface{}]interface{}) *mux.Router {
-
 	router := mux.NewRouter()
 
 	// store provider address in context as lease endpoints below need it

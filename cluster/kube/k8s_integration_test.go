@@ -17,13 +17,13 @@ import (
 	atestutil "github.com/ovrclk/akash/testutil"
 
 	"github.com/ovrclk/provider-services/cluster/kube/builder"
-	"github.com/ovrclk/provider-services/testutil"
+	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
 )
 
 func TestNewClient(t *testing.T) {
 	// create lease
 	lid := atestutil.LeaseID(t)
-	group := testutil.AppManifestGenerator.Group(t)
+	group := mtestutil.AppManifestGenerator.Group(t)
 	ns := builder.LidNS(lid)
 
 	settings := builder.Settings{
