@@ -53,4 +53,4 @@ jobs:
           make release
         env:
           RELEASE_TAG: ${{ steps.branch_name.outputs.RELEASE_TAG }}
-          GITHUB_TOKEN: ${{secrets.GHCR_TOKEN}}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
