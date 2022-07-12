@@ -11,50 +11,43 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	"github.com/ovrclk/provider-services/operator/waiter"
-
-	"github.com/shopspring/decimal"
-
-	"github.com/ovrclk/akash/sdl"
-	mparams "github.com/ovrclk/akash/x/market/types/v1beta2"
-
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-
-	config2 "github.com/ovrclk/akash/x/provider/config"
-
 	"github.com/pkg/errors"
+	"github.com/shopspring/decimal"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
 
-	"github.com/ovrclk/akash/client/broadcaster"
-	ctypes "github.com/ovrclk/akash/x/cert/types/v1beta2"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
-
-	"github.com/ovrclk/provider-services/bidengine"
+	"github.com/tendermint/tendermint/libs/log"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
-	"github.com/go-kit/kit/log/term" // nolint: staticcheck
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"github.com/tendermint/tendermint/libs/log"
-	"golang.org/x/sync/errgroup"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/ovrclk/akash/client"
+	"github.com/ovrclk/akash/client/broadcaster"
 	"github.com/ovrclk/akash/cmd/common"
 	"github.com/ovrclk/akash/events"
 	"github.com/ovrclk/akash/pubsub"
+	"github.com/ovrclk/akash/sdl"
 	cmodule "github.com/ovrclk/akash/x/cert"
+	ctypes "github.com/ovrclk/akash/x/cert/types/v1beta2"
+	cutils "github.com/ovrclk/akash/x/cert/utils"
+	mparams "github.com/ovrclk/akash/x/market/types/v1beta2"
+	config2 "github.com/ovrclk/akash/x/provider/config"
 	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
 
 	"github.com/ovrclk/provider-services"
+	"github.com/ovrclk/provider-services/bidengine"
 	"github.com/ovrclk/provider-services/cluster"
 	"github.com/ovrclk/provider-services/cluster/kube"
+	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
+	"github.com/ovrclk/provider-services/cluster/operatorclients"
+	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
+	cmdutil "github.com/ovrclk/provider-services/cmd/provider-services/cmd/util"
 	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	"github.com/ovrclk/provider-services/operator/waiter"
 	"github.com/ovrclk/provider-services/session"
 )
 
@@ -474,7 +467,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	logger := openLogger().With("cmp", "provider")
+	logger := cmdutil.OpenLogger().With("cmp", "provider")
 	kubeConfig, err := clientcommon.OpenKubeConfig(kubeConfigPath, logger)
 	if err != nil {
 		return err
@@ -744,13 +737,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
-}
-
-func openLogger() log.Logger {
-	// logger with no color output - current debug colors are invisible for me.
-	return log.NewTMLoggerWithColorFn(log.NewSyncWriter(os.Stdout), func(_ ...interface{}) term.FgBgColor {
-		return term.FgBgColor{}
-	})
 }
 
 func createClusterClient(log log.Logger, _ *cobra.Command, configPath string) (cluster.Client, error) {

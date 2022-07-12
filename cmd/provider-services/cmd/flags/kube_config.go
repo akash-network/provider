@@ -10,6 +10,6 @@ const (
 )
 
 func AddKubeConfigPathFlag(cmd *cobra.Command) error {
-	cmd.Flags().String(FlagKubeConfig, KubeConfigDefaultPath, "kubernetes configuration file path")
+	cmd.Flags().String(FlagKubeConfig, "$HOME/.kube/config", "kubernetes configuration file path")
 	return viper.BindPFlag(FlagKubeConfig, cmd.Flags().Lookup(FlagKubeConfig))
 }

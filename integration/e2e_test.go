@@ -345,6 +345,11 @@ func (s *IntegrationTestSuite) SetupSuite() {
 			provURL.Host,
 			extraArgs...,
 		)
+
+		if err != nil {
+			s.T().Logf("provider exit %v", err)
+		}
+
 		return err
 	})
 

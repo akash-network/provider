@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	cmdutil "github.com/ovrclk/provider-services/cmd/provider-services/cmd/util"
 	gwrest "github.com/ovrclk/provider-services/gateway/rest"
 )
 
@@ -90,7 +91,7 @@ func doRunResourceServer(ctx context.Context, cmd *cobra.Command, _ []string) er
 	}
 
 	group, ctx := errgroup.WithContext(ctx)
-	log := openLogger()
+	log := cmdutil.OpenLogger()
 
 	resourceServer, err := gwrest.NewResourceServer(ctx, log, gwAddr, cctx.FromAddress, pubkey, lokiGwAddr)
 	if err != nil {
