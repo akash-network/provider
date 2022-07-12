@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/ovrclk/provider-services/operator"
 	"github.com/ovrclk/provider-services/operator/hostnameoperator"
 	"github.com/ovrclk/provider-services/operator/ipoperator"
 
@@ -47,6 +48,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(migrate())
 	cmd.AddCommand(RunResourceServerCmd())
 	cmd.AddCommand(MigrateEndpointsCmd())
+	cmd.AddCommand(operator.Cmd())
 
 	return cmd
 }

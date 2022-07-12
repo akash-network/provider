@@ -20,7 +20,7 @@ spec:
       - name: akash-hostname-operator
         image: ghcr.io/ovrclk/provider-services:stable
         imagePullPolicy: IfNotPresent
-        args: ["hostname-operator"]
+        args: ["provider-services", "hostname-operator"]
         ports:
           - name: status
             containerPort: 8085

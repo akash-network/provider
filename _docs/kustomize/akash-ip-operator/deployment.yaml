@@ -20,7 +20,7 @@ spec:
       - name: akash-ip-operator
         image: ghcr.io/ovrclk/provider-services:stable
         imagePullPolicy: IfNotPresent
-        args: ["ip-operator"]
+        args: ["provider-services", "ip-operator"]
         ports:
           - name: api
             containerPort: 8086

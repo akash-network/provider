@@ -9,7 +9,11 @@ RUN \
     tini \
  && rm -rf /var/lib/apt/lists/*
 
+# default port for provider API
 EXPOSE 8443
 
-ENTRYPOINT ["/usr/bin/tini", "--", "/bin/provider-services"]
-CMD ["--help"]
+# default for inventory operator API
+EXPOSE 8080
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["provider-services", "--help"]
