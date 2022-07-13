@@ -17,6 +17,7 @@ import (
 	atestutil "github.com/ovrclk/akash/testutil"
 
 	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
 	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
 )
 
@@ -34,7 +35,7 @@ func TestNewClient(t *testing.T) {
 	}
 	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
 
-	ac, err := NewClient(atestutil.Logger(t), ns, "")
+	ac, err := NewClient(atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
 
 	require.NoError(t, err)
 
