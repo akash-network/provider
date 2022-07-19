@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
@@ -59,6 +60,7 @@ type Client interface {
 	CreateIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error
 	PurgeIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error
 	GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough, error)
+	DetectPoolChanges(ctx context.Context) (<-chan struct{}, error)
 
 	Stop()
 }
@@ -70,6 +72,7 @@ type client struct {
 
 	sda    clusterutil.ServiceDiscoveryAgent
 	client clusterutil.ServiceClient
+	l      sync.Locker
 
 	poolName string
 }
@@ -104,14 +107,25 @@ func NewClient(configPath string, logger log.Logger, poolName string, endpoint *
 		sda:      sda,
 		kube:     kc,
 		poolName: poolName,
-
-		log: logger.With("client", "metallb"),
+		l:        &sync.Mutex{},
+		log:      logger.With("client", "metallb"),
 	}, nil
 
 }
 
 func (c *client) Stop() {
 	c.sda.Stop()
+}
+
+func (c *client) setupClient(ctx context.Context) error {
+	c.l.Lock()
+	defer c.l.Unlock()
+	if c.client != nil {
+		return nil
+	}
+	var err error
+	c.client, err = c.sda.GetClient(ctx, false, false)
+	return err
 }
 
 /*
@@ -123,12 +137,9 @@ can get stuff like this to access metal lb metrics
 */
 
 func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
-	if c.client == nil {
-		var err error
-		c.client, err = c.sda.GetClient(ctx, false, false)
-		if err != nil {
-			return math.MaxUint32, math.MaxUint32, err
-		}
+	err := c.setupClient(ctx)
+	if err != nil {
+		return math.MaxUint32, math.MaxUint32, err
 	}
 
 	request, err := c.client.CreateRequest(ctx, http.MethodGet, metricsPath, nil)
@@ -164,6 +175,7 @@ func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
 	setAvailable := false
 	inUse := uint(0)
 	setInUse := false
+	poolsFound := make(map[string]struct{})
 	for _, entry := range mf {
 		if setInUse && setAvailable {
 			break
@@ -194,6 +206,9 @@ func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
 					continue
 				}
 
+				// Record all pool names found, for debugging purposes
+				poolsFound[labelEntry.GetValue()] = struct{}{}
+
 				if labelEntry.GetValue() != c.poolName {
 					continue
 				}
@@ -206,7 +221,11 @@ func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
 	}
 
 	if !setInUse || !setAvailable {
-		return math.MaxUint32, math.MaxUint32, fmt.Errorf("%w: data not found in metrics response", errMetalLB)
+		if len(poolsFound) == 0 {
+			c.log.Debug("no pools configured on Metal LB")
+		} else {
+			c.log.Debug("pools configured on Metal LB, but none matching", "configured-pool-name", c.poolName, "quantity-configured", len(poolsFound))
+		}
 	}
 
 	return inUse, available, nil
@@ -487,6 +506,38 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough
 		})
 
 	return result, err
+}
+
+func (c *client) DetectPoolChanges(ctx context.Context) (<-chan struct{}, error) {
+	const metalLBNamespace = "metallb-system"
+	watcher, err := c.kube.CoreV1().ConfigMaps(metalLBNamespace).Watch(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	output := make(chan struct{}, 1)
+	go func() {
+		defer close(output)
+		for {
+			select {
+			case <-ctx.Done():
+				err = ctx.Err()
+				if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+					c.log.Error("failed watching metal LB config map changes", "err", err)
+				}
+				return
+			case ev, ok := <-watcher.ResultChan():
+				if !ok { // Channel closed when an error happens
+					return
+				}
+				// Do not log the whole event, it is too verbose
+				c.log.Debug("metal LB config change event", "event-type", ev.Type)
+				output <- struct{}{}
+			}
+		}
+	}()
+
+	return output, nil
 }
 
 type ipPassthrough struct {

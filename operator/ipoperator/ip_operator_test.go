@@ -38,6 +38,12 @@ func runIPOperator(t *testing.T, run bool, prerun, fn func(ctx context.Context, 
 	mllbc := &mocks.MetalLBClient{}
 	mllbc.On("Stop")
 
+	poolChangesMock := make(chan struct{})
+	// nolint: golint, gosimple
+	var poolChangesInterface <-chan struct{}
+	poolChangesInterface = poolChangesMock
+	mllbc.On("DetectPoolChanges", mock.Anything).Return(poolChangesInterface, nil)
+
 	ilc := operatorcommon.IgnoreListConfig{
 		FailureLimit: 100,
 		EntryLimit:   9999,

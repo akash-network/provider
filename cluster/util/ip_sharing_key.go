@@ -4,16 +4,18 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"fmt"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 	"io"
 	"regexp"
 	"strings"
+
+	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 )
 
+var allowedIPEndpointNameRegex = regexp.MustCompile(`^[a-z0-9\-]+$`)
+
 func MakeIPSharingKey(lID mtypes.LeaseID, endpointName string) string {
-	allowedRegex := regexp.MustCompile(`[a-z0-9\-]+`)
 	effectiveName := endpointName
-	if !allowedRegex.MatchString(endpointName) {
+	if !allowedIPEndpointNameRegex.MatchString(endpointName) {
 		h := sha256.New()
 		_, err := io.WriteString(h, endpointName)
 		if err != nil {

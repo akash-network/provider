@@ -58,14 +58,14 @@ type ipOperator struct {
 	dataLock sync.Locker
 }
 
-func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
-	var err error
-
+func (op *ipOperator) monitorUntilError(ctx context.Context) error {
 	op.log.Info("associated provider ", "addr", op.cfg.ProviderAddress)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	op.state = make(map[string]managedIP)
 	op.log.Info("fetching existing IP passthroughs")
-	entries, err := op.mllbc.GetIPPassthroughs(parentCtx)
+	entries, err := op.mllbc.GetIPPassthroughs(ctx)
 	if err != nil {
 		return err
 	}
@@ -85,14 +85,19 @@ func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 	op.flagState()
 
 	// Get the present counts before starting
-	err = op.updateCounts(parentCtx)
+	err = op.updateCounts(ctx)
 	if err != nil {
 		return err
 	}
 
 	op.log.Info("starting observation")
 
-	events, err := op.client.ObserveIPState(parentCtx)
+	// Detect changes to the IP's declared by the provider
+	events, err := op.client.ObserveIPState(ctx)
+	if err != nil {
+		return err
+	}
+	poolChanges, err := op.mllbc.DetectPoolChanges(ctx)
 	if err != nil {
 		return err
 	}
@@ -107,6 +112,8 @@ func (op *ipOperator) monitorUntilError(parentCtx context.Context) error {
 	defer pruneTicker.Stop()
 	prepareTicker := time.NewTicker(op.cfg.WebRefreshInterval)
 	defer prepareTicker.Stop()
+	updateTicker := time.NewTicker(10 * time.Minute)
+	defer updateTicker.Stop()
 
 	op.log.Info("barrier can now be passed")
 	op.barrier.enable()
@@ -115,8 +122,8 @@ loop:
 		isUpdating := false
 		prepareData := false
 		select {
-		case <-parentCtx.Done():
-			exitError = parentCtx.Err()
+		case <-ctx.Done():
+			exitError = ctx.Err()
 			break loop
 
 		case ev, ok := <-events:
@@ -124,7 +131,7 @@ loop:
 				exitError = operatorcommon.ErrObservationStopped
 				break loop
 			}
-			err = op.applyEvent(parentCtx, ev)
+			err = op.applyEvent(ctx, ev)
 			if err != nil {
 				op.log.Error("failed applying event", "err", err)
 				exitError = err
@@ -138,10 +145,17 @@ loop:
 			prepareData = true
 		case <-prepareTicker.C:
 			prepareData = true
+		case <-updateTicker.C:
+			isUpdating = true
+		case _, ok := <-poolChanges:
+			if !ok {
+				break loop
+			}
+			isUpdating = true
 		}
 
 		if isUpdating {
-			err = op.updateCounts(parentCtx)
+			err = op.updateCounts(ctx)
 			if err != nil {
 				exitError = err
 				break loop
@@ -531,9 +545,12 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	}
 
 	if len(ipStatus) == 0 {
+		op.log.Debug("no IP address to status for lease", "lease-id", leaseID)
 		rw.WriteHeader(http.StatusNoContent)
 		return
 	}
+
+	op.log.Debug("retrieved IP address status for lease", "lease-id", leaseID, "quantity", len(ipStatus))
 
 	rw.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(rw)

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"k8s.io/client-go/rest"
@@ -28,6 +29,7 @@ type hostnameOperatorClient struct {
 	sda    clusterutil.ServiceDiscoveryAgent
 	client clusterutil.ServiceClient
 	log    log.Logger
+	l      sync.Locker
 }
 
 func NewHostnameOperatorClient(logger log.Logger, kubeConfig *rest.Config, endpoint *net.SRV) (HostnameOperatorClient, error) {
@@ -39,11 +41,15 @@ func NewHostnameOperatorClient(logger log.Logger, kubeConfig *rest.Config, endpo
 	return &hostnameOperatorClient{
 		log: logger.With("operator", "hostname"),
 		sda: sda,
+		l:   &sync.Mutex{},
 	}, nil
 
 }
 
 func (hopc *hostnameOperatorClient) newRequest(ctx context.Context, method string, path string, body io.Reader) (*http.Request, error) {
+	hopc.l.Lock()
+	defer hopc.l.Unlock()
+
 	if nil == hopc.client {
 		var err error
 		hopc.client, err = hopc.sda.GetClient(ctx, false, false)

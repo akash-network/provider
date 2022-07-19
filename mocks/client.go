@@ -11,7 +11,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	provider_services "github.com/ovrclk/provider-services"
+	provider "github.com/ovrclk/provider-services"
 
 	testing "testing"
 
@@ -90,15 +90,15 @@ func (_m *Client) Manifest() manifest.Client {
 }
 
 // Status provides a mock function with given fields: _a0
-func (_m *Client) Status(_a0 context.Context) (*provider_services.Status, error) {
+func (_m *Client) Status(_a0 context.Context) (*provider.Status, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *provider_services.Status
-	if rf, ok := ret.Get(0).(func(context.Context) *provider_services.Status); ok {
+	var r0 *provider.Status
+	if rf, ok := ret.Get(0).(func(context.Context) *provider.Status); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*provider_services.Status)
+			r0 = ret.Get(0).(*provider.Status)
 		}
 	}
 
@@ -113,14 +113,14 @@ func (_m *Client) Status(_a0 context.Context) (*provider_services.Status, error)
 }
 
 // Validate provides a mock function with given fields: _a0, _a1
-func (_m *Client) Validate(_a0 context.Context, _a1 typesv1beta2.GroupSpec) (provider_services.ValidateGroupSpecResult, error) {
+func (_m *Client) Validate(_a0 context.Context, _a1 typesv1beta2.GroupSpec) (provider.ValidateGroupSpecResult, error) {
 	ret := _m.Called(_a0, _a1)
 
-	var r0 provider_services.ValidateGroupSpecResult
-	if rf, ok := ret.Get(0).(func(context.Context, typesv1beta2.GroupSpec) provider_services.ValidateGroupSpecResult); ok {
+	var r0 provider.ValidateGroupSpecResult
+	if rf, ok := ret.Get(0).(func(context.Context, typesv1beta2.GroupSpec) provider.ValidateGroupSpecResult); ok {
 		r0 = rf(_a0, _a1)
 	} else {
-		r0 = ret.Get(0).(provider_services.ValidateGroupSpecResult)
+		r0 = ret.Get(0).(provider.ValidateGroupSpecResult)
 	}
 
 	var r1 error

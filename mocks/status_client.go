@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	provider_services "github.com/ovrclk/provider-services"
+	provider "github.com/ovrclk/provider-services"
 	mock "github.com/stretchr/testify/mock"
 
 	testing "testing"
@@ -17,15 +17,15 @@ type StatusClient struct {
 }
 
 // Status provides a mock function with given fields: _a0
-func (_m *StatusClient) Status(_a0 context.Context) (*provider_services.Status, error) {
+func (_m *StatusClient) Status(_a0 context.Context) (*provider.Status, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *provider_services.Status
-	if rf, ok := ret.Get(0).(func(context.Context) *provider_services.Status); ok {
+	var r0 *provider.Status
+	if rf, ok := ret.Get(0).(func(context.Context) *provider.Status); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*provider_services.Status)
+			r0 = ret.Get(0).(*provider.Status)
 		}
 	}
 
