@@ -6,6 +6,8 @@ null  :=
 space := $(null) #
 comma := ,
 
+SKIP_BUILD  ?= false
+
 ifndef AKASH_HOME
 $(error AKASH_HOME is not set)
 endif
@@ -16,16 +18,18 @@ export AKASH_CHAIN_ID           = local
 export AKASH_YES                = true
 export AKASH_GAS_PRICES         = 0.025uakt
 export AKASH_GAS                = auto
+export AKASH_NODE               = http://akash.localhost:$(KIND_PORT_BINDINGS)
 
-export AP_KEYRING_BACKEND    = test
-export AP_GAS_ADJUSTMENT     = 2
-export AP_CHAIN_ID           = local
-export AP_YES                = true
-export AP_GAS_PRICES         = 0.025uakt
-export AP_GAS                = auto
+export AP_HOME                  = $(AKASH_HOME)
+export AP_KEYRING_BACKEND       = $(AKASH_KEYRING_BACKEND)
+export AP_GAS_ADJUSTMENT        = $(AKASH_GAS_ADJUSTMENT)
+export AP_CHAIN_ID              = $(AKASH_CHAIN_ID)
+export AP_YES                   = $(AKASH_YES)
+export AP_GAS_PRICES            = $(AKASH_GAS_PRICES)
+export AP_GAS                   = $(AKASH_GAS)
+export AP_NODE                  = $(AKASH_NODE)
 
-AKASH              := $(AKASH) --home $(AKASH_HOME)
-PROVIDER_SERVICES  := $(PROVIDER_SERVICES) --home $(AKASH_HOME)
+AKASH_INIT                     := $(AP_RUN_DIR)/.akash-init
 
 KEY_OPTS     := --keyring-backend=$(AKASH_KEYRING_BACKEND)
 GENESIS_PATH := $(AKASH_HOME)/config/genesis.json
@@ -45,37 +49,44 @@ GENESIS_ACCOUNTS := $(KEY_NAMES) $(MULTISIG_KEY)
 CLIENT_CERTS := main validator other
 SERVER_CERTS := provider
 
-
 .PHONY: init
+init: bins akash-init
 
-init: bins client-init node-init
 
-.PHONY: client-init
-client-init: init-dirs client-init-keys
+$(AP_RUN_DIR):
+	mkdir -p $@
 
-.PHONY: init-dirs
-init-dirs: 
-	mkdir -p "$(AKASH_HOME)"
+$(AKASH_HOME):
+	mkdir -p $@
 
-.PHONY: client-init-keys
-client-init-keys: $(patsubst %,client-init-key-%,$(KEY_NAMES)) client-init-multisig-key
+$(AKASH_INIT): $(AKASH_HOME) client-init node-init
+	touch $@
 
-.PHONY: client-init-key-%
+.INTERMEDIATE: akash-init
+akash-init: $(AKASH_INIT)
+
+.INTERMEDIATE: client-init
+client-init: client-init-keys
+
+.INTERMEDIATE: client-init-keys
+client-init-keys: $(patsubst %,client-init-key-%,$(KEY_NAMES)) client-init-key-multisig
+
+.INTERMEDIATE: $(patsubst %,client-init-key-%,$(KEY_NAMES))
 client-init-key-%:
 	$(AKASH) keys add "$(@:client-init-key-%=%)"
 
-.PHONY: client-init-multisig-key
-client-init-multisig-key:
+.INTERMEDIATE: client-init-key-multisig
+client-init-key-multisig:
 	$(AKASH) keys add \
 		"$(MULTISIG_KEY)" \
 		--multisig "$(subst $(space),$(comma),$(strip $(MULTISIG_SIGNERS)))" \
 		--multisig-threshold 2
 
-.PHONY: node-init
+.INTERMEDIATE: node-init
 node-init: node-init-genesis node-init-genesis-accounts node-init-genesis-certs node-init-gentx node-init-finalize
 
-.PHONY: node-init-genesis
-node-init-genesis: init-dirs
+.INTERMEDIATE: node-init-genesis
+node-init-genesis:
 	$(AKASH) init node0
 	cp "$(GENESIS_PATH)" "$(GENESIS_PATH).orig"
 	cat "$(GENESIS_PATH).orig" | \
@@ -85,36 +96,35 @@ node-init-genesis: init-dirs
 		jq -rM '(..|objects|select(has("mint_denom"))).mint_denom |= "$(CHAIN_TOKEN_DENOM)"' > \
 		"$(GENESIS_PATH)"
 
-.PHONY: node-init-genesis-certs
+.INTERMEDIATE: node-init-genesis-certs
 node-init-genesis-certs: $(patsubst %,node-init-genesis-client-cert-%,$(CLIENT_CERTS)) $(patsubst %,node-init-genesis-server-cert-%,$(SERVER_CERTS))
 
-.PHONY: node-init-genesis-client-cert-%
+.INTERMEDIATE: $(patsubst %,node-init-genesis-client-cert-%,$(CLIENT_CERTS))
 node-init-genesis-client-cert-%:
 	$(AKASH) tx cert generate client --from=$*
 	$(AKASH) tx cert publish client --to-genesis=true --from=$*
 
-.PHONY: node-init-genesis-server-cert-%
+.INTERMEDIATE: $(patsubst %,node-init-genesis-server-cert-%,$(SERVER_CERTS))
 node-init-genesis-server-cert-%:
 	$(AKASH) tx cert generate server localhost akash-provider.localhost --from=$*
 	$(AKASH) tx cert publish server --to-genesis=true --from=$*
 
-.PHONY: node-init-genesis-accounts
+.INTERMEDIATE: node-init-genesis-accounts
 node-init-genesis-accounts: $(patsubst %,node-init-genesis-account-%,$(GENESIS_ACCOUNTS))
 	$(AKASH) validate-genesis
 
-.PHONY: node-init-genesis-account-%
+.INTERMEDIATE: $(patsubst %,node-init-genesis-account-%,$(GENESIS_ACCOUNTS))
 node-init-genesis-account-%:
 	$(AKASH) add-genesis-account \
 		"$(shell $(AKASH) $(KEY_OPTS) keys show "$(@:node-init-genesis-account-%=%)" -a)" \
 		"$(CHAIN_MIN_DEPOSIT)$(CHAIN_TOKEN_DENOM)"
 
-.PHONY: node-init-gentx
+.INTERMEDIATE: node-init-gentx
 node-init-gentx: AKASH_GAS='' AKASH_GAS_PRICES=''
 node-init-gentx:
-	$(AKASH) gentx validator \
-		"$(CHAIN_VALIDATOR_DELEGATE)$(CHAIN_TOKEN_DENOM)"
+	$(AKASH) gentx validator "$(CHAIN_VALIDATOR_DELEGATE)$(CHAIN_TOKEN_DENOM)"
 
-.PHONY: node-init-finalize
+.INTERMEDIATE: node-init-finalize
 node-init-finalize:
 	$(AKASH) collect-gentxs
 	$(AKASH) validate-genesis
@@ -133,7 +143,7 @@ rest-server-run:
 
 .PHONY: clean
 clean: clean-$(AP_RUN_NAME)
-	rm -rf "$(AKASH_HOME)"
+	rm -rf "$(DEVCACHE_RUN)/$(AP_RUN_NAME)"
 
 .PHONY: rosetta-run
 rosetta-run:

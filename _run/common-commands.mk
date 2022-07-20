@@ -46,33 +46,31 @@ multisig-send:
 
 .PHONY: provider-create
 provider-create:
-	$(AKASH) tx provider create "$(PROVIDER_CONFIG_PATH)" \
-		--from "$(PROVIDER_KEY_NAME)"
+	$(AKASH) tx provider create "$(PROVIDER_CONFIG_PATH)" --from "$(PROVIDER_KEY_NAME)"
 
 .PHONY: provider-update
 provider-update:
-	$(AKASH) tx provider update "$(PROVIDER_CONFIG_PATH)" \
-		--from "$(PROVIDER_KEY_NAME)"
+	$(AKASH) tx provider update "$(PROVIDER_CONFIG_PATH)" --from "$(PROVIDER_KEY_NAME)"
 
 .PHONY: provider-status
 provider-status:
-	$(PROVIDER_SERVICES) provider status $(PROVIDER_ADDRESS)
+	$(PROVIDER_SERVICES) status $(PROVIDER_ADDRESS)
 
 .PHONY: authenticate
 authenticate:
-	$(PROVIDER_SERVICES) provider authenticate \
+	$(PROVIDER_SERVICES) authenticate \
 		--from      "$(KEY_ADDRESS)" \
 		--provider  "$(PROVIDER_ADDRESS)"
 
 .PHONY: auth-server
 auth-server:
-	$(PROVIDER_SERVICES) provider auth-server \
+	$(PROVIDER_SERVICES) auth-server \
 		--from "$(PROVIDER_KEY_NAME)" \
 		--jwt-auth-listen-address "$(JWT_AUTH_HOST)" \
 
 .PHONY: run-resource-server
 run-resource-server:
-	$(PROVIDER_SERVICES) provider run-resource-server \
+	$(PROVIDER_SERVICES) run-resource-server \
 		--from "$(PROVIDER_KEY_NAME)" \
 		--resource-server-listen-address "$(RESOURCE_SERVER_HOST)" \
 		--loki-gateway-listen-address localhost:3100 \
@@ -274,7 +272,7 @@ events-run:
 
 .PHONY: provider-lease-logs
 provider-lease-logs:
-	$(AKASH) provider lease-logs \
+	$(PROVIDER_SERVICES) lease-logs \
 		-f \
 		--service="$(LEASE_SERVICES)" \
 		--dseq "$(DSEQ)"     \
@@ -283,8 +281,26 @@ provider-lease-logs:
 
 .PHONY: provider-lease-events
 provider-lease-events:
-	$(AKASH) provider lease-events \
+	$(PROVIDER_SERVICES) lease-events \
 		-f \
 		--dseq "$(DSEQ)"     \
 		--from "$(KEY_NAME)" \
 		--provider "$(PROVIDER_ADDRESS)"
+
+PHONY: provider-lease-status
+provider-lease-status:
+	$(PROVIDER_SERVICES) lease-status \
+		--dseq      "$(DSEQ)"        \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)"    \
+		--provider  "$(PROVIDER_ADDRESS)"
+
+.PHONY: provider-service-status
+provider-service-status:
+	$(PROVIDER_SERVICES) lease-status \
+		--dseq      "$(DSEQ)"        \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)" \
+		--provider  "$(PROVIDER_ADDRESS)"

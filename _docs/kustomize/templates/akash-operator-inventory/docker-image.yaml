@@ -1,3 +1,3 @@
 - op: replace
   path: /spec/template/spec/containers/0/image
-  value: ghcr.io/ovrclk/provider-services:latest-arm64
+  value: ghcr.io/ovrclk/provider-services:stable

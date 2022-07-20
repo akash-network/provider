@@ -1,15 +1,14 @@
-bases:
-  # - github.com/ovrclk/akash/_docs/kustomize/akash-provider?ref=boz/kustomize
-  - ../../../../_docs/kustomize/akash-provider
-
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 namespace: akash-services
-
+resources:
+  - ../../../../../_docs/kustomize/akash-provider
 configMapGenerator:
 
   ##
   # cosmos-sdk client (config.toml) options
   ##
-  - name: akash-client-config
+  - name: akash-provider-client-config
     behavior: merge
     literals:
       - node=http://akash-node:26657

@@ -11,7 +11,7 @@ import (
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 )
 
-var allowedIPEndpointNameRegex = regexp.MustCompile(`^[a-z0-9\-]+$`)
+var allowedIPEndpointNameRegex = regexp.MustCompile(`^[a-z\d\-]+$`)
 
 func MakeIPSharingKey(lID mtypes.LeaseID, endpointName string) string {
 	effectiveName := endpointName

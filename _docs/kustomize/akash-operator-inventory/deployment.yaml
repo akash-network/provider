@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: inventory-operator
+  namespace: akash-services
+  labels:
+    akash.network: "true"
+    app.kubernetes.io/name: akash
+    app.kubernetes.io/instance: inventory
+    app.kubernetes.io/component: operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: akash
+      app.kubernetes.io/instance: inventory
+      app.kubernetes.io/component: operator
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        app: inventory-operator
+        app.kubernetes.io/name: akash
+        app.kubernetes.io/instance: inventory
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: inventory-operator
+      containers:
+        - name: inventory-operator
+          image: ghcr.io/ovrclk/provider-services
+          args:
+            - "provider-services"
+            - "operator"
+            - "inventory"
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - containerPort: 8080
+              name: api
+              protocol: TCP

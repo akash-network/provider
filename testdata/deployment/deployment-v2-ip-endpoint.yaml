@@ -10,7 +10,7 @@ services:
           - global: true
             ip: "meow"
         accept:
-          - test.localhost         
+          - test.localhost
 
 profiles:
   compute:

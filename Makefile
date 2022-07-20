@@ -25,6 +25,25 @@ GO_MOD                 ?= readonly
 BUILD_TAGS             ?= osusergo,netgo,static_build
 GORELEASER_STRIP_FLAGS ?=
 
+GORELEASER_BUILD_VARS := \
+-X github.com/ovrclk/provider-services/version.Name=provider-services \
+-X github.com/ovrclk/provider-services/version.AppName=provider-services \
+-X github.com/ovrclk/provider-services/version.BuildTags=\"$(BUILD_TAGS)\" \
+-X github.com/ovrclk/provider-services/version.Version=$(RELEASE_TAG) \
+-X github.com/ovrclk/provider-services/version.Commit=$(GIT_HEAD_COMMIT_LONG)
+
+ldflags = -linkmode=$(GO_LINKMODE) -X github.com/ovrclk/provider-services/version.Name=provider-services \
+-X github.com/ovrclk/provider-services/version.AppName=provider-services \
+-X github.com/ovrclk/provider-services/version.BuildTags="$(BUILD_TAGS)" \
+-X github.com/ovrclk/provider-services/version.Version=$(shell git describe --tags | sed 's/^v//') \
+-X github.com/ovrclk/provider-services/version.Commit=$(GIT_HEAD_COMMIT_LONG)
+
+# check for nostrip option
+ifeq (,$(findstring nostrip,$(BUILD_OPTIONS)))
+	ldflags                += -s -w
+	GORELEASER_STRIP_FLAGS += -s -w
+endif
+
 ldflags += $(LDFLAGS)
 ldflags := $(strip $(ldflags))
 

@@ -34,25 +34,25 @@ Each command is marked __t1__-__t3__ to indicate a suggested terminal number.
 
 Four keys and accounts are created.  The key names are:
 
-|Key Name|Use|
-|---|---|
-|`main`|Primary account (creating deployments, etc...)|
-|`provider`|The provider account (bidding on orders, etc...)|
-|`validator`|The sole validator for the created network|
-|`other`|Misc. account to (receives tokens, etc...)|
+| Key Name    | Use                                              |
+|-------------|--------------------------------------------------|
+| `main`      | Primary account (creating deployments, etc...)   |
+| `provider`  | The provider account (bidding on orders, etc...) |
+| `validator` | The sole validator for the created network       |
+| `other`     | Misc. account to (receives tokens, etc...)       |
 
 Most `make` commands are configurable and have defaults to make it
 such that you don't need to override them for a simple pass-through of
 this example.
 
-|Name|Default|Description|
-|---|---|---|
-|`KEY_NAME`|`main`|standard key name|
-|`PROVIDER_KEY_NAME`|`provider`|name of key to use for provider|
-|`DSEQ`|1|deployment sequence|
-|`GSEQ`|1|group sequence|
-|`OSEQ`|1|order sequence|
-|`PRICE`|10uakt|price to bid|
+| Name                | Default    | Description                     |
+|---------------------|------------|---------------------------------|
+| `KEY_NAME`          | `main`     | standard key name               |
+| `PROVIDER_KEY_NAME` | `provider` | name of key to use for provider |
+| `DSEQ`              | 1          | deployment sequence             |
+| `GSEQ`              | 1          | group sequence                  |
+| `OSEQ`              | 1          | order sequence                  |
+| `PRICE`             | 10uakt     | price to bid                    |
 
 To get DNS routing to work locally, there are two addresses which will probably need to set to configure requests to hit the kind docker container. To route requests back to the local interface, add the following two lines to your `/etc/hosts` for the Akash-Node and Akash-Provider examples to work correctly.
 
@@ -89,10 +89,10 @@ Pick one of the following commands:
 __t1__
 ```sh
 # Standard Networking
-make kind-cluster-create
+make kind-cluster-setup
 
 # Calico Network Manger
-make kind-cluster-calico-create
+KIND_CONFIG=calico make kind-cluster-setup
 ```
 
 Check all pods in kube-system and ingress-nginx namespaces are in Running state.
@@ -108,7 +108,7 @@ cluster created by the `kind` command. This uploads an image from your local doc
 
 __t1__
 ```sh
-DOCKER_IMAGE=ovrclk/akash:mycustomtag make kind-upload-image
+DOCKER_IMAGE=ovrclk/akash:mycustomtag make kind-upload-images
 ```
 
 ### Build Akash binaries and initialize network

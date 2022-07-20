@@ -11,8 +11,11 @@ INTEGRATION_VARS := TEST_INTEGRATION=true
 
 .PHONY: test-e2e-integration
 test-e2e-integration:
-	# Assumes cluster created: `make -s -C _run/kube kind-cluster-create`
-	$(KIND_VARS) $(INTEGRATION_VARS) go test -count=1 -mod=readonly -p 4 -tags "e2e $(BUILD_MAINNET)" -v ./integration/... -run TestIntegrationTestSuite -timeout 1500s
+	# Assumes cluster created and configured:
+	# ```
+	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kind-cluster-setup-e2e
+	# ```
+	$(KIND_VARS) $(INTEGRATION_VARS) go test -count=1 -mod=readonly -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 1500s
 
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:
@@ -20,11 +23,14 @@ test-e2e-integration-k8s:
 
 .PHONY: test-query-app
 test-query-app:
-	 $(INTEGRATION_VARS) $(KIND_VARS) go test -mod=readonly -p 4 -tags "e2e integration $(BUILD_MAINNET)" -v ./integration/... -run TestQueryApp
+	 $(INTEGRATION_VARS) $(KIND_VARS) go test -mod=readonly -p 4 -tags "e2e integration" -v ./integration/... -run TestQueryApp
 
 .PHONY: test-k8s-integration
 test-k8s-integration:
-	# Assumes cluster created: `make -s -C _run/kube kind-cluster-create`
+	# Assumes cluster created and configured:
+	# ```
+	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kind-cluster-setup-e2e
+	# ```
 	go test -count=1 -v -tags k8s_integration ./pkg/apis/akash.network/v2beta1
 	go test -count=1 -v -tags k8s_integration ./cluster/kube
 

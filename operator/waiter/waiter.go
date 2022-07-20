@@ -2,8 +2,9 @@ package waiter
 
 import (
 	"context"
-	"github.com/tendermint/tendermint/libs/log"
 	"time"
+
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 type OperatorWaiter interface {
