@@ -1,0 +1,6 @@
+- op: replace
+  path: /spec/template/spec/initContainers/0/image
+  value: ghcr.io/ovrclk/akash:stable
+- op: replace
+  path: /spec/template/spec/containers/0/image
+  value: ghcr.io/ovrclk/provider-services:stable

@@ -3,6 +3,7 @@ kind: Deployment
 metadata:
   name: akash-provider
 spec:
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app: akash-provider
@@ -31,17 +32,17 @@ spec:
             - name: AKASH_HOME
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: home
             - name: AKASH_FROM
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: from
             - name: AKASH_KEYRING_BACKEND
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: keyring-backend
           volumeMounts:
             - name: boot
@@ -50,11 +51,14 @@ spec:
             - name: keys
               mountPath: /boot-keys
               readOnly: true
+            - name: home
+              mountPath: /home
       containers:
         - name: akash-provider
           image: ghcr.io/ovrclk/provider-services:stable
           imagePullPolicy: IfNotPresent
           args:
+            - provider-services
             - run
             - --cluster-k8s
           env:
@@ -66,42 +70,42 @@ spec:
             - name: AP_HOME
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: home
 
             # --from
             - name: AP_FROM
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: from
 
             # --node
             - name: AP_NODE
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: node
 
             # --chain-id
             - name: AP_CHAIN_ID
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: chain-id
 
             # --keyring-backend
             - name: AP_KEYRING_BACKEND
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: keyring-backend
 
             # --trust-node
             - name: AP_TRUST_NODE
               valueFrom:
                 configMapKeyRef:
-                  name: akash-client-config
+                  name: akash-provider-client-config
                   key: trust-node
 
             ##
@@ -361,12 +365,8 @@ spec:
             - name: gateway
               containerPort: 8443
           volumeMounts:
-            - name: boot
-              mountPath: /boot
-              readOnly: true
-            - name: keys
-              mountPath: /boot-keys
-              readOnly: true
+            - name: home
+              mountPath: /home
       volumes:
         - name: boot
           configMap:
@@ -374,3 +374,5 @@ spec:
         - name: keys
           secret:
             secretName: akash-provider-keys
+        - name: home
+          emptyDir: {}

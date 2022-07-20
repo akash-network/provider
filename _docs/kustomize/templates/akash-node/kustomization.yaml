@@ -1,17 +1,16 @@
-bases:
-  # - github.com/ovrclk/akash/_docs/kustomize/akashd?ref=boz/kustomize
-  - ../../../../_docs/kustomize/akash-node
-
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 namespace: akash-services
+resources:
+  - ../../../../../_docs/kustomize/akash-node
 
 configMapGenerator:
-
   ##
   # cosmos-sdk app config (app.toml) overrides
   ##
   - name: akash-app-config
     behavior: merge
-    literals:
+    literals: []
       # - pruning=syncable
 
   ##
@@ -19,7 +18,7 @@ configMapGenerator:
   ##
   - name: akash-config
     behavior: merge
-    literals:
+    literals: []
       # - moniker=node0
 
   - name: akash-data

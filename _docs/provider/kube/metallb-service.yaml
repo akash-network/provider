@@ -21,15 +21,15 @@ metadata:
   namespace: metallb-system
 spec:
   podSelector:
-    matchLabels:  
+    matchLabels:
       app: metallb
       component: controller
   policyTypes:
-  - Ingress
+    - Ingress
   ingress:
     - from:
-      - namespaceSelector:
-          matchLabels:
-            kubernetes.io/metadata.name: akash-services
-        podSelector: 
-          matchLabels: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: akash-services
+          podSelector:
+            matchLabels: {}

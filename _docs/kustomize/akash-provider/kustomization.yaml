@@ -1,32 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: akash-services
 resources:
   - rbac.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
   - service_account.yaml
-
-namespace: akash-services
-
 commonLabels:
   app: akash-provider
   akash.network/component: akash-provider
-
 configMapGenerator:
   - name: akash-provider-boot
     files:
       - run.sh
 
-  - name: akash-client-config
+  - name: akash-provider-client-config
     literals:
       - home=/home
-      - from=main
+      - from=provider
       - node=http://akash-node:26657
       - chain-id=local
       - keyring-backend=test
       - trust-node=true
 
   - name: akash-provider-config
-    literals:
+    literals: []
       ##
       #  override-able defaults
       ##
@@ -63,6 +62,6 @@ secretGenerator:
   # required values:
   ##
   - name: akash-provider-keys
-    files:
+    files: []
     # - key.txt
     # - key-pass.txt

@@ -1,3 +1,5 @@
+//go:build e2e
+
 package integration
 
 import (
@@ -236,7 +238,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 	s.Require().Equal(testData.String(), string(bodyData))
 }
 
-func (s *E2EPersistentStorageDeploymentUpdate) TestDeploymentUpdate() {
+func (s *E2EPersistentStorageDeploymentUpdate) TestPersistentStorageDeploymentUpdate() {
 	// create a deployment
 	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-storage-updateA.yaml")
 	s.Require().NoError(err)

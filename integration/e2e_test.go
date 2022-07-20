@@ -1,3 +1,5 @@
+//go:build e2e
+
 package integration
 
 import (
@@ -405,19 +407,17 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 func waitForTCPSocket(ctx context.Context, dialer net.Dialer, host string, t *testing.T) {
 	// Wait no more than 30 seconds for the socket to be listening
-	subctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	for {
-		if err := subctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			t.Fatalf("timed out trying to connect to host %q", host)
 		}
 
 		// Just test for TCP socket accepting connections, not for an actual functional server
-		conn, err := dialer.DialContext(subctx, "tcp", host)
+		conn, err := dialer.DialContext(ctx, "tcp", host)
 		if err != nil {
-			t.Logf("connecting to %q returned %v", host, err)
-
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 				t.Fatalf("timed out trying to connect to host %q", host)
 			}
@@ -1082,7 +1082,7 @@ func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
 
 	var out sdktest.BufferWriter
 
-	leaseShellCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	leaseShellCtx, cancel := context.WithTimeout(s.ctx, time.Minute)
 	defer cancel()
 
 	logged := make(map[string]struct{})
@@ -1484,7 +1484,6 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 	// Wait for lease to show up
 	maxWait := time.After(2 * time.Minute)
 	for {
-
 		select {
 		case <-s.ctx.Done():
 			s.T().Fatal("test context closed before lease is stood up by provider")
@@ -1503,7 +1502,11 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 			break
 		}
 
-		time.Sleep(time.Second)
+		select {
+		case <-s.ctx.Done():
+			s.T().Fatal("test context closed before lease is stood up by provider")
+		case <-time.After(time.Second):
+		}
 	}
 
 	time.Sleep(30 * time.Second) // TODO - replace with polling
@@ -1518,11 +1521,11 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
 		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
 	)
+
 	require.NoError(s.T(), err)
 	leaseStatusData := gwrest.LeaseStatus{}
 	err = json.Unmarshal(cmdResult.Bytes(), &leaseStatusData)
 	require.NoError(s.T(), err)
-
 	s.Require().Len(leaseStatusData.IPs, 1)
 
 	webService := leaseStatusData.IPs["web"]
@@ -1534,7 +1537,6 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 	ipAddr := leasedIP.IP
 	ip := net.ParseIP(ipAddr)
 	s.Assert().NotNilf(ip, "after parsing %q got nil", ipAddr)
-
 }
 
 func TestIntegrationTestSuite(t *testing.T) {
@@ -1549,8 +1551,7 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2EJWTServer))
-	// fixme engineering#357
-	// suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 
 func (s *IntegrationTestSuite) waitForBlocksCommitted(height int) error {

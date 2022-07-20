@@ -8,15 +8,15 @@ import (
 	"time"
 
 	"github.com/boz/go-lifecycle"
+	"github.com/ovrclk/akash/sdl"
+	"github.com/ovrclk/akash/validation"
 	"github.com/pkg/errors"
 	"github.com/tendermint/tendermint/libs/log"
 
 	maniv2beta1 "github.com/ovrclk/akash/manifest/v2beta1"
 	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/sdl"
 	sdlutil "github.com/ovrclk/akash/sdl/util"
 	"github.com/ovrclk/akash/util/runner"
-	"github.com/ovrclk/akash/validation"
 	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 
@@ -38,6 +38,7 @@ var (
 	ErrNoManifestForDeployment = errors.New("manifest not yet received for that deployment")
 	ErrNoLeaseForDeployment    = errors.New("no lease for deployment")
 	errNoGroupForLease         = errors.New("group not found")
+	errManifestRejected        = errors.New("manifest rejected")
 )
 
 func newManager(h *service, daddr dtypes.DeploymentID) *manager {
@@ -136,6 +137,7 @@ func (m *manager) clearFetched() {
 	m.data = dtypes.QueryDeploymentResponse{}
 	m.localLeases = nil
 }
+
 func (m *manager) run(donech chan<- *manager) {
 	defer m.lc.ShutdownCompleted()
 	defer func() { donech <- m }()
@@ -146,14 +148,12 @@ func (m *manager) run(donech chan<- *manager) {
 
 loop:
 	for {
-
 		var stopch <-chan time.Time
 		if m.stoptimer != nil {
 			stopch = m.stoptimer.C
 		}
 
 		select {
-
 		case err := <-m.lc.ShutdownRequest():
 			m.lc.ShutdownInitiated(err)
 			break loop
@@ -166,24 +166,22 @@ loop:
 		case ev := <-m.leasech:
 			m.log.Info("new lease", "lease", ev.LeaseID)
 			m.clearFetched()
-			m.emitReceivedEvents()
 			m.maybeScheduleStop()
 			runch = m.maybeFetchData(ctx, runch)
-
 		case id := <-m.rmleasech:
 			m.log.Info("lease removed", "lease", id)
 			m.clearFetched()
 			m.maybeScheduleStop()
-
 		case req := <-m.manifestch:
 			m.log.Info("manifest received")
 
 			m.requests = append(m.requests, req)
-			m.validateRequests()
-			m.emitReceivedEvents()
 			m.maybeScheduleStop()
-			runch = m.maybeFetchData(ctx, runch)
 
+			if runch = m.maybeFetchData(ctx, runch); runch == nil {
+				m.validateRequests()
+				m.emitReceivedEvents()
+			}
 		case version := <-m.updatech:
 			m.log.Info("received version", "version", hex.EncodeToString(version))
 			m.versions = append(m.versions, version)
@@ -226,16 +224,16 @@ loop:
 	if runch != nil {
 		<-runch
 	}
-
 }
 
+// maybeFetchData try fetch deployment and lease data
+// if there is cached result the function returns nil channel which signals caller to process events
 func (m *manager) maybeFetchData(ctx context.Context, runch <-chan runner.Result) <-chan runner.Result {
 	if runch != nil {
 		return runch
 	}
 
-	expired := time.Since(m.fetchedAt) > m.config.CachedResultMaxAge
-	if !m.fetched || expired {
+	if !m.fetched || time.Since(m.fetchedAt) > m.config.CachedResultMaxAge {
 		m.clearFetched()
 		return m.fetchData(ctx)
 	}
@@ -318,7 +316,6 @@ func (m *manager) maybeScheduleStop() bool { // nolint:golint,unparam
 		return false
 	}
 	if m.stoptimer != nil {
-
 		m.log.Info("starting stop timer", "duration", manifestLingerDuration)
 		m.stoptimer = time.NewTimer(manifestLingerDuration)
 	}
@@ -335,6 +332,7 @@ func (m *manager) fillAllRequests(response error) {
 		req.ch <- response
 	}
 	m.requests = nil
+
 }
 
 func (m *manager) emitReceivedEvents() {
@@ -406,7 +404,53 @@ func (m *manager) validateRequests() {
 	}
 }
 
-var errManifestRejected = errors.New("manifest rejected")
+func (m *manager) validateRequest(req manifestRequest) error {
+	select {
+	case <-req.ctx.Done():
+		return req.ctx.Err()
+	default:
+	}
+
+	// ensure that an uploaded manifest matches the hash declared on
+	// the Akash Deployment.Version
+	version, err := sdl.ManifestVersion(req.value.Manifest)
+	if err != nil {
+		return err
+	}
+
+	var versionExpected []byte
+
+	if len(m.versions) != 0 {
+		versionExpected = m.versions[len(m.versions)-1]
+	} else {
+		versionExpected = m.data.Deployment.Version
+	}
+
+	if !bytes.Equal(version, versionExpected) {
+		m.log.Info("deployment version mismatch", "expected", m.data.Deployment.Version, "got", version)
+		return ErrManifestVersion
+	}
+
+	if err = validation.ValidateManifest(req.value.Manifest); err != nil {
+		return err
+	}
+
+	if err = validation.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
+		return err
+	}
+
+	groupNames := make([]string, 0)
+
+	for _, lease := range m.localLeases {
+		groupNames = append(groupNames, lease.Group.GroupSpec.Name)
+	}
+	// Check that hostnames are not in use
+	if err = m.checkHostnamesForManifest(req.value.Manifest, groupNames); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta1.Manifest, groupNames []string) error {
 	// Check if the hostnames are available. Do not block forever
@@ -440,45 +484,4 @@ func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta1.Manifest
 	}
 
 	return m.hostnameService.CanReserveHostnames(allHostnames, ownerAddr)
-}
-
-func (m *manager) validateRequest(req manifestRequest) error {
-	// ensure that an uploaded manifest matches the hash declared on
-	// the Akash Deployment.Version
-	version, err := sdl.ManifestVersion(req.value.Manifest)
-	if err != nil {
-		return err
-	}
-
-	var versionExpected []byte
-
-	if len(m.versions) != 0 {
-		versionExpected = m.versions[len(m.versions)-1]
-	} else {
-		versionExpected = m.data.Deployment.Version
-	}
-	if !bytes.Equal(version, versionExpected) {
-		m.log.Info("deployment version mismatch", "expected", m.data.Deployment.Version, "got", version)
-		return ErrManifestVersion
-	}
-
-	if err := validation.ValidateManifest(req.value.Manifest); err != nil {
-		return err
-	}
-
-	if err := validation.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
-		return err
-	}
-
-	groupNames := make([]string, 0)
-
-	for _, lease := range m.localLeases {
-		groupNames = append(groupNames, lease.Group.GroupSpec.Name)
-	}
-	// Check that hostnames are not in use
-	if err := m.checkHostnamesForManifest(req.value.Manifest, groupNames); err != nil {
-		return err
-	}
-
-	return nil
 }

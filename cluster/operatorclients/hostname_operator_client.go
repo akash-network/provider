@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	hostnameOperatorHealthPath = "/health"
+	hostnameOperatorHealthPath = "health"
 )
 
 type HostnameOperatorClient interface {

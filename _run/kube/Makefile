@@ -1,3 +1,9 @@
+KIND_SETUP_PREREQUISITES ?= \
+
+KUSTOMIZE_INSTALLS ?= \
+	akash-operator-hostname \
+	akash-operator-inventory
+
 include ../common.mk
 include ../common-commands.mk
 include ../common-kind.mk
@@ -21,24 +27,6 @@ provider-run:
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none"
 
-.PHONY: provider-lease-status
-provider-lease-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)"
-
-.PHONY: provider-service-status
-provider-service-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)"
-
 .PHONY: provider-lease-ping
 provider-lease-ping:
 	curl -sIH "Host: hello.localhost" localhost:$(KIND_HTTP_PORT)
@@ -47,10 +35,11 @@ provider-lease-ping:
 hostname-operator:
 	$(PROVIDER_SERVICES) hostname-operator
 
-.PHONY: kustomize-install-hostname-operator
-kustomize-install-hostname-operator:
-	kubectl kustomize ./kustomize/akash-hostname-operator | kubectl apply -f -
-
 .PHONY: clean-kube
 clean-kube:
-	# noop
+
+.PHONY: kind-deployments-rollout
+kind-deployments-rollout:
+
+.PHONY: kind-setup-kube
+kind-setup-kube:

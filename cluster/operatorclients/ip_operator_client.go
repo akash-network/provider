@@ -12,9 +12,10 @@ import (
 	"sync"
 
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"k8s.io/client-go/rest"
+
+	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
 
 	clusterutil "github.com/ovrclk/provider-services/cluster/util"
 )
@@ -126,7 +127,7 @@ func (ipoc *ipOperatorClient) newRequest(ctx context.Context, method string, pat
 }
 
 func (ipoc *ipOperatorClient) GetIPAddressStatus(ctx context.Context, orderID mtypes.OrderID) ([]ipoptypes.LeaseIPStatus, error) {
-	path := fmt.Sprintf("/ip-lease-status/%s/%d/%d/%d", orderID.GetOwner(), orderID.GetDSeq(), orderID.GetGSeq(), orderID.GetOSeq())
+	path := fmt.Sprintf("ip-lease-status/%s/%d/%d/%d", orderID.GetOwner(), orderID.GetDSeq(), orderID.GetGSeq(), orderID.GetOSeq())
 	req, err := ipoc.newRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -159,7 +160,7 @@ func (ipoc *ipOperatorClient) GetIPAddressStatus(ctx context.Context, orderID mt
 }
 
 func (ipoc *ipOperatorClient) GetIPAddressUsage(ctx context.Context) (ipoptypes.IPAddressUsage, error) {
-	req, err := ipoc.newRequest(ctx, http.MethodGet, "/usage", nil)
+	req, err := ipoc.newRequest(ctx, http.MethodGet, "usage", nil)
 	if err != nil {
 		return ipoptypes.IPAddressUsage{}, err
 	}

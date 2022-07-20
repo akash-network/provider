@@ -30,7 +30,7 @@ install:
 	$(GO) install $(BUILD_FLAGS) ./cmd/provider-services
 
 .PHONY: docker-image
-docker-image:
+docker-image: modvendor
 	docker run \
 		--rm \
 		-e STABLE=$(IS_STABLE) \
@@ -42,7 +42,7 @@ docker-image:
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
-		-f .goreleaser-docker.yaml \
+		-f .goreleaser-docker-$(UNAME_ARCH).yaml \
 		--debug=$(GORELEASER_DEBUG) \
 		--rm-dist \
 		--skip-validate \

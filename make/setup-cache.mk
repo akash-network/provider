@@ -1,3 +1,7 @@
+ifeq (, $(AP_DEVCACHE))
+$(error AP_DEVCACHE is not set)
+endif
+
 $(AP_DEVCACHE):
 	@echo "creating .cache dir structure..."
 	mkdir -p $@
@@ -6,6 +10,8 @@ $(AP_DEVCACHE):
 	mkdir -p $(AP_DEVCACHE_VERSIONS)
 	mkdir -p $(AP_DEVCACHE_NODE_MODULES)
 	mkdir -p $(AP_DEVCACHE)/run
+
+.INTERMEDIATE: cache
 cache: $(AP_DEVCACHE)
 
 .PHONY: akash
@@ -83,10 +89,16 @@ $(K8S_CODE_GEN_VERSION_FILE): $(AP_DEVCACHE) modvendor
 $(K8S_GO_TO_PROTOBUF): $(K8S_CODE_GEN_VERSION_FILE)
 $(K8S_GENERATE_GROUPS): $(K8S_CODE_GEN_VERSION_FILE)
 
-.PHONY: $(KIND)
-$(KIND):
-	@echo "installing kind ..."
-	$(GO) install sigs.k8s.io/kind
+$(KIND_VERSION_FILE): $(AP_DEVCACHE)
+ifeq (, $(KIND))
+	@echo "installing kind $(KIND_VERSION) ..."
+	rm -f $(MOCKERY)
+	GOBIN=$(AP_DEVCACHE_BIN) go install sigs.k8s.io/kind
+endif
+	rm -rf "$(dir $@)"
+	mkdir -p "$(dir $@)"
+	touch $@
+$(KIND): $(KIND_VERSION_FILE)
 
 $(NPM):
 ifeq (, $(shell which $(NPM) 2>/dev/null))
@@ -100,12 +112,6 @@ ifeq (, $(shell which swagger-combine 2>/dev/null))
 	chmod +x $(SWAGGER_COMBINE)
 else
 	@echo "swagger-combine already installed; skipping..."
-endif
-
-$(PROTOC_SWAGGER_GEN): $(AP_DEVCACHE)
-ifeq (, $(shell which protoc-gen-swagger 2>/dev/null))
-	@echo "installing protoc-gen-swagger $(PROTOC_SWAGGER_GEN_VERSION) ..."
-	GOBIN=$(AP_DEVCACHE_BIN) $(GO) install github.com/grpc-ecosystem/grpc-gateway/protoc-gen-swagger@$(PROTOC_SWAGGER_GEN_VERSION)
 endif
 
 cache-clean:

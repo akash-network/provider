@@ -9,6 +9,7 @@ import (
 	"github.com/ovrclk/provider-services/operator"
 	"github.com/ovrclk/provider-services/operator/hostnameoperator"
 	"github.com/ovrclk/provider-services/operator/ipoperator"
+	"github.com/ovrclk/provider-services/version"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
 
@@ -24,7 +25,7 @@ func NewRootCmd() *cobra.Command {
 		Use:               "provider-services",
 		Short:             "Provider services commands",
 		SilenceUsage:      true,
-		PersistentPreRunE: acmd.GetPersistentPreRunE(encodingConfig),
+		PersistentPreRunE: acmd.GetPersistentPreRunE(encodingConfig, []string{"AP"}),
 	}
 
 	cmd.PersistentFlags().String(flags.FlagNode, "http://localhost:26657", "The node address")
@@ -49,6 +50,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(RunResourceServerCmd())
 	cmd.AddCommand(MigrateEndpointsCmd())
 	cmd.AddCommand(operator.Cmd())
+	cmd.AddCommand(version.NewVersionCommand())
 
 	return cmd
 }
