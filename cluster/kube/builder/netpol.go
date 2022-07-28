@@ -147,8 +147,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 		portsWithIP := make([]netv1.NetworkPolicyPort, 0)
 
 		for _, expose := range service.Expose {
-			portToOpen := sdlutil.ExposeExternalPort(expose)
-			portAsIntStr := intstr.FromInt(int(portToOpen))
+			portAsIntStr := intstr.FromInt(int(expose.Port))
 
 			var exposeProto corev1.Protocol
 			switch expose.Proto {
@@ -216,6 +215,13 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 				Spec: netv1.NetworkPolicySpec{
 					Ingress: []netv1.NetworkPolicyIngressRule{
 						{
+							From: []netv1.NetworkPolicyPeer{
+								{
+									IPBlock: &netv1.IPBlock{
+										CIDR: "0.0.0.0/0",
+									},
+								},
+							},
 							Ports: portsWithIP,
 						},
 					},
