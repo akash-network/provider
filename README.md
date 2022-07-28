@@ -1,5 +1,8 @@
 # Akash Provider Daemon
 
+[![tests](https://github.com/ovrclk/provider-services/actions/workflows/tests.yaml/badge.svg)](https://github.com/ovrclk/provider-services/actions/workflows/tests.yaml)
+[![integration](https://github.com/ovrclk/provider-services/actions/workflows/k8s-integration.yaml/badge.svg)](https://github.com/ovrclk/provider-services/actions/workflows/k8s-integration.yaml)
+
 This folder contains the Akash Provider Daemon. This piece of software listens to events emitted from the Akash blockchain (code in `../app/app.go`) and takes actions on a connected Kubernetes cluster to provision compute capacity based on the bids that the configured provider key wins. The following are the pieces of the daemon:
 
 ### [`bidengine`](./bidengine)
