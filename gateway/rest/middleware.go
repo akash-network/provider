@@ -7,13 +7,13 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
-	"github.com/tendermint/tendermint/libs/log"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gorilla/context"
 	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/pkg/errors"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/tendermint/tendermint/libs/log"
 
 	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
 	mquery "github.com/ovrclk/akash/x/market/query"

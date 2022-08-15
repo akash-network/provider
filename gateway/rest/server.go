@@ -8,14 +8,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
 
 	ctypes "github.com/ovrclk/akash/x/cert/types/v1beta2"
 
 	"github.com/ovrclk/provider-services"
+	"github.com/ovrclk/provider-services/cluster/operatorclients"
 	gwutils "github.com/ovrclk/provider-services/gateway/utils"
 )
 

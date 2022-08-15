@@ -16,12 +16,13 @@ import (
 	"sync"
 	"time"
 
-	cosmosclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/remotecommand"
+
+	cosmosclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	akashclient "github.com/ovrclk/akash/client"
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"

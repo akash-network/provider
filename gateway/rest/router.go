@@ -15,41 +15,34 @@ import (
 	"sync"
 	"time"
 
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	"github.com/ovrclk/provider-services/gateway/utils"
-	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
-
 	"github.com/golang-jwt/jwt/v4"
-
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-
+	gcontext "github.com/gorilla/context"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
+	"github.com/pkg/errors"
+	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
+	kubeVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/tendermint/tendermint/libs/log"
 
 	manifest "github.com/ovrclk/akash/manifest/v2beta1"
 	"github.com/ovrclk/akash/util/wsutil"
-
-	"github.com/ovrclk/provider-services/cluster/util"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	gcontext "github.com/gorilla/context"
-	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
-	"github.com/tendermint/tendermint/libs/log"
-
-	"github.com/gorilla/mux"
-
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
-	kubeVersion "k8s.io/apimachinery/pkg/version"
-
 	manifestValidation "github.com/ovrclk/akash/validation"
 	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 
 	"github.com/ovrclk/provider-services"
 	"github.com/ovrclk/provider-services/cluster"
+	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
+	"github.com/ovrclk/provider-services/cluster/operatorclients"
 	cltypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/ovrclk/provider-services/cluster/util"
+	"github.com/ovrclk/provider-services/gateway/utils"
 	pmanifest "github.com/ovrclk/provider-services/manifest"
+	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
 )
 
 type CtxAuthKey string
@@ -215,8 +208,9 @@ func newResourceServerRouter(log log.Logger, providerAddr sdk.Address, publicKey
 
 // lokiServiceHandler forwards all requests to the loki instance running in provider's cluster.
 // Example:
-// 		Incoming Request: http://localhost:8445/lease/1/1/1/loki-service/loki/api/v1/query?query={app=".+"}
-// 		Outgoing Request: http://{lokiGwAddr}/loki/api/v1/query?query={app=".+"}
+//
+//	Incoming Request: http://localhost:8445/lease/1/1/1/loki-service/loki/api/v1/query?query={app=".+"}
+//	Outgoing Request: http://{lokiGwAddr}/loki/api/v1/query?query={app=".+"}
 func lokiServiceHandler(log log.Logger, lokiGwAddr string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// set the X-Scope-OrgID header for fetching logs for the right tenant
