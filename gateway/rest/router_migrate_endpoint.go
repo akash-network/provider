@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"net/http"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	manifest "github.com/ovrclk/akash/manifest/v2beta1"
 
 	"github.com/ovrclk/provider-services/cluster"
 	clusterutil "github.com/ovrclk/provider-services/cluster/util"
+	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
 )
 
 type endpointMigrateRequestBody struct {

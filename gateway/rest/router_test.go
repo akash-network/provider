@@ -10,35 +10,33 @@ import (
 	"testing"
 	"time"
 
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/gateway/utils"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/version"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/version"
+
 	qmock "github.com/ovrclk/akash/client/mocks"
 	"github.com/ovrclk/akash/sdl"
 	"github.com/ovrclk/akash/testutil"
 	manifestValidation "github.com/ovrclk/akash/validation"
 	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 	types "github.com/ovrclk/akash/x/market/types/v1beta2"
 
 	"github.com/ovrclk/provider-services"
+	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
 	pcmock "github.com/ovrclk/provider-services/cluster/mocks"
+	"github.com/ovrclk/provider-services/cluster/operatorclients"
 	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/ovrclk/provider-services/gateway/utils"
 	pmmock "github.com/ovrclk/provider-services/manifest/mocks"
 	pmock "github.com/ovrclk/provider-services/mocks"
+	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
 )
 
 const (

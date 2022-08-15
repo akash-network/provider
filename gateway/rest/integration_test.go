@@ -6,11 +6,11 @@ import (
 	"crypto/tls"
 	"testing"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-
 	"github.com/stretchr/testify/mock"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	qmock "github.com/ovrclk/akash/client/mocks"
 	akashmanifest "github.com/ovrclk/akash/manifest/v2beta1"

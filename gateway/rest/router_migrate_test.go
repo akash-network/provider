@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ovrclk/akash/testutil"
 	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+
+	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
 )
 
 func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
