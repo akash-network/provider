@@ -20,5 +20,3 @@ configMapGenerator:
       - retry-delay=3s
       - ignore-list-age-limit=2613600s
       - event-failure-limit=3
-      # Update this with the address of the provider
-      # - provider-address=akash1esvcrfre038ffvknc5wzh7hha9wjkqpefqllf3

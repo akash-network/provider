@@ -18,7 +18,6 @@ export AKASH_CHAIN_ID           = local
 export AKASH_YES                = true
 export AKASH_GAS_PRICES         = 0.025uakt
 export AKASH_GAS                = auto
-export AKASH_NODE               = http://akash.localhost:$(KIND_PORT_BINDINGS)
 
 export AP_HOME                  = $(AKASH_HOME)
 export AP_KEYRING_BACKEND       = $(AKASH_KEYRING_BACKEND)
@@ -27,7 +26,6 @@ export AP_CHAIN_ID              = $(AKASH_CHAIN_ID)
 export AP_YES                   = $(AKASH_YES)
 export AP_GAS_PRICES            = $(AKASH_GAS_PRICES)
 export AP_GAS                   = $(AKASH_GAS)
-export AP_NODE                  = $(AKASH_NODE)
 
 AKASH_INIT                     := $(AP_RUN_DIR)/.akash-init
 
