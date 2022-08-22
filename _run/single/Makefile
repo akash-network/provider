@@ -4,6 +4,9 @@ KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \
 	akash-operator-inventory
 
+export AKASH_NODE               = http://akash.localhost:$(KIND_PORT_BINDINGS)
+export AP_NODE                  = $(AKASH_NODE)
+
 include ../common.mk
 include ../common-commands.mk
 include ../common-kind.mk

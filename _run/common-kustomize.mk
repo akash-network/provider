@@ -64,10 +64,11 @@ kustomize-configure-akash-provider:
 kustomize-configure-akash-operator-hostname:
 
 .PHONY: kustomize-configure-akash-operator-ip
-kustomize-init-akash-operator-ip:
+kustomize-configure-akash-operator-ip: akash-init
+	echo "provider-address=$(PROVIDER_ADDRESS)\n" > "$(KUSTOMIZE_DIR)/akash-operator-ip/configmap.yaml"
 
 .PHONY: kustomize-configure-akash-operator-inventory
-kustomize-init-configure-operator-inventory:
+kustomize-configure-configure-operator-inventory:
 
 #### Kustomize installations
 .PHONY: kustomize-deploy-services

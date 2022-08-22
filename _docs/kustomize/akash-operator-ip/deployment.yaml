@@ -10,6 +10,7 @@ spec:
     matchLabels:
       app: akash-ip-operator
   replicas: 1
+  revisionHistoryLimit: 1
   template:
     metadata:
       labels:
@@ -66,12 +67,3 @@ spec:
               configMapKeyRef:
                 name: akash-ip-operator-config
                 key: provider-address
-
-        volumeMounts:
-          - name: boot
-            mountPath: /boot
-            readOnly: true
-      volumes:
-        - name: boot
-          configMap:
-            name: akash-ip-operator-boot

@@ -10,3 +10,9 @@ patchesJson6902:
       group: apps
       name: akash-ip-operator
       version: v1
+
+configMapGenerator:
+  - name: akash-ip-operator-config
+    behavior: merge
+    envs:
+      - configmap.yaml
