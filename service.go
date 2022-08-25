@@ -241,4 +241,6 @@ func (s *service) run() {
 	<-s.bidengine.Done()
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
+
+	s.session.Log().Info("shutdown complete")
 }

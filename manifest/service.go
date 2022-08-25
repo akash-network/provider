@@ -311,6 +311,7 @@ loop:
 		}
 	}
 
+	s.session.Log().Info("shutdown complete")
 }
 
 func (s *service) maybeRemoveWatchdog(deploymentID dtypes.DeploymentID) {

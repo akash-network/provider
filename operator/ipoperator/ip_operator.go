@@ -391,8 +391,8 @@ func (op *ipOperator) prepareUsage(pd operatorcommon.PreparedResult) error {
 
 func (op *ipOperator) prepareState(pd operatorcommon.PreparedResult) error {
 	results := make(map[string][]interface{})
-	for _, mnagedIPEntry := range op.state {
-		leaseID := mnagedIPEntry.presentLease
+	for _, managedIPEntry := range op.state {
+		leaseID := managedIPEntry.presentLease
 
 		result := struct {
 			LastChangeTime string         `json:"last-event-time,omitempty"`
@@ -405,11 +405,11 @@ func (op *ipOperator) prepareState(pd operatorcommon.PreparedResult) error {
 		}{
 			LeaseID:        leaseID,
 			Namespace:      clusterutil.LeaseIDToNamespace(leaseID),
-			Port:           mnagedIPEntry.presentPort,
-			ExternalPort:   mnagedIPEntry.presentExternalPort,
-			ServiceName:    mnagedIPEntry.presentServiceName,
-			SharingKey:     mnagedIPEntry.presentSharingKey,
-			LastChangeTime: mnagedIPEntry.lastChangedAt.UTC().String(),
+			Port:           managedIPEntry.presentPort,
+			ExternalPort:   managedIPEntry.presentExternalPort,
+			ServiceName:    managedIPEntry.presentServiceName,
+			SharingKey:     managedIPEntry.presentSharingKey,
+			LastChangeTime: managedIPEntry.lastChangedAt.UTC().String(),
 		}
 
 		entryList := results[leaseID.String()]

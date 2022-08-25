@@ -221,8 +221,9 @@ loop:
 		s.updateOrderManagerGauge()
 	}
 
-	s.session.Log().Info("Waiting on provider attributes service")
+	s.session.Log().Debug("waiting on provider attributes service")
 	<-s.pass.lc.Done()
+	s.session.Log().Info("shutdown complete")
 }
 
 func queryExistingOrders(ctx context.Context, session session.Session) ([]mtypes.OrderID, error) {

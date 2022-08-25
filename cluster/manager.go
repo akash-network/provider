@@ -28,8 +28,6 @@ import (
 	"github.com/avast/retry-go"
 )
 
-type deploymentState string
-
 const (
 	dsDeployActive     deploymentState = "deploy-active"
 	dsDeployPending    deploymentState = "deploy-pending"
@@ -38,6 +36,10 @@ const (
 	dsTeardownPending  deploymentState = "teardown-pending"
 	dsTeardownComplete deploymentState = "teardown-complete"
 )
+
+const uncleanShutdownGracePeriod = 30 * time.Second
+
+type deploymentState string
 
 var (
 	deploymentCounter = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -98,10 +100,10 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *manifest.Gro
 		currentHostnames:    make(map[string]struct{}),
 	}
 
-	ctx, _ := TieContextToLifecycle(context.Background(), s.lc)
 	startCh := make(chan struct{}, 1)
 
-	go dm.run(ctx, startCh)
+	go dm.lc.WatchChannel(s.lc.ShuttingDown())
+	go dm.run(context.Background(), startCh)
 
 	// ensures lease withdraw monitor is started and subscribed to the bus prior
 	// sending LeaseAddFundsMonitor event
@@ -254,8 +256,7 @@ loop:
 	dm.log.Debug("waiting on dm.wg")
 	dm.wg.Wait()
 
-	if dm.state != dsTeardownComplete {
-		const uncleanShutdownGracePeriod = 30 * time.Second
+	if dm.state != dsDeployComplete {
 		dm.log.Info("shutting down unclean, running teardown now")
 		ctx, cancel := context.WithTimeout(context.Background(), uncleanShutdownGracePeriod)
 		defer cancel()
@@ -263,7 +264,7 @@ loop:
 	}
 
 	if teardownErr != nil {
-		dm.log.Error("lease teardwon failed", "err", teardownErr)
+		dm.log.Error("lease teardown failed", "err", teardownErr)
 	}
 
 	dm.log.Info("shutdown complete")
@@ -626,10 +627,6 @@ func (dm *deploymentManager) do(fn func() error) <-chan error {
 		ch <- fn()
 	}()
 	return ch
-}
-
-func TieContextToLifecycle(parentCtx context.Context, lc lifecycle.Lifecycle) (context.Context, context.CancelFunc) {
-	return TieContextToChannel(parentCtx, lc.ShuttingDown())
 }
 
 func TieContextToChannel(parentCtx context.Context, donech <-chan struct{}) (context.Context, context.CancelFunc) {

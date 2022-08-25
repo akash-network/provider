@@ -35,8 +35,6 @@ import (
 )
 
 const (
-	akashServiceTarget    = "akash.network/service-target"
-	akashMetalLB          = "metal-lb"
 	metalLbAllowSharedIP  = "metallb.universe.tf/allow-shared-ip"
 	metalLbPoolAnnotation = "metallb.universe.tf/address-pool"
 
@@ -275,7 +273,7 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 	if err != nil {
 		return nil, err
 	}
-	_, err = fmt.Fprintf(labelSelector, ",%s=%s", akashServiceTarget, akashMetalLB)
+	_, err = fmt.Fprintf(labelSelector, ",%s=%s", builder.AkashServiceTarget, builder.AkashMetalLB)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +372,7 @@ func (c *client) CreateIPPassthrough(ctx context.Context, directive ctypes.Clust
 	labels := make(map[string]string)
 	builder.AppendLeaseLabels(directive.LeaseID, labels)
 	labels[builder.AkashManagedLabelName] = "true"
-	labels[akashServiceTarget] = akashMetalLB
+	labels[builder.AkashServiceTarget] = builder.AkashMetalLB
 
 	selector := map[string]string{
 		builder.AkashManagedLabelName:         "true",
@@ -442,7 +440,7 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough
 	if err != nil {
 		return nil, err
 	}
-	_, err = fmt.Fprintf(labelSelector, ",%s=%s", akashServiceTarget, akashMetalLB)
+	_, err = fmt.Fprintf(labelSelector, ",%s=%s", builder.AkashServiceTarget, builder.AkashMetalLB)
 	if err != nil {
 		return nil, err
 	}
