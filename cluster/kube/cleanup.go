@@ -27,11 +27,17 @@ func cleanupStaleResources(ctx context.Context, kc kubernetes.Interface, lid mty
 	if err != nil {
 		return err
 	}
-	req2, err := labels.NewRequirement(builder.AkashManagedLabelName, selection.Equals, []string{"true"})
+	req2, err := labels.NewRequirement(builder.AkashServiceTarget, selection.Equals, []string{"true"})
 	if err != nil {
 		return err
 	}
-	selector := labels.NewSelector().Add(*req1).Add(*req2).String()
+
+	req3, err := labels.NewRequirement(builder.AkashManagedLabelName, selection.NotIn, []string{builder.AkashMetalLB})
+	if err != nil {
+		return err
+	}
+
+	selector := labels.NewSelector().Add(*req1).Add(*req2).Add(*req3).String()
 
 	// delete stale deployments
 	if err := kc.AppsV1().Deployments(ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{

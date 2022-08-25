@@ -21,6 +21,8 @@ const (
 	AkashManagedLabelName         = "akash.network"
 	AkashManifestServiceLabelName = "akash.network/manifest-service"
 	AkashNetworkStorageClasses    = "akash.network/storageclasses"
+	AkashServiceTarget            = "akash.network/service-target"
+	AkashMetalLB                  = "metal-lb"
 
 	akashNetworkNamespace = "akash.network/namespace"
 
@@ -29,8 +31,8 @@ const (
 	AkashLeaseGSeqLabelName     = "akash.network/lease.id.gseq"
 	AkashLeaseOSeqLabelName     = "akash.network/lease.id.oseq"
 	AkashLeaseProviderLabelName = "akash.network/lease.id.provider"
-
-	akashDeploymentPolicyName = "akash-deployment-restrictions"
+	AkashLeaseManifestVersion   = "akash.network/manifest.version"
+	akashDeploymentPolicyName   = "akash-deployment-restrictions"
 )
 
 const runtimeClassNoneValue = "none"

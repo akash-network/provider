@@ -169,7 +169,7 @@ func (ipoc *ipOperatorClient) GetIPAddressUsage(ctx context.Context) (ipoptypes.
 	if err != nil {
 		return ipoptypes.IPAddressUsage{}, err
 	}
-	ipoc.log.Info("usage result", "status", response.StatusCode)
+
 	if response.StatusCode != http.StatusOK {
 		return ipoptypes.IPAddressUsage{}, extractRemoteError(response)
 	}

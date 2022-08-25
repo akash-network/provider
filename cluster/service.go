@@ -341,7 +341,7 @@ loop:
 	}
 
 	<-s.inventory.done()
-
+	s.session.Log().Info("shutdown complete")
 }
 
 func (s *service) doCheckDeploymentExists(req checkDeploymentExistsRequest) {

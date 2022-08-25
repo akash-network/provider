@@ -2,7 +2,8 @@ KIND_SETUP_PREREQUISITES ?= \
 
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \
-	akash-operator-inventory
+	akash-operator-inventory \
+	akash-operator-ip
 
 export AKASH_NODE=http://localhost:26657
 export AP_NODE=http://localhost:26657
@@ -28,7 +29,8 @@ provider-run:
 		--cluster-node-port-quantity 100 \
 		--cluster-public-hostname "$(GATEWAY_HOSTNAME)" \
 		--bid-price-strategy "randomRange" \
-		--deployment-runtime-class "none"
+		--deployment-runtime-class "none" \
+		--ip-operator=true
 
 .PHONY: provider-lease-ping
 provider-lease-ping:
