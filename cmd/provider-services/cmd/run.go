@@ -25,7 +25,6 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/ovrclk/akash/client"
-	"github.com/ovrclk/akash/client/broadcaster"
 	"github.com/ovrclk/akash/cmd/common"
 	"github.com/ovrclk/akash/events"
 	"github.com/ovrclk/akash/pubsub"
@@ -39,6 +38,7 @@ import (
 
 	"github.com/ovrclk/provider-services"
 	"github.com/ovrclk/provider-services/bidengine"
+	"github.com/ovrclk/provider-services/client/broadcaster"
 	"github.com/ovrclk/provider-services/cluster"
 	"github.com/ovrclk/provider-services/cluster/kube"
 	"github.com/ovrclk/provider-services/cluster/kube/builder"
@@ -93,6 +93,7 @@ const (
 	FlagRPCQueryTimeout                  = "rpc-query-timeout"
 	FlagBidPriceIPScale                  = "bid-price-ip-scale"
 	FlagEnableIPOperator                 = "ip-operator"
+	FlagTxBroadcastTimeout               = "tx-broadcast-timeout"
 )
 
 const (
@@ -336,6 +337,11 @@ func RunCmd() *cobra.Command {
 		return nil
 	}
 
+	cmd.Flags().Duration(FlagTxBroadcastTimeout, 30*time.Second, "tx broadcast timeout. defaults to 30s")
+	if err := viper.BindPFlag(FlagTxBroadcastTimeout, cmd.Flags().Lookup(FlagTxBroadcastTimeout)); err != nil {
+		return nil
+	}
+
 	if err := providerflags.AddServiceEndpointFlag(cmd, serviceHostnameOperator); err != nil {
 		return nil
 	}
@@ -433,7 +439,7 @@ func createBidPricingStrategy(strategy string) (bidengine.BidPricingStrategy, er
 	return nil, errNoSuchBidPricingStrategy
 }
 
-// doRunCmd initializes all of the Provider functionality, hangs, and awaits shutdown signals.
+// doRunCmd initializes all the Provider functionality, hangs, and awaits shutdown signals.
 func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	clusterPublicHostname := viper.GetString(FlagClusterPublicHostname)
 	// TODO - validate that clusterPublicHostname is a valid hostname
@@ -461,6 +467,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	cachedResultMaxAge := viper.GetDuration(FlagCachedResultMaxAge)
 	rpcQueryTimeout := viper.GetDuration(FlagRPCQueryTimeout)
 	enableIPOperator := viper.GetBool(FlagEnableIPOperator)
+	txTimeout := viper.GetDuration(FlagTxBroadcastTimeout)
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
@@ -532,7 +539,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return errors.Errorf("no valid found on chain certificate for account %s", cctx.FromAddress)
 	}
 
-	broadcasterInstance, err := broadcaster.NewSerialClient(logger, cctx, txFactory, info)
+	broadcasterInstance, err := broadcaster.NewSerialClient(logger, cctx, txTimeout, txFactory, info)
 	if err != nil {
 		return err
 	}
