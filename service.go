@@ -3,17 +3,16 @@ package provider
 import (
 	"context"
 
+	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	aclient "github.com/ovrclk/akash/client"
+
 	"github.com/ovrclk/provider-services/cluster/operatorclients"
 	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
 	"github.com/ovrclk/provider-services/operator/waiter"
 
+	"github.com/boz/go-lifecycle"
 	"github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-
-	aclient "github.com/ovrclk/akash/client"
-
-	"github.com/boz/go-lifecycle"
 	"github.com/pkg/errors"
 
 	"github.com/ovrclk/akash/pubsub"
@@ -81,9 +80,17 @@ func NewService(ctx context.Context,
 	clusterConfig.DeploymentIngressDomain = cfg.DeploymentIngressDomain
 	clusterConfig.ClusterSettings = cfg.ClusterSettings
 
+	bc, err := newBalanceChecker(ctx, bankTypes.NewQueryClient(cctx), aclient.NewQueryClientFromCtx(cctx), accAddr, session, bus, cfg.BalanceCheckerCfg)
+	if err != nil {
+		session.Log().Error("starting balance checker", "err", err)
+		cancel()
+		return nil, err
+	}
+
 	cluster, err := cluster.NewService(ctx, session, bus, cclient, ipOperatorClient, waiter, clusterConfig)
 	if err != nil {
 		cancel()
+		<-bc.lc.Done()
 		return nil, err
 	}
 
@@ -99,6 +106,7 @@ func NewService(ctx context.Context,
 		session.Log().Error(errmsg, "err", err)
 		cancel()
 		<-cluster.Done()
+		<-bc.lc.Done()
 		return nil, errors.Wrap(err, errmsg)
 	}
 
@@ -115,15 +123,7 @@ func NewService(ctx context.Context,
 		cancel()
 		<-cluster.Done()
 		<-bidengine.Done()
-		return nil, err
-	}
-
-	bc, err := newBalanceChecker(ctx, bankTypes.NewQueryClient(cctx), aclient.NewQueryClientFromCtx(cctx), accAddr, session, bus, cfg.BalanceCheckerCfg)
-	if err != nil {
-		session.Log().Error("starting balance checker", "err", err)
-		cancel()
-		<-cluster.Done()
-		<-bidengine.Done()
+		<-bc.lc.Done()
 		return nil, err
 	}
 
