@@ -9,6 +9,7 @@ $(AP_DEVCACHE):
 	mkdir -p $(AP_DEVCACHE_INCLUDE)
 	mkdir -p $(AP_DEVCACHE_VERSIONS)
 	mkdir -p $(AP_DEVCACHE_NODE_MODULES)
+	mkdir -p $(AP_DEVCACHE_TESTS)
 	mkdir -p $(AP_DEVCACHE)/run
 
 .INTERMEDIATE: cache
