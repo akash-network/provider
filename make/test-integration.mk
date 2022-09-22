@@ -1,4 +1,7 @@
-COVER_PACKAGES = $(shell go list ./... | grep -v 'mock\|pkg/client' | paste -sd, -)
+BUILD_TAGS_K8S_INTEGRATION := k8s_integration
+BUILD_TAGS_E2E := e2e integration
+
+BUILD_TAGS_ALL := "$(BUILD_TAGS_K8S_INTEGRATION) $(BUILD_TAGS_E2E)"
 
 # This is statically specified in the vagrant configuration
 # todo @troian check it still necessary
@@ -23,7 +26,7 @@ test-e2e-integration-k8s:
 
 .PHONY: test-query-app
 test-query-app:
-	 $(INTEGRATION_VARS) $(KIND_VARS) go test -mod=readonly -p 4 -tags "e2e integration" -v ./integration/... -run TestQueryApp
+	 $(INTEGRATION_VARS) $(KIND_VARS) go test -mod=readonly -p 4 -tags "$(BUILD_TAGS_E2E)" -v ./integration/... -run TestQueryApp
 
 .PHONY: test-k8s-integration
 test-k8s-integration:
@@ -31,8 +34,8 @@ test-k8s-integration:
 	# ```
 	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kind-cluster-setup-e2e
 	# ```
-	go test -count=1 -v -tags k8s_integration ./pkg/apis/akash.network/v2beta1
-	go test -count=1 -v -tags k8s_integration ./cluster/kube
+	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./pkg/apis/akash.network/v2beta1
+	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./cluster/kube
 
 
 ###############################################################################
@@ -60,11 +63,8 @@ test-full:
 	$(GO) test -tags=$(BUILD_TAGS) -race ./...
 
 .PHONY: test-coverage
-test-coverage:
-	$(GO) test -tags=$(BUILD_MAINNET) -coverprofile=coverage.txt \
-		-covermode=count \
-		-coverpkg="$(COVER_PACKAGES)" \
-		./...
+test-coverage: $(AP_DEVCACHE)
+	./script/codecov.sh "$(AP_DEVCACHE_TESTS)" $(BUILD_TAGS_ALL)
 
 .PHONY: test-vet
 test-vet:

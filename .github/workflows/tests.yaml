@@ -58,4 +58,4 @@ jobs:
       - name: lint all
         run: make test-lint-all
       - name: lint make-sublinters
-        run: make test-sublinters 
+        run: make test-sublinters
