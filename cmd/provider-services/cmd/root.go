@@ -25,7 +25,7 @@ func NewRootCmd() *cobra.Command {
 		Use:               "provider-services",
 		Short:             "Provider services commands",
 		SilenceUsage:      true,
-		PersistentPreRunE: acmd.GetPersistentPreRunE(encodingConfig, []string{"AP"}),
+		PersistentPreRunE: acmd.GetPersistentPreRunE(encodingConfig, []string{"AP", "AKASH"}),
 	}
 
 	cmd.PersistentFlags().String(flags.FlagNode, "http://localhost:26657", "The node address")
@@ -51,6 +51,9 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(MigrateEndpointsCmd())
 	cmd.AddCommand(operator.Cmd())
 	cmd.AddCommand(version.NewVersionCommand())
+
+	cmd.AddCommand(acmd.QueryCmd())
+	cmd.AddCommand(acmd.TxCmd())
 
 	return cmd
 }
