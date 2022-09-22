@@ -17,7 +17,7 @@ UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # uname reports x86_64. rename to amd64 to make it usable by goreleaser
 UNAME_ARCH                 := $(shell uname -m | sed "s/x86_64/amd64/g")
 
-GO_MOD_NAME                := $(shell go list -m)
+GO_MOD_NAME                := $(shell go list -m 2>/dev/null)
 
 PROVIDER_SERVICES          ?= $(AP_DEVCACHE_BIN)/provider-services
 BINS                       := $(PROVIDER_SERVICES) akash
