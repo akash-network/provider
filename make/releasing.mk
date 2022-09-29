@@ -1,6 +1,15 @@
-GORELEASER_SKIP_VALIDATE ?= false
+GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
 GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser:$(GORELEASER_VERSION)
+
+ifeq ($(GORELEASER_RELEASE),true)
+	GORELEASER_SKIP_VALIDATE := false
+	GORELEASER_SKIP_PUBLISH  := release --skip-publish=false
+else
+	GORELEASER_SKIP_PUBLISH  := --skip-publish=true
+	GORELEASER_SKIP_VALIDATE ?= false
+	GITHUB_TOKEN=
+endif
 
 ifeq ($(OS),Windows_NT)
 $(error Windows, really?)
@@ -54,26 +63,6 @@ gen-changelog: $(GIT_CHGLOG)
 	@echo "generating changelog to .cache/changelog"
 	./script/genchangelog.sh "$(RELEASE_TAG)" .cache/changelog.md
 
-.PHONY: release-dry-run
-release-dry-run: modvendor gen-changelog
-	docker run \
-		--rm \
-		-e STABLE=$(IS_STABLE) \
-		-e MOD="$(GO_MOD)" \
-		-e BUILD_TAGS="$(BUILD_TAGS)" \
-		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
-		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
-		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
-		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
-		-w /go/src/$(GO_MOD_NAME) \
-		$(GORELEASER_IMAGE) \
-		-f "$(GORELEASER_CONFIG)" \
-		--skip-validate=$(GORELEASER_SKIP_VALIDATE) \
-		--debug=$(GORELEASER_DEBUG) \
-		--rm-dist \
-		--skip-publish \
-		--release-notes=/go/src/$(GO_MOD_NAME)/.cache/changelog.md
-
 .PHONY: release
 release: modvendor gen-changelog
 	docker run \
@@ -87,11 +76,14 @@ release: modvendor gen-changelog
 		-e HOMEBREW_NAME="$(GORELEASER_HOMEBREW_NAME)" \
 		-e HOMEBREW_CUSTOM="$(GORELEASER_HOMEBREW_CUSTOM)" \
 		-e GITHUB_TOKEN="$(GITHUB_TOKEN)" \
+		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
-		-f "$(GORELEASER_CONFIG)" release \
+		-f "$(GORELEASER_CONFIG)" \
+		$(GORELEASER_SKIP_PUBLISH) \
+		--skip-validate=$(GORELEASER_SKIP_VALIDATE) \
 		--debug=$(GORELEASER_DEBUG) \
 		--rm-dist \
 		--release-notes=/go/src/$(GO_MOD_NAME)/.cache/changelog.md

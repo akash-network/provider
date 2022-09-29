@@ -15,10 +15,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-/**
-This type exists to identify the target of a reservation. The lease ID type is not used directly because
-there is no need to consider order ID or provider ID for the purposes oft this
-*/
+// hostnameID type exists to identify the target of a reservation. The lease ID type is not used directly because
+// there is no need to consider order ID or provider ID for the purposes oft this
 type hostnameID struct {
 	owner sdktypes.Address
 	dseq  uint64
