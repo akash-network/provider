@@ -1,15 +1,18 @@
 env:
   - GO111MODULE=on
   - DOCKER_CLI_EXPERIMENTAL="enabled"
+  - CGO_ENABLED=1
 builds:
-  - id: provider-services-darwin
+  - id: provider-services-darwin-arm64
     binary: provider-services
     main: ./cmd/provider-services
     goarch:
-      - amd64
       - arm64
     goos:
       - darwin
+    env:
+      - CC=oa64-clang
+      - CXX=oa64-clang++
     flags:
       - "-mod={{ .Env.MOD }}"
       - "-tags={{ .Env.BUILD_TAGS }}"
@@ -17,14 +20,17 @@ builds:
     ldflags:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
-  - id: provider-services-linux
+      - "-linkmode={{ .Env.LINKMODE }}"
+  - id: provider-services-darwin-amd64
     binary: provider-services
     main: ./cmd/provider-services
     goarch:
       - amd64
-      - arm64
     goos:
-      - linux
+      - darwin
+    env:
+      - CC=o64-clang
+      - CXX=o64-clang++
     flags:
       - "-mod={{ .Env.MOD }}"
       - "-tags={{ .Env.BUILD_TAGS }}"
@@ -32,10 +38,48 @@ builds:
     ldflags:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+  - id: provider-services-linux-arm64
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - arm64
+    goos:
+      - linux
+    env:
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "{{ .Env.STRIP_FLAGS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+  - id: provider-services-linux-amd64
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - amd64
+    goos:
+      - linux
+    env:
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "{{ .Env.STRIP_FLAGS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
 universal_binaries:
   - id: darwin-universal
     ids:
-      - provider-services-darwin
+      - provider-services-darwin-arm64
+      - provider-services-darwin-amd64
     replace: true
     name_template: "{{.ProjectName}}"
 archives:
@@ -51,7 +95,8 @@ archives:
   - id: provider-services
     builds:
       - darwin-universal
-      - provider-services-linux
+      - provider-services-linux-arm64
+      - provider-services-linux-amd64
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: true
     format: zip

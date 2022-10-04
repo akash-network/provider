@@ -1,6 +1,6 @@
 GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
-GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser:$(GORELEASER_VERSION)
+GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:v$(GOLANG_VERSION)
 
 ifeq ($(GORELEASER_RELEASE),true)
 	GORELEASER_SKIP_VALIDATE := false
@@ -47,6 +47,7 @@ docker-image: modvendor
 		-e BUILD_TAGS="$(BUILD_TAGS)" \
 		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
+		-e LINKMODE="$(GO_LINKMODE)" \
 		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
