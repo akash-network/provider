@@ -514,10 +514,11 @@ func TestInventoryMultipleReplicasOutOfCapacity4(t *testing.T) {
 }
 
 // multipleReplicasGenNodes generates four nodes with following CPUs available
-//   node1: 68780
-//   node2: 68800
-//   node3: 119525
-//   node4: 119495
+//
+//	node1: 68780
+//	node2: 68800
+//	node3: 119525
+//	node4: 119495
 func multipleReplicasGenNodes() []v1.Node {
 	nodeCapacity := make(v1.ResourceList)
 	nodeCapacity[v1.ResourceCPU] = *(resource.NewMilliQuantity(119800, resource.DecimalSI))

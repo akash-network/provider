@@ -37,12 +37,22 @@ universal_binaries:
     ids:
       - provider-services-darwin
     replace: true
+    name_template: "{{.ProjectName}}"
 archives:
-  - id: provider-services
+  - id: provider-services-version
     builds:
       - darwin-universal
       - provider-services-linux
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: true
+    format: zip
+    files:
+      - none*
+  - id: provider-services
+    builds:
+      - darwin-universal
+      - provider-services-linux
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: true
     format: zip
     files:
@@ -100,9 +110,20 @@ docker_manifests:
       - ghcr.io/ovrclk/{{ .ProjectName }}:latest-arm64
 
 nfpms:
-  - vendor: "Overclock Labs Inc."
+  - id: w/version
+    vendor: "Overclock Labs Inc."
     homepage: "https://ovrclk.com"
     maintainer: "Overclock Labs Inc. <hello@akash.network>"
+    file_name_template: "{{ .ConventionalFileName }}"
+    formats:
+      - deb
+      - rpm
+    license: Apache 2.0
+  - id: wo/version
+    vendor: "Overclock Labs Inc."
+    homepage: "https://ovrclk.com"
+    maintainer: "Overclock Labs Inc. <hello@akash.network>"
+    file_name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - deb
       - rpm

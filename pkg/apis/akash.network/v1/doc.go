@@ -8,18 +8,17 @@
 // Contains the Stack Definition Language(pkg: github.com/ovrclk/akash/sdl) Manifest
 // declarations which are written to Kubernetes CRDs for storage.
 //
-// Manifest {
-//	ManifestSpec {
-//		k8s.TypeMeta
-//		LeaseID
-//		ManifestGroup
+//	Manifest {
+//		ManifestSpec {
 //			k8s.TypeMeta
-//			Name
-//			[]*ManifestService
-//				ManifestService analogous to a running container.
-//	ManifestStatus
-//		State
-//		Message
-// }
-//
+//			LeaseID
+//			ManifestGroup
+//				k8s.TypeMeta
+//				Name
+//				[]*ManifestService
+//					ManifestService analogous to a running container.
+//		ManifestStatus
+//			State
+//			Message
+//	}
 package v1
