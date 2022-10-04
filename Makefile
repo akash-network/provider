@@ -3,6 +3,8 @@ KIND_APP_IP            ?= $(shell make -sC _run/kube kind-k8s-ip)
 KIND_APP_PORT          ?= $(shell make -sC _run/kube app-http-port)
 KIND_VARS              ?= KUBE_INGRESS_IP="$(KIND_APP_IP)" KUBE_INGRESS_PORT="$(KIND_APP_PORT)"
 
+LEDGER_ENABLED         ?= true
+
 include make/init.mk
 
 .DEFAULT_GOAL          := $(PROVIDER)
@@ -24,6 +26,12 @@ GO_LINKMODE            ?= external
 GO_MOD                 ?= readonly
 BUILD_TAGS             ?= osusergo,netgo,static_build
 GORELEASER_STRIP_FLAGS ?=
+
+GO_LINKMODE            ?= external
+
+ifeq ($(LEDGER_ENABLED),true)
+	BUILD_TAGS := $(BUILD_TAGS),ledger
+endif
 
 GORELEASER_BUILD_VARS := \
 -X github.com/ovrclk/provider-services/version.Name=provider-services \

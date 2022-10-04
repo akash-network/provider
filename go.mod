@@ -67,7 +67,6 @@ require (
 	github.com/cosmos/iavl v0.17.3 // indirect
 	github.com/cosmos/ibc-go/v3 v3.1.0 // indirect
 	github.com/cosmos/ledger-cosmos-go v0.11.1 // indirect
-	github.com/cosmos/ledger-go v0.9.2 // indirect
 	github.com/danieljoos/wincred v1.0.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.2 // indirect
@@ -181,6 +180,7 @@ require (
 	github.com/tendermint/go-amino v0.16.0 // indirect
 	github.com/tendermint/tm-db v0.6.7 // indirect
 	github.com/zondax/hid v0.9.0 // indirect
+	github.com/zondax/ledger-go v0.12.1 // indirect
 	go.etcd.io/bbolt v1.3.6 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
@@ -224,9 +224,12 @@ require (
 
 replace (
 	github.com/cosmos/cosmos-sdk => github.com/ovrclk/cosmos-sdk v0.45.4-akash.1
+	github.com/cosmos/ledger-cosmos-go => github.com/ovrclk/ledger-cosmos-go v0.13.2
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 	github.com/keybase/go-keychain => github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4
 	github.com/tendermint/tendermint => github.com/ovrclk/tendermint v0.34.19-patches
+	github.com/zondax/hid => github.com/troian/hid v0.9.9
+	github.com/zondax/ledger-go => github.com/ovrclk/ledger-go v0.13.4
 	google.golang.org/grpc => google.golang.org/grpc v1.33.2
 )
 
