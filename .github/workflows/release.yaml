@@ -45,4 +45,4 @@ jobs:
         env:
           GORELEASER_RELEASE: true
           RELEASE_TAG: ${{ steps.branch_name.outputs.RELEASE_TAG }}
-          GITHUB_TOKEN: ${{ secrets.GORELEASER_ACCESS_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
