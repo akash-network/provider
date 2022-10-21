@@ -31,7 +31,7 @@ AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "gi
 AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/ovrclk/akash")
 AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/ovrclk/akash | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
-GOLANGCI_LINT_VERSION        ?= v1.45.2
+GOLANGCI_LINT_VERSION        ?= v1.50.0
 GOLANG_VERSION               ?= 1.16.1
 STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1

@@ -15,6 +15,12 @@ $(AP_DEVCACHE):
 .INTERMEDIATE: cache
 cache: $(AP_DEVCACHE)
 
+AKASH_INSTALL_ARCH := $(UNAME_ARCH)
+# darwin has option to install multiarch binary
+ifeq ($(UNAME_OS_LOWER), darwin)
+	AKASH_INSTALL_ARCH := all
+endif
+
 .PHONY: akash
 ifeq ($(AKASH_SRC_IS_LOCAL), true)
 akash:
@@ -24,8 +30,8 @@ else
 $(AKASH_VERSION_FILE): $(AP_DEVCACHE)
 	@echo "Installing akash $(AKASH_VERSION) ..."
 	rm -f $(AKASH)
-	wget -q https://github.com/ovrclk/akash/releases/download/v$(AKASH_VERSION)/akash_$(AKASH_VERSION)_$(UNAME_OS_LOWER)_$(UNAME_ARCH).zip -O $(AP_DEVCACHE)/akash.zip
-	unzip -p $(AP_DEVCACHE)/akash.zip akash_$(AKASH_VERSION)_$(UNAME_OS_LOWER)_$(UNAME_ARCH)/akash > $(AKASH)
+	wget -q https://github.com/ovrclk/akash/releases/download/v$(AKASH_VERSION)/akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH).zip -O $(AP_DEVCACHE)/akash.zip
+	unzip -p $(AP_DEVCACHE)/akash.zip akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH)/akash > $(AKASH)
 	chmod +x $(AKASH)
 	rm $(AP_DEVCACHE)/akash.zip
 	rm -rf "$(dir $@)"
