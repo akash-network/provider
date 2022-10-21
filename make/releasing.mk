@@ -17,6 +17,11 @@ else
 	DETECTED_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
 endif
 
+# on MacOS disable deprecation warnings security framework
+ifeq ($(DETECTED_OS), Darwin)
+	export CGO_CFLAGS=-Wno-deprecated-declarations
+endif
+
 .PHONY: bins
 bins: $(BINS)
 
