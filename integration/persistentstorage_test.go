@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"path/filepath"
 	"time"
@@ -95,7 +95,7 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 	httpResp := queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
 
-	bodyData, err := ioutil.ReadAll(httpResp.Body)
+	bodyData, err := io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(`default`, string(bodyData))
 
@@ -110,7 +110,7 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
 
-	bodyData, err = ioutil.ReadAll(httpResp.Body)
+	bodyData, err = io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(testData.String(), string(bodyData))
 
@@ -132,7 +132,7 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 	appURL = fmt.Sprintf("http://%s:%s/GET/value", s.appHost, s.appPort)
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
-	bodyData, err = ioutil.ReadAll(httpResp.Body)
+	bodyData, err = io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(testData.String(), string(bodyData))
 }
@@ -197,7 +197,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 	httpResp := queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
 
-	bodyData, err := ioutil.ReadAll(httpResp.Body)
+	bodyData, err := io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(`default`, string(bodyData))
 	testData := uuid.NewV4()
@@ -210,7 +210,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 	appURL = fmt.Sprintf("http://%s:%s/GET/value", s.appHost, s.appPort)
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
-	bodyData, err = ioutil.ReadAll(httpResp.Body)
+	bodyData, err = io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(testData.String(), string(bodyData))
 
@@ -233,7 +233,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
 
-	bodyData, err = ioutil.ReadAll(httpResp.Body)
+	bodyData, err = io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(testData.String(), string(bodyData))
 }

@@ -29,6 +29,8 @@ func NewServer(
 	certs []tls.Certificate,
 	clusterConfig map[interface{}]interface{}) (*http.Server, error) {
 
+	// fixme ovrclk/engineering#609
+	// nolint: gosec
 	srv := &http.Server{
 		Addr:    address,
 		Handler: newRouter(log, pid, pclient, ipopclient, clusterConfig),
@@ -55,6 +57,8 @@ func NewJwtServer(ctx context.Context,
 	certSerialNumber string,
 	jwtExpiresAfter time.Duration,
 ) (*http.Server, error) {
+	// fixme ovrclk/engineering#609
+	// nolint: gosec
 	srv := &http.Server{
 		Addr:    jwtGatewayAddr,
 		Handler: newJwtServerRouter(providerAddr, cert.PrivateKey, jwtExpiresAfter, certSerialNumber),
@@ -79,6 +83,8 @@ func NewResourceServer(ctx context.Context,
 	pubkey *ecdsa.PublicKey,
 	lokiGwAddr string,
 ) (*http.Server, error) {
+	// fixme ovrclk/engineering#609
+	// nolint: gosec
 	srv := &http.Server{
 		Addr:        serverAddr,
 		Handler:     newResourceServerRouter(log, providerAddr, pubkey, lokiGwAddr),

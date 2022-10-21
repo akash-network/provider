@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/exec"
@@ -330,7 +329,7 @@ func backupObject(path string, data []byte) error {
 }
 
 func loadManifests(path string) ([]v1.Manifest, error) {
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +354,7 @@ func loadManifests(path string) ([]v1.Manifest, error) {
 }
 
 func loadHosts(path string) ([]v1.ProviderHost, error) {
-	files, err := ioutil.ReadDir(path)
+	files, err := os.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -388,7 +387,7 @@ func readObject(path string, obj interface{}) error {
 		_ = fl.Close()
 	}()
 
-	data, err := ioutil.ReadAll(fl)
+	data, err := io.ReadAll(fl)
 	if err != nil {
 		return err
 	}
@@ -446,5 +445,5 @@ func readOrDownload(path string) ([]byte, error) {
 		stream = fl
 	}
 
-	return ioutil.ReadAll(stream)
+	return io.ReadAll(stream)
 }

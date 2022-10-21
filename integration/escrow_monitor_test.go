@@ -4,7 +4,7 @@ package integration
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"path/filepath"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -85,7 +85,7 @@ func (s *E2EEscrowMonitor) TestE2EEscrowMonitor() {
 	const testHost = "webdistest.localhost"
 	const attempts = 120
 	httpResp := queryAppWithRetries(s.T(), appURL, testHost, attempts)
-	bodyData, err := ioutil.ReadAll(httpResp.Body)
+	bodyData, err := io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(`{"SET":[true,"OK"]}`, string(bodyData))
 

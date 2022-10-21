@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -205,7 +205,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	}
 
 	provFileStr := fmt.Sprintf(providerTemplate, provURL.String(), jwtURL.String())
-	tmpFile, err := ioutil.TempFile(s.network.BaseDir, "provider.yaml")
+	tmpFile, err := os.CreateTemp(s.network.BaseDir, "provider.yaml")
 	require.NoError(s.T(), err)
 
 	_, err = tmpFile.WriteString(provFileStr)
@@ -275,18 +275,18 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 	pemSrc := fmt.Sprintf("%s/%s.pem", s.validator.ClientCtx.HomeDir, s.keyProvider.GetAddress().String())
 	pemDst := fmt.Sprintf("%s/%s.pem", strings.Replace(s.validator.ClientCtx.HomeDir, "simd", "simcli", 1), s.keyProvider.GetAddress().String())
-	input, err := ioutil.ReadFile(pemSrc)
+	input, err := os.ReadFile(pemSrc)
 	s.Require().NoError(err)
 
-	err = ioutil.WriteFile(pemDst, input, 0400)
+	err = os.WriteFile(pemDst, input, 0400)
 	s.Require().NoError(err)
 
 	pemSrc = fmt.Sprintf("%s/%s.pem", s.validator.ClientCtx.HomeDir, s.keyTenant.GetAddress().String())
 	pemDst = fmt.Sprintf("%s/%s.pem", strings.Replace(s.validator.ClientCtx.HomeDir, "simd", "simcli", 1), s.keyTenant.GetAddress().String())
-	input, err = ioutil.ReadFile(pemSrc)
+	input, err = os.ReadFile(pemSrc)
 	s.Require().NoError(err)
 
-	err = ioutil.WriteFile(pemDst, input, 0400)
+	err = os.WriteFile(pemDst, input, 0400)
 	s.Require().NoError(err)
 
 	localCtx := s.validator.ClientCtx.WithOutputFormat("json")
@@ -605,14 +605,14 @@ func (s *E2EContainerToContainer) TestE2EContainerToContainer() {
 	const testHost = "webdistest.localhost"
 	const attempts = 120
 	httpResp := queryAppWithRetries(s.T(), appURL, testHost, attempts)
-	bodyData, err := ioutil.ReadAll(httpResp.Body)
+	bodyData, err := io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(`{"SET":[true,"OK"]}`, string(bodyData))
 
 	// Hit the endpoint to read a key in redis, foo
 	appURL = fmt.Sprintf("http://%s:%s/GET/foo", s.appHost, s.appPort)
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
-	bodyData, err = ioutil.ReadAll(httpResp.Body)
+	bodyData, err = io.ReadAll(httpResp.Body)
 	s.Require().NoError(err)
 	s.Require().Equal(`{"GET":"bar"}`, string(bodyData)) // Check that the value is bar
 }
@@ -730,7 +730,7 @@ portLoop:
 		// Read everything with a timeout
 		err = conn.SetReadDeadline(time.Now().Add(time.Duration(10) * time.Second))
 		s.Require().NoError(err)
-		recvData, err = ioutil.ReadAll(conn)
+		recvData, err = io.ReadAll(conn)
 		s.Require().NoError(err)
 		s.Require().NoError(conn.Close())
 

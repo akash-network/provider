@@ -720,6 +720,8 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	if metricsRouter != nil {
 		group.Go(func() error {
+			// fixme ovrclk/engineering#609
+			// nolint: gosec
 			srv := http.Server{Addr: metricsListener, Handler: metricsRouter}
 			go func() {
 				<-ctx.Done()

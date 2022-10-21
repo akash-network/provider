@@ -4,7 +4,7 @@ package integration
 
 import (
 	"bytes"
-	"io/ioutil"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -156,7 +156,7 @@ func queryAppWithHostname(t *testing.T, appURL string, limit int, hostname strin
 	require.NotNil(t, resp)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Contains(t, string(body), "The Future of The Cloud is Decentralized")
 }
