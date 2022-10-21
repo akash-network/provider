@@ -28,14 +28,10 @@ jobs:
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      - name: branch name
-        id: branch_name
-        run: |
-          echo ::set-output name=RELEASE_TAG::${GITHUB_REF#refs/tags/}
+      - name: release version
+        run: echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
       - name: release dry-run
         run: make release
-        env:
-          RELEASE_TAG: ${{ steps.branch_name.outputs.RELEASE_TAG }}
       - name: Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -48,5 +44,5 @@ jobs:
           make release
         env:
           GORELEASER_RELEASE: true
-          RELEASE_TAG: ${{ steps.branch_name.outputs.RELEASE_TAG }}
+          GORELEASER_MOUNT_CONFIG: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

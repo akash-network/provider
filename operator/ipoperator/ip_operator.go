@@ -610,6 +610,8 @@ func doIPOperator(cmd *cobra.Command) error {
 	group, ctx := errgroup.WithContext(cmd.Context())
 
 	group.Go(func() error {
+		// fixme ovrclk/engineering#609
+		// nolint: gosec
 		srv := http.Server{Addr: listenAddr, Handler: router}
 		go func() {
 			<-ctx.Done()

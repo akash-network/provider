@@ -106,6 +106,8 @@ func Cmd() *cobra.Command {
 			queryTimeout, _ := cmd.Flags().GetDuration(FlagQueryTimeout)
 			port, _ := cmd.Flags().GetUint16(FlagAPIPort)
 
+			// fixme ovrclk/engineering#609
+			// nolint: gosec
 			srv := &http.Server{
 				Addr:    fmt.Sprintf(":%d", port),
 				Handler: newRouter(LogFromCtx(cmd.Context()).WithName("router"), apiTimeout, queryTimeout),

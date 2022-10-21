@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
@@ -417,7 +417,7 @@ func TestRouteStatusFails(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, http.StatusInternalServerError)
 
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^generic test error(?s:.)*$", string(data))
 	})
@@ -472,7 +472,7 @@ func TestRouteValidateFails(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, http.StatusInternalServerError)
 
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^generic test error(?s:.)*$", string(data))
 	})
@@ -493,7 +493,7 @@ func TestRouteValidateFailsEmptyBody(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, http.StatusBadRequest)
 
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "empty payload", string(data))
 	})
@@ -533,7 +533,7 @@ func TestRoutePutManifestOK(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, http.StatusOK)
 
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Equal(t, string(data), "")
 	})
@@ -574,7 +574,7 @@ func TestRoutePutInvalidManifest(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, http.StatusUnprocessableEntity)
 
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^invalid manifest(?s:.)*$", string(data))
 	})
@@ -731,7 +731,7 @@ func TestRouteLeaseStatusErr(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, resp.StatusCode, http.StatusInternalServerError)
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^generic test error(?s:.)*$", string(data))
 	})
@@ -821,7 +821,7 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, resp.StatusCode, http.StatusNotFound)
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^kube: no deployment(?s:.)*$", string(data))
 	})
@@ -872,7 +872,7 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, resp.StatusCode, http.StatusNotFound)
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^fake error(?s:.)*$", string(data))
 	})
@@ -911,7 +911,7 @@ func TestRouteServiceStatusError(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Equal(t, resp.StatusCode, http.StatusInternalServerError)
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.Regexp(t, "^generic test error(?s:.)*$", string(data))
 	})
