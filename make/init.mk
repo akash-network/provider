@@ -1,15 +1,26 @@
-# expecting GNU make >= 4.0. so comparing major version only
-MAKE_VERSION               := $(shell make --version | head -1 | cut -d" " -f3 | cut -d"." -f1)
+ifeq (, $(shell which direnv))
+$(warning "No direnv in $(PATH), consider installing. https://direnv.net")
+endif
 
-ifneq (true, $(shell [ $(MAKE_VERSION) -ge 4 ] && echo true))
+# expecting GNU make >= 4.0. so comparing major version only
+MAKE_MAJOR_VERSION        := $(shell echo $(MAKE_VERSION) | cut -d"." -f1)
+
+ifneq (true, $(shell [ $(MAKE_MAJOR_VERSION) -ge 4 ] && echo true))
 $(error "make version is outdated. min required 4.0")
 endif
 
 # AP_ROOT may not be set if environment does not support/use direnv
 # in this case define it manually as well as all required env variables
 ifndef AP_ROOT
-AP_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../)
-include $(AP_ROOT)/.env
+	AP_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../)
+
+	include $(AP_ROOT)/.env
+
+	PROVIDER_SERVICES   ?= $(AP_DEVCACHE_BIN)/provider-services
+	AKASH               ?= $(AP_DEVCACHE_BIN)/akash
+
+	# setup .cache bins first in paths to have precedence over already installed same tools for system wide use
+	PATH                := "$(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)"
 endif
 
 UNAME_OS                   := $(shell uname -s)
@@ -17,16 +28,19 @@ UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # uname reports x86_64. rename to amd64 to make it usable by goreleaser
 UNAME_ARCH                 := $(shell uname -m | sed "s/x86_64/amd64/g")
 
-GO_MOD_NAME                := $(shell go list -m 2>/dev/null)
+ifeq (, $(shell which wget))
+$(error "No wget in $(PATH), consider installing")
+endif
 
-PROVIDER_SERVICES          ?= $(AP_DEVCACHE_BIN)/provider-services
-BINS                       := $(PROVIDER_SERVICES) akash
+ifeq (, $(shell which realpath))
+$(error "No realpath in $(PATH), consider installing")
+endif
 
-export GO                  := GO111MODULE=$(GO111MODULE) go
+BINS                         := $(PROVIDER_SERVICES) akash
 
-# setup .cache bins first in paths to have precedence over already installed same tools for system wide use
-PATH                         := "$(PATH):$(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN)"
+export GO                    := GO111MODULE=$(GO111MODULE) go
 
+GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "github.com/ovrclk/akash")
 AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/ovrclk/akash")
 AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/ovrclk/akash | cut -c2-)

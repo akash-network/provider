@@ -59,8 +59,8 @@ config_file() {
         calico)
             file="$_run_dir/../kind-config-calico.yaml"
             ;;
-        default) ;;&
-
+        default)
+            ;;&
         *)
             file="$_run_dir/kind-config.yaml"
             ;;

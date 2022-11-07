@@ -5,6 +5,12 @@
 
 This folder contains the Akash Provider Daemon. This piece of software listens to events emitted from the Akash blockchain (code in `../app/app.go`) and takes actions on a connected Kubernetes cluster to provision compute capacity based on the bids that the configured provider key wins. The following are the pieces of the daemon:
 
+## Development environment
+
+[This doc](https://github.com/ovrclk/akash/blob/master/_docs/development-environment.md) guides through setting up local development environment 
+
+## Structure
+
 ### [`bidengine`](./bidengine)
 
 The bid engine queries for any existing orders on chain, and based on the on-chain provider configuration, places bids on behalf of the configured provider based on configured selling prices for resources. The daemon listens for changes in the configuration so users can use automation tooling to dynamically change the prices they are charging w/o restarting the daemon. You can see the key management code for `provider` tx signing in `cmd/run.go`.
@@ -19,7 +25,7 @@ The `cobra` command line utility that wraps the rest of the code here and is bui
 
 ### [`event`](./event)
 
-Declares the pubsub events that the `provider` needs to take action on won leases an recieved manifests.
+Declares the pubsub events that the `provider` needs to take action on won leases and received manifests.
 
 ### [`gateway`](./gateway)
 
