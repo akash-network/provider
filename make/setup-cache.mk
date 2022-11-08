@@ -100,16 +100,17 @@ $(K8S_CODE_GEN_VERSION_FILE): $(AP_DEVCACHE) modvendor
 $(K8S_GO_TO_PROTOBUF): $(K8S_CODE_GEN_VERSION_FILE)
 $(K8S_GENERATE_GROUPS): $(K8S_CODE_GEN_VERSION_FILE)
 
+ifeq (false, $(_SYSTEM_KIND))
 $(KIND_VERSION_FILE): $(AP_DEVCACHE)
-ifeq (, $(KIND))
 	@echo "installing kind $(KIND_VERSION) ..."
-	rm -f $(MOCKERY)
-	GOBIN=$(AP_DEVCACHE_BIN) go install sigs.k8s.io/kind
-endif
+	GOBIN=$(AP_DEVCACHE_BIN) go install sigs.k8s.io/kind@$(KIND_VERSION)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
 $(KIND): $(KIND_VERSION_FILE)
+else
+	@echo "using alread installed kind $(KIND_VERSION) $(KIND)"
+endif
 
 $(NPM):
 ifeq (, $(shell which $(NPM) 2>/dev/null))
