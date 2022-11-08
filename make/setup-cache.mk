@@ -2,6 +2,10 @@ ifeq (, $(AP_DEVCACHE))
 $(error AP_DEVCACHE is not set)
 endif
 
+ifeq (, $(AKASH))
+$(error "AKASH variable is not set")
+endif
+
 $(AP_DEVCACHE):
 	@echo "creating .cache dir structure..."
 	mkdir -p $@
@@ -16,7 +20,7 @@ $(AP_DEVCACHE):
 cache: $(AP_DEVCACHE)
 
 AKASH_INSTALL_ARCH := $(UNAME_ARCH)
-# darwin has option to install multiarch binary
+# darwin has option to install multi-arch binary
 ifeq ($(UNAME_OS_LOWER), darwin)
 	AKASH_INSTALL_ARCH := all
 endif

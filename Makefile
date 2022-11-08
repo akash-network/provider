@@ -7,7 +7,7 @@ LEDGER_ENABLED         ?= true
 
 include make/init.mk
 
-.DEFAULT_GOAL          := $(PROVIDER)
+.DEFAULT_GOAL          := bins
 
 DOCKER_RUN             := docker run --rm -v $(shell pwd):/workspace -w /workspace
 GOLANGCI_LINT_RUN      := $(GOLANGCI_LINT) run
