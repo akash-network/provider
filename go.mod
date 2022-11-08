@@ -97,6 +97,7 @@ require (
 	github.com/google/go-cmp v0.5.8 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/orderedcode v0.0.1 // indirect
+	github.com/google/safetext v0.0.0-20220905092116-b49f7bc46da2 // indirect
 	github.com/gorilla/handlers v1.5.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0 // indirect
@@ -219,7 +220,7 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/prometheus/common v0.34.0
 	k8s.io/code-generator v0.24.2
-	sigs.k8s.io/kind v0.14.0
+	sigs.k8s.io/kind v0.17.0
 )
 
 replace (

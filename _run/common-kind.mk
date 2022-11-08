@@ -6,7 +6,10 @@ export KIND_NAME ?= $(shell basename $$PWD)
 
 KIND_CREATE       := $(AP_RUN_DIR)/.kind-create
 
-KINDEST_VERSION  ?= v1.22.2
+ifeq (, $(KINDEST_VERSION))
+$(error "KINDEST_VERSION is not set")
+endif
+
 KIND_IMG         ?= kindest/node:$(KINDEST_VERSION)
 
 K8S_CONTEXT      ?= $(shell kubectl config current-context)

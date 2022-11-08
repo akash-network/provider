@@ -52,7 +52,16 @@ GIT_CHGLOG_VERSION           ?= v0.15.1
 MODVENDOR_VERSION            ?= v0.3.0
 MOCKERY_VERSION              ?= 2.12.1
 K8S_CODE_GEN_VERSION         ?= v0.19.3
-KIND_VERSION                 ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' sigs.k8s.io/kind)
+
+ifeq (0, $(shell which kind &>/dev/null; echo $$?))
+	KIND_VERSION                 ?= $(shell kind --version | cut -d" " -f3)
+	KIND                         := $(shell which kind)
+	_SYSTEM_KIND                 := true
+else
+	KIND_VERSION                 ?= $(shell go list -mod=readonly -m -f '{{ .Version }}' sigs.k8s.io/kind)
+	KIND                         := $(AP_DEVCACHE_BIN)/kind
+	_SYSTEM_KIND                 := false
+endif
 
 # <TOOL>_VERSION_FILE points to the marker file for the installed version.
 # If <TOOL>_VERSION_FILE is changed, the binary will be re-downloaded.
@@ -75,10 +84,6 @@ K8S_GO_TO_PROTOBUF               := $(AP_DEVCACHE_BIN)/go-to-protobuf
 NPM                              := npm
 GOLANGCI_LINT                    := $(AP_DEVCACHE_BIN)/golangci-lint
 
-ifeq (0, $(shell which kind &>/dev/null; echo $?))
-KIND := $(shell which kind)
-endif
-
 AKASH_BIND_LOCAL ?=
 
 # if go.mod contains replace for akash on local filesystem
@@ -88,7 +93,3 @@ AKASH_BIND_LOCAL := -v $(AKASH_LOCAL_PATH):$(AKASH_LOCAL_PATH)
 endif
 
 include $(AP_ROOT)/make/setup-cache.mk
-
-ifeq (, $(KIND))
-KIND := $(shell which kind)
-endif
