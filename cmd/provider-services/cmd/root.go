@@ -61,17 +61,29 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(acmd.QueryCmd())
 	cmd.AddCommand(acmd.TxCmd())
 
-	cmd.AddCommand(rpc.StatusCommand())
+	cmd.AddCommand(nodeCmd())
+
 	cmd.AddCommand(ecmd.EventCmd())
 	cmd.AddCommand(keys.Commands(app.DefaultHome))
 	cmd.AddCommand(genutilcli.InitCmd(app.ModuleBasics(), app.DefaultHome))
 	cmd.AddCommand(genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultHome))
-	cmd.AddCommand(genutilcli.MigrateGenesisCmd())
 	cmd.AddCommand(genutilcli.GenTxCmd(app.ModuleBasics(), encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{}, app.DefaultHome))
 	cmd.AddCommand(genutilcli.ValidateGenesisCmd(app.ModuleBasics()))
 	cmd.AddCommand(acmd.AddGenesisAccountCmd(app.DefaultHome))
 	cmd.AddCommand(tmcli.NewCompletionCmd(cmd, true))
 	cmd.AddCommand(debug.Cmd())
+
+	return cmd
+}
+
+func nodeCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "node",
+		Short: "operations with akash RPC node",
+	}
+
+	cmd.AddCommand(rpc.StatusCommand())
+	cmd.AddCommand(genutilcli.MigrateGenesisCmd())
 
 	return cmd
 }
