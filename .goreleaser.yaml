@@ -57,6 +57,7 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
+      - -extldflags "-lc -lrt -lpthread --static"
   - id: provider-services-linux-amd64
     binary: provider-services
     main: ./cmd/provider-services
@@ -75,6 +76,7 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
+      - -extldflags "-lc -lrt -lpthread --static"
 universal_binaries:
   - id: darwin-universal
     ids:
