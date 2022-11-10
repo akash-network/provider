@@ -20,7 +20,7 @@ ifndef AP_ROOT
 	AKASH               ?= $(AP_DEVCACHE_BIN)/akash
 
 	# setup .cache bins first in paths to have precedence over already installed same tools for system wide use
-	PATH                := "$(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)"
+	PATH                := $(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)
 endif
 
 UNAME_OS                   := $(shell uname -s)
