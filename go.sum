@@ -1225,8 +1225,8 @@ github.com/ory/dockertest v3.3.4+incompatible/go.mod h1:1vX4m9wsvi00u5bseYwXaSnh
 github.com/ory/dockertest v3.3.5+incompatible h1:iLLK6SQwIhcbrG783Dghaaa3WPzGc+4Emza6EbVUUGA=
 github.com/ory/dockertest v3.3.5+incompatible/go.mod h1:1vX4m9wsvi00u5bseYwXaSnhNrne+V0E6LAcBILJdPs=
 github.com/otiai10/copy v1.6.0 h1:IinKAryFFuPONZ7cm6T6E2QX/vcJwSnlaA5lfoaXIiQ=
-github.com/ovrclk/akash v0.17.2-rc8 h1:1X/+b6cIt6EqZuhy0o6xMXldAb8gbNfRNpkqnTrex3c=
-github.com/ovrclk/akash v0.17.2-rc8/go.mod h1:90SiCUyOR5AvRH1bq2wMHrzGpJ2VMvoiJ+wI0iWScTY=
+github.com/ovrclk/akash v0.18.1 h1:nhzBglrENpJ6cXmGtspx8ACUWfWRSO6PJnmp9qwF8Os=
+github.com/ovrclk/akash v0.18.1/go.mod h1:90SiCUyOR5AvRH1bq2wMHrzGpJ2VMvoiJ+wI0iWScTY=
 github.com/ovrclk/ledger-go v0.14.0 h1:vTonPpIIniEPQBsD3ozxnHZgo394uT/mwve93bBf6Pc=
 github.com/ovrclk/ledger-go v0.14.0/go.mod h1:/VvYUunOmwkxig4LjNaSfvMSEyVs3UcaMgr78zL96ZA=
 github.com/ovrclk/ledger-go/cosmos v0.14.0 h1:qSSGP2ysh4yPTowtCODW2lDAUY85AZMzMz+DFIKiavY=
