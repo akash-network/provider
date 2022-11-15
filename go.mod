@@ -14,7 +14,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
-	github.com/ovrclk/akash v0.17.2-rc8
+	github.com/ovrclk/akash v0.18.1
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/rook/rook v1.9.7
@@ -226,7 +226,7 @@ require (
 replace (
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.1.7-0.20210622111912-ef00f8ac3d76
 
-	// dragonberry path
+	// dragonberry patch
 	github.com/confio/ics23/go => github.com/cosmos/cosmos-sdk/ics23/go v0.8.0
 	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.45.9
 	github.com/cosmos/ledger-cosmos-go => github.com/ovrclk/ledger-go/cosmos v0.14.0
