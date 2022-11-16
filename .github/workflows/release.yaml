@@ -46,3 +46,16 @@ jobs:
           GORELEASER_RELEASE: true
           GORELEASER_MOUNT_CONFIG: true
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: is prerelease
+        if: success()
+        run: |
+          IS_PRERELEASE=$(script/is_prerelease.sh ${{ env.RELEASE_TAG}})
+          echo "IS_PRERELEASE=${IS_PRERELEASE}" >> $GITHUB_ENV
+      - name: notify homebrew with new release
+        if: success()
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.GORELEASER_ACCESS_TOKEN }}
+          repository: ovrclk/homebrew-tap
+          event-type: provider-services
+          client-payload: '{"tag": "${{ env.RELEASE_TAG }}", "is_prerelease": "${{ env.IS_PRERELEASE }}"}'
