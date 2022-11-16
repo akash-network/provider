@@ -9,4 +9,4 @@ if [[ $# -ne 1 ]]; then
 	exit 1
 fi
 
-[[ -n $("${SCRIPT_DIR}"/semver.sh get prerel "$1" >/dev/null 2>&1) ]] && echo true || echo false
+[[ $("${SCRIPT_DIR}"/semver.sh get prerel "$1" 2>/dev/null) != "" ]] && echo true || echo false
