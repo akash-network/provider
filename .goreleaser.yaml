@@ -88,7 +88,8 @@ archives:
   - id: provider-services-version
     builds:
       - darwin-universal
-      - provider-services-linux
+      - provider-services-linux-arm64
+      - provider-services-linux-amd64
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: true
     format: zip
