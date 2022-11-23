@@ -198,9 +198,10 @@ type ManifestService struct {
 	// Service name
 	Name string `json:"name,omitempty"`
 	// Docker image
-	Image string   `json:"image,omitempty"`
-	Args  []string `json:"args,omitempty"`
-	Env   []string `json:"env,omitempty"`
+	Image   string   `json:"image,omitempty"`
+	Command []string `json:"command,omitempty"`
+	Args    []string `json:"args,omitempty"`
+	Env     []string `json:"env,omitempty"`
 	// Resource requirements
 	// in current version of CRD it is named as unit
 	Resources ResourceUnits `json:"unit"`
@@ -221,13 +222,12 @@ func (ms ManifestService) toAkash() (maniv2beta1.Service, error) {
 	ams := &maniv2beta1.Service{
 		Name:      ms.Name,
 		Image:     ms.Image,
+		Command:   ms.Command,
 		Args:      ms.Args,
 		Env:       ms.Env,
 		Resources: res,
 		Count:     ms.Count,
 		Expose:    make([]maniv2beta1.ServiceExpose, 0, len(ms.Expose)),
-		Params:    nil, // TODO - store in CRD
-		Command:   nil, // TODO - store in CRD
 	}
 
 	for _, expose := range ms.Expose {
@@ -271,6 +271,7 @@ func manifestServiceFromAkash(ams maniv2beta1.Service) (ManifestService, error) 
 	ms := ManifestService{
 		Name:      ams.Name,
 		Image:     ams.Image,
+		Command:   ams.Command,
 		Args:      ams.Args,
 		Env:       ams.Env,
 		Resources: resources,

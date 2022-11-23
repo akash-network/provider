@@ -50,6 +50,10 @@ spec:
                             type: string
                           image:
                             type: string
+                          command:
+                            type: array
+                            items:
+                              type: string
                           args:
                             type: array
                             items:
@@ -236,7 +240,6 @@ spec:
                   type: string
                 sharing_key:
                   type: string
-
   names:
     # plural name to be used in the URL: /apis/<group>/<version>/<plural>
     plural: providerleasedips
