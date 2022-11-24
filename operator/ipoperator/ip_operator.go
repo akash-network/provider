@@ -584,7 +584,7 @@ func doIPOperator(cmd *cobra.Command) error {
 		return fmt.Errorf("%w: provider address must valid bech32", err)
 	}
 
-	client, err := clusterClient.NewClient(logger, ns, configPath)
+	client, err := clusterClient.NewClient(cmd.Context(), logger, ns, configPath)
 	if err != nil {
 		return err
 	}

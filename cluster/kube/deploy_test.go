@@ -45,7 +45,7 @@ func TestDeploy(t *testing.T) {
 	require.NoError(t, err)
 
 	log := testutil.Logger(t)
-	client, err := NewClient(log, "lease", "")
+	client, err := NewClient(ctx, log, "lease", "")
 	require.NoError(t, err)
 
 	ctx = context.WithValue(ctx, builder.SettingsKey, builder.NewDefaultSettings())
