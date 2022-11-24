@@ -64,9 +64,9 @@ func (c *client) String() string {
 	return fmt.Sprintf("kube client %p ns=%s", c, c.ns)
 }
 
-// NewClient returns new Kubernetes Client instance with provided logger, host and ns. Returns error incase of failure
+// NewClient returns new Kubernetes Client instance with provided logger, host and ns. Returns error in-case of failure
 // configPath may be the empty string
-func NewClient(log log.Logger, ns string, configPath string) (Client, error) {
+func NewClient(ctx context.Context, log log.Logger, ns string, configPath string) (Client, error) {
 	config, err := clientcommon.OpenKubeConfig(configPath, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "kube: error building config flags")
@@ -76,6 +76,11 @@ func NewClient(log log.Logger, ns string, configPath string) (Client, error) {
 	kc, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, errors.Wrap(err, "kube: error creating kubernetes client")
+	}
+
+	_, err = kc.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
+	if err != nil {
+		return nil, errors.Wrap(err, "kube: unable to fetch leases namespace")
 	}
 
 	mc, err := akashclient.NewForConfig(config)

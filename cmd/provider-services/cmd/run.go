@@ -584,7 +584,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		builder.SettingsKey: kubeSettings,
 	}
 
-	cclient, err := createClusterClient(logger, cmd, kubeConfigPath)
+	cclient, err := createClusterClient(cmd.Context(), logger, cmd, kubeConfigPath)
 	if err != nil {
 		return err
 	}
@@ -748,7 +748,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func createClusterClient(log log.Logger, _ *cobra.Command, configPath string) (cluster.Client, error) {
+func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command, configPath string) (cluster.Client, error) {
 	if !viper.GetBool(FlagClusterK8s) {
 		// Condition that there is no Kubernetes API to work with.
 		return cluster.NullClient(), nil
@@ -757,7 +757,7 @@ func createClusterClient(log log.Logger, _ *cobra.Command, configPath string) (c
 	if ns == "" {
 		return nil, fmt.Errorf("%w: --%s required", errInvalidConfig, providerflags.FlagK8sManifestNS)
 	}
-	return kube.NewClient(log, ns, configPath)
+	return kube.NewClient(ctx, log, ns, configPath)
 }
 
 func showErrorToUser(err error) error {

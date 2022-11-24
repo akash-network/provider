@@ -445,7 +445,7 @@ func doHostnameOperator(cmd *cobra.Command) error {
 	logger := operatorcommon.OpenLogger().With("op", "hostname")
 	logger.Info("HTTP listening", "address", listenAddr)
 
-	client, err := clusterClient.NewClient(logger, ns, configPath)
+	client, err := clusterClient.NewClient(cmd.Context(), logger, ns, configPath)
 	if err != nil {
 		return err
 	}

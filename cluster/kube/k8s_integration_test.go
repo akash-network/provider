@@ -1,5 +1,4 @@
 //go:build k8s_integration
-// +build k8s_integration
 
 package kube
 
@@ -12,14 +11,37 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/util/flowcontrol"
 
 	atestutil "github.com/ovrclk/akash/testutil"
 
 	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
 	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
 	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
 )
+
+func TestNewClientNSNotFound(t *testing.T) {
+	// create lease
+	lid := atestutil.LeaseID(t)
+	ns := builder.LidNS(lid)
+
+	settings := builder.Settings{
+		DeploymentServiceType:          corev1.ServiceTypeClusterIP,
+		DeploymentIngressStaticHosts:   false,
+		DeploymentIngressDomain:        "bar.com",
+		DeploymentIngressExposeLBHosts: false,
+	}
+
+	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
+
+	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
+	require.True(t, kubeErrors.IsNotFound(err))
+	require.Nil(t, ac)
+}
 
 func TestNewClient(t *testing.T) {
 	// create lease
@@ -33,9 +55,27 @@ func TestNewClient(t *testing.T) {
 		DeploymentIngressDomain:        "bar.com",
 		DeploymentIngressExposeLBHosts: false,
 	}
+
 	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
 
-	ac, err := NewClient(atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
+	config, err := clientcommon.OpenKubeConfig(providerflags.KubeConfigDefaultPath, atestutil.Logger(t))
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	config.RateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+
+	kc, err := kubernetes.NewForConfig(config)
+	require.NoError(t, err)
+	require.NotNil(t, kc)
+
+	_, err = kc.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
 
 	require.NoError(t, err)
 
