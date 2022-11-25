@@ -1,7 +1,7 @@
-GORELEASER_RELEASE            ?= false
-GORELEASER_DEBUG              ?= false
-GORELEASER_IMAGE              := ghcr.io/goreleaser/goreleaser-cross:v$(GOLANG_VERSION)
-GORELEASER_BIND_DOCKER_CONFIG ?= false
+GORELEASER_RELEASE       ?= false
+GORELEASER_DEBUG         ?= false
+GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:v$(GOLANG_VERSION)
+GORELEASER_MOUNT_CONFIG  ?= false
 
 ifeq ($(GORELEASER_RELEASE),true)
 	GORELEASER_SKIP_VALIDATE := false
@@ -12,10 +12,8 @@ else
 	GITHUB_TOKEN=
 endif
 
-GORELEASER_DOCKER_CONFIG :=
-
-ifeq ($(GORELEASER_BIND_DOCKER_CONFIG),true)
-	GORELEASER_DOCKER_CONFIG := -v $(HOME)/.docker/config.json:/root/.docker/config.json
+ifeq ($(GORELEASER_MOUNT_CONFIG),true)
+	GORELEASER_IMAGE := -v $(HOME)/.docker/config.json:/root/.docker/config.json $(GORELEASER_IMAGE)
 endif
 
 ifeq ($(OS),Windows_NT)
@@ -92,7 +90,6 @@ release: modvendor gen-changelog
 		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
-		$(GORELEASER_DOCKER_CONFIG) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
 		-f "$(GORELEASER_CONFIG)" \
