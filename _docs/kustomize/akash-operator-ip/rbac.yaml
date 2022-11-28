@@ -36,3 +36,16 @@ roleRef:
   kind: ClusterRole
   name: akash-ip-op-watch-configmaps
   apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akash-ip-operator-get-namespaces
+subjects:
+  - kind: ServiceAccount
+    name: akash-ip-operator
+    namespace: akash-services
+roleRef:
+  kind: ClusterRole
+  name: akash-ip-op-get-namespaces
+  apiGroup: rbac.authorization.k8s.io
