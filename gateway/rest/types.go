@@ -5,10 +5,10 @@ import (
 )
 
 type LeasedIPStatus struct {
-	Port         uint32
-	ExternalPort uint32
-	Protocol     string
-	IP           string
+	Port         uint32 `json:"port"`
+	ExternalPort uint32 `json:"external_port"`
+	Protocol     string `json:"protocol"`
+	IP           string `json:"ip"`
 }
 
 type LeaseStatus struct {
