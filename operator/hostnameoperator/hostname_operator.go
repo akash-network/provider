@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	sdlutil "github.com/ovrclk/akash/sdl/util"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -20,13 +20,13 @@ import (
 	"golang.org/x/sync/errgroup"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"github.com/ovrclk/provider-services/cluster"
-	clusterClient "github.com/ovrclk/provider-services/cluster/kube"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	clusterutil "github.com/ovrclk/provider-services/cluster/util"
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	"github.com/ovrclk/provider-services/operator/operatorcommon"
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/provider/cluster"
+	clusterClient "github.com/akash-network/provider/cluster/kube"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clusterutil "github.com/akash-network/provider/cluster/util"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	"github.com/akash-network/provider/operator/operatorcommon"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 var (

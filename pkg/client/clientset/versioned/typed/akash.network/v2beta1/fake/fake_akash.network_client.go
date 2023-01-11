@@ -19,7 +19,7 @@ limitations under the License.
 package fake
 
 import (
-	v2beta1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
+	v2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
 	rest "k8s.io/client-go/rest"
 	testing "k8s.io/client-go/testing"
 )

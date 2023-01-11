@@ -8,16 +8,16 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
-	cmdcommon "github.com/ovrclk/akash/cmd/common"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	cmdcommon "github.com/akash-network/node/cmd/common"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	cltypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	cltypes "github.com/akash-network/provider/cluster/types/v1beta2"
 
-	akashclient "github.com/ovrclk/akash/client"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
+	akashclient "github.com/akash-network/node/client"
+	cutils "github.com/akash-network/node/x/cert/utils"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 func leaseEventsCmd() *cobra.Command {

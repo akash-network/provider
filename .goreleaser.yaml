@@ -1,3 +1,4 @@
+project_name: provider
 env:
   - GO111MODULE=on
   - DOCKER_CLI_EXPERIMENTAL="enabled"
@@ -83,15 +84,15 @@ universal_binaries:
       - provider-services-darwin-arm64
       - provider-services-darwin-amd64
     replace: true
-    name_template: "{{.ProjectName}}"
+    name_template: "provider-services"
 archives:
   - id: provider-services-version
     builds:
       - darwin-universal
       - provider-services-linux-arm64
       - provider-services-linux-amd64
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-    wrap_in_directory: true
+    name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
     format: zip
     files:
       - none*
@@ -100,8 +101,8 @@ archives:
       - darwin-universal
       - provider-services-linux-arm64
       - provider-services-linux-amd64
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
-    wrap_in_directory: true
+    name_template: "provider-services_{{ .Os }}_{{ .Arch }}"
+    wrap_in_directory: false
     format: zip
     files:
       - none*
@@ -116,15 +117,15 @@ dockers:
       - --platform=linux/amd64
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/ovrclk/provider-services
-      - --label=org.opencontainers.image.source=https://github.com/ovrclk/provider-services
+      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
+      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
       - --label=org.opencontainers.image.version={{ .Version }}
       - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
     image_templates:
-      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-amd64'
-      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-amd64'
-      - 'ghcr.io/ovrclk/{{ .ProjectName }}:latest-amd64'
+      - 'ghcr.io/akash-network/{{ .ProjectName }}:{{ .ShortCommit }}-amd64'
+      - 'ghcr.io/akash-network/{{ .ProjectName }}:{{ .Version }}-amd64'
+      - 'ghcr.io/akash-network/{{ .ProjectName }}:latest-amd64'
   - dockerfile: Dockerfile
     use: buildx
     goarch: arm64
@@ -134,35 +135,35 @@ dockers:
       - --platform=linux/arm64
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/ovrclk/provider-services
-      - --label=org.opencontainers.image.source=https://github.com/ovrclk/provider-services
+      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
+      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
       - --label=org.opencontainers.image.version={{ .Version }}
       - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
     image_templates:
-      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-arm64'
-      - 'ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-arm64'
-      - 'ghcr.io/ovrclk/{{ .ProjectName }}:latest-arm64'
+      - 'ghcr.io/akash-network/{{ .ProjectName }}:{{ .ShortCommit }}-arm64'
+      - 'ghcr.io/akash-network/{{ .ProjectName }}:{{ .Version }}-arm64'
+      - 'ghcr.io/akash-network/{{ .ProjectName }}:latest-arm64'
 docker_manifests:
-  - name_template: ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}
+  - name_template: ghcr.io/akash-network/{{ .ProjectName }}:{{ .ShortCommit }}
     image_templates:
-      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-amd64
-      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .ShortCommit }}-arm64
-  - name_template: ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}
+      - ghcr.io/akash-network/{{ .ProjectName }}:{{ .ShortCommit }}-amd64
+      - ghcr.io/akash-network/{{ .ProjectName }}:{{ .ShortCommit }}-arm64
+  - name_template: ghcr.io/akash-network/{{ .ProjectName }}:{{ .Version }}
     image_templates:
-      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-amd64
-      - ghcr.io/ovrclk/{{ .ProjectName }}:{{ .Version }}-arm64
-  - name_template: ghcr.io/ovrclk/{{ .ProjectName }}:latest
+      - ghcr.io/akash-network/{{ .ProjectName }}:{{ .Version }}-amd64
+      - ghcr.io/akash-network/{{ .ProjectName }}:{{ .Version }}-arm64
+  - name_template: ghcr.io/akash-network/{{ .ProjectName }}:latest
     image_templates:
-      - ghcr.io/ovrclk/{{ .ProjectName }}:latest-amd64
-      - ghcr.io/ovrclk/{{ .ProjectName }}:latest-arm64
+      - ghcr.io/akash-network/{{ .ProjectName }}:latest-amd64
+      - ghcr.io/akash-network/{{ .ProjectName }}:latest-arm64
 
 nfpms:
   - id: w/version
     vendor: "Overclock Labs Inc."
     homepage: "https://ovrclk.com"
     maintainer: "Overclock Labs Inc. <hello@akash.network>"
-    file_name_template: "{{ .ConventionalFileName }}"
+    file_name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - deb
       - rpm
@@ -171,7 +172,7 @@ nfpms:
     vendor: "Overclock Labs Inc."
     homepage: "https://ovrclk.com"
     maintainer: "Overclock Labs Inc. <hello@akash.network>"
-    file_name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    file_name_template: "provider-services_{{ .Os }}_{{ .Arch }}"
     formats:
       - deb
       - rpm
@@ -179,8 +180,8 @@ nfpms:
 
 release:
   github:
-    owner: ovrclk
-    name: provider-services
+    owner: akash-network
+    name: provider
   prerelease: auto
   mode: replace
   draft: false

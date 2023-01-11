@@ -3,14 +3,14 @@ package cluster
 import (
 	"context"
 
-	"github.com/ovrclk/provider-services/operator/waiter"
+	"github.com/akash-network/provider/operator/waiter"
 
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
+	"github.com/akash-network/provider/cluster/operatorclients"
 
 	"github.com/boz/go-lifecycle"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -18,13 +18,13 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/ovrclk/akash/pubsub"
-	atypes "github.com/ovrclk/akash/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/pubsub"
+	atypes "github.com/akash-network/node/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 )
 
 // ErrNotRunning is the error when service is not running

@@ -9,17 +9,17 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	akashclient "github.com/ovrclk/akash/client"
-	"github.com/ovrclk/akash/sdl"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
+	akashclient "github.com/akash-network/node/client"
+	"github.com/akash-network/node/sdl"
+	cutils "github.com/akash-network/node/x/cert/utils"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 var (

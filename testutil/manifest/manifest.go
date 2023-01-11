@@ -3,7 +3,7 @@ package manifest
 import (
 	"testing"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
 )
 
 var (

@@ -1,8 +1,9 @@
-module github.com/ovrclk/provider-services
+module github.com/akash-network/provider
 
 go 1.18
 
 require (
+	github.com/akash-network/node v0.21.0-rc4
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/boz/go-lifecycle v0.1.1-0.20190620234137-5139c86739b8
 	github.com/cosmos/cosmos-sdk v0.45.9
@@ -14,13 +15,11 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
-	github.com/ovrclk/akash v0.20.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/rook/rook v1.9.7
 	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v1.3.1
-	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.12.0
@@ -172,6 +171,7 @@ require (
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sasha-s/go-deadlock v0.2.1-0.20190427202633-1595213edefa // indirect
 	github.com/spf13/afero v1.8.2 // indirect
+	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/stretchr/objx v0.4.0 // indirect
 	github.com/subosito/gotenv v1.4.0 // indirect

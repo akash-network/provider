@@ -7,9 +7,9 @@ import (
 
 	eventsv1 "k8s.io/api/events/v1"
 
-	manifest "github.com/ovrclk/akash/manifest/v1"
-	atypes "github.com/ovrclk/akash/types/v1beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta1"
+	manifest "github.com/akash-network/node/manifest/v1"
+	atypes "github.com/akash-network/node/types/v1beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta1"
 )
 
 // Status stores current leases and inventory statuses

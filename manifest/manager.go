@@ -8,21 +8,22 @@ import (
 	"time"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/ovrclk/akash/sdl"
-	"github.com/ovrclk/akash/validation"
 	"github.com/pkg/errors"
+
 	"github.com/tendermint/tendermint/libs/log"
 
-	maniv2beta1 "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/pubsub"
-	sdlutil "github.com/ovrclk/akash/sdl/util"
-	"github.com/ovrclk/akash/util/runner"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	maniv2beta1 "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/sdl"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	"github.com/akash-network/node/util/runner"
+	"github.com/akash-network/node/validation"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 )
 
 const (

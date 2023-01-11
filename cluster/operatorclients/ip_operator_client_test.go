@@ -13,10 +13,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/server"
-	"github.com/ovrclk/akash/testutil"
-	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cosmos/cosmos-sdk/server"
+
+	"github.com/akash-network/node/testutil"
+
+	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
 )
 
 type fakeIPOperator struct {

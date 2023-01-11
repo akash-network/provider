@@ -5,10 +5,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ovrclk/akash/manifest/v2beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/manifest/v2beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 /*

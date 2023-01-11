@@ -16,12 +16,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/util/flowcontrol"
 
-	atestutil "github.com/ovrclk/akash/testutil"
+	atestutil "github.com/akash-network/node/testutil"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
+	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	mtestutil "github.com/akash-network/provider/testutil/manifest"
 )
 
 func TestNewClientNSNotFound(t *testing.T) {

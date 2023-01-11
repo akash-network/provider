@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
-	"github.com/ovrclk/akash/sdl"
+	"github.com/akash-network/node/sdl"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
@@ -23,17 +23,17 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
 
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
 
-	"github.com/ovrclk/akash/types/unit"
-	mquery "github.com/ovrclk/akash/x/market/query"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/types/unit"
+	mquery "github.com/akash-network/node/x/market/query"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	akashtypes "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 var (

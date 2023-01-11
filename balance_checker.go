@@ -11,18 +11,18 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmrpc "github.com/tendermint/tendermint/rpc/core/types"
 
-	"github.com/ovrclk/akash/client"
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/util/runner"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	"github.com/ovrclk/akash/x/escrow/client/util"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/client"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/util/runner"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	"github.com/akash-network/node/x/escrow/client/util"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 
-	aclient "github.com/ovrclk/akash/client"
-	netutil "github.com/ovrclk/akash/util/network"
+	aclient "github.com/akash-network/node/client"
+	netutil "github.com/akash-network/node/util/network"
 )
 
 type respState int

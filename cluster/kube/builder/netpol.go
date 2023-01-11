@@ -8,9 +8,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	manitypes "github.com/ovrclk/akash/manifest/v2beta1"
-	sdlutil "github.com/ovrclk/akash/sdl/util"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manitypes "github.com/akash-network/node/manifest/v2beta1"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 )
 
 type NetPol interface {

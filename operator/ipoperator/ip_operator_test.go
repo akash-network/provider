@@ -5,17 +5,17 @@ import (
 	"testing"
 	"time"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/testutil"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/testutil"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/ovrclk/provider-services/cluster/mocks"
-	"github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/operator/operatorcommon"
+	"github.com/akash-network/provider/cluster/mocks"
+	"github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/operator/operatorcommon"
 )
 
 type ipOperatorScaffold struct {

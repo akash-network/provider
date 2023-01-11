@@ -17,18 +17,18 @@ import (
 
 	"github.com/boz/go-lifecycle"
 
-	"github.com/ovrclk/akash/pubsub"
-	sdlutil "github.com/ovrclk/akash/sdl/util"
-	atypes "github.com/ovrclk/akash/types/v1beta2"
-	"github.com/ovrclk/akash/util/runner"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/pubsub"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	atypes "github.com/akash-network/node/types/v1beta2"
+	"github.com/akash-network/node/util/runner"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/event"
-	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
-	"github.com/ovrclk/provider-services/operator/waiter"
+	"github.com/akash-network/provider/cluster/operatorclients"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/event"
+	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
+	"github.com/akash-network/provider/operator/waiter"
 )
 
 var (

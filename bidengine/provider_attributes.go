@@ -9,13 +9,13 @@ import (
 
 	"github.com/boz/go-lifecycle"
 
-	"github.com/ovrclk/akash/pubsub"
+	"github.com/akash-network/node/pubsub"
 
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/session"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
-	atypes "github.com/ovrclk/akash/x/audit/types/v1beta2"
-	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
+	atypes "github.com/akash-network/node/x/audit/types/v1beta2"
+	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 )
 
 const (

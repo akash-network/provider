@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 )
 
 var allowedIPEndpointNameRegex = regexp.MustCompile(`^[a-z\d\-]+$`)

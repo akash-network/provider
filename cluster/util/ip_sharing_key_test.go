@@ -3,10 +3,10 @@ package util_test
 import (
 	"testing"
 
-	"github.com/ovrclk/akash/testutil"
+	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ovrclk/provider-services/cluster/util"
+	"github.com/akash-network/provider/cluster/util"
 )
 
 func TestPassesThroughNames(t *testing.T) {

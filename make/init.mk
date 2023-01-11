@@ -45,9 +45,9 @@ BINS                         := $(PROVIDER_SERVICES) akash
 export GO                    := GO111MODULE=$(GO111MODULE) go
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
-AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "github.com/ovrclk/akash")
-AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/ovrclk/akash")
-AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/ovrclk/akash | cut -c2-)
+AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "github.com/akash-network/node")
+AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/akash-network/node")
+AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/akash-network/node | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
 GOLANGCI_LINT_VERSION        ?= v1.50.0
 GOLANG_VERSION               ?= 1.16.1

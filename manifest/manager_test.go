@@ -5,30 +5,30 @@ import (
 	"testing"
 	"time"
 
-	sdlutil "github.com/ovrclk/akash/sdl/util"
-	escrowtypes "github.com/ovrclk/akash/x/escrow/types/v1beta2"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	escrowtypes "github.com/akash-network/node/x/escrow/types/v1beta2"
 
-	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	clientMocks "github.com/ovrclk/akash/client/mocks"
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/sdkutil"
-	"github.com/ovrclk/akash/testutil"
+	clientMocks "github.com/akash-network/node/client/mocks"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/sdkutil"
+	"github.com/akash-network/node/testutil"
 
-	"github.com/ovrclk/akash/sdl"
+	"github.com/akash-network/node/sdl"
 
-	"github.com/ovrclk/provider-services/cluster"
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	types "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	types "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 )
 
 type scaffold struct {

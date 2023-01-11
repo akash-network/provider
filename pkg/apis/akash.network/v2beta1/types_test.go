@@ -6,9 +6,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	atestutil "github.com/ovrclk/akash/testutil"
+	atestutil "github.com/akash-network/node/testutil"
 
-	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
+	mtestutil "github.com/akash-network/provider/testutil/manifest"
 )
 
 func Test_Manifest_encoding(t *testing.T) {

@@ -3,7 +3,7 @@ package cluster
 import (
 	"context"
 	"errors"
-	"github.com/ovrclk/akash/testutil"
+	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
 	"testing"
 	"time"

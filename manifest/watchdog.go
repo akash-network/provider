@@ -5,12 +5,14 @@ import (
 	"time"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/ovrclk/akash/util/runner"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	types "github.com/ovrclk/akash/x/market/types/v1beta2"
+
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/node/util/runner"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	types "github.com/akash-network/node/x/market/types/v1beta2"
+
+	"github.com/akash-network/provider/session"
 )
 
 type watchdog struct {

@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
-	akashv2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 type rancher struct {

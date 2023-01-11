@@ -19,12 +19,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
-	atestutil "github.com/ovrclk/akash/testutil"
+	atestutil "github.com/akash-network/node/testutil"
 
-	clusterutil "github.com/ovrclk/provider-services/cluster/util"
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	akashclient "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
-	mtestutil "github.com/ovrclk/provider-services/testutil/manifest"
+	clusterutil "github.com/akash-network/provider/cluster/util"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	mtestutil "github.com/akash-network/provider/testutil/manifest"
 )
 
 func TestWriteRead(t *testing.T) {

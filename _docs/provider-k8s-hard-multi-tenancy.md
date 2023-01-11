@@ -13,7 +13,7 @@ There are use cases where running as root might be necessary, and the provider w
 
 Restricted PSP source: https://raw.githubusercontent.com/kubernetes/website/master/content/en/examples/policy/restricted-psp.yaml
 
-These polices are applied by the Provider in [provider/cluster/kube/builder.go](https://github.com/ovrclk/akash/blob/master/provider/cluster/kube/builder.go).
+These polices are applied by the Provider in [provider/cluster/kube/builder.go](https://github.com/akash-network/node/blob/master/provider/cluster/kube/builder.go).
 
 ```
 apiVersion: policy/v1beta1
@@ -76,7 +76,7 @@ Networking connections the tenant containers are allowed to create. Ideal goal i
 
 Kubernetes Networking Policies enforced by a [CNI Plugin](https://kubernetes.io/docs/tasks/administer-cluster/network-policy-provider/calico-network-policy/)([Calico](https://docs.projectcalico.org/getting-started/kubernetes/) is recommended) 
 
-These polices are applied by the Provider in [provider/cluster/kube/builder.go](https://github.com/ovrclk/akash/blob/master/provider/cluster/kube/builder.go).
+These polices are applied by the Provider in [provider/cluster/kube/builder.go](https://github.com/akash-network/node/blob/master/provider/cluster/kube/builder.go).
 
 ### Ingress Rules
 * Deny all Ingress into Tenant namespace. This is the base for providing controlled access to the Namespace.

@@ -29,13 +29,13 @@ endif
 ifeq ($(AKASH_SRC_IS_LOCAL), true)
 akash:
 	@echo "compiling and installing Akash from local sources"
-	make -C $(AKASH_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
+	make -C $(AKASH_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/node
 else
 $(AKASH_VERSION_FILE): $(AP_DEVCACHE)
 	@echo "Installing akash $(AKASH_VERSION) ..."
 	rm -f $(AKASH)
-	wget -q https://github.com/ovrclk/akash/releases/download/v$(AKASH_VERSION)/akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH).zip -O $(AP_DEVCACHE)/akash.zip
-	unzip -p $(AP_DEVCACHE)/akash.zip akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH)/akash > $(AKASH)
+	wget -q https://github.com/akash-network/node/releases/download/v$(AKASH_VERSION)/akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH).zip -O $(AP_DEVCACHE)/akash.zip
+	unzip -p $(AP_DEVCACHE)/akash.zip akash > $(AKASH)
 	chmod +x $(AKASH)
 	rm $(AP_DEVCACHE)/akash.zip
 	rm -rf "$(dir $@)"

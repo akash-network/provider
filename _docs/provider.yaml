@@ -2,5 +2,24 @@ host: https://localhost:8443
 attributes:
   - key: region
     value:  us-west
+  - key: location
+    value:
   - key: tier
     value: 5
+  - key: hostname
+    value: ewr1
+capabilities:
+  cpu:
+    - arch: amd64
+      vendor: amd
+  memory:
+  gpu:
+    - vendor: nvidia|amd
+  storage:
+    - class: default
+      persistent: true
+    - class: beta3
+      persistent: true
+  ip-leases:
+    blocks:
+      - /29

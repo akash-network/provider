@@ -12,21 +12,21 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	qmock "github.com/ovrclk/akash/client/mocks"
-	akashmanifest "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/testutil"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-	providertypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
+	qmock "github.com/akash-network/node/client/mocks"
+	akashmanifest "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/testutil"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	providertypes "github.com/akash-network/node/x/provider/types/v1beta2"
 
-	"github.com/ovrclk/provider-services"
-	pcmock "github.com/ovrclk/provider-services/cluster/mocks"
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	pmmock "github.com/ovrclk/provider-services/manifest/mocks"
-	pmock "github.com/ovrclk/provider-services/mocks"
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	testutilrest "github.com/ovrclk/provider-services/testutil/rest"
+	"github.com/akash-network/provider"
+	pcmock "github.com/akash-network/provider/cluster/mocks"
+	"github.com/akash-network/provider/cluster/operatorclients"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	pmmock "github.com/akash-network/provider/manifest/mocks"
+	pmock "github.com/akash-network/provider/mocks"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	testutilrest "github.com/akash-network/provider/testutil/rest"
 )
 
 func Test_router_Status(t *testing.T) {

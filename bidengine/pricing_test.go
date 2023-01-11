@@ -17,17 +17,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ovrclk/provider-services/cluster/util"
+	"github.com/akash-network/provider/cluster/util"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ovrclk/akash/sdl"
-	"github.com/ovrclk/akash/testutil"
-	"github.com/ovrclk/akash/types/unit"
-	atypes "github.com/ovrclk/akash/types/v1beta2"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	"github.com/akash-network/node/sdl"
+	"github.com/akash-network/node/testutil"
+	"github.com/akash-network/node/types/unit"
+	atypes "github.com/akash-network/node/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
 )
 
 func Test_ScalePricingRejectsAllZero(t *testing.T) {

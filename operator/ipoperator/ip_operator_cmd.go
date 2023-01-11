@@ -4,8 +4,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	"github.com/ovrclk/provider-services/operator/operatorcommon"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	"github.com/akash-network/provider/operator/operatorcommon"
 )
 
 const (

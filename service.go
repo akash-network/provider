@@ -3,25 +3,24 @@ package provider
 import (
 	"context"
 
-	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-	aclient "github.com/ovrclk/akash/client"
-
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/operator/waiter"
-
 	"github.com/boz/go-lifecycle"
-	"github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 
-	"github.com/ovrclk/akash/pubsub"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	"github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
-	"github.com/ovrclk/provider-services/bidengine"
-	"github.com/ovrclk/provider-services/cluster"
-	"github.com/ovrclk/provider-services/manifest"
-	"github.com/ovrclk/provider-services/session"
+	aclient "github.com/akash-network/node/client"
+	"github.com/akash-network/node/pubsub"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+
+	"github.com/akash-network/provider/bidengine"
+	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/cluster/operatorclients"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/manifest"
+	"github.com/akash-network/provider/operator/waiter"
+	"github.com/akash-network/provider/session"
 )
 
 // ValidateClient is the interface to check if provider will bid on given groupspec

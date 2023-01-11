@@ -11,18 +11,20 @@ import (
 	"sync"
 	"syscall"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	dockerterm "github.com/moby/term"
-	akashclient "github.com/ovrclk/akash/client"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
-	dcli "github.com/ovrclk/akash/x/deployment/client/cli"
-	mcli "github.com/ovrclk/akash/x/market/client/cli"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+
+	akashclient "github.com/akash-network/node/client"
+	cutils "github.com/akash-network/node/x/cert/utils"
+	dcli "github.com/akash-network/node/x/deployment/client/cli"
+	mcli "github.com/akash-network/node/x/market/client/cli"
+
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 const (

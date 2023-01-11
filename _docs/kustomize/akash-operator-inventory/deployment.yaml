@@ -27,7 +27,7 @@ spec:
       serviceAccountName: inventory-operator
       containers:
         - name: inventory-operator
-          image: ghcr.io/ovrclk/provider-services
+          image: ghcr.io/akash-network/provider
           args:
             - "provider-services"
             - "operator"

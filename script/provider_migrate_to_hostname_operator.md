@@ -59,8 +59,8 @@ The hostname operator is implemented in `_docs/kustomize/akash-hostname-operator
 
 ```
 images:
-  - name: ghcr.io/ovrclk/akash:stable
-    newName: ghcr.io/ovrclk/akash
+  - name: ghcr.io/akash-network/node:stable
+    newName: ghcr.io/akash-network/node
     newTag: v0.14.0
 ```
 

@@ -22,7 +22,7 @@ mocks: $(MOCKERY) modvendor
 .PHONY: kubetypes
 kubetypes: $(K8S_GENERATE_GROUPS)
 	GOBIN=$(AP_DEVCACHE_BIN) $(K8S_GENERATE_GROUPS) all \
-	github.com/ovrclk/provider-services/pkg/client github.com/ovrclk/provider-services/pkg/apis \
+	github.com/akash-network/provider/pkg/client github.com/akash-network/provider/pkg/apis \
 	akash.network:v1,v2beta1
 
 .PHONY: codegen
