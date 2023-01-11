@@ -1,6 +1,6 @@
 package util
 
-import atypes "github.com/ovrclk/akash/types/v1beta2"
+import atypes "github.com/akash-network/node/types/v1beta2"
 
 func GetEndpointQuantityOfResourceGroup(resources atypes.ResourceGroup, kind atypes.Endpoint_Kind) uint {
 	endpoints := make(map[uint32]struct{})

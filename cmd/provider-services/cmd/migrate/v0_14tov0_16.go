@@ -21,12 +21,12 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
-	"github.com/ovrclk/akash/util/cli"
+	"github.com/akash-network/node/util/cli"
 
-	v1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v1"
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	v2beta1migrate "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1/migrate"
-	akashclient "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
+	v1 "github.com/akash-network/provider/pkg/apis/akash.network/v1"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	v2beta1migrate "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1/migrate"
+	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
 const (

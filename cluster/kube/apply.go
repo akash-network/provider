@@ -9,11 +9,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	metricsutils "github.com/ovrclk/akash/util/metrics"
+	metricsutils "github.com/akash-network/node/util/metrics"
 
-	crdapi "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
+	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/builder"
 )
 
 func applyNS(ctx context.Context, kc kubernetes.Interface, b builder.NS) error {

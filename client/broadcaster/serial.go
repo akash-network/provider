@@ -18,8 +18,8 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	ttypes "github.com/tendermint/tendermint/types"
 
-	abroadcaster "github.com/ovrclk/akash/client/broadcaster"
-	"github.com/ovrclk/akash/sdkutil"
+	abroadcaster "github.com/akash-network/node/client/broadcaster"
+	"github.com/akash-network/node/sdkutil"
 )
 
 const (

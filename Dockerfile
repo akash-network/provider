@@ -1,5 +1,5 @@
 FROM debian:bullseye
-LABEL "org.opencontainers.image.source"="https://github.com/ovrclk/provider-services"
+LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
 COPY provider-services /bin/
 

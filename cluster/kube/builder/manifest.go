@@ -3,10 +3,10 @@ package builder
 import (
 	"github.com/tendermint/tendermint/libs/log"
 
-	manitypes "github.com/ovrclk/akash/manifest/v2beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manitypes "github.com/akash-network/node/manifest/v2beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 type Manifest interface {

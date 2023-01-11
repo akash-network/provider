@@ -5,9 +5,9 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/server"
 
-	acmd "github.com/ovrclk/akash/cmd/akash/cmd"
+	acmd "github.com/akash-network/node/cmd/akash/cmd"
 
-	pcmd "github.com/ovrclk/provider-services/cmd/provider-services/cmd"
+	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 )
 
 // In main we call the rootCmd

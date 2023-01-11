@@ -4,9 +4,9 @@ import (
 	"math"
 	"testing"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	atestutil "github.com/ovrclk/akash/testutil"
-	types "github.com/ovrclk/akash/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	atestutil "github.com/akash-network/node/testutil"
+	types "github.com/akash-network/node/types/v1beta2"
 )
 
 // OverflowManifestGenerator generates a manifest maximum integer values

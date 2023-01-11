@@ -19,7 +19,7 @@ limitations under the License.
 package v2beta1
 
 import (
-	v2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"

@@ -19,11 +19,11 @@ limitations under the License.
 package fake
 
 import (
-	clientset "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
-	akashv1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v1"
-	fakeakashv1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v1/fake"
-	akashv2beta1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
-	fakeakashv2beta1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v2beta1/fake"
+	clientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	akashv1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v1"
+	fakeakashv1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v1/fake"
+	akashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
+	fakeakashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"

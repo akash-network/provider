@@ -4,18 +4,18 @@ import (
 	"math"
 	"strconv"
 
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	clusterutil "github.com/ovrclk/provider-services/cluster/util"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clusterutil "github.com/akash-network/provider/cluster/util"
 
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	maniv2beta1 "github.com/ovrclk/akash/manifest/v2beta1"
+	maniv2beta1 "github.com/akash-network/node/manifest/v2beta1"
 )
 
 // +genclient

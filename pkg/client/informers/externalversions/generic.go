@@ -21,8 +21,8 @@ package externalversions
 import (
 	"fmt"
 
-	v1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v1"
-	v2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	v1 "github.com/akash-network/provider/pkg/apis/akash.network/v1"
+	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
 )

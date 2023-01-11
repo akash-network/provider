@@ -19,7 +19,7 @@ limitations under the License.
 package v2beta1
 
 import (
-	internalinterfaces "github.com/ovrclk/provider-services/pkg/client/informers/externalversions/internalinterfaces"
+	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to all the informers in this group version.

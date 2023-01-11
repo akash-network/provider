@@ -13,7 +13,7 @@ import (
 
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
 
-	akashclientset "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
+	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
 func LogFromCtx(ctx context.Context) logr.Logger {

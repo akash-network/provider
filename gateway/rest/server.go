@@ -11,11 +11,11 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
 
-	ctypes "github.com/ovrclk/akash/x/cert/types/v1beta2"
+	ctypes "github.com/akash-network/node/x/cert/types/v1beta2"
 
-	"github.com/ovrclk/provider-services"
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
-	gwutils "github.com/ovrclk/provider-services/gateway/utils"
+	"github.com/akash-network/provider"
+	"github.com/akash-network/provider/cluster/operatorclients"
+	gwutils "github.com/akash-network/provider/gateway/utils"
 )
 
 func NewServer(

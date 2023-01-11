@@ -13,8 +13,8 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	akashv2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 const (

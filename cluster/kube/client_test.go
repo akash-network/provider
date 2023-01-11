@@ -6,17 +6,17 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	types "github.com/ovrclk/akash/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	types "github.com/akash-network/node/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/builder"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -25,15 +25,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/ovrclk/akash/testutil"
+	"github.com/akash-network/node/testutil"
 
-	kubernetes_mocks "github.com/ovrclk/provider-services/testutil/kubernetes_mock"
-	appsv1_mocks "github.com/ovrclk/provider-services/testutil/kubernetes_mock/typed/apps/v1"
-	corev1_mocks "github.com/ovrclk/provider-services/testutil/kubernetes_mock/typed/core/v1"
+	kubernetes_mocks "github.com/akash-network/provider/testutil/kubernetes_mock"
+	appsv1_mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/apps/v1"
+	corev1_mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/core/v1"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	akashclient "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
-	akashclient_fake "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/fake"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	akashclient_fake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 )
 
 const testKubeClientNs = "nstest1111"

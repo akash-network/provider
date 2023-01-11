@@ -7,12 +7,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/ovrclk/akash/testutil"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/testutil"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/builder"
 
-	"github.com/ovrclk/akash/sdl"
+	"github.com/akash-network/node/sdl"
 
 	"github.com/stretchr/testify/require"
 )

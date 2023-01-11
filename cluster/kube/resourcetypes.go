@@ -6,9 +6,9 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 type resourcePair struct {

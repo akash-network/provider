@@ -10,15 +10,15 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/akash-network/node/cmd/common"
+	cmodule "github.com/akash-network/node/x/cert"
+	cutils "github.com/akash-network/node/x/cert/utils"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/ovrclk/akash/cmd/common"
-	cmodule "github.com/ovrclk/akash/x/cert"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 const (

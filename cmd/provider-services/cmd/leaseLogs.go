@@ -10,14 +10,14 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	akashclient "github.com/ovrclk/akash/client"
-	cmdcommon "github.com/ovrclk/akash/cmd/common"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
+	akashclient "github.com/akash-network/node/client"
+	cmdcommon "github.com/akash-network/node/cmd/common"
+	cutils "github.com/akash-network/node/x/cert/utils"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 func leaseLogsCmd() *cobra.Command {

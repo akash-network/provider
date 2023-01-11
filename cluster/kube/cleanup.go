@@ -8,10 +8,10 @@ import (
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/builder"
 )
 
 func cleanupStaleResources(ctx context.Context, kc kubernetes.Interface, lid mtypes.LeaseID, group *manifest.Group) error {

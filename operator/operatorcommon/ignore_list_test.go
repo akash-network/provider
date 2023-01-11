@@ -3,7 +3,7 @@ package operatorcommon
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/ovrclk/akash/testutil"
+	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"

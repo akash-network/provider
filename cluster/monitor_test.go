@@ -3,17 +3,17 @@ package cluster
 import (
 	"testing"
 
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/testutil"
 	"github.com/boz/go-lifecycle"
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/testutil"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ovrclk/provider-services/cluster/mocks"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/cluster/mocks"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 )
 
 func TestMonitorInstantiate(t *testing.T) {

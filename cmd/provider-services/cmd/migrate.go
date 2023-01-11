@@ -3,7 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
-	migratecmd "github.com/ovrclk/provider-services/cmd/provider-services/cmd/migrate"
+	migratecmd "github.com/akash-network/provider/cmd/provider-services/cmd/migrate"
 )
 
 func migrate() *cobra.Command {

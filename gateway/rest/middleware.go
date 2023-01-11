@@ -15,9 +15,9 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
 
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mquery "github.com/ovrclk/akash/x/market/query"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mquery "github.com/akash-network/node/x/market/query"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 )
 
 type contextKey int

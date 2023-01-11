@@ -11,7 +11,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"k8s.io/client-go/rest"
 
-	clusterutil "github.com/ovrclk/provider-services/cluster/util"
+	clusterutil "github.com/akash-network/provider/cluster/util"
 )
 
 const (

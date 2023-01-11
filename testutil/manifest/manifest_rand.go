@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"testing"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	atestutil "github.com/ovrclk/akash/testutil"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	atestutil "github.com/akash-network/node/testutil"
 )
 
 // RandManifestGenerator generates a manifest with random values

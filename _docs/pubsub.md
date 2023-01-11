@@ -23,7 +23,7 @@ Redis example below show use of JSON. Protobuf should work as well.
 |    RabbitMQ |        **Yes**         |   **Yes**   |           **Yes**           |                        N/A                         |
 |    ActiveMQ |        **Yes**         |   **Yes**   |           **Yes**           |                        N/A                         |
 | Apache Qpid |         **No**         |   **No**    |           **No**            |                        N/A                         |
-|       Redis |      **Partial**       |   **No**    |           **Yes**           | [redis](https://github.com/ovrclk/akash/pull/1623) |
+|       Redis |      **Partial**       |   **No**    |           **Yes**           | [redis](https://github.com/akash-network/node/pull/1623) |
 
 Both **ZeroMQ** and **Qpid** are rather toolkits and requiring significant time to design and implement routing. Consider them as combination of TCP/UDP on steroids.
 

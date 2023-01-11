@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/ovrclk/provider-services/gateway/utils"
+	"github.com/akash-network/provider/gateway/utils"
 )
 
 type PrepareFlagFn func()

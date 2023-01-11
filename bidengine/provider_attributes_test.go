@@ -9,15 +9,15 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	clientmocks "github.com/ovrclk/akash/client/mocks"
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/testutil"
+	clientmocks "github.com/akash-network/node/client/mocks"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/testutil"
 
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/session"
 
-	akashtypes "github.com/ovrclk/akash/types/v1beta2"
-	atypes "github.com/ovrclk/akash/x/audit/types/v1beta2"
-	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
+	akashtypes "github.com/akash-network/node/types/v1beta2"
+	atypes "github.com/akash-network/node/x/audit/types/v1beta2"
+	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 )
 
 type providerAttributesTestScaffold struct {

@@ -3,7 +3,7 @@ package operator
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/ovrclk/provider-services/operator/inventory"
+	"github.com/akash-network/provider/operator/inventory"
 )
 
 func Cmd() *cobra.Command {

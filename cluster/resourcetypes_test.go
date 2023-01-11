@@ -6,7 +6,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
 )
 
 func TestResourcePairAvailable(t *testing.T) {

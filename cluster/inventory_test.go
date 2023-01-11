@@ -5,26 +5,26 @@ import (
 	"testing"
 	"time"
 
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
-	"github.com/ovrclk/provider-services/operator/waiter"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
+	"github.com/akash-network/provider/operator/waiter"
 
-	"github.com/ovrclk/provider-services/cluster/operatorclients"
+	"github.com/akash-network/provider/cluster/operatorclients"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/testutil"
-	"github.com/ovrclk/akash/types/unit"
-	types "github.com/ovrclk/akash/types/v1beta2"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/testutil"
+	"github.com/akash-network/node/types/unit"
+	types "github.com/akash-network/node/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/cluster/mocks"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/event"
+	"github.com/akash-network/provider/cluster/mocks"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/event"
 )
 
 func newInventory(nodes ...string) ctypes.Inventory {

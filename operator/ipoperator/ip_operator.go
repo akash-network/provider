@@ -12,25 +12,27 @@ import (
 	"sync"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gorilla/mux"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tendermint/tendermint/libs/log"
 	"golang.org/x/sync/errgroup"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/tendermint/tendermint/libs/log"
+
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 
-	"github.com/ovrclk/provider-services/cluster"
-	clusterClient "github.com/ovrclk/provider-services/cluster/kube"
-	"github.com/ovrclk/provider-services/cluster/kube/metallb"
-	"github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	clusterutil "github.com/ovrclk/provider-services/cluster/util"
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	ipoptypes "github.com/ovrclk/provider-services/operator/ipoperator/types"
-	"github.com/ovrclk/provider-services/operator/operatorcommon"
+	"github.com/akash-network/provider/cluster"
+	clusterClient "github.com/akash-network/provider/cluster/kube"
+	"github.com/akash-network/provider/cluster/kube/metallb"
+	"github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clusterutil "github.com/akash-network/provider/cluster/util"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
+	"github.com/akash-network/provider/operator/operatorcommon"
 )
 
 const (
