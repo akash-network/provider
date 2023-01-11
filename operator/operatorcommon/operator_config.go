@@ -5,7 +5,7 @@ import (
 
 	"github.com/spf13/viper"
 
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 )
 
 type OperatorConfig struct {

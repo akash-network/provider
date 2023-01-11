@@ -21,7 +21,7 @@ package fake
 import (
 	"context"
 
-	v2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	labels "k8s.io/apimachinery/pkg/labels"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"

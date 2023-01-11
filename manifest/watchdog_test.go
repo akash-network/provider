@@ -4,17 +4,19 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	broadcastmocks "github.com/ovrclk/akash/client/broadcaster/mocks"
-	clientmocks "github.com/ovrclk/akash/client/mocks"
-	"github.com/ovrclk/akash/testutil"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	types "github.com/ovrclk/akash/x/market/types/v1beta2"
-	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ovrclk/provider-services/session"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
+	clientmocks "github.com/akash-network/node/client/mocks"
+	"github.com/akash-network/node/testutil"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	types "github.com/akash-network/node/x/market/types/v1beta2"
+	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
+
+	"github.com/akash-network/provider/session"
 )
 
 type watchdogTestScaffold struct {

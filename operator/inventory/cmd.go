@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/akash-network/node/util/runner"
 	"github.com/cskr/pubsub"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/zapr"
 	"github.com/gorilla/mux"
-	"github.com/ovrclk/akash/util/runner"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -25,12 +25,11 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 
-	cmdutil "github.com/ovrclk/provider-services/cmd/provider-services/cmd/util"
-
-	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	akashv2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	akashclientset "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
+	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
 func CmdSetContextValue(cmd *cobra.Command, key, val interface{}) {

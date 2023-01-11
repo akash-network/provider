@@ -19,23 +19,23 @@ import (
 
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/sdl"
-	sdlutil "github.com/ovrclk/akash/sdl/util"
-	metricsutils "github.com/ovrclk/akash/util/metrics"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/sdl"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	metricsutils "github.com/akash-network/node/util/metrics"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/client-go/util/flowcontrol"
 
-	"github.com/ovrclk/provider-services/cluster"
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	akashclient "github.com/ovrclk/provider-services/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
 var (

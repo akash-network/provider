@@ -3,10 +3,10 @@ package cmd
 import (
 	"fmt"
 
-	mcli "github.com/ovrclk/akash/x/market/client/cli"
+	mcli "github.com/akash-network/node/x/market/client/cli"
 	"github.com/spf13/cobra"
 
-	cutil "github.com/ovrclk/provider-services/cluster/util"
+	cutil "github.com/akash-network/provider/cluster/util"
 )
 
 func clusterNSCmd() *cobra.Command {

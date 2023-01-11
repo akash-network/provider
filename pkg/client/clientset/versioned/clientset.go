@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"net/http"
 
-	akashv1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v1"
-	akashv2beta1 "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
+	akashv1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v1"
+	akashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"

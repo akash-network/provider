@@ -21,8 +21,8 @@ package v2beta1
 import (
 	"net/http"
 
-	v2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	"github.com/ovrclk/provider-services/pkg/client/clientset/versioned/scheme"
+	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/provider/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 

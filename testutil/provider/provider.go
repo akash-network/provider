@@ -12,13 +12,13 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
 
-	testutilcli "github.com/ovrclk/akash/testutil/cli"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	testutilcli "github.com/akash-network/node/testutil/cli"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	pcmd "github.com/ovrclk/provider-services/cmd/provider-services/cmd"
-	providerflags "github.com/ovrclk/provider-services/cmd/provider-services/cmd/flags"
-	"github.com/ovrclk/provider-services/operator/hostnameoperator"
-	"github.com/ovrclk/provider-services/operator/ipoperator"
+	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	"github.com/akash-network/provider/operator/hostnameoperator"
+	"github.com/akash-network/provider/operator/ipoperator"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 )
 
 type HostnameServiceClient interface {

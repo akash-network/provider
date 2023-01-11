@@ -3,9 +3,9 @@ package hostnameoperator
 import (
 	"time"
 
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 type managedHostname struct {

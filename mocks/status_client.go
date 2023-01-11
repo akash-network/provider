@@ -5,7 +5,7 @@ package mocks
 import (
 	context "context"
 
-	provider "github.com/ovrclk/provider-services"
+	provider "github.com/akash-network/provider"
 	mock "github.com/stretchr/testify/mock"
 
 	testing "testing"

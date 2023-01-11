@@ -1,8 +1,8 @@
 package v1beta2
 
 import (
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 )
 
 type IPResourceEvent interface {

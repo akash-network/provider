@@ -24,16 +24,16 @@ import (
 	cosmosclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	akashclient "github.com/ovrclk/akash/client"
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	ctypes "github.com/ovrclk/akash/x/cert/types/v1beta2"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
+	akashclient "github.com/akash-network/node/client"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	ctypes "github.com/akash-network/node/x/cert/types/v1beta2"
+	cutils "github.com/akash-network/node/x/cert/utils"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 
-	"github.com/ovrclk/provider-services"
-	cltypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/akash-network/provider"
+	cltypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 const (

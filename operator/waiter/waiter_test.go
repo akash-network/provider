@@ -2,7 +2,7 @@ package waiter
 
 import (
 	"context"
-	"github.com/ovrclk/akash/testutil"
+	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
 	"io"
 	"testing"

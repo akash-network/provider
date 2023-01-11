@@ -6,7 +6,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	sdktest "github.com/cosmos/cosmos-sdk/testutil"
 
-	testutilcli "github.com/ovrclk/akash/testutil/cli"
+	testutilcli "github.com/akash-network/node/testutil/cli"
 )
 
 func ProviderLeaseStatusExec(clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {

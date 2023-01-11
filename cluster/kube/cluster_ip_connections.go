@@ -5,21 +5,21 @@ import (
 	"fmt"
 	"strings"
 
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/pager"
 
-	akashtypes "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
-	"github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/kube/builder"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 const (

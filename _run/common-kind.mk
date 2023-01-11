@@ -47,8 +47,8 @@ BASH_PATH                 := $(shell which bash)
 INGRESS_CONFIG_PATH       ?= ../ingress-nginx.yaml
 CALICO_MANIFEST           ?= https://docs.projectcalico.org/v3.8/manifests/calico.yaml
 
-AKASH_DOCKER_IMAGE        ?= ghcr.io/ovrclk/akash:latest-$(UNAME_ARCH)
-DOCKER_IMAGE              ?= ghcr.io/ovrclk/provider-services:latest-$(UNAME_ARCH)
+AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:latest-$(UNAME_ARCH)
+DOCKER_IMAGE              ?= ghcr.io/akash-network/provider:latest-$(UNAME_ARCH)
 
 PROVIDER_HOSTNAME         ?= localhost
 PROVIDER_HOST              = $(PROVIDER_HOSTNAME):$(KIND_HTTP_PORT)

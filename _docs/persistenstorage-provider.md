@@ -14,7 +14,7 @@ Configuration is based on Rook V1.8
 Meanwhile examples referenced in the guide can be found [here](TBD)
 3. We will prevent cluster from using master nodes.
 4. We will be utilizing all available devices on each used node
-5. AKASH_ROOT environment variable points to local copy of [akash codebase](https://github.com/ovrclk/akash)
+5. AKASH_ROOT environment variable points to local copy of [akash codebase](https://github.com/akash-network/node)
 
 ## Configuration
 
@@ -77,7 +77,7 @@ AKASH_BID_PRICE_STORAGE_SCALE=0.0001,default=0.002,beta2=0.002
 ```
 
 #### Pricing script
-Following [script](https://github.com/ovrclk/akash/blob/master/script/usd_pricing_oracle.sh) can be used for dynamic price changes.
+Following [script](https://github.com/akash-network/node/blob/master/script/usd_pricing_oracle.sh) can be used for dynamic price changes.
 Storage classes are defined on lines 47..51. Comment or remove unsupported storage classes and change scale accordingly.
 
 ## Deploying test cluster

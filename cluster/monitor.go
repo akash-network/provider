@@ -8,18 +8,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/ovrclk/provider-services/cluster/util"
+	"github.com/akash-network/provider/cluster/util"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/tendermint/tendermint/libs/log"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/util/runner"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/util/runner"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 )
 
 const (

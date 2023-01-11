@@ -34,17 +34,17 @@ ifeq ($(LEDGER_ENABLED),true)
 endif
 
 GORELEASER_BUILD_VARS := \
--X github.com/ovrclk/provider-services/version.Name=provider-services \
--X github.com/ovrclk/provider-services/version.AppName=provider-services \
--X github.com/ovrclk/provider-services/version.BuildTags=\"$(BUILD_TAGS)\" \
--X github.com/ovrclk/provider-services/version.Version=$(RELEASE_TAG) \
--X github.com/ovrclk/provider-services/version.Commit=$(GIT_HEAD_COMMIT_LONG)
+-X github.com/akash-network/provider/version.Name=provider-services \
+-X github.com/akash-network/provider/version.AppName=provider-services \
+-X github.com/akash-network/provider/version.BuildTags=\"$(BUILD_TAGS)\" \
+-X github.com/akash-network/provider/version.Version=$(RELEASE_TAG) \
+-X github.com/akash-network/provider/version.Commit=$(GIT_HEAD_COMMIT_LONG)
 
-ldflags = -linkmode=$(GO_LINKMODE) -X github.com/ovrclk/provider-services/version.Name=provider-services \
--X github.com/ovrclk/provider-services/version.AppName=provider-services \
--X github.com/ovrclk/provider-services/version.BuildTags="$(BUILD_TAGS)" \
--X github.com/ovrclk/provider-services/version.Version=$(shell git describe --tags | sed 's/^v//') \
--X github.com/ovrclk/provider-services/version.Commit=$(GIT_HEAD_COMMIT_LONG)
+ldflags = -linkmode=$(GO_LINKMODE) -X github.com/akash-network/provider/version.Name=provider-services \
+-X github.com/akash-network/provider/version.AppName=provider-services \
+-X github.com/akash-network/provider/version.BuildTags="$(BUILD_TAGS)" \
+-X github.com/akash-network/provider/version.Version=$(shell git describe --tags | sed 's/^v//') \
+-X github.com/akash-network/provider/version.Commit=$(GIT_HEAD_COMMIT_LONG)
 
 # check for nostrip option
 ifeq (,$(findstring nostrip,$(BUILD_OPTIONS)))

@@ -6,13 +6,13 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
-	akashclient "github.com/ovrclk/akash/client"
-	cmdcommon "github.com/ovrclk/akash/cmd/common"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
-	dcli "github.com/ovrclk/akash/x/deployment/client/cli"
-	mcli "github.com/ovrclk/akash/x/market/client/cli"
+	akashclient "github.com/akash-network/node/client"
+	cmdcommon "github.com/akash-network/node/cmd/common"
+	cutils "github.com/akash-network/node/x/cert/utils"
+	dcli "github.com/akash-network/node/x/deployment/client/cli"
+	mcli "github.com/akash-network/node/x/market/client/cli"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 func leaseStatusCmd() *cobra.Command {

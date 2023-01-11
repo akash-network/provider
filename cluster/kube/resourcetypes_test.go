@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
 )
 
 func TestResourcePairAvailable(t *testing.T) {

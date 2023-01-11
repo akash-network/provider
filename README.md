@@ -1,13 +1,13 @@
 # Akash Provider Daemon
 
-[![tests](https://github.com/ovrclk/provider-services/actions/workflows/tests.yaml/badge.svg)](https://github.com/ovrclk/provider-services/actions/workflows/tests.yaml)
-[![integration](https://github.com/ovrclk/provider-services/actions/workflows/k8s-integration.yaml/badge.svg)](https://github.com/ovrclk/provider-services/actions/workflows/k8s-integration.yaml)
+[![tests](https://github.com/akash-network/provider/actions/workflows/tests.yaml/badge.svg)](https://github.com/akash-network/provider/actions/workflows/tests.yaml)
+[![integration](https://github.com/akash-network/provider/actions/workflows/k8s-integration.yaml/badge.svg)](https://github.com/akash-network/provider/actions/workflows/k8s-integration.yaml)
 
 This folder contains the Akash Provider Daemon. This piece of software listens to events emitted from the Akash blockchain (code in `../app/app.go`) and takes actions on a connected Kubernetes cluster to provision compute capacity based on the bids that the configured provider key wins. The following are the pieces of the daemon:
 
 ## Development environment
 
-[This doc](https://github.com/ovrclk/akash/blob/master/_docs/development-environment.md) guides through setting up local development environment 
+[This doc](https://github.com/akash-network/node/blob/master/_docs/development-environment.md) guides through setting up local development environment 
 
 ## Structure
 

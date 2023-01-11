@@ -5,10 +5,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
-	akashclient "github.com/ovrclk/akash/client"
-	cmdcommon "github.com/ovrclk/akash/cmd/common"
+	akashclient "github.com/akash-network/node/client"
+	cmdcommon "github.com/akash-network/node/cmd/common"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 func statusCmd() *cobra.Command {

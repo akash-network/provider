@@ -5,11 +5,11 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	types "github.com/ovrclk/akash/types/v1beta2"
-	"github.com/ovrclk/akash/validation/constants"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	types "github.com/akash-network/node/types/v1beta2"
+	"github.com/akash-network/node/validation/constants"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/bidengine"
+	"github.com/akash-network/provider/bidengine"
 )
 
 type Config struct {

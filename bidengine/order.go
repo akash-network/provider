@@ -13,17 +13,17 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/ovrclk/akash/pubsub"
-	metricsutils "github.com/ovrclk/akash/util/metrics"
-	"github.com/ovrclk/akash/util/runner"
-	atypes "github.com/ovrclk/akash/x/audit/types/v1beta2"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/pubsub"
+	metricsutils "github.com/akash-network/node/util/metrics"
+	"github.com/akash-network/node/util/runner"
+	atypes "github.com/akash-network/node/x/audit/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/cluster"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/cluster"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 )
 
 // order manages bidding and general lifecycle handling of an order.
