@@ -1,25 +1,26 @@
 package cmd
 
 import (
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	"github.com/cosmos/cosmos-sdk/client/debug"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/keys"
 	"github.com/cosmos/cosmos-sdk/client/rpc"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
-	"github.com/ovrclk/akash/app"
-	"github.com/ovrclk/akash/sdkutil"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
 
-	acmd "github.com/ovrclk/akash/cmd/akash/cmd"
-	ecmd "github.com/ovrclk/akash/events/cmd"
+	"github.com/akash-network/node/app"
+	acmd "github.com/akash-network/node/cmd/akash/cmd"
+	ecmd "github.com/akash-network/node/events/cmd"
+	"github.com/akash-network/node/sdkutil"
 
-	"github.com/ovrclk/provider-services/operator"
-	"github.com/ovrclk/provider-services/operator/hostnameoperator"
-	"github.com/ovrclk/provider-services/operator/ipoperator"
-	"github.com/ovrclk/provider-services/version"
+	"github.com/akash-network/provider/operator"
+	"github.com/akash-network/provider/operator/hostnameoperator"
+	"github.com/akash-network/provider/operator/ipoperator"
+	"github.com/akash-network/provider/version"
 )
 
 func NewRootCmd() *cobra.Command {

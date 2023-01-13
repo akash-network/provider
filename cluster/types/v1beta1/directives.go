@@ -1,6 +1,6 @@
 package v1beta1
 
-import mtypes "github.com/ovrclk/akash/x/market/types/v1beta1"
+import mtypes "github.com/akash-network/node/x/market/types/v1beta1"
 
 type ConnectHostnameToDeploymentDirective struct {
 	Hostname    string

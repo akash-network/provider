@@ -11,16 +11,17 @@ import (
 	"os/exec"
 	"time"
 
-	atypes "github.com/ovrclk/akash/types/v1beta2"
-
-	"github.com/ovrclk/provider-services/cluster/util"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/ovrclk/akash/sdl"
-	"github.com/ovrclk/akash/types/unit"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	"github.com/akash-network/node/sdl"
+	"github.com/akash-network/node/types/unit"
+	atypes "github.com/akash-network/node/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+
+	"github.com/akash-network/provider/cluster/util"
 )
 
 type BidPricingStrategy interface {

@@ -12,19 +12,19 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/ovrclk/akash/testutil"
-	"github.com/ovrclk/akash/types/unit"
-	atypes "github.com/ovrclk/akash/types/v1beta2"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/testutil"
+	"github.com/akash-network/node/types/unit"
+	atypes "github.com/akash-network/node/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	kubernetesmocks "github.com/ovrclk/provider-services/testutil/kubernetes_mock"
-	corev1mocks "github.com/ovrclk/provider-services/testutil/kubernetes_mock/typed/core/v1"
-	storagev1mocks "github.com/ovrclk/provider-services/testutil/kubernetes_mock/typed/storage/v1"
+	kubernetesmocks "github.com/akash-network/provider/testutil/kubernetes_mock"
+	corev1mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/core/v1"
+	storagev1mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/storage/v1"
 
-	akashclientfake "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/fake"
+	akashclientfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 type testReservation struct {

@@ -7,13 +7,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 
-	metricsutils "github.com/ovrclk/akash/util/metrics"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	metricsutils "github.com/akash-network/node/util/metrics"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 
 	netv1 "k8s.io/api/networking/v1"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/builder"
 )
 
 const (

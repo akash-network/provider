@@ -1,8 +1,8 @@
 package migrate
 
 import (
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v1"
-	"github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v1"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 )
 
 func ManifestSpecFromV1(from v1.ManifestSpec) v2beta1.ManifestSpec {

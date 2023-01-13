@@ -22,8 +22,8 @@ import (
 	"context"
 	"time"
 
-	v2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	scheme "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/scheme"
+	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	scheme "github.com/akash-network/provider/pkg/client/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
 	watch "k8s.io/apimachinery/pkg/watch"

@@ -5,22 +5,22 @@ import (
 	"errors"
 	"time"
 
-	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/boz/go-lifecycle"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
 
-	"github.com/ovrclk/akash/pubsub"
-	dquery "github.com/ovrclk/akash/x/deployment/query"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/pubsub"
+	dquery "github.com/akash-network/node/x/deployment/query"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/event"
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/session"
 )
 
 // ErrNotRunning is the error when service is not running

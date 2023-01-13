@@ -4,12 +4,14 @@ import (
 	"crypto/tls"
 	"errors"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	akashclient "github.com/ovrclk/akash/client"
-	cutils "github.com/ovrclk/akash/x/cert/utils"
 	"github.com/spf13/cobra"
 
-	gwrest "github.com/ovrclk/provider-services/gateway/rest"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+
+	akashclient "github.com/akash-network/node/client"
+	cutils "github.com/akash-network/node/x/cert/utils"
+
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 var errEmptyEndpoints = errors.New("endpoints cannot be empty")

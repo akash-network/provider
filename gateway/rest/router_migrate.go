@@ -9,8 +9,8 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/ovrclk/provider-services/cluster"
-	clustertypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 type migrateRequestBody struct {

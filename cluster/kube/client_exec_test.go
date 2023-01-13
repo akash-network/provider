@@ -11,19 +11,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ovrclk/akash/sdl"
-	"github.com/ovrclk/akash/testutil"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/sdl"
+	"github.com/akash-network/node/testutil"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
-	akashclient_fake "github.com/ovrclk/provider-services/pkg/client/clientset/versioned/fake"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashclient_fake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 
-	"github.com/ovrclk/provider-services/cluster"
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/cluster/kube/builder"
 
 	kubefake "k8s.io/client-go/kubernetes/fake"
 )

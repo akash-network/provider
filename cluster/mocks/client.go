@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	akash_networkv2beta1 "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	akash_networkv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
 	context "context"
 
@@ -15,11 +15,11 @@ import (
 
 	testing "testing"
 
-	typesv1beta2 "github.com/ovrclk/akash/x/market/types/v1beta2"
+	typesv1beta2 "github.com/akash-network/node/x/market/types/v1beta2"
 
-	v1beta2 "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	v1beta2 "github.com/akash-network/provider/cluster/types/v1beta2"
 
-	v2beta1 "github.com/ovrclk/akash/manifest/v2beta1"
+	v2beta1 "github.com/akash-network/node/manifest/v2beta1"
 
 	version "k8s.io/apimachinery/pkg/version"
 )

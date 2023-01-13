@@ -6,31 +6,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ovrclk/provider-services/operator/waiter"
+	"github.com/akash-network/provider/operator/waiter"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/ovrclk/akash/sdkutil"
-	"github.com/ovrclk/akash/validation/constants"
+	"github.com/akash-network/node/sdkutil"
+	"github.com/akash-network/node/validation/constants"
 
 	"github.com/stretchr/testify/mock"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/ovrclk/akash/pubsub"
-	"github.com/ovrclk/akash/testutil"
-	atypes "github.com/ovrclk/akash/types/v1beta2"
-	audittypes "github.com/ovrclk/akash/x/audit/types/v1beta2"
-	dtypes "github.com/ovrclk/akash/x/deployment/types/v1beta2"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
-	ptypes "github.com/ovrclk/akash/x/provider/types/v1beta2"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/testutil"
+	atypes "github.com/akash-network/node/types/v1beta2"
+	audittypes "github.com/akash-network/node/x/audit/types/v1beta2"
+	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 
-	"github.com/ovrclk/provider-services/session"
+	"github.com/akash-network/provider/session"
 
-	broadcastmocks "github.com/ovrclk/akash/client/broadcaster/mocks"
-	clientmocks "github.com/ovrclk/akash/client/mocks"
+	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
+	clientmocks "github.com/akash-network/node/client/mocks"
 
-	clustermocks "github.com/ovrclk/provider-services/cluster/mocks"
+	clustermocks "github.com/akash-network/provider/cluster/mocks"
 )
 
 type orderTestScaffold struct {

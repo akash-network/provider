@@ -13,14 +13,14 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
-	"github.com/ovrclk/akash/sdl"
-	types "github.com/ovrclk/akash/types/v1beta2"
-	metricsutils "github.com/ovrclk/akash/util/metrics"
+	"github.com/akash-network/node/sdl"
+	types "github.com/akash-network/node/types/v1beta2"
+	metricsutils "github.com/akash-network/node/util/metrics"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/kube/builder"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 const (

@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ovrclk/akash/testutil"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	"github.com/akash-network/node/testutil"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	crd "github.com/ovrclk/provider-services/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
-	"github.com/ovrclk/provider-services/cluster/mocks"
-	cluster "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	"github.com/ovrclk/provider-services/operator/operatorcommon"
+	"github.com/akash-network/provider/cluster/mocks"
+	cluster "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/operator/operatorcommon"
 )
 
 type testHostnameResourceEv struct {

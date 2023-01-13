@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	manifest "github.com/ovrclk/akash/manifest/v2beta1"
-	mtypes "github.com/ovrclk/akash/x/market/types/v1beta2"
+	manifest "github.com/akash-network/node/manifest/v2beta1"
+	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/prometheus/common/expfmt"
 	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
@@ -25,13 +25,13 @@ import (
 	"k8s.io/client-go/tools/pager"
 	"k8s.io/client-go/util/flowcontrol"
 
-	"github.com/ovrclk/provider-services/cluster/kube/builder"
-	"github.com/ovrclk/provider-services/cluster/kube/clientcommon"
-	"github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	ctypes "github.com/ovrclk/provider-services/cluster/types/v1beta2"
-	clusterutil "github.com/ovrclk/provider-services/cluster/util"
+	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	"github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clusterutil "github.com/akash-network/provider/cluster/util"
 
-	kubeclienterrors "github.com/ovrclk/provider-services/cluster/kube/errors"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 )
 
 const (

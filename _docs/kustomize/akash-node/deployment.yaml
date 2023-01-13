@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: akash-node
-          image: ghcr.io/ovrclk/akash:stable
+          image: ghcr.io/akash-network/node:stable
           imagePullPolicy: IfNotPresent
           command: [ "/bin/sh" , "/boot/run.sh" ]
           env:
