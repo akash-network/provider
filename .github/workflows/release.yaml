@@ -56,10 +56,11 @@ jobs:
       - name: release version
         run: |
           echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-      - name: notify homebrew with new release
-        uses: benc-uk/workflow-dispatch@v121
+      - name: notify homebrew with a new release
+        uses: benc-uk/workflow-dispatch@v1
         with:
           token: ${{ secrets.GORELEASER_ACCESS_TOKEN }}
           repo: akash-network/homebrew-tap
+          ref: ${{ github.sha }}
           workflow: provider-services
           inputs: '{"tag": "${{ env.RELEASE_TAG }}"}'
