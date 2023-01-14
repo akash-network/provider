@@ -54,13 +54,17 @@ jobs:
         with:
           fetch-depth: 0
       - name: release version
+        run: echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+      - name: check if pre-release
         run: |
-          echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-      - name: notify homebrew with a new release
+          IS_PRERELEASE=$(script/is_prerelease.sh ${{ env.RELEASE_TAG }})
+          echo "IS_PRERELEASE=${IS_PRERELEASE}" >> $GITHUB_ENV
+      - if: ${{ env.IS_PRERELEASE }} != 'true'
+        name: notify homebrew with a new release
         uses: benc-uk/workflow-dispatch@v1
         with:
           token: ${{ secrets.GORELEASER_ACCESS_TOKEN }}
           repo: akash-network/homebrew-tap
-          ref: ${{ github.sha }}
+          ref: refs/heads/master
           workflow: provider-services
           inputs: '{"tag": "${{ env.RELEASE_TAG }}"}'
