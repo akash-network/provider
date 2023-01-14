@@ -56,11 +56,12 @@ jobs:
       - name: release version
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
       - name: check if pre-release
+        id: check
         run: |
-          IS_PRERELEASE=$(script/is_prerelease.sh ${{ env.RELEASE_TAG }})
-          echo "IS_PRERELEASE=${IS_PRERELEASE}" >> $GITHUB_ENV
-      - if: ${{ env.IS_PRERELEASE }} != 'true'
-        name: notify homebrew with a new release
+          is_prerelease=$(./script/is_prerelease.sh ${{ env.RELEASE_TAG }}; echo $?)
+          echo "is_prerelease=${is_prerelease}" >> $GITHUB_OUTPUT
+      - name: notify homebrew with a new release
+        if: contains(steps.check.outputs.is_prerelease, '1')
         uses: benc-uk/workflow-dispatch@v1
         with:
           token: ${{ secrets.GORELEASER_ACCESS_TOKEN }}
