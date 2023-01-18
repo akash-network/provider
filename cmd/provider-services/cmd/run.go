@@ -112,16 +112,16 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			// leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
-			// withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
-			//
-			// if leaseFundsMonInterval < time.Minute || leaseFundsMonInterval > 24*time.Hour {
-			// 	return errors.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: goerr113
-			// }
-			//
-			// if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
-			// 	return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: goerr113
-			// }
+			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
+			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
+
+			if leaseFundsMonInterval < time.Minute || leaseFundsMonInterval > 24*time.Hour {
+				return errors.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: goerr113
+			}
+
+			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
+				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: goerr113
+			}
 
 			return nil
 		},
@@ -539,7 +539,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return errors.Errorf("no valid found on chain certificate for account %s", cctx.FromAddress)
 	}
 
-	broadcasterInstance, err := broadcaster.NewSerialClient(logger, cctx, txTimeout, txFactory, info)
+	broadcasterInstance, err := broadcaster.NewSerialClient(cmd.Context(), logger, cctx, txTimeout, txFactory, info)
 	if err != nil {
 		return err
 	}
