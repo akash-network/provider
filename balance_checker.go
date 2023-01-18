@@ -182,33 +182,15 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	return resp
 }
 
-func (bc *balanceChecker) startWithdraw(lid mtypes.LeaseID) error {
+func (bc *balanceChecker) startWithdraw(ctx context.Context, lid mtypes.LeaseID) error {
 	msg := &mtypes.MsgWithdrawLease{
 		LeaseID: lid,
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	errch := make(chan error, 1)
-
-	go func(ch chan<- error) {
-		ch <- bc.session.Client().Tx().Broadcast(ctx, msg)
-	}(errch)
-
-	select {
-	case <-bc.lc.Done():
-		// give request extra 30s to finish before force canceling
-		select {
-		case <-time.After(30 * time.Second):
-			cancel()
-			return bc.lc.Error()
-		case err := <-errch:
-			return err
-		}
-	case err := <-errch:
-		return err
-	}
+	return bc.session.Client().Tx().Broadcast(ctx, msg)
 }
 
 func (bc *balanceChecker) run(startCh chan<- error) {
@@ -244,6 +226,7 @@ loop:
 		case <-bc.lc.ShutdownRequest():
 			bc.log.Debug("shutting down")
 			bc.lc.ShutdownInitiated(nil)
+			cancel()
 			break loop
 		case evt := <-subscriber.Events():
 			switch ev := evt.(type) {
@@ -326,8 +309,8 @@ loop:
 			if withdraw {
 				go func() {
 					select {
-					case <-bc.ctx.Done():
-					case resultch <- runner.NewResult(res.lid, bc.startWithdraw(res.lid)):
+					case <-ctx.Done():
+					case resultch <- runner.NewResult(res.lid, bc.startWithdraw(ctx, res.lid)):
 					}
 				}()
 			}

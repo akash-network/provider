@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/boz/go-lifecycle"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -24,6 +25,7 @@ import (
 
 const (
 	broadcastBlockRetryPeriod = time.Second
+	sequenceSyncTimeout       = 30 * time.Second
 )
 
 var (
@@ -49,18 +51,27 @@ type seqreq struct {
 	ch   chan<- uint64
 }
 
+type broadcast struct {
+	donech chan<- error
+	respch []chan<- error
+	msgs   []sdk.Msg
+}
+
 type serialBroadcaster struct {
+	ctx              context.Context
 	cctx             sdkclient.Context
 	txf              tx.Factory
 	info             keyring.Info
 	broadcastTimeout time.Duration
-	broadcastch      chan broadcastRequest
+	reqch            chan broadcastRequest
+	cancelch         chan uintptr
+	broadcastch      chan broadcast
 	seqreqch         chan seqreq
 	lc               lifecycle.Lifecycle
 	log              log.Logger
 }
 
-func NewSerialClient(log log.Logger, cctx sdkclient.Context, timeout time.Duration, txf tx.Factory, info keyring.Info) (SerialClient, error) {
+func NewSerialClient(ctx context.Context, log log.Logger, cctx sdkclient.Context, timeout time.Duration, txf tx.Factory, info keyring.Info) (SerialClient, error) {
 	// populate account number, current sequence number
 	poptxf, err := sdkutil.PrepareFactory(cctx, txf)
 	if err != nil {
@@ -69,17 +80,22 @@ func NewSerialClient(log log.Logger, cctx sdkclient.Context, timeout time.Durati
 
 	poptxf = poptxf.WithSimulateAndExecute(true)
 	client := &serialBroadcaster{
+		ctx:              ctx,
 		cctx:             cctx,
 		txf:              poptxf,
 		info:             info,
 		broadcastTimeout: timeout,
 		lc:               lifecycle.New(),
-		broadcastch:      make(chan broadcastRequest),
+		reqch:            make(chan broadcastRequest, 1),
+		cancelch:         make(chan uintptr),
+		broadcastch:      make(chan broadcast, 1),
 		seqreqch:         make(chan seqreq),
 		log:              log.With("cmp", "client/broadcaster"),
 	}
 
+	go client.lc.WatchContext(ctx)
 	go client.run()
+	go client.broadcaster()
 
 	return client, nil
 }
@@ -89,6 +105,7 @@ func (c *serialBroadcaster) Close() {
 }
 
 type broadcastRequest struct {
+	id         uintptr
 	responsech chan<- error
 	msgs       []sdk.Msg
 }
@@ -100,16 +117,21 @@ func (c *serialBroadcaster) Broadcast(ctx context.Context, msgs ...sdk.Msg) erro
 		msgs:       msgs,
 	}
 
-	select {
-	// request received, return response
-	case c.broadcastch <- request:
-		return <-responsech
+	request.id = uintptr(unsafe.Pointer(&request))
 
-	// caller context cancelled, return error
+	select {
+	case c.reqch <- request:
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-c.lc.ShuttingDown():
+		return ErrNotRunning
+	}
 
-	// loop shutting down, return error
+	select {
+	case err := <-responsech:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
 	case <-c.lc.ShuttingDown():
 		return ErrNotRunning
 	}
@@ -127,18 +149,87 @@ func (c *serialBroadcaster) run() {
 
 	defer func() { <-donech }()
 
+	pendingMsgCount := 0
+	pending := make(map[uintptr]broadcastRequest)
+
+	var broadcastDoneCh chan error
+
+	signalCh := make(chan struct{}, 1)
+	signal := signalCh
+
+	trySignal := func() {
+		select {
+		case signal <- struct{}{}:
+		default:
+		}
+	}
+
 loop:
 	for {
 		select {
 		case err := <-c.lc.ShutdownRequest():
 			c.lc.ShutdownInitiated(err)
 			break loop
+		case req := <-c.reqch:
+			pending[req.id] = req
+			pendingMsgCount += len(req.msgs)
+			trySignal()
+		case id := <-c.cancelch:
+			delete(pending, id)
+			trySignal()
+		case <-signal:
+			if len(pending) == 0 {
+				continue loop
+			}
+
+			resChs := make([]chan<- error, 0, len(pending))
+			msgs := make([]sdk.Msg, 0, pendingMsgCount)
+
+			for id, req := range pending {
+				resChs = append(resChs, req.responsech)
+				msgs = append(msgs, req.msgs...)
+
+				pendingMsgCount -= len(req.msgs)
+				req.responsech = nil
+
+				delete(pending, id)
+			}
+
+			broadcastDoneCh := make(chan error, 1)
+			c.broadcastch <- broadcast{
+				donech: broadcastDoneCh,
+				respch: resChs,
+				msgs:   msgs,
+			}
+
+			signal = nil
+		case err := <-broadcastDoneCh:
+			if err != nil {
+				c.log.Error("unable to broadcast messages", "error", err.Error())
+			}
+			signal = signalCh
+			trySignal()
+		}
+	}
+}
+
+func (c *serialBroadcaster) broadcaster() {
+	for {
+		select {
+		case <-c.lc.ShuttingDown():
+			return
 		case req := <-c.broadcastch:
 			// broadcast the message
 			txf, err := c.broadcast(c.txf, false, req.msgs...)
-			// send response
-			req.responsech <- err
+			// send response to broadcast callers
+			for _, ch := range req.respch {
+				ch <- err
+			}
+
+			// fixme it should not be updated if there was an error
 			c.txf = txf
+
+			req.donech <- err
 		}
 	}
 }
@@ -189,15 +280,20 @@ func (c *serialBroadcaster) broadcast(txf tx.Factory, retry bool, msgs ...sdk.Ms
 	c.log.Error("broadcast response", "response", response)
 	// transaction has failed, perform the query of account sequence to make sure correct one is used
 	// for the next transaction
-	ch := make(chan uint64)
+	ch := make(chan uint64, 1)
 	c.seqreqch <- seqreq{
 		curr: txf.Sequence(),
 		ch:   ch,
 	}
 
+	ctx, cancel := context.WithTimeout(c.ctx, sequenceSyncTimeout)
+	defer cancel()
+
 	select {
 	case curseq := <-ch:
 		txf = txf.WithSequence(curseq)
+	case <-ctx.Done():
+		return txf, fmt.Errorf("serial broadcast: timed-out waiting for sequence sync")
 	case <-c.lc.ShuttingDown():
 		return txf, ErrNotRunning
 	}
