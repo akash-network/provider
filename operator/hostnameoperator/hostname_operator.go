@@ -296,6 +296,8 @@ func buildDirective(ev ctypes.HostnameResourceEvent, serviceExpose crd.ManifestS
 		directive.NextCases = serviceExpose.HTTPOptions.NextCases
 	}
 
+	directive.SslPassthrough = serviceExpose.HTTPSOptions.SslPassthrough
+
 	return directive
 }
 

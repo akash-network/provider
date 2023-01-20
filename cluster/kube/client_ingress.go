@@ -43,6 +43,11 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 		fmt.Sprintf("%s/proxy-body-size", root):           strconv.Itoa(int(directive.MaxBodySize)),
 	}
 
+	if directive.SslPassthrough {
+		result[fmt.Sprintf("%s/backend-protocol", root)] = "HTTPS"
+		result[fmt.Sprintf("%s/ssl-passthrough", root)] = "true"
+	}
+
 	nextTimeoutKey := fmt.Sprintf("%s/proxy-next-upstream-timeout", root)
 	nextTimeout := 0 // default magic value for disable
 	if directive.NextTimeout > 0 {

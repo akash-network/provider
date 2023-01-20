@@ -308,10 +308,11 @@ type ManifestServiceExpose struct {
 	Service      string `json:"service,omitempty"`
 	Global       bool   `json:"global,omitempty"`
 	// accepted hostnames
-	Hosts                  []string                         `json:"hosts,omitempty"`
-	HTTPOptions            ManifestServiceExposeHTTPOptions `json:"http_options,omitempty"`
-	IP                     string                           `json:"ip,omitempty"`
-	EndpointSequenceNumber uint32                           `json:"endpoint_sequence_number"`
+	Hosts                  []string                          `json:"hosts,omitempty"`
+	HTTPOptions            ManifestServiceExposeHTTPOptions  `json:"http_options,omitempty"`
+	HTTPSOptions           ManifestServiceExposeHTTPSOptions `json:"https_options,omitempty"`
+	IP                     string                            `json:"ip,omitempty"`
+	EndpointSequenceNumber uint32                            `json:"endpoint_sequence_number"`
 }
 
 type ManifestServiceExposeHTTPOptions struct {
@@ -321,6 +322,10 @@ type ManifestServiceExposeHTTPOptions struct {
 	NextTries   uint32   `json:"next_tries,omitempty"`
 	NextTimeout uint32   `json:"next_timeout,omitempty"`
 	NextCases   []string `json:"next_cases,omitempty"`
+}
+
+type ManifestServiceExposeHTTPSOptions struct {
+	SslPassthrough bool `json:"ssl_passthrough,omitempty"`
 }
 
 func (mse ManifestServiceExpose) toAkash() (maniv2beta1.ServiceExpose, error) {
