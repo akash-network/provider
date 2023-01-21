@@ -14,23 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: wow-actions/wip@v1
+      - uses: akash-network/wip-check@v1
         with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          setFailed: true
-          labels:
-            - 'do-not-merge'
-            - 'work in progress'
-            - 'wip'
-            - 'rfc'
-            - '🚧'
-          keywords:
-            - 'do-not-merge'
-            - 'work in progress'
-            - 'wip'
-            - 'rfc'
-            - '🚧'
-          context: WIP
-          target_url: ''
-          wip_description: 'work in progress'
-          ready_description: 'ready for review'
+          labels: '["do-not-merge", "wip", "rfc"]'
+          keywords: '["WIP", "wip", "RFC", "rfc"]'
