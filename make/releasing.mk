@@ -2,6 +2,7 @@ GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
 GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:v$(GOLANG_VERSION)
 GORELEASER_MOUNT_CONFIG  ?= false
+RELEASE_DOCKER_IMAGE     ?= ghcr.io/akash-network/provider-services
 
 ifeq ($(GORELEASER_RELEASE),true)
 	GORELEASER_SKIP_VALIDATE := false
@@ -58,6 +59,7 @@ docker-image: modvendor
 		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
 		-e LINKMODE="$(GO_LINKMODE)" \
+		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
@@ -86,6 +88,7 @@ release: modvendor gen-changelog
 		-e LINKMODE="$(GO_LINKMODE)" \
 		-e GITHUB_TOKEN="$(GITHUB_TOKEN)" \
 		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
+		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
