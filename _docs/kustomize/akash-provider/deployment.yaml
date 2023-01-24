@@ -101,13 +101,6 @@ spec:
                   name: akash-provider-client-config
                   key: keyring-backend
 
-            # --trust-node
-            - name: AP_TRUST_NODE
-              valueFrom:
-                configMapKeyRef:
-                  name: akash-provider-client-config
-                  key: trust-node
-
             ##
             # akash-provider config
             ##
