@@ -53,7 +53,7 @@ else
 AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASH_VERSION)-$(UNAME_ARCH)
 endif
 
-DOCKER_IMAGE              ?= ghcr.io/akash-network/provider-services:latest-$(UNAME_ARCH)
+DOCKER_IMAGE              ?= ghcr.io/akash-network/provider:latest-$(UNAME_ARCH)
 
 PROVIDER_HOSTNAME         ?= localhost
 PROVIDER_HOST              = $(PROVIDER_HOSTNAME):$(KIND_HTTP_PORT)
