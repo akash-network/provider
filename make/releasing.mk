@@ -2,7 +2,7 @@ GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
 GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:v$(GOLANG_VERSION)
 GORELEASER_MOUNT_CONFIG  ?= false
-RELEASE_DOCKER_IMAGE     ?= ghcr.io/akash-network/provider-services
+RELEASE_DOCKER_IMAGE     ?= ghcr.io/akash-network/provider
 
 ifeq ($(GORELEASER_RELEASE),true)
 	GORELEASER_SKIP_VALIDATE := false
