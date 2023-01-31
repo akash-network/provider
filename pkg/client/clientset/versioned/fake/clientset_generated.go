@@ -1,5 +1,5 @@
 /*
-Copyright The Kubernetes Authors.
+Copyright The Akash Network Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -20,10 +20,10 @@ package fake
 
 import (
 	clientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
-	akashv1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v1"
-	fakeakashv1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v1/fake"
 	akashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
 	fakeakashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1/fake"
+	akashv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
+	fakeakashv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2/fake"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/discovery"
@@ -81,12 +81,12 @@ var (
 	_ testing.FakeClient  = &Clientset{}
 )
 
-// AkashV1 retrieves the AkashV1Client
-func (c *Clientset) AkashV1() akashv1.AkashV1Interface {
-	return &fakeakashv1.FakeAkashV1{Fake: &c.Fake}
-}
-
 // AkashV2beta1 retrieves the AkashV2beta1Client
 func (c *Clientset) AkashV2beta1() akashv2beta1.AkashV2beta1Interface {
 	return &fakeakashv2beta1.FakeAkashV2beta1{Fake: &c.Fake}
+}
+
+// AkashV2beta2 retrieves the AkashV2beta2Client
+func (c *Clientset) AkashV2beta2() akashv2beta2.AkashV2beta2Interface {
+	return &fakeakashv2beta2.FakeAkashV2beta2{Fake: &c.Fake}
 }

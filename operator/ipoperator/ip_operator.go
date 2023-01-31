@@ -22,13 +22,13 @@ import (
 
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster"
 	clusterClient "github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/metallb"
-	"github.com/akash-network/provider/cluster/types/v1beta2"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"

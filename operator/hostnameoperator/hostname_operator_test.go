@@ -9,16 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akash-network/node/testutil"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/node/testutil"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster/mocks"
-	cluster "github.com/akash-network/provider/cluster/types/v1beta2"
+	cluster "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/operator/operatorcommon"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 type testHostnameResourceEv struct {

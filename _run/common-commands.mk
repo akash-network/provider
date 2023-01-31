@@ -1,4 +1,4 @@
-KEY_NAME   ?= main
+KEY_NAME ?= main
 
 KEY_ADDRESS          ?= $(shell $(AKASH) $(KEY_OPTS) keys show "$(KEY_NAME)" -a)
 PROVIDER_KEY_NAME    ?= provider

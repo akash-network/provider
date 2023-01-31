@@ -8,11 +8,11 @@ import (
 
 	"github.com/boz/go-lifecycle"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
-
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/pkg/errors"
+
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 // hostnameID type exists to identify the target of a reservation. The lease ID type is not used directly because

@@ -1,0 +1,38 @@
+---
+version: "2.0"
+
+services:
+  gpu-test:
+    image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda10.2
+    expose:
+      - port: 3000
+        as: 80
+        to:
+          - global: true
+        accept:
+          - webdistest.localhost
+profiles:
+  compute:
+    gpu-test:
+      resources:
+        cpu:
+          units: 1
+        memory:
+          size: 1Gi
+        gpu:
+          units: 1
+        storage:
+          - size: 512Mi
+  placement:
+    westcoast:
+      attributes:
+        region: us-west
+      pricing:
+        gpu-test:
+          denom: uakt
+          amount: 1000
+deployment:
+  gpu-test:
+    westcoast:
+      profile: gpu-test
+      count: 1

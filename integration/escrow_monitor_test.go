@@ -12,9 +12,9 @@ import (
 
 	clitestutil "github.com/akash-network/node/testutil/cli"
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mcli "github.com/akash-network/node/x/market/client/cli"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"

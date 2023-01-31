@@ -28,6 +28,14 @@ ifeq ($(DETECTED_OS), Darwin)
 	export CGO_CFLAGS=-Wno-deprecated-declarations
 endif
 
+# if go.mod contains replace for any modules on local filesystem
+# mount them into docker during goreleaser build to exactly same path
+REPLACED_MODULES              := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
+ifneq ($(REPLACED_MODULES), )
+	GORELEASER_MOUNT_REPLACED := $(foreach mod, $(REPLACED_MODULES), -v $(mod):$(mod)\\)
+endif
+GORELEASER_MOUNT_REPLACED     := $(GORELEASER_MOUNT_REPLACED:\\=)
+
 .PHONY: bins
 bins: $(BINS)
 
@@ -60,13 +68,14 @@ docker-image: modvendor
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
 		-e LINKMODE="$(GO_LINKMODE)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
-		-v /var/run/docker.sock:/var/run/docker.sock $(AKASH_BIND_LOCAL) \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		$(GORELEASER_MOUNT_REPLACED) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
-		-f .goreleaser-docker-$(UNAME_ARCH).yaml \
+		-f .goreleaser-docker.yaml \
 		--debug=$(GORELEASER_DEBUG) \
-		--rm-dist \
+		--clean \
 		--skip-validate \
 		--skip-publish \
 		--snapshot
@@ -90,6 +99,7 @@ release: modvendor gen-changelog
 		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
+		$(GORELEASER_MOUNT_REPLACED) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
@@ -97,5 +107,5 @@ release: modvendor gen-changelog
 		$(GORELEASER_SKIP_PUBLISH) \
 		--skip-validate=$(GORELEASER_SKIP_VALIDATE) \
 		--debug=$(GORELEASER_DEBUG) \
-		--rm-dist \
+		--clean \
 		--release-notes=/go/src/$(GO_MOD_NAME)/.cache/changelog.md

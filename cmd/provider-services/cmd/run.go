@@ -24,17 +24,17 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
+	mparams "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	"github.com/akash-network/node/client"
 	"github.com/akash-network/node/cmd/common"
 	"github.com/akash-network/node/events"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/sdl"
 	cmodule "github.com/akash-network/node/x/cert"
-	ctypes "github.com/akash-network/node/x/cert/types/v1beta2"
 	cutils "github.com/akash-network/node/x/cert/utils"
-	mparams "github.com/akash-network/node/x/market/types/v1beta2"
 	config2 "github.com/akash-network/node/x/provider/config"
-	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
@@ -456,6 +456,8 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	from := viper.GetString(flags.FlagFrom)
 	overcommitPercentStorage := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentStorage)/100.0)
 	overcommitPercentCPU := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentCPU)/100.0)
+	// no GPU overcommit
+	overcommitPercentGPU := 1.0
 	overcommitPercentMemory := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentMemory)/100.0)
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
 	kubeConfigPath := viper.GetString(providerflags.FlagKubeConfig)
@@ -487,7 +489,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	cctx := sdkclient.GetClientContextFromCmd(cmd)
 
-	_, _, _, err = sdkclient.GetFromFields(cctx.Keyring, from, false)
+	_, _, _, err = sdkclient.GetFromFields(cctx, cctx.Keyring, from)
 	if err != nil {
 		return err
 	}
@@ -571,6 +573,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.NetworkPoliciesEnabled = deploymentNetworkPoliciesEnabled
 	kubeSettings.ClusterPublicHostname = clusterPublicHostname
 	kubeSettings.CPUCommitLevel = overcommitPercentCPU
+	kubeSettings.GPUCommitLevel = overcommitPercentGPU
 	kubeSettings.MemoryCommitLevel = overcommitPercentMemory
 	kubeSettings.StorageCommitLevel = overcommitPercentStorage
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass

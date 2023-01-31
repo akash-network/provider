@@ -19,24 +19,24 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/version"
 
+	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	qmock "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/sdl"
 	"github.com/akash-network/node/testutil"
-	manifestValidation "github.com/akash-network/node/validation"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-	types "github.com/akash-network/node/x/market/types/v1beta2"
 
 	"github.com/akash-network/provider"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/cluster/operatorclients"
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/gateway/utils"
 	pmmock "github.com/akash-network/provider/manifest/mocks"
 	pmock "github.com/akash-network/provider/mocks"
-	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
@@ -123,7 +123,7 @@ func testCertHelper(t *testing.T, test *routerTest) {
 		"Submit",
 		mock.Anything,
 		mock.AnythingOfType("types.DeploymentID"),
-		mock.AnythingOfType("v2beta1.Manifest"),
+		mock.AnythingOfType("v2beta2.Manifest"),
 	).Return(nil)
 
 	dseq := uint64(testutil.RandRangeInt(1, 1000))
@@ -509,7 +509,7 @@ func TestRoutePutManifestOK(t *testing.T) {
 				Owner: test.caddr.String(),
 				DSeq:  dseq,
 			},
-			mock.AnythingOfType("v2beta1.Manifest"),
+			mock.AnythingOfType("v2beta2.Manifest"),
 		).Return(nil)
 
 		uri, err := makeURI(test.host, submitManifestPath(dseq))
@@ -550,7 +550,7 @@ func TestRoutePutInvalidManifest(t *testing.T) {
 				DSeq:  dseq,
 			},
 
-			mock.AnythingOfType("v2beta1.Manifest"),
+			mock.AnythingOfType("v2beta2.Manifest"),
 		).Return(manifestValidation.ErrInvalidManifest)
 
 		uri, err := makeURI(test.host, submitManifestPath(dseq))
@@ -594,30 +594,30 @@ func mockManifestGroupsForRouterTest(rt *routerTest, leaseID mtypes.LeaseID) {
 		AvailableReplicas:  0,
 	}
 	rt.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(status, nil)
-	rt.pcclient.On("GetManifestGroup", mock.Anything, leaseID).Return(true, v2beta1.ManifestGroup{
+	rt.pcclient.On("GetManifestGroup", mock.Anything, leaseID).Return(true, v2beta2.ManifestGroup{
 		Name: testGroupName,
-		Services: []v2beta1.ManifestService{{
+		Services: []v2beta2.ManifestService{{
 			Name:  testServiceName,
 			Image: testImageName,
 			Args:  nil,
 			Env:   nil,
-			Resources: v2beta1.ResourceUnits{
+			Resources: v2beta2.ResourceUnits{
 				CPU:    1000,
 				Memory: "3333",
-				Storage: []v2beta1.ManifestServiceStorage{{
+				Storage: []v2beta2.ManifestServiceStorage{{
 					Name: "",
 					Size: "4444",
 				}},
 			},
 			Count: 1,
-			Expose: []v2beta1.ManifestServiceExpose{{
+			Expose: []v2beta2.ManifestServiceExpose{{
 				Port:         8080,
 				ExternalPort: 80,
 				Proto:        "TCP",
 				Service:      testServiceName,
 				Global:       true,
 				Hosts:        []string{"hello.localhost"},
-				HTTPOptions: v2beta1.ManifestServiceExposeHTTPOptions{
+				HTTPOptions: v2beta2.ManifestServiceExposeHTTPOptions{
 					MaxBodySize: 1,
 					ReadTimeout: 2,
 					SendTimeout: 3,

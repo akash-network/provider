@@ -6,8 +6,7 @@ networking:
 nodes:
 - role: control-plane
   kubeadmConfigPatches:
-  - |
-    kind: InitConfiguration
+  - kind: InitConfiguration
     nodeRegistration:
       kubeletExtraArgs:
         node-labels: "ingress-ready=true"

@@ -10,9 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/akash-network/node/testutil"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {

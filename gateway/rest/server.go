@@ -11,7 +11,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
 
-	ctypes "github.com/akash-network/node/x/cert/types/v1beta2"
+	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/cluster/operatorclients"

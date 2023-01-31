@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
 
-MOD_PATH=$(go list -mod=readonly -m -f '{{ .Replace }}' "$1" 2>/dev/null)
+MOD_PATH=$(go list -mod=readonly -m -f '{{ .Replace }}' "$1" 2>/dev/null | grep -v -x -F "<nil>")
 
-if [[ "${MOD_PATH}" == "<nil>" ]]; then
-	echo false
-else
-	[[ "${MOD_PATH}" = /* ]] && echo true || echo false
-fi
+[[ "${MOD_PATH}" = /* ]] && echo -n true || echo -n false

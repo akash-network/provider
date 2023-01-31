@@ -12,8 +12,6 @@ import (
 	"strings"
 	"sync"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/prometheus/common/expfmt"
 	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
@@ -25,13 +23,15 @@ import (
 	"k8s.io/client-go/tools/pager"
 	"k8s.io/client-go/util/flowcontrol"
 
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
-	"github.com/akash-network/provider/cluster/types/v1beta2"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
-	clusterutil "github.com/akash-network/provider/cluster/util"
-
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	clusterutil "github.com/akash-network/provider/cluster/util"
 )
 
 const (

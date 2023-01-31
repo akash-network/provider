@@ -13,7 +13,7 @@ DOCKER_RUN             := docker run --rm -v $(shell pwd):/workspace -w /workspa
 GOLANGCI_LINT_RUN      := $(GOLANGCI_LINT) run
 LINT                    = $(GOLANGCI_LINT_RUN) ./... --disable-all --deadline=5m --enable
 
-GORELEASER_CONFIG       = .goreleaser.yaml
+GORELEASER_CONFIG      ?= .goreleaser.yaml
 
 GIT_HEAD_COMMIT_LONG   := $(shell git log -1 --format='%H')
 GIT_HEAD_COMMIT_SHORT  := $(shell git rev-parse --short HEAD)

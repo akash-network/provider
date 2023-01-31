@@ -2,15 +2,16 @@ package cluster
 
 import (
 	"context"
-	"github.com/akash-network/node/manifest/v2beta1"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+
+	"github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	logger "github.com/tendermint/tendermint/libs/log"
 )
 
 type purgeIPEntry struct {
 	serviceName string
 	port        uint32
-	proto       v2beta1.ServiceProtocol
+	proto       v2beta2.ServiceProtocol
 }
 
 type deployCleanupHelper struct {
@@ -34,7 +35,7 @@ func (dch *deployCleanupHelper) addHostname(hostname string) {
 	dch.hostnamesToPurge = append(dch.hostnamesToPurge, hostname)
 }
 
-func (dch *deployCleanupHelper) addIP(serviceName string, port uint32, proto v2beta1.ServiceProtocol) {
+func (dch *deployCleanupHelper) addIP(serviceName string, port uint32, proto v2beta2.ServiceProtocol) {
 	dch.ipsToPurge = append(
 		dch.ipsToPurge,
 		purgeIPEntry{

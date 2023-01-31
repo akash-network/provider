@@ -11,9 +11,8 @@ import (
 
 	metricsutils "github.com/akash-network/node/util/metrics"
 
-	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
-
 	"github.com/akash-network/provider/cluster/kube/builder"
+	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
 func applyNS(ctx context.Context, kc kubernetes.Interface, b builder.NS) error {
@@ -155,7 +154,7 @@ func applyService(ctx context.Context, kc kubernetes.Interface, b builder.Servic
 }
 
 func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest) error {
-	obj, err := kc.AkashV2beta1().Manifests(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+	obj, err := kc.AkashV2beta2().Manifests(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
 
 	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "akash-manifests-get", err, errors.IsNotFound)
 
@@ -164,13 +163,13 @@ func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest)
 		// TODO - only run this update if it would change something
 		obj, err = b.Update(obj)
 		if err == nil {
-			_, err = kc.AkashV2beta1().Manifests(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
+			_, err = kc.AkashV2beta2().Manifests(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-update", err)
 		}
 	case errors.IsNotFound(err):
 		obj, err = b.Create()
 		if err == nil {
-			_, err = kc.AkashV2beta1().Manifests(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
+			_, err = kc.AkashV2beta2().Manifests(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-create", err)
 		}
 	}

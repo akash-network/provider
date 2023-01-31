@@ -25,9 +25,9 @@ import (
 
 	"github.com/akash-network/node/sdl"
 	"github.com/akash-network/node/testutil"
-	"github.com/akash-network/node/types/unit"
-	atypes "github.com/akash-network/node/types/v1beta2"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 )
 
 func Test_ScalePricingRejectsAllZero(t *testing.T) {

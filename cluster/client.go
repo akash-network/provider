@@ -9,31 +9,24 @@ import (
 	"sync"
 	"time"
 
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-
-	"github.com/akash-network/node/sdl"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
-	"k8s.io/client-go/tools/remotecommand"
-
 	eventsv1 "k8s.io/api/events/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/client-go/tools/remotecommand"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
-
-	types "github.com/akash-network/node/types/v1beta2"
-
-	"github.com/akash-network/node/types/unit"
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	"github.com/akash-network/node/sdl"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mquery "github.com/akash-network/node/x/market/query"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
-	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 var (

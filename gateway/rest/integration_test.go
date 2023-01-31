@@ -13,19 +13,19 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	qmock "github.com/akash-network/node/client/mocks"
-	akashmanifest "github.com/akash-network/node/manifest/v2beta1"
+	akashmanifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/testutil"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-	providertypes "github.com/akash-network/node/x/provider/types/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	providertypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
 	"github.com/akash-network/provider"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/cluster/operatorclients"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	pmmock "github.com/akash-network/provider/manifest/mocks"
 	pmock "github.com/akash-network/provider/mocks"
-	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	testutilrest "github.com/akash-network/provider/testutil/rest"
 )
 
@@ -151,30 +151,30 @@ func mockManifestGroups(m integrationMocks, leaseID mtypes.LeaseID) {
 		AvailableReplicas:  0,
 	}
 	m.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(status, nil)
-	m.pcclient.On("GetManifestGroup", mock.Anything, leaseID).Return(true, v2beta1.ManifestGroup{
+	m.pcclient.On("GetManifestGroup", mock.Anything, leaseID).Return(true, v2beta2.ManifestGroup{
 		Name: testGroupName,
-		Services: []v2beta1.ManifestService{{
+		Services: []v2beta2.ManifestService{{
 			Name:  testServiceName,
 			Image: testImageName,
 			Args:  nil,
 			Env:   nil,
-			Resources: v2beta1.ResourceUnits{
+			Resources: v2beta2.ResourceUnits{
 				CPU:    1000,
 				Memory: "3333",
-				Storage: []v2beta1.ManifestServiceStorage{{
+				Storage: []v2beta2.ManifestServiceStorage{{
 					Name: "",
 					Size: "4444",
 				}},
 			},
 			Count: 1,
-			Expose: []v2beta1.ManifestServiceExpose{{
+			Expose: []v2beta2.ManifestServiceExpose{{
 				Port:         8080,
 				ExternalPort: 80,
 				Proto:        "TCP",
 				Service:      testServiceName,
 				Global:       true,
 				Hosts:        []string{"hello.localhost"},
-				HTTPOptions: v2beta1.ManifestServiceExposeHTTPOptions{
+				HTTPOptions: v2beta2.ManifestServiceExposeHTTPOptions{
 					MaxBodySize: 1,
 					ReadTimeout: 2,
 					SendTimeout: 3,

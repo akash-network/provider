@@ -15,7 +15,7 @@ import (
 	"github.com/akash-network/node/app"
 	acmd "github.com/akash-network/node/cmd/akash/cmd"
 	ecmd "github.com/akash-network/node/events/cmd"
-	"github.com/akash-network/node/sdkutil"
+	"github.com/akash-network/akash-api/go/sdkutil"
 
 	"github.com/akash-network/provider/operator"
 	"github.com/akash-network/provider/operator/hostnameoperator"

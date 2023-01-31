@@ -23,14 +23,12 @@ ifndef AP_ROOT
 	PATH         := $(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)
 endif
 
-#vr = $(shell which docker-credential-desktop)
-#
-#$(error $(vr))
+-include $(AP_ROOT)/.devenv
 
 UNAME_OS                   := $(shell uname -s)
 UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # uname reports x86_64. rename to amd64 to make it usable by goreleaser
-UNAME_ARCH                 := $(shell uname -m | sed "s/x86_64/amd64/g")
+UNAME_ARCH                 ?= $(shell uname -m | sed "s/x86_64/amd64/g")
 
 ifeq (, $(shell which wget))
 $(error "No wget in $(PATH), consider installing")
@@ -45,6 +43,7 @@ BINS                         := $(PROVIDER_SERVICES) akash
 export GO                    := GO111MODULE=$(GO111MODULE) go
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
+REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
 AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "github.com/akash-network/node")
 AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/akash-network/node")
 AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/akash-network/node | cut -c2-)
@@ -55,7 +54,7 @@ STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
 MODVENDOR_VERSION            ?= v0.3.0
 MOCKERY_VERSION              ?= 2.12.1
-K8S_CODE_GEN_VERSION         ?= v0.19.3
+K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
 
 ifeq (0, $(shell which kind &>/dev/null; echo $$?))
 	KIND_VERSION                 ?= $(shell kind --version | cut -d" " -f3)
@@ -87,13 +86,5 @@ K8S_GENERATE_GROUPS              := $(AP_ROOT)/vendor/k8s.io/code-generator/gene
 K8S_GO_TO_PROTOBUF               := $(AP_DEVCACHE_BIN)/go-to-protobuf
 NPM                              := npm
 GOLANGCI_LINT                    := $(AP_DEVCACHE_BIN)/golangci-lint
-
-AKASH_BIND_LOCAL ?=
-
-# if go.mod contains replace for akash on local filesystem
-# bind this path to goreleaser
-ifeq ($(AKASH_SRC_IS_LOCAL), true)
-AKASH_BIND_LOCAL := -v $(AKASH_LOCAL_PATH):$(AKASH_LOCAL_PATH)
-endif
 
 include $(AP_ROOT)/make/setup-cache.mk

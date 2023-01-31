@@ -8,7 +8,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	manitypes "github.com/akash-network/node/manifest/v2beta1"
+	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/testutil"
 )
 

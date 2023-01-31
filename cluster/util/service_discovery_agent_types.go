@@ -2,12 +2,13 @@ package util
 
 import (
 	"context"
+	"io"
+	"net/http"
+
 	"github.com/boz/go-lifecycle"
 	"github.com/tendermint/tendermint/libs/log"
-	"io"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"net/http"
 )
 
 type ServiceDiscoveryAgent interface {

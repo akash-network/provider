@@ -9,10 +9,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	maniv2beta1 "github.com/akash-network/node/manifest/v2beta1"
+	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/sdl"
 	sdlutil "github.com/akash-network/node/sdl/util"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
 
 type workloadBase interface {
@@ -65,6 +65,17 @@ func (b *workload) container() corev1.Container {
 		requestedCPU := sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units)
 		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(requestedCPU.Value()), resource.Milli).DeepCopy()
 		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(cpu.Units.Value()), resource.Milli).DeepCopy()
+	}
+
+	if gpu := b.service.Resources.GPU; gpu != nil {
+		requestedGPU := sdlutil.ComputeCommittedResources(b.settings.GPUCommitLevel, gpu.Units)
+		// GPUs are only supposed to be specified in the limits section, which means
+		//  - can specify GPU limits without specifying requests, because Kubernetes will use the limit as the request value by default.
+		//  - can specify GPU in both limits and requests but these two values must be equal.
+		//  - cannot specify GPU requests without specifying limits.
+		// fixme get custom resource name from inventory
+		kcontainer.Resources.Requests["nvidia.com/gpu"] = resource.NewQuantity(int64(requestedGPU.Value()), resource.DecimalSI).DeepCopy()
+		kcontainer.Resources.Limits["nvidia.com/gpu"] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()
 	}
 
 	if mem := b.service.Resources.Memory; mem != nil {

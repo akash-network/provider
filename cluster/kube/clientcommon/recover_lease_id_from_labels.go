@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 )

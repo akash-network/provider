@@ -1,4 +1,6 @@
-KIND_SETUP_PREREQUISITES ?= \
+KUBE_SETUP_PREREQUISITES   ?= \
+
+KUBE_CLUSTER_CREATE_TARGET := kind
 
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \
@@ -10,7 +12,7 @@ export AP_NODE=http://localhost:26657
 
 include ../common.mk
 include ../common-commands.mk
-include ../common-kind.mk
+include ../common-kube.mk
 
 SDL_PATH ?= grafana.yaml
 
@@ -43,8 +45,8 @@ hostname-operator:
 .PHONY: clean-kube
 clean-kube:
 
-.PHONY: kind-deployments-rollout
-kind-deployments-rollout:
+.PHONY: kube-deployments-rollout
+kube-deployments-rollout:
 
-.PHONY: kind-setup-kube
-kind-setup-kube:
+.PHONY: kube-setup-kube
+kube-setup-kube:

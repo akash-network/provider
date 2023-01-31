@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/akash-network/provider/operator/waiter"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -15,9 +13,10 @@ import (
 
 	"github.com/akash-network/node/pubsub"
 	mquery "github.com/akash-network/node/x/market/query"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 )
 

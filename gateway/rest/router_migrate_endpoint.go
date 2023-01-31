@@ -7,11 +7,11 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 
 	"github.com/akash-network/provider/cluster"
 	clusterutil "github.com/akash-network/provider/cluster/util"
-	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 type endpointMigrateRequestBody struct {
@@ -21,7 +21,7 @@ type endpointMigrateRequestBody struct {
 }
 
 type serviceExposeWithName struct {
-	expose      v2beta1.ManifestServiceExpose
+	expose      v2beta2.ManifestServiceExpose
 	serviceName string
 	proto       manifest.ServiceProtocol
 }

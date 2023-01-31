@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 
 	"github.com/akash-network/node/util/wsutil"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
 
 var (

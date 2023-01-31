@@ -4,18 +4,17 @@ import (
 	"math"
 	"strconv"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
-	clusterutil "github.com/akash-network/provider/cluster/util"
-
 	"github.com/pkg/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	types "github.com/akash-network/node/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
-	maniv2beta1 "github.com/akash-network/node/manifest/v2beta1"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	clusterutil "github.com/akash-network/provider/cluster/util"
 )
 
 // +genclient
@@ -329,8 +328,8 @@ func (mse ManifestServiceExpose) toAkash() (maniv2beta1.ServiceExpose, error) {
 		return maniv2beta1.ServiceExpose{}, err
 	}
 	return maniv2beta1.ServiceExpose{
-		Port:                   mse.Port,
-		ExternalPort:           mse.ExternalPort,
+		Port:                   uint32(mse.Port),
+		ExternalPort:           uint32(mse.ExternalPort),
 		Proto:                  proto,
 		Service:                mse.Service,
 		Global:                 mse.Global,
@@ -357,8 +356,8 @@ func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
 
 func manifestServiceExposeFromAkash(amse maniv2beta1.ServiceExpose) ManifestServiceExpose {
 	return ManifestServiceExpose{
-		Port:                   amse.Port,
-		ExternalPort:           amse.ExternalPort,
+		Port:                   uint16(amse.Port),
+		ExternalPort:           uint16(amse.ExternalPort),
 		Proto:                  amse.Proto.ToString(),
 		Service:                amse.Service,
 		Global:                 amse.Global,

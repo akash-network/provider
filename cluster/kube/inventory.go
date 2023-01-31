@@ -13,24 +13,28 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/sdl"
-	types "github.com/akash-network/node/types/v1beta2"
 	metricsutils "github.com/akash-network/node/util/metrics"
 
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-
 	"github.com/akash-network/provider/cluster/kube/builder"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
 	inventoryOperatorQueryTimeout = 5 * time.Second
 )
 
+const (
+	resourceNvidiaGPU = "nvidia.com/gpu"
+)
+
 type node struct {
 	id               string
 	arch             string
 	cpu              resourcePair
+	gpu              resourcePair
 	memory           resourcePair
 	ephemeralStorage resourcePair
 	volumesAttached  resourcePair
@@ -96,7 +100,7 @@ nodes:
 			for ; resources[i].Count > 0; resources[i].Count-- {
 				nd := currInventory.nodes[nodeName]
 
-				// first check if there reservation needs persistent storage
+				// first check if reservation needs persistent storage
 				// and node handles such class
 				if !nd.allowsStorageClasses(res.Storage) {
 					continue nodes
@@ -106,6 +110,11 @@ nodes:
 
 				cpu := nd.cpu.dup()
 				if adjusted = cpu.subMilliNLZ(res.CPU.Units); !adjusted {
+					continue nodes
+				}
+
+				gpu := nd.gpu.dup()
+				if adjusted = gpu.subNLZ(res.GPU.Units); !adjusted {
 					continue nodes
 				}
 
@@ -153,6 +162,7 @@ nodes:
 					id:               nd.id,
 					arch:             nd.arch,
 					cpu:              *cpu,
+					gpu:              *gpu,
 					memory:           *memory,
 					ephemeralStorage: *ephemeralStorage,
 					volumesAttached:  *volumesAttached,
@@ -182,11 +192,13 @@ nodes:
 
 func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 	cpuTotal := uint64(0)
+	gpuTotal := uint64(0)
 	memoryTotal := uint64(0)
 	storageEphemeralTotal := uint64(0)
 	storageTotal := make(map[string]int64)
 
 	cpuAvailable := uint64(0)
+	gpuAvailable := uint64(0)
 	memoryAvailable := uint64(0)
 	storageEphemeralAvailable := uint64(0)
 	storageAvailable := make(map[string]int64)
@@ -200,18 +212,24 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 			Name: nodeName,
 			Allocatable: ctypes.InventoryNodeMetric{
 				CPU:              uint64(nd.cpu.allocatable.MilliValue()),
+				GPU:              uint64(nd.gpu.allocatable.Value()),
 				Memory:           uint64(nd.memory.allocatable.Value()),
 				StorageEphemeral: uint64(nd.ephemeralStorage.allocatable.Value()),
 			},
 		}
 
 		cpuTotal += uint64(nd.cpu.allocatable.MilliValue())
+		gpuTotal += uint64(nd.gpu.allocatable.Value())
 		memoryTotal += uint64(nd.memory.allocatable.Value())
 		storageEphemeralTotal += uint64(nd.ephemeralStorage.allocatable.Value())
 
 		avail := nd.cpu.available()
 		invNode.Available.CPU = uint64(avail.MilliValue())
 		cpuAvailable += invNode.Available.CPU
+
+		avail = nd.gpu.available()
+		invNode.Available.GPU = uint64(avail.Value())
+		gpuAvailable += invNode.Available.GPU
 
 		avail = nd.memory.available()
 		invNode.Available.Memory = uint64(avail.Value())
@@ -234,6 +252,7 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 
 	ret.TotalAllocatable = ctypes.InventoryMetricTotal{
 		CPU:              cpuTotal,
+		GPU:              gpuTotal,
 		Memory:           memoryTotal,
 		StorageEphemeral: storageEphemeralTotal,
 		Storage:          storageTotal,
@@ -241,6 +260,7 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 
 	ret.TotalAvailable = ctypes.InventoryMetricTotal{
 		CPU:              cpuAvailable,
+		GPU:              gpuAvailable,
 		Memory:           memoryAvailable,
 		StorageEphemeral: storageEphemeralAvailable,
 		Storage:          storageAvailable,
@@ -356,12 +376,16 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 
 		// Create an entry with the allocatable amount for the node
 		cpu := knode.Status.Allocatable.Cpu().DeepCopy()
+		gpu := knode.Status.Allocatable.Name(resourceNvidiaGPU, resource.DecimalSI).DeepCopy()
 		memory := knode.Status.Allocatable.Memory().DeepCopy()
 		storage := knode.Status.Allocatable.StorageEphemeral().DeepCopy()
 		entry := &node{
 			arch: knode.Status.NodeInfo.Architecture,
 			cpu: resourcePair{
 				allocatable: cpu,
+			},
+			gpu: resourcePair{
+				allocatable: gpu,
 			},
 			memory: resourcePair{
 				allocatable: memory,
@@ -385,6 +409,7 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 
 		// Initialize the allocated amount to for each node
 		zero.DeepCopyInto(&entry.cpu.allocated)
+		zero.DeepCopyInto(&entry.gpu.allocated)
 		zero.DeepCopyInto(&entry.memory.allocated)
 		zero.DeepCopyInto(&entry.ephemeralStorage.allocated)
 
@@ -429,6 +454,8 @@ func (nd *node) addAllocatedResources(rl corev1.ResourceList) {
 			nd.memory.allocated.Add(quantity)
 		case corev1.ResourceEphemeralStorage:
 			nd.ephemeralStorage.allocated.Add(quantity)
+		case resourceNvidiaGPU:
+			nd.gpu.allocated.Add(quantity)
 		}
 	}
 }
@@ -438,6 +465,7 @@ func (nd *node) dup() *node {
 		id:               nd.id,
 		arch:             nd.arch,
 		cpu:              *nd.cpu.dup(),
+		gpu:              *nd.gpu.dup(),
 		memory:           *nd.memory.dup(),
 		ephemeralStorage: *nd.ephemeralStorage.dup(),
 		volumesAttached:  *nd.volumesAttached.dup(),

@@ -6,18 +6,17 @@ import (
 	"encoding/json"
 	"fmt"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
 	akashclient "github.com/akash-network/node/client"
 	"github.com/akash-network/node/sdl"
 	cutils "github.com/akash-network/node/x/cert/utils"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )

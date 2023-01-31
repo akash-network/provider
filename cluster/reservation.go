@@ -1,12 +1,11 @@
 package cluster
 
 import (
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
-
-	atypes "github.com/akash-network/node/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 )
 
 func newReservation(order mtypes.OrderID, resources atypes.ResourceGroup) *reservation {

@@ -39,13 +39,13 @@ import (
 	clitestutil "github.com/akash-network/node/testutil/cli"
 	ccli "github.com/akash-network/node/x/cert/client/cli"
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mcli "github.com/akash-network/node/x/market/client/cli"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/x/provider/client/cli"
-	types "github.com/akash-network/node/x/provider/types/v1beta2"
+	types "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
@@ -495,7 +495,7 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 	s.Require().NoError(err)
 	const ns = "lease"
 	propagation := metav1.DeletePropagationForeground
-	err = ac.AkashV2beta1().ProviderHosts(ns).DeleteCollection(s.ctx, metav1.DeleteOptions{
+	err = ac.AkashV2beta2().ProviderHosts(ns).DeleteCollection(s.ctx, metav1.DeleteOptions{
 		TypeMeta:           metav1.TypeMeta{},
 		GracePeriodSeconds: nil,
 		Preconditions:      nil,

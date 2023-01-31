@@ -35,6 +35,7 @@ type Settings struct {
 	NetworkPoliciesEnabled bool
 
 	CPUCommitLevel     float64
+	GPUCommitLevel     float64
 	MemoryCommitLevel  float64
 	StorageCommitLevel float64
 

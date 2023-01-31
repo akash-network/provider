@@ -3,15 +3,16 @@ package cluster
 import (
 	"testing"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
 	"github.com/boz/go-lifecycle"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/testutil"
+
 	"github.com/akash-network/provider/cluster/mocks"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
 )

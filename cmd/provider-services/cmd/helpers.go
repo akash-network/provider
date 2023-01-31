@@ -15,8 +15,8 @@ import (
 
 	"github.com/akash-network/node/app"
 	akashclient "github.com/akash-network/node/client"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
 
 const (

@@ -19,7 +19,7 @@ import (
 
 	"github.com/akash-network/node/util/runner"
 
-	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
@@ -267,7 +267,7 @@ func (c *ceph) run() error {
 				log.Error(err, "unable to pull ceph status")
 			}
 
-			if data, valid := res.Value().([]akashv2beta1.InventoryClusterStorage); valid {
+			if data, valid := res.Value().([]akashv2beta2.InventoryClusterStorage); valid {
 				r.res = data
 			}
 
@@ -280,8 +280,8 @@ func (c *ceph) run() error {
 	}
 }
 
-func (c *ceph) scrapeMetrics(ctx context.Context, scs cephStorageClasses, clusters map[string]string) ([]akashv2beta1.InventoryClusterStorage, error) {
-	var res []akashv2beta1.InventoryClusterStorage
+func (c *ceph) scrapeMetrics(ctx context.Context, scs cephStorageClasses, clusters map[string]string) ([]akashv2beta2.InventoryClusterStorage, error) {
+	var res []akashv2beta2.InventoryClusterStorage
 
 	dfResults := make(map[string]dfResp, len(clusters))
 	for clusterID, ns := range clusters {
@@ -307,9 +307,9 @@ func (c *ceph) scrapeMetrics(ctx context.Context, scs cephStorageClasses, cluste
 
 		for _, pool := range df.Pools {
 			if pool.Name == params.pool {
-				res = append(res, akashv2beta1.InventoryClusterStorage{
+				res = append(res, akashv2beta2.InventoryClusterStorage{
 					Class: class,
-					ResourcePair: akashv2beta1.ResourcePair{
+					ResourcePair: akashv2beta2.ResourcePair{
 						Allocated:   pool.Stats.BytesUsed,
 						Allocatable: pool.Stats.MaxAvail,
 					},

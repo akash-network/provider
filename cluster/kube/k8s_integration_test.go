@@ -21,7 +21,7 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	mtestutil "github.com/akash-network/provider/testutil/manifest"
+	mtestutil "github.com/akash-network/provider/testutil/manifest/v2beta2"
 )
 
 func TestNewClientNSNotFound(t *testing.T) {

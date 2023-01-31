@@ -5,21 +5,19 @@ import (
 	"fmt"
 	"strings"
 
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
-
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/pager"
 
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+
 	"github.com/akash-network/provider/cluster/kube/builder"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 type hostnameResourceEvent struct {
@@ -42,7 +40,7 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 	}
 	builder.AppendLeaseLabels(lID, labels)
 
-	foundEntry, err := c.ac.AkashV2beta1().ProviderHosts(c.ns).Get(ctx, host, metav1.GetOptions{})
+	foundEntry, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).Get(ctx, host, metav1.GetOptions{})
 	exists := true
 	var resourceVersion string
 
@@ -78,10 +76,10 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)
 	// Create or update the entry
 	if exists {
-		_, err = c.ac.AkashV2beta1().ProviderHosts(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
+		_, err = c.ac.AkashV2beta2().ProviderHosts(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
 	} else {
 		obj.ResourceVersion = ""
-		_, err = c.ac.AkashV2beta1().ProviderHosts(c.ns).Create(ctx, &obj, metav1.CreateOptions{})
+		_, err = c.ac.AkashV2beta2().ProviderHosts(c.ns).Create(ctx, &obj, metav1.CreateOptions{})
 	}
 	return err
 }
@@ -90,7 +88,7 @@ func (c *client) PurgeDeclaredHostname(ctx context.Context, lID mtypes.LeaseID, 
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, lID)
 
-	return c.ac.AkashV2beta1().ProviderHosts(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+	return c.ac.AkashV2beta2().ProviderHosts(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: labelSelector.String(),
 		FieldSelector: fmt.Sprintf("metadata.name=%s", hostname),
 	})
@@ -99,7 +97,7 @@ func (c *client) PurgeDeclaredHostname(ctx context.Context, lID mtypes.LeaseID, 
 func (c *client) PurgeDeclaredHostnames(ctx context.Context, lID mtypes.LeaseID) error {
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, lID)
-	result := c.ac.AkashV2beta1().ProviderHosts(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+	result := c.ac.AkashV2beta2().ProviderHosts(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: labelSelector.String(),
 	})
 
@@ -135,7 +133,7 @@ func (ev hostnameResourceEvent) GetExternalPort() uint32 {
 func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.HostnameResourceEvent, error) {
 	var lastResourceVersion string
 	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		resources, err := c.ac.AkashV2beta1().ProviderHosts(c.ns).List(ctx, opts)
+		resources, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).List(ctx, opts)
 
 		if err == nil && len(resources.GetResourceVersion()) != 0 {
 			lastResourceVersion = resources.GetResourceVersion()
@@ -155,7 +153,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.Hostna
 	}
 
 	c.log.Info("starting hostname watch", "resourceVersion", lastResourceVersion)
-	watcher, err := c.ac.AkashV2beta1().ProviderHosts(c.ns).Watch(ctx, metav1.ListOptions{
+	watcher, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).Watch(ctx, metav1.ListOptions{
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
 		FieldSelector:        "",
@@ -265,7 +263,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.Hostna
 
 func (c *client) AllHostnames(ctx context.Context) ([]ctypes.ActiveHostname, error) {
 	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return c.ac.AkashV2beta1().ProviderHosts(c.ns).List(ctx, opts)
+		return c.ac.AkashV2beta2().ProviderHosts(c.ns).List(ctx, opts)
 	})
 
 	listOptions := metav1.ListOptions{

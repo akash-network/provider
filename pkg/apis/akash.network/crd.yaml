@@ -15,9 +15,142 @@ spec:
     shortNames:
       - mani
   versions:
-    - name: v2beta1
+    - name: v2beta2
       served: true
       storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                lease_id:
+                  type: object
+                  properties:
+                    owner:
+                      type: string
+                    dseq:
+                      type: string
+                      format: uint64
+                    gseq:
+                      type: integer
+                    oseq:
+                      type: integer
+                    provider:
+                      type: string
+                group:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                    services:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                          image:
+                            type: string
+                          command:
+                            type: array
+                            items:
+                              type: string
+                          args:
+                            type: array
+                            items:
+                              type: string
+                          env:
+                            type: array
+                            items:
+                              type: string
+                          unit:
+                            type: object
+                            properties:
+                              cpu:
+                                type: number
+                                format: uint32
+                              memory:
+                                type: string
+                                format: uint64
+                              gpu:
+                                type: number
+                                format: uint32
+                              storage:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    size:
+                                      type: string
+                                      format: uint64
+                                    name:
+                                      type: string
+                          count:
+                            type: number
+                            format: uint64
+                          expose:
+                            type: array
+                            items:
+                              type: object
+                              properties:
+                                endpoint_sequence_number:
+                                  type: number
+                                  format: uint32
+                                ip:
+                                  type: string
+                                port:
+                                  type: integer
+                                  format: uint16
+                                external_port:
+                                  type: integer
+                                  format: uint16
+                                proto:
+                                  type: string
+                                service:
+                                  type: string
+                                global:
+                                  type: boolean
+                                http_options:
+                                  type: object
+                                  properties:
+                                    max_body_size:
+                                      type: integer
+                                    read_timeout:
+                                      type: integer
+                                    send_timeout:
+                                      type: integer
+                                    next_tries:
+                                      type: integer
+                                    next_timeout:
+                                      type: integer
+                                    next_cases:
+                                      type: array
+                                      items:
+                                        type: string
+                                hosts:
+                                  type: array
+                                  items:
+                                    type: string
+                          params:
+                            type: object
+                            nullable: true
+                            properties:
+                              storage:
+                                type: array
+                                items:
+                                  type: object
+                                  properties:
+                                    name:
+                                      type: string
+                                    readOnly:
+                                      type: boolean
+                                    mount:
+                                      type: string
+    - name: v2beta1
+      served: true
+      storage: false
       schema:
         openAPIV3Schema:
           type: object
@@ -170,11 +303,39 @@ spec:
       - ph
   # list of versions supported by this CustomResourceDefinition
   versions:
-    - name: v2beta1
+    - name: v2beta2
       # Each version can be enabled/disabled by Served flag.
       served: true
       # One and only one version must be marked as the storage version.
       storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                service_name:
+                  type: string
+                external_port:
+                  type: integer
+                hostname:
+                  type: string
+                owner:
+                  type: string
+                provider:
+                  type: string
+                dseq:
+                  type: integer
+                gseq:
+                  type: integer
+                oseq:
+                  type: integer
+    - name: v2beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: false
       schema:
         openAPIV3Schema:
           type: object
@@ -213,11 +374,47 @@ spec:
   scope: Namespaced
   # list of versions supported by this CustomResourceDefinition
   versions:
-    - name: v2beta1
+    - name: v2beta2
       # Each version can be enabled/disabled by Served flag.
       served: true
       # One and only one version must be marked as the storage version.
       storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                lease_id:
+                  type: object
+                  properties:
+                    owner:
+                      type: string
+                    dseq:
+                      type: string
+                      format: uint64
+                    gseq:
+                      type: integer
+                    oseq:
+                      type: integer
+                    provider:
+                      type: string
+                service_name:
+                  type: string
+                port:
+                  type: integer
+                external_port:
+                  type: integer
+                protocol:
+                  type: string
+                sharing_key:
+                  type: string
+    - name: v2beta1
+      # Each version can be enabled/disabled by Served flag.
+      served: true
+      # One and only one version must be marked as the storage version.
+      storage: false
       schema:
         openAPIV3Schema:
           type: object

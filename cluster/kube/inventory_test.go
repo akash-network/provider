@@ -13,18 +13,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/akash-network/node/testutil"
-	"github.com/akash-network/node/types/unit"
-	atypes "github.com/akash-network/node/types/v1beta2"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	akashclientfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 	kubernetesmocks "github.com/akash-network/provider/testutil/kubernetes_mock"
 	corev1mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/core/v1"
 	storagev1mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/storage/v1"
-
-	akashclientfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
-
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 )
 
 type testReservation struct {

@@ -24,16 +24,16 @@ import (
 	cosmosclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	akashclient "github.com/akash-network/node/client"
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	ctypes "github.com/akash-network/node/x/cert/types/v1beta2"
 	cutils "github.com/akash-network/node/x/cert/utils"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 
 	"github.com/akash-network/provider"
-	cltypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 const (
@@ -107,7 +107,7 @@ func newClient(qclient akashclient.QueryClient, addr sdk.Address, certs []tls.Ce
 	}
 
 	tlsConfig := &tls.Config{
-		// must use Hostname rather then Host field as certificate is issued for host without port
+		// must use Hostname rather than Host field as certificate is issued for host without port
 		ServerName:            uri.Hostname(),
 		Certificates:          certs,
 		InsecureSkipVerify:    true, // nolint: gosec

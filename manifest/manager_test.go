@@ -5,30 +5,26 @@ import (
 	"testing"
 	"time"
 
-	sdlutil "github.com/akash-network/node/sdl/util"
-	escrowtypes "github.com/akash-network/node/x/escrow/types/v1beta2"
-
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	clientMocks "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/sdkutil"
-	"github.com/akash-network/node/testutil"
-
+	"github.com/akash-network/akash-api/go/sdkutil"
 	"github.com/akash-network/node/sdl"
+	sdlutil "github.com/akash-network/node/sdl/util"
+	"github.com/akash-network/node/testutil"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	escrowtypes "github.com/akash-network/akash-api/go/node/escrow/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
 	"github.com/akash-network/provider/cluster"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
-
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	types "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
 )
 
 type scaffold struct {

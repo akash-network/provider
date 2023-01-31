@@ -4,36 +4,30 @@ import (
 	"context"
 	"testing"
 
-	"k8s.io/client-go/rest"
-
-	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	types "github.com/akash-network/node/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
-	"github.com/akash-network/provider/cluster/kube/builder"
-
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
+	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/testutil"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
+	"github.com/akash-network/provider/cluster/kube/builder"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	akashclient_fake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 	kubernetes_mocks "github.com/akash-network/provider/testutil/kubernetes_mock"
 	appsv1_mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/apps/v1"
 	corev1_mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/core/v1"
-
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
-	akashclient_fake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 )
 
 const testKubeClientNs = "nstest1111"

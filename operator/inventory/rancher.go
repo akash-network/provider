@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
-	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 type rancher struct {
@@ -64,7 +64,7 @@ func (c *rancher) run() error {
 
 	scs := make(rancherStorageClasses)
 
-	resources := akashv2beta1.ResourcePair{
+	resources := akashv2beta2.ResourcePair{
 		Allocatable: math.MaxUint64,
 	}
 
@@ -190,13 +190,13 @@ func (c *rancher) run() error {
 			var resp resp
 
 			if pvSynced {
-				var res []akashv2beta1.InventoryClusterStorage
+				var res []akashv2beta2.InventoryClusterStorage
 
 				for class, params := range scs {
 					if params.isRancher && params.isAkashManaged {
-						res = append(res, akashv2beta1.InventoryClusterStorage{
+						res = append(res, akashv2beta2.InventoryClusterStorage{
 							Class: class,
-							ResourcePair: akashv2beta1.ResourcePair{
+							ResourcePair: akashv2beta2.ResourcePair{
 								Allocated:   params.allocated,
 								Allocatable: resources.Allocatable,
 							},
