@@ -8,7 +8,9 @@ require (
 	github.com/boz/go-lifecycle v0.1.1-0.20190620234137-5139c86739b8
 	github.com/cosmos/cosmos-sdk v0.45.9
 	github.com/cskr/pubsub v1.0.2
+	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f
 	github.com/go-kit/kit v0.12.0
+	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.0
 	github.com/golang-jwt/jwt/v4 v4.4.2
 	github.com/gorilla/context v1.1.1
@@ -17,6 +19,7 @@ require (
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
+	github.com/prometheus/common v0.34.0
 	github.com/rook/rook v1.9.7
 	github.com/satori/go.uuid v1.2.0
 	github.com/shopspring/decimal v1.3.1
@@ -31,8 +34,10 @@ require (
 	k8s.io/api v0.24.2
 	k8s.io/apimachinery v0.24.2
 	k8s.io/client-go v0.24.2
+	k8s.io/code-generator v0.24.2
 	k8s.io/kubectl v0.24.2
 	k8s.io/metrics v0.24.2
+	sigs.k8s.io/kind v0.17.0
 )
 
 require (
@@ -215,27 +220,18 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-require (
-	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f
-	github.com/go-logr/logr v1.2.3
-	github.com/prometheus/common v0.34.0
-	k8s.io/code-generator v0.24.2
-	sigs.k8s.io/kind v0.17.0
-)
-
 replace (
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.1.7-0.20210622111912-ef00f8ac3d76
 
 	// dragonberry patch
 	github.com/confio/ics23/go => github.com/cosmos/cosmos-sdk/ics23/go v0.8.0
-	github.com/cosmos/cosmos-sdk => github.com/cosmos/cosmos-sdk v0.45.9
-	github.com/cosmos/ledger-cosmos-go => github.com/ovrclk/ledger-go/cosmos v0.14.0
+	github.com/cosmos/ledger-cosmos-go => github.com/akash-network/ledger-go/cosmos v0.14.0
 
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
-	github.com/tendermint/tendermint => github.com/ovrclk/tendermint v0.34.21-akash.2
+	github.com/tendermint/tendermint => github.com/akash-network/tendermint v0.34.21-akash.2
 
 	github.com/zondax/hid => github.com/troian/hid v0.11.0
-	github.com/zondax/ledger-go => github.com/ovrclk/ledger-go v0.14.0
+	github.com/zondax/ledger-go => github.com/akash-network/ledger-go v0.14.0
 
 	google.golang.org/grpc => google.golang.org/grpc v1.33.2
 )
