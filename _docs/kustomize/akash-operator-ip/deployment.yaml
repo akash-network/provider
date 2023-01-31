@@ -20,7 +20,7 @@ spec:
       serviceAccountName: akash-ip-operator
       containers:
       - name: akash-ip-operator
-        image: ghcr.io/akash-network/provider::stable
+        image: ghcr.io/akash-network/provider:0.2.1
         imagePullPolicy: IfNotPresent
         args: ["provider-services", "ip-operator"]
         ports:

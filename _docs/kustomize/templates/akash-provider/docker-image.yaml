@@ -3,4 +3,4 @@
   value: ghcr.io/akash-network/node:stable
 - op: replace
   path: /spec/template/spec/containers/0/image
-  value: ghcr.io/akash-network/provider::stable
+  value: ghcr.io/akash-network/provider:0.2.1
