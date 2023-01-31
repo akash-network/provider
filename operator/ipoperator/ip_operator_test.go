@@ -5,16 +5,17 @@ import (
 	"testing"
 	"time"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	"github.com/akash-network/node/testutil"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	"github.com/akash-network/node/testutil"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+
 	"github.com/akash-network/provider/cluster/mocks"
-	"github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/operator/operatorcommon"
 )
 

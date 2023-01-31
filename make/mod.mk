@@ -13,5 +13,3 @@ modsensure: deps-tidy deps-vendor
 
 .PHONY: modvendor
 modvendor: $(MODVENDOR) modsensure
-	@echo "vendoring non-go files..."
-	$(MODVENDOR) -copy="**/*.go.txt **/*.sh" -include=k8s.io/code-generator

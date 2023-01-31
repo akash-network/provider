@@ -26,3 +26,5 @@ coverage.txt
 
 go.work
 go.work.sum
+
+.devenv

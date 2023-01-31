@@ -10,7 +10,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/akash-network/provider/cluster"
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 type migrateRequestBody struct {

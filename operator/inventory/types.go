@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
@@ -84,7 +84,7 @@ type Watcher interface {
 }
 
 type RemotePodCommandExecutor interface {
-	ExecWithOptions(options rookexec.ExecOptions) (string, string, error)
+	ExecWithOptions(ctx context.Context, options rookexec.ExecOptions) (string, string, error)
 	ExecCommandInContainerWithFullOutput(ctx context.Context, appLabel, containerName, namespace string, cmd ...string) (string, string, error)
 	// ExecCommandInContainerWithFullOutputWithTimeout uses 15s hard-coded timeout
 	ExecCommandInContainerWithFullOutputWithTimeout(ctx context.Context, appLabel, containerName, namespace string, cmd ...string) (string, string, error)
@@ -99,7 +99,7 @@ func NewRemotePodCommandExecutor(restcfg *rest.Config, clientset *kubernetes.Cli
 
 func InformKubeObjects(ctx context.Context, pubsub *pubsub.PubSub, informer cache.SharedIndexInformer, topic string) {
 	ErrGroupFromCtx(ctx).Go(func() error {
-		informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				pubsub.Pub(watch.Event{
 					Type:   watch.Added,
@@ -119,6 +119,11 @@ func InformKubeObjects(ctx context.Context, pubsub *pubsub.PubSub, informer cach
 				}, topic)
 			},
 		})
+
+		if err != nil {
+			LogFromCtx(ctx).Error(err, "couldn't register event handlers")
+			return nil
+		}
 
 		informer.Run(ctx.Done())
 		return nil

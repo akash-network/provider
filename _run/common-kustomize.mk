@@ -1,5 +1,5 @@
 KUSTOMIZE_ROOT                 ?= $(AP_ROOT)/_docs/kustomize
-KUSTOMIZE_DIR                  := $(DEVCACHE_RUN)/$(KIND_NAME)/kustomize
+KUSTOMIZE_DIR                  := $(DEVCACHE_RUN)/$(AP_RUN_NAME)/kustomize
 KUSTOMIZE_PROVIDER             := $(KUSTOMIZE_DIR)/akash-provider
 KUSTOMIZE_AKASH                := $(KUSTOMIZE_DIR)/akash-node
 KUSTOMIZE_OPERATOR_HOSTNAME    := $(KUSTOMIZE_DIR)/akash-operator-hostname

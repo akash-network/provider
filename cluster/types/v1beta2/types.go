@@ -10,9 +10,9 @@ import (
 
 	eventsv1 "k8s.io/api/events/v1"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	types "github.com/akash-network/node/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta1"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta2"
 
 	"github.com/akash-network/node/sdl"
 )

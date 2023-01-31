@@ -16,10 +16,10 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/types/unit"
-	atypes "github.com/akash-network/node/types/v1beta2"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
 
 	"github.com/akash-network/provider/cluster/util"
 )

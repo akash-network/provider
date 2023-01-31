@@ -8,7 +8,6 @@ import (
 	"time"
 	"unsafe"
 
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 	"github.com/boz/go-lifecycle"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/tx"
@@ -19,8 +18,8 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	ttypes "github.com/tendermint/tendermint/types"
 
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	abroadcaster "github.com/akash-network/node/client/broadcaster"
-	"github.com/akash-network/node/sdkutil"
 )
 
 const (
@@ -78,7 +77,7 @@ type serialBroadcaster struct {
 
 func NewSerialClient(ctx context.Context, log log.Logger, cctx sdkclient.Context, timeout time.Duration, txf tx.Factory, info keyring.Info) (SerialClient, error) {
 	// populate account number, current sequence number
-	poptxf, err := sdkutil.PrepareFactory(cctx, txf)
+	poptxf, err := abroadcaster.PrepareFactory(cctx, txf)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +265,7 @@ func (c *serialBroadcaster) broadcast(txf tx.Factory, retry bool, msgs ...sdk.Ms
 	var err error
 
 	if !retry {
-		txf, err = sdkutil.AdjustGas(c.cctx, txf, msgs...)
+		txf, err = abroadcaster.AdjustGas(c.cctx, txf, msgs...)
 		if err != nil {
 			return txf, err
 		}

@@ -1,8 +1,8 @@
 package v1beta2
 
 import (
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta1"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta2"
 )
 
 type ConnectHostnameToDeploymentDirective struct {

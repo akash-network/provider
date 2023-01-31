@@ -8,16 +8,15 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/akash-network/provider/cluster/util"
-
 	"github.com/boz/go-lifecycle"
 	"github.com/tendermint/tendermint/libs/log"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/util/runner"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
+	"github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
 )

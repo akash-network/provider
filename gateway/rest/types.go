@@ -1,7 +1,7 @@
 package rest
 
 import (
-	cltypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 type LeasedIPStatus struct {

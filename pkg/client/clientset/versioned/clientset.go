@@ -1,5 +1,5 @@
 /*
-Copyright The Kubernetes Authors.
+Copyright The Akash Network Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -22,8 +22,8 @@ import (
 	"fmt"
 	"net/http"
 
-	akashv1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v1"
 	akashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
+	akashv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
 	flowcontrol "k8s.io/client-go/util/flowcontrol"
@@ -31,26 +31,25 @@ import (
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-	AkashV1() akashv1.AkashV1Interface
 	AkashV2beta1() akashv2beta1.AkashV2beta1Interface
+	AkashV2beta2() akashv2beta2.AkashV2beta2Interface
 }
 
-// Clientset contains the clients for groups. Each group has exactly one
-// version included in a Clientset.
+// Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	akashV1      *akashv1.AkashV1Client
 	akashV2beta1 *akashv2beta1.AkashV2beta1Client
-}
-
-// AkashV1 retrieves the AkashV1Client
-func (c *Clientset) AkashV1() akashv1.AkashV1Interface {
-	return c.akashV1
+	akashV2beta2 *akashv2beta2.AkashV2beta2Client
 }
 
 // AkashV2beta1 retrieves the AkashV2beta1Client
 func (c *Clientset) AkashV2beta1() akashv2beta1.AkashV2beta1Interface {
 	return c.akashV2beta1
+}
+
+// AkashV2beta2 retrieves the AkashV2beta2Client
+func (c *Clientset) AkashV2beta2() akashv2beta2.AkashV2beta2Interface {
+	return c.akashV2beta2
 }
 
 // Discovery retrieves the DiscoveryClient
@@ -97,11 +96,11 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 
 	var cs Clientset
 	var err error
-	cs.akashV1, err = akashv1.NewForConfigAndClient(&configShallowCopy, httpClient)
+	cs.akashV2beta1, err = akashv2beta1.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
-	cs.akashV2beta1, err = akashv2beta1.NewForConfigAndClient(&configShallowCopy, httpClient)
+	cs.akashV2beta2, err = akashv2beta2.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +125,8 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
-	cs.akashV1 = akashv1.New(c)
 	cs.akashV2beta1 = akashv2beta1.New(c)
+	cs.akashV2beta2 = akashv2beta2.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)
 	return &cs

@@ -7,6 +7,7 @@ type Config struct {
 	InventoryResourceDebugFrequency uint
 	InventoryExternalPortQuantity   uint
 	CPUCommitLevel                  float64
+	GPUCommitLevel                  float64
 	MemoryCommitLevel               float64
 	StorageCommitLevel              float64
 	BlockedHostnames                []string

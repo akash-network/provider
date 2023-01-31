@@ -29,7 +29,7 @@ endif
 ifeq ($(AKASH_SRC_IS_LOCAL), true)
 akash:
 	@echo "compiling and installing Akash from local sources"
-	make -C $(AKASH_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/node
+	make -C $(AKASH_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
 else
 $(AKASH_VERSION_FILE): $(AP_DEVCACHE)
 	@echo "Installing akash $(AKASH_VERSION) ..."

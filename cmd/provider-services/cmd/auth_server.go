@@ -8,15 +8,16 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
+
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 
 	"github.com/akash-network/node/cmd/common"
 	cmodule "github.com/akash-network/node/x/cert"
 	cutils "github.com/akash-network/node/x/cert/utils"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )

@@ -5,20 +5,18 @@ import (
 	"errors"
 	"time"
 
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	"github.com/boz/go-lifecycle"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/pubsub"
 	dquery "github.com/akash-network/node/x/deployment/query"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
 )

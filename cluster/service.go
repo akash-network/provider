@@ -3,14 +3,8 @@ package cluster
 import (
 	"context"
 
-	"github.com/akash-network/provider/operator/waiter"
-
-	"github.com/akash-network/provider/cluster/operatorclients"
-
 	"github.com/boz/go-lifecycle"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,11 +13,14 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/akash-network/node/pubsub"
-	atypes "github.com/akash-network/node/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/operatorclients"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/operator/waiter"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	"github.com/akash-network/provider/session"
 )
 

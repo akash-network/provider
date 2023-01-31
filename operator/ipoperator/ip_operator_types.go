@@ -5,10 +5,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/akash-network/node/manifest/v2beta1"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
+	"github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
-	"github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 /*
@@ -23,7 +23,7 @@ type managedIP struct {
 	presentExternalPort uint32
 	presentPort         uint32
 	lastChangedAt       time.Time
-	presentProtocol     v2beta1.ServiceProtocol
+	presentProtocol     v2beta2.ServiceProtocol
 }
 
 type barrier struct {

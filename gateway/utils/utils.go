@@ -6,10 +6,11 @@ import (
 	"crypto/x509"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 
-	ctypes "github.com/akash-network/node/x/cert/types/v1beta2"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 )
 
 func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery ctypes.QueryClient) (*tls.Config, error) {

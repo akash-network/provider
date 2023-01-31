@@ -28,7 +28,7 @@ import (
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
-	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	akashv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
@@ -202,17 +202,17 @@ func newRouter(_ logr.Logger, apiTimeout, queryTimeout time.Duration) *mux.Route
 
 	router.HandleFunc("/inventory", func(w http.ResponseWriter, req *http.Request) {
 		storage := StorageFromCtx(req.Context())
-		inv := akashv2beta1.Inventory{
+		inv := akashv2beta2.Inventory{
 			TypeMeta: metav1.TypeMeta{
 				Kind:       "Inventory",
-				APIVersion: "akash.network/v2beta1",
+				APIVersion: "akash.network/v2beta2",
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				CreationTimestamp: metav1.NewTime(time.Now().UTC()),
 			},
-			Spec: akashv2beta1.InventorySpec{},
-			Status: akashv2beta1.InventoryStatus{
-				State: akashv2beta1.InventoryStatePulled,
+			Spec: akashv2beta2.InventorySpec{},
+			Status: akashv2beta2.InventoryStatus{
+				State: akashv2beta2.InventoryStatePulled,
 			},
 		}
 
@@ -257,7 +257,7 @@ func newRouter(_ logr.Logger, apiTimeout, queryTimeout time.Duration) *mux.Route
 					inv.Status.Messages = append(inv.Status.Messages, res.Error().Error())
 				}
 
-				if inventory, valid := res.Value().([]akashv2beta1.InventoryClusterStorage); valid {
+				if inventory, valid := res.Value().([]akashv2beta2.InventoryClusterStorage); valid {
 					inv.Spec.Storage = append(inv.Spec.Storage, inventory...)
 				}
 			}

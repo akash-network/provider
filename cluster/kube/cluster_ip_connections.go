@@ -5,21 +5,22 @@ import (
 	"fmt"
 	"strings"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/pager"
 
-	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	"github.com/akash-network/provider/cluster/types/v1beta2"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
@@ -32,7 +33,7 @@ func (c *client) GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, leaseID)
 
-	results, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).List(ctx, metav1.ListOptions{
+	results, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector.String(),
 	})
 
@@ -54,7 +55,7 @@ func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, se
 	_, _ = fmt.Fprintf(labelSelector, ",%s=%s", serviceNameLabel, serviceName)
 	_, _ = fmt.Fprintf(labelSelector, ",%s=%s", protoLabel, proto.ToString())
 	_, _ = fmt.Fprintf(labelSelector, ",%s=%d", externalPortLabel, externalPort)
-	return c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+	return c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName),
 	})
 }
@@ -65,7 +66,7 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 	resourceName := strings.ToLower(fmt.Sprintf("%s-%s-%d", sharingKey, proto.ToString(), externalPort))
 
 	c.log.Debug("checking for resource", "resource-name", resourceName)
-	foundEntry, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
+	foundEntry, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
 	exists := true
 	if err != nil {
 		if !kubeErrors.IsNotFound(err) {
@@ -111,9 +112,9 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 	// Create or update the entry
 	if exists {
 		obj.ObjectMeta.ResourceVersion = foundEntry.ResourceVersion
-		_, err = c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
+		_, err = c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
 	} else {
-		_, err = c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Create(ctx, &obj, metav1.CreateOptions{})
+		_, err = c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Create(ctx, &obj, metav1.CreateOptions{})
 	}
 
 	return err
@@ -126,7 +127,7 @@ func (c *client) PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 		return err
 	}
 	kubeSelectorForLease(labelSelector, lID)
-	result := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
+	result := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
 		LabelSelector: labelSelector.String(),
 	})
 
@@ -136,7 +137,7 @@ func (c *client) PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceEvent, error) {
 	var lastResourceVersion string
 	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		resources, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).List(ctx, opts)
+		resources, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).List(ctx, opts)
 
 		if err == nil && len(resources.GetResourceVersion()) != 0 {
 			lastResourceVersion = resources.GetResourceVersion()
@@ -156,7 +157,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceE
 	}
 
 	c.log.Info("starting ip passthrough watch", "resourceVersion", lastResourceVersion)
-	watcher, err := c.ac.AkashV2beta1().ProviderLeasedIPs(c.ns).Watch(ctx, metav1.ListOptions{
+	watcher, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Watch(ctx, metav1.ListOptions{
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
 		FieldSelector:        "",

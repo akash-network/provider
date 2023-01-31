@@ -12,9 +12,9 @@ import (
 	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
 	clientmocks "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/testutil"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	types "github.com/akash-network/node/x/market/types/v1beta2"
-	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
 	"github.com/akash-network/provider/session"
 )

@@ -4,7 +4,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/provider/bidengine"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/manifest"
 )
 

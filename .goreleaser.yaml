@@ -164,18 +164,18 @@ docker_manifests:
 
 nfpms:
   - id: w/version
-    vendor: "Overclock Labs Inc."
-    homepage: "https://ovrclk.com"
-    maintainer: "Overclock Labs Inc. <hello@akash.network>"
+    vendor: "Akash Network"
+    homepage: "https://akash.network"
+    maintainer: "Akash Network <hello@akash.network>"
     file_name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats:
       - deb
       - rpm
     license: Apache 2.0
   - id: wo/version
-    vendor: "Overclock Labs Inc."
-    homepage: "https://ovrclk.com"
-    maintainer: "Overclock Labs Inc. <hello@akash.network>"
+    vendor: "Akash Network"
+    homepage: "https://akash.network"
+    maintainer: "Akash Network <hello@akash.network>"
     file_name_template: "provider-services_{{ .Os }}_{{ .Arch }}"
     formats:
       - deb

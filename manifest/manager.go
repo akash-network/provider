@@ -12,16 +12,15 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	maniv2beta1 "github.com/akash-network/node/manifest/v2beta1"
+	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/sdl"
 	sdlutil "github.com/akash-network/node/sdl/util"
 	"github.com/akash-network/node/util/runner"
-	"github.com/akash-network/node/validation"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
 )
@@ -432,11 +431,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return ErrManifestVersion
 	}
 
-	if err = validation.ValidateManifest(req.value.Manifest); err != nil {
+	if err = maniv2beta1.ValidateManifest(req.value.Manifest); err != nil {
 		return err
 	}
 
-	if err = validation.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
+	if err = maniv2beta1.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
 		return err
 	}
 
@@ -469,7 +468,7 @@ func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta1.Manifest
 				continue
 			}
 
-			allHostnames = append(allHostnames, sdlutil.AllHostnamesOfManifestGroup(mgroup)...)
+			allHostnames = append(allHostnames, AllHostnamesOfManifestGroup(mgroup)...)
 			if !m.config.HTTPServicesRequireAtLeastOneHost {
 				continue
 			}

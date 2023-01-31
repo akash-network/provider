@@ -10,14 +10,14 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	aclient "github.com/akash-network/node/client"
 	"github.com/akash-network/node/pubsub"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
 
 	"github.com/akash-network/provider/bidengine"
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/operatorclients"
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"

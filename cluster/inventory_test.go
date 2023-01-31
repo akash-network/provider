@@ -5,26 +5,24 @@ import (
 	"testing"
 	"time"
 
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
-	"github.com/akash-network/provider/operator/waiter"
-
-	"github.com/akash-network/provider/cluster/operatorclients"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
+	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/testutil"
-	"github.com/akash-network/node/types/unit"
-	types "github.com/akash-network/node/types/v1beta2"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster/mocks"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	"github.com/akash-network/provider/cluster/operatorclients"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
+	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
+	"github.com/akash-network/provider/operator/waiter"
 )
 
 func newInventory(nodes ...string) ctypes.Inventory {

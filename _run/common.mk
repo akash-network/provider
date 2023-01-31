@@ -50,7 +50,6 @@ SERVER_CERTS := provider
 .PHONY: init
 init: bins akash-init
 
-
 $(AP_RUN_DIR):
 	mkdir -p $@
 

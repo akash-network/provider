@@ -7,11 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
-
-	"github.com/akash-network/provider/cluster"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -21,7 +16,11 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	executil "k8s.io/client-go/util/exec"
 
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+
+	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 // the type implementing the interface returned by the Exec command
@@ -54,7 +53,7 @@ func (c *client) Exec(ctx context.Context, leaseID mtypes.LeaseID, serviceName s
 	tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error) {
 	namespace := builder.LidNS(leaseID)
 
-	mani, err := c.ac.AkashV2beta1().Manifests(c.ns).Get(ctx, namespace, metav1.GetOptions{})
+	mani, err := c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed getting manifest", err)
 	}

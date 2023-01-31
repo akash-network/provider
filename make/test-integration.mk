@@ -34,7 +34,7 @@ test-k8s-integration:
 	# ```
 	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kind-cluster-setup-e2e
 	# ```
-	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./pkg/apis/akash.network/v2beta1
+	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./pkg/apis/akash.network/v2beta2
 	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./cluster/kube
 
 

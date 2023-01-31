@@ -9,23 +9,23 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
+	"github.com/avast/retry-go"
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	manifest "github.com/akash-network/node/manifest/v2beta1"
+	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	sdlutil "github.com/akash-network/node/sdl/util"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
+	manifest "github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/session"
-
-	"github.com/avast/retry-go"
 )
 
 const (
@@ -61,11 +61,11 @@ type deploymentManager struct {
 	state deploymentState
 
 	lease  mtypes.LeaseID
-	mgroup *manifest.Group
+	mgroup *maniv2beta2.Group
 
 	monitor          *deploymentMonitor
 	wg               sync.WaitGroup
-	updatech         chan *manifest.Group
+	updatech         chan *maniv2beta2.Group
 	teardownch       chan struct{}
 	currentHostnames map[string]struct{}
 
@@ -78,7 +78,7 @@ type deploymentManager struct {
 	serviceShuttingDown <-chan struct{}
 }
 
-func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *manifest.Group, isNewLease bool) *deploymentManager {
+func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *maniv2beta2.Group, isNewLease bool) *deploymentManager {
 	logger := s.log.With("cmp", "deployment-manager", "lease", lease, "manifest-group", mgroup.Name)
 
 	dm := &deploymentManager{
@@ -89,7 +89,7 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *manifest.Gro
 		lease:               lease,
 		mgroup:              mgroup,
 		wg:                  sync.WaitGroup{},
-		updatech:            make(chan *manifest.Group),
+		updatech:            make(chan *maniv2beta2.Group),
 		teardownch:          make(chan struct{}),
 		log:                 logger,
 		lc:                  lifecycle.New(),
@@ -116,7 +116,7 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *manifest.Gro
 	return dm
 }
 
-func (dm *deploymentManager) update(mgroup *manifest.Group) error {
+func (dm *deploymentManager) update(mgroup *maniv2beta2.Group) error {
 	select {
 	case dm.updatech <- mgroup:
 		return nil
@@ -319,7 +319,7 @@ func (dm *deploymentManager) startTeardown() <-chan error {
 }
 
 type serviceExposeWithServiceName struct {
-	expose manifest.ServiceExpose
+	expose maniv2beta2.ServiceExpose
 	name   string
 }
 
@@ -354,7 +354,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	}
 
 	// Either reserve the hostnames, or confirm that they already are held
-	allHostnames := sdlutil.AllHostnamesOfManifestGroup(*dm.mgroup)
+	allHostnames := manifest.AllHostnamesOfManifestGroup(*dm.mgroup)
 	withheldHostnames, err := dm.hostnameService.ReserveHostnames(ctx, allHostnames, dm.lease)
 
 	if err != nil {
@@ -394,7 +394,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	for _, hostname := range withheldHostnames {
 		blockedHostnames[hostname] = struct{}{}
 	}
-	hosts := make(map[string]manifest.ServiceExpose)
+	hosts := make(map[string]maniv2beta2.ServiceExpose)
 	leasedIPs := make([]serviceExposeWithServiceName, 0)
 	hostToServiceName := make(map[string]string)
 
@@ -406,7 +406,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		for _, expose := range service.Expose {
 			if sdlutil.ShouldBeIngress(expose) {
 				if dm.config.DeploymentIngressStaticHosts {
-					uid := sdlutil.IngressHost(dm.lease, service.Name)
+					uid := manifest.IngressHost(dm.lease, service.Name)
 					host := fmt.Sprintf("%s.%s", uid, dm.config.DeploymentIngressDomain)
 					hosts[host] = expose
 					hostToServiceName[host] = service.Name
@@ -435,7 +435,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		// Check if the IP exists in the compute cluster but not in the presently used set of IPs
 		_, stillInUse := ipsInThisRequest[currentIP.SharingKey]
 		if !stillInUse {
-			proto, err := manifest.ParseServiceProtocol(currentIP.Protocol)
+			proto, err := maniv2beta2.ParseServiceProtocol(currentIP.Protocol)
 			if err != nil {
 				return withheldHostnames, nil, err
 			}

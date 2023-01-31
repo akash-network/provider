@@ -9,23 +9,22 @@ import (
 	"sync/atomic"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
-
+	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/boz/go-lifecycle"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/tendermint/tendermint/libs/log"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	sdlutil "github.com/akash-network/node/sdl/util"
-	atypes "github.com/akash-network/node/types/v1beta2"
 	"github.com/akash-network/node/util/runner"
-	dtypes "github.com/akash-network/node/x/deployment/types/v1beta2"
-	mtypes "github.com/akash-network/node/x/market/types/v1beta2"
 
 	"github.com/akash-network/provider/cluster/operatorclients"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
 	"github.com/akash-network/provider/operator/waiter"
@@ -52,8 +51,8 @@ var (
 		Help: "",
 	}, []string{"classification", "quantity"})
 
-	clusterInventoryAllocateable = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "provider_inventory_allocateable_total",
+	clusterInventoryAllocatable = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "provider_inventory_allocatable_total",
 		Help: "",
 	}, []string{"quantity"})
 
@@ -238,6 +237,10 @@ func (is *inventoryService) resourcesToCommit(rgroup atypes.ResourceGroup) atype
 				Units:      sdlutil.ComputeCommittedResources(is.config.CPUCommitLevel, resource.Resources.GetCPU().GetUnits()),
 				Attributes: resource.Resources.GetCPU().GetAttributes(),
 			},
+			GPU: &atypes.GPU{
+				Units:      sdlutil.ComputeCommittedResources(is.config.GPUCommitLevel, resource.Resources.GetGPU().GetUnits()),
+				Attributes: resource.Resources.GetGPU().GetAttributes(),
+			},
 			Memory: &atypes.Memory{
 				Quantity:   sdlutil.ComputeCommittedResources(is.config.MemoryCommitLevel, resource.Resources.GetMemory().GetQuantity()),
 				Attributes: resource.Resources.GetMemory().GetAttributes(),
@@ -271,20 +274,22 @@ func (is *inventoryService) resourcesToCommit(rgroup atypes.ResourceGroup) atype
 		Requirements: atypes.PlacementRequirements{},
 		Resources:    replacedResources,
 	}
+
 	return result
 }
 
 func (is *inventoryService) updateInventoryMetrics(metrics ctypes.InventoryMetrics) {
-	clusterInventoryAllocateable.WithLabelValues("nodes").Set(float64(len(metrics.Nodes)))
+	clusterInventoryAllocatable.WithLabelValues("nodes").Set(float64(len(metrics.Nodes)))
 
-	clusterInventoryAllocateable.WithLabelValues("cpu").Set(float64(metrics.TotalAllocatable.CPU) / 1000)
-	clusterInventoryAllocateable.WithLabelValues("memory").Set(float64(metrics.TotalAllocatable.Memory))
-	clusterInventoryAllocateable.WithLabelValues("storage-ephemeral").Set(float64(metrics.TotalAllocatable.StorageEphemeral))
+	clusterInventoryAllocatable.WithLabelValues("cpu").Set(float64(metrics.TotalAllocatable.CPU) / 1000)
+	clusterInventoryAllocatable.WithLabelValues("gpu").Set(float64(metrics.TotalAllocatable.GPU) / 1000)
+	clusterInventoryAllocatable.WithLabelValues("memory").Set(float64(metrics.TotalAllocatable.Memory))
+	clusterInventoryAllocatable.WithLabelValues("storage-ephemeral").Set(float64(metrics.TotalAllocatable.StorageEphemeral))
 	for class, val := range metrics.TotalAllocatable.Storage {
-		clusterInventoryAllocateable.WithLabelValues(fmt.Sprintf("storage-%s", class)).Set(float64(val))
+		clusterInventoryAllocatable.WithLabelValues(fmt.Sprintf("storage-%s", class)).Set(float64(val))
 	}
 
-	clusterInventoryAllocateable.WithLabelValues("endpoints").Set(float64(is.config.InventoryExternalPortQuantity))
+	clusterInventoryAllocatable.WithLabelValues("endpoints").Set(float64(is.config.InventoryExternalPortQuantity))
 
 	clusterInventoryAvailable.WithLabelValues("cpu").Set(float64(metrics.TotalAvailable.CPU) / 1000)
 	clusterInventoryAvailable.WithLabelValues("memory").Set(float64(metrics.TotalAvailable.Memory))
@@ -300,11 +305,13 @@ func updateReservationMetrics(reservations []*reservation) {
 	inventoryReservations.WithLabelValues("none", "quantity").Set(float64(len(reservations)))
 
 	activeCPUTotal := 0.0
+	activeGPUTotal := 0.0
 	activeMemoryTotal := 0.0
 	activeStorageEphemeralTotal := 0.0
 	activeEndpointsTotal := 0.0
 
 	pendingCPUTotal := 0.0
+	pendingGPUTotal := 0.0
 	pendingMemoryTotal := 0.0
 	pendingStorageEphemeralTotal := 0.0
 	pendingEndpointsTotal := 0.0
@@ -312,21 +319,21 @@ func updateReservationMetrics(reservations []*reservation) {
 	allocated := 0.0
 	for _, reservation := range reservations {
 		cpuTotal := &pendingCPUTotal
+		gpuTotal := &pendingGPUTotal
 		memoryTotal := &pendingMemoryTotal
-		// storageTotal := &pendingStorageTotal
 		endpointsTotal := &pendingEndpointsTotal
 
 		if reservation.allocated {
 			allocated++
 			cpuTotal = &activeCPUTotal
+			gpuTotal = &activeGPUTotal
 			memoryTotal = &activeMemoryTotal
-			// storageTotal = &activeStorageTotal
 			endpointsTotal = &activeEndpointsTotal
 		}
 		for _, resource := range reservation.Resources().GetResources() {
 			*cpuTotal += float64(resource.Resources.GetCPU().GetUnits().Value() * uint64(resource.Count))
+			*gpuTotal += float64(resource.Resources.GetGPU().GetUnits().Value() * uint64(resource.Count))
 			*memoryTotal += float64(resource.Resources.GetMemory().Quantity.Value() * uint64(resource.Count))
-			// *storageTotal += float64(resource.Resources.GetStorage().Quantity.Value() * uint64(resource.Count))
 			*endpointsTotal += float64(len(resource.Resources.GetEndpoints()))
 		}
 	}
@@ -334,11 +341,13 @@ func updateReservationMetrics(reservations []*reservation) {
 	inventoryReservations.WithLabelValues("none", "allocated").Set(allocated)
 
 	inventoryReservations.WithLabelValues("active", "cpu").Set(activeCPUTotal)
+	inventoryReservations.WithLabelValues("active", "gpu").Set(activeGPUTotal)
 	inventoryReservations.WithLabelValues("active", "memory").Set(activeMemoryTotal)
 	inventoryReservations.WithLabelValues("active", "storage-ephemeral").Set(activeStorageEphemeralTotal)
 	inventoryReservations.WithLabelValues("active", "endpoints").Set(activeEndpointsTotal)
 
 	inventoryReservations.WithLabelValues("pending", "cpu").Set(pendingCPUTotal)
+	inventoryReservations.WithLabelValues("pending", "gpu").Set(pendingGPUTotal)
 	inventoryReservations.WithLabelValues("pending", "memory").Set(pendingMemoryTotal)
 	inventoryReservations.WithLabelValues("pending", "storage-ephemeral").Set(pendingStorageEphemeralTotal)
 	inventoryReservations.WithLabelValues("pending", "endpoints").Set(pendingEndpointsTotal)

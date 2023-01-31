@@ -4,7 +4,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/akash-network/node/client"
-	ptypes "github.com/akash-network/node/x/provider/types/v1beta2"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 )
 
 // Session interface wraps Log, Client, Provider and ForModule methods
