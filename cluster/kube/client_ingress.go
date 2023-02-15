@@ -26,7 +26,7 @@ const (
 	akashIngressClassName = "akash-ingress-class"
 )
 
-func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDirective) map[string]string {
+func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDirective, env map[string]string) map[string]string {
 	// For kubernetes/ingress-nginx
 	// https://github.com/kubernetes/ingress-nginx
 	const root = "nginx.ingress.kubernetes.io"
@@ -66,6 +66,12 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 		}
 	}
 
+	if env["AKASH_PROVIDER_ISSUER_TYPE"] == "cluster-issuer" {
+		result["cert-manager.io/cluster-issuer"] = env["AKASH_PROVIDER_ISSUER_NAME"]
+	} else if env["AKASH_PROVIDER_ISSUER_TYPE"] == "issuer" {
+		result["cert-manager.io/issuer"] = env["AKASH_PROVIDER_ISSUER_NAME"]
+	}
+
 	result[fmt.Sprintf("%s/proxy-next-upstream", root)] = strBuilder.String()
 	return result
 }
@@ -87,11 +93,17 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctyp
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ingressName,
 			Labels:      labels,
-			Annotations: kubeNginxIngressAnnotations(directive),
+			Annotations: kubeNginxIngressAnnotations(directive, c.env),
 		},
 		Spec: netv1.IngressSpec{
 			IngressClassName: &ingressClassName,
 			Rules:            rules,
+			TLS: []netv1.IngressTLS{
+				{
+					Hosts:      []string{directive.Hostname},
+					SecretName: fmt.Sprintf("%s-tls", ingressName),
+				},
+			},
 		},
 	}
 
