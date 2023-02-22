@@ -30,6 +30,7 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 	// For kubernetes/ingress-nginx
 	// https://github.com/kubernetes/ingress-nginx
 	const root = "nginx.ingress.kubernetes.io"
+	const certManager = "cert-manager.io"
 
 	readTimeout := math.Ceil(float64(directive.ReadTimeout) / 1000.0)
 	sendTimeout := math.Ceil(float64(directive.SendTimeout) / 1000.0)
@@ -67,9 +68,9 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 	}
 
 	if env["AKASH_PROVIDER_ISSUER_TYPE"] == "cluster-issuer" {
-		result["cert-manager.io/cluster-issuer"] = env["AKASH_PROVIDER_ISSUER_NAME"]
+		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = env["AKASH_PROVIDER_ISSUER_NAME"]
 	} else if env["AKASH_PROVIDER_ISSUER_TYPE"] == "issuer" {
-		result["cert-manager.io/issuer"] = env["AKASH_PROVIDER_ISSUER_NAME"]
+		result[fmt.Sprintf("%s/issuer", certManager)] = env["AKASH_PROVIDER_ISSUER_NAME"]
 	}
 
 	result[fmt.Sprintf("%s/proxy-next-upstream", root)] = strBuilder.String()

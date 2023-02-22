@@ -3,7 +3,7 @@ package kube
 import (
 	"context"
 	"fmt"
-	"os"
+	"github.com/akash-network/provider/cluster/util"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -100,7 +100,7 @@ func NewClient(ctx context.Context, log log.Logger, ns string, configPath string
 		ns:                ns,
 		log:               log.With("client", "kube"),
 		kubeContentConfig: config,
-		env:               environmentVariablesToMap(),
+		env:               util.EnvironmentVariablesToMap(),
 	}, nil
 }
 
@@ -769,15 +769,4 @@ func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (m
 
 func (c *client) KubeVersion() (*version.Info, error) {
 	return c.kc.Discovery().ServerVersion()
-}
-
-func environmentVariablesToMap() map[string]string {
-	m := make(map[string]string)
-	for _, e := range os.Environ() {
-		if i := strings.Index(e, "="); i >= 0 {
-			m[e[:i]] = e[i+1:]
-		}
-	}
-
-	return m
 }
