@@ -67,10 +67,13 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 		}
 	}
 
-	if env["AKASH_PROVIDER_ISSUER_TYPE"] == "cluster-issuer" {
+	switch env["AKASH_PROVIDER_ISSUER_TYPE"] {
+	case "cluster-issuer":
 		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = env["AKASH_PROVIDER_ISSUER_NAME"]
-	} else if env["AKASH_PROVIDER_ISSUER_TYPE"] == "issuer" {
+		break
+	case "issuer":
 		result[fmt.Sprintf("%s/issuer", certManager)] = env["AKASH_PROVIDER_ISSUER_NAME"]
+		break
 	}
 
 	result[fmt.Sprintf("%s/proxy-next-upstream", root)] = strBuilder.String()
