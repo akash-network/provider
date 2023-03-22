@@ -48,12 +48,11 @@ AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "gi
 AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "github.com/akash-network/node")
 AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/akash-network/node | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
-GOLANGCI_LINT_VERSION        ?= v1.50.0
+GOLANGCI_LINT_VERSION        ?= v1.51.2
 GOLANG_VERSION               ?= 1.16.1
 STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
 MODVENDOR_VERSION            ?= v0.3.0
-#MOCKERY_VERSION              ?= 2.12.1
 MOCKERY_VERSION              ?= 2.23.1
 K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
 
