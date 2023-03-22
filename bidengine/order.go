@@ -13,12 +13,12 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/akash-network/node/pubsub"
-	metricsutils "github.com/akash-network/node/util/metrics"
-	"github.com/akash-network/node/util/runner"
 	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/node/pubsub"
+	metricsutils "github.com/akash-network/node/util/metrics"
+	"github.com/akash-network/node/util/runner"
 
 	"github.com/akash-network/provider/cluster"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"

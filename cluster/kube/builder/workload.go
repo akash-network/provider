@@ -10,9 +10,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/sdl"
 	sdlutil "github.com/akash-network/node/sdl/util"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
 
 type workloadBase interface {

@@ -12,8 +12,8 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
 
-	testutilcli "github.com/akash-network/node/testutil/cli"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	testutilcli "github.com/akash-network/node/testutil/cli"
 
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"

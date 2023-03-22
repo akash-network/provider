@@ -3,8 +3,8 @@ package session
 import (
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/akash-network/node/client"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	"github.com/akash-network/node/client"
 )
 
 // Session interface wraps Log, Client, Provider and ForModule methods

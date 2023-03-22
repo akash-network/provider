@@ -13,9 +13,9 @@ import (
 
 	"github.com/akash-network/provider/session"
 
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 )
 
 const (

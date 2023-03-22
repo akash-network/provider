@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/akash-network/node/testutil"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/node/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
