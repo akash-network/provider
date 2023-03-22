@@ -12,9 +12,9 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/util/runner"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"

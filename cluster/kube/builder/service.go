@@ -10,8 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	sdlutil "github.com/akash-network/node/sdl/util"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	sdlutil "github.com/akash-network/node/sdl/util"
 )
 
 type Service interface {

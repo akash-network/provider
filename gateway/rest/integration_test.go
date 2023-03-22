@@ -12,12 +12,12 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	qmock "github.com/akash-network/node/client/mocks"
 	akashmanifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/testutil"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	providertypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	qmock "github.com/akash-network/node/client/mocks"
+	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider"
 	pcmock "github.com/akash-network/provider/cluster/mocks"

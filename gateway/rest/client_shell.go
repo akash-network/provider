@@ -14,8 +14,8 @@ import (
 	"github.com/gorilla/websocket"
 	"k8s.io/client-go/tools/remotecommand"
 
-	"github.com/akash-network/node/util/wsutil"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/node/util/wsutil"
 )
 
 var (

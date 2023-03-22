@@ -23,11 +23,11 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	"github.com/akash-network/node/sdl"
+	"github.com/akash-network/node/testutil"
 )
 
 func Test_ScalePricingRejectsAllZero(t *testing.T) {

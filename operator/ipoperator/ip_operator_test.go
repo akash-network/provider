@@ -11,8 +11,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/testutil"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/cluster/types/v1beta3"
