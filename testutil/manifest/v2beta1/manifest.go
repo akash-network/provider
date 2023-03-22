@@ -1,4 +1,4 @@
-package v1beta2
+package v2beta1
 
 import (
 	"testing"

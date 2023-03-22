@@ -26,6 +26,7 @@ var (
 	errIPOperatorRemote = errors.New("ip operator remote error")
 )
 
+//go:generate mockery --name IPOperatorClient --output ../mocks
 type IPOperatorClient interface {
 	Check(ctx context.Context) error
 	GetIPAddressUsage(ctx context.Context) (ipoptypes.IPAddressUsage, error)

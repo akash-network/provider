@@ -12,11 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/akash-network/node/testutil"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	"github.com/akash-network/node/testutil"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	akashclientfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
@@ -607,6 +607,9 @@ func multipleReplicasGenReservations(cpuUnits uint64, count uint32) *testReserva
 					Resources: atypes.ResourceUnits{
 						CPU: &atypes.CPU{
 							Units: atypes.NewResourceValue(cpuUnits),
+						},
+						GPU: &atypes.GPU{
+							Units: atypes.NewResourceValue(0),
 						},
 						Memory: &atypes.Memory{
 							Quantity: atypes.NewResourceValue(16 * unit.Gi),
