@@ -37,7 +37,7 @@ jobs:
       - name: Docker Status
         run: docker ps -a
       - name: Setup Ingress K8S
-        run: KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kind-cluster-setup-e2e-ci
+        run: KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kube-cluster-setup-e2e-ci
       - name: k8s-ingress
         run: make -s -C _run/kube kind-k8s-ip
       - name: Kube Environment
