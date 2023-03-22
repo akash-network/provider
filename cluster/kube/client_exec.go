@@ -164,7 +164,7 @@ loop:
 
 	// Run, passing in the streams and everything else. This runs until the remote end closes
 	// or the streams close
-	err = exec.Stream(remotecommand.StreamOptions{
+	err = exec.StreamWithContext(ctx, remotecommand.StreamOptions{
 		Stdin:             stdin,  // any reader
 		Stdout:            stdout, // any writer
 		Stderr:            stderr, // any writer
