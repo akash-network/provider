@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/akash-api/go/node/types/unit"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	"github.com/akash-network/node/pubsub"
+	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/cluster/operatorclients"
@@ -46,6 +46,10 @@ func newInventory(nodes ...string) ctypes.Inventory {
 				allocatable: sdk.NewInt(nullClientCPU),
 				allocated:   sdk.NewInt(100),
 			},
+			gpu: resourcePair{
+				allocatable: sdk.NewInt(nullClientGPU),
+				allocated:   sdk.NewInt(1),
+			},
 			memory: resourcePair{
 				allocatable: sdk.NewInt(nullClientMemory),
 				allocated:   sdk.NewInt(1 * unit.Gi),
@@ -62,13 +66,16 @@ func newInventory(nodes ...string) ctypes.Inventory {
 	return inv
 }
 
-func TestInventory_reservationAllocateable(t *testing.T) {
-	mkrg := func(cpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dtypes.Resource {
+func TestInventory_reservationAllocatable(t *testing.T) {
+	mkrg := func(cpu uint64, gpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dtypes.Resource {
 		endpoints := make([]types.Endpoint, endpointsCount)
 		return dtypes.Resource{
 			Resources: types.ResourceUnits{
 				CPU: &types.CPU{
 					Units: types.NewResourceValue(cpu),
+				},
+				GPU: &types.GPU{
+					Units: types.NewResourceValue(gpu),
 				},
 				Memory: &types.Memory{
 					Quantity: types.NewResourceValue(memory),
@@ -94,14 +101,14 @@ func TestInventory_reservationAllocateable(t *testing.T) {
 	inv := newInventory("a", "b")
 
 	reservations := []*reservation{
-		mkres(true, mkrg(750, 3*unit.Gi, 1*unit.Gi, 0, 1)),
-		mkres(true, mkrg(100, 4*unit.Gi, 1*unit.Gi, 0, 2)),
-		mkres(true, mkrg(2000, 3*unit.Gi, 1*unit.Gi, 0, 2)),
-		mkres(true, mkrg(250, 12*unit.Gi, 1*unit.Gi, 0, 2)),
-		mkres(true, mkrg(100, 1*unit.G, 1*unit.Gi, 1, 2)),
-		mkres(true, mkrg(100, 4*unit.G, 1*unit.Gi, 0, 1)),
-		mkres(true, mkrg(100, 4*unit.G, 98*unit.Gi, 0, 1)),
-		mkres(true, mkrg(250, 1*unit.G, 1*unit.Gi, 0, 1)),
+		mkres(true, mkrg(750, 0, 3*unit.Gi, 1*unit.Gi, 0, 1)),
+		mkres(true, mkrg(100, 0, 4*unit.Gi, 1*unit.Gi, 0, 2)),
+		mkres(true, mkrg(2000, 0, 3*unit.Gi, 1*unit.Gi, 0, 2)),
+		mkres(true, mkrg(250, 0, 12*unit.Gi, 1*unit.Gi, 0, 2)),
+		mkres(true, mkrg(100, 0, 1*unit.G, 1*unit.Gi, 1, 2)),
+		mkres(true, mkrg(100, 0, 4*unit.G, 1*unit.Gi, 0, 1)),
+		mkres(true, mkrg(100, 0, 4*unit.G, 98*unit.Gi, 0, 1)),
+		mkres(true, mkrg(250, 0, 1*unit.G, 1*unit.Gi, 0, 1)),
 	}
 
 	for idx, r := range reservations {
@@ -185,6 +192,9 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		Resources: types.ResourceUnits{
 			CPU: &types.CPU{
 				Units: types.NewResourceValue(1),
+			},
+			GPU: &types.GPU{
+				Units: types.NewResourceValue(0),
 			},
 			Memory: &types.Memory{
 				Quantity: types.NewResourceValue(1 * unit.Gi),
@@ -321,6 +331,9 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint, inventoryCall bool, node
 		CPU: &types.CPU{
 			Units: types.NewResourceValue(4000),
 		},
+		GPU: &types.GPU{
+			Units: types.NewResourceValue(0),
+		},
 		Memory: &types.Memory{
 			Quantity: types.NewResourceValue(30 * unit.Gi),
 		},
@@ -387,6 +400,9 @@ func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Gro
 	deploymentRequirements := types.ResourceUnits{
 		CPU: &types.CPU{
 			Units: types.NewResourceValue(4000),
+		},
+		GPU: &types.GPU{
+			Units: types.NewResourceValue(0),
 		},
 		Memory: &types.Memory{
 			Quantity: types.NewResourceValue(30 * unit.Gi),
@@ -606,6 +622,9 @@ func TestInventory_OverReservations(t *testing.T) {
 	deploymentRequirements := types.ResourceUnits{
 		CPU: &types.CPU{
 			Units: types.NewResourceValue(4000),
+		},
+		GPU: &types.GPU{
+			Units: types.NewResourceValue(0),
 		},
 		Memory: &types.Memory{
 			Quantity: types.NewResourceValue(30 * unit.Gi),

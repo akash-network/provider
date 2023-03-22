@@ -1,5 +1,28 @@
 #!/usr/bin/env bash
 
+macos_deps=(
+    "coreutils"
+    "qemu"
+    "direnv"
+    "unzip"
+    "wget"
+    "curl"
+    "npm"
+    "jq"
+)
+
+debian_deps=(
+    "make"
+    "build-essentials"
+    "direnv"
+    "unzip"
+    "wget"
+    "curl"
+    "npm"
+    "jq"
+    "coreutils"
+)
+
 parse_args() {
     while getopts "?x" arg; do
         case "$arg" in
@@ -40,45 +63,12 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
         tools="$tools make"
     fi
 
-    if ! brew list coreutils >/dev/null 2>&1 ; then
-        tools="$tools coreutils"
-    fi
-
-    if ! brew list coreutils >/dev/null 2>&1 ; then
-        tools="$tools coreutils"
-    fi
-
-    if ! brew list qemu >/dev/null 2>&1 ; then
-        tools="$tools qemu"
-    fi
-
-    if ! is_command direnv; then
-        tools="$tools direnv"
-    fi
-
-    if ! is_command unzip; then
-        tools="$tools unzip"
-    fi
-
-    if ! is_command wget; then
-        tools="$tools wget"
-    fi
-
-    if ! is_command curl; then
-        tools="$tools curl"
-    fi
-
-    if ! is_command npm; then
-        tools="$tools npm"
-    fi
-
-    if ! is_command jq; then
-        tools="$tools jq"
-    fi
-
-    if ! is_command readlink; then
-        tools="$tools readlink"
-    fi
+    # shellcheck disable=SC2068
+    for dep in ${macos_deps[@]}; do
+        if ! brew list "$dep" >/dev/null 2>&1 ; then
+            tools="$tools $dep"
+        fi
+    done
 
     if [[ "$tools" != "" ]]; then
         # don't put quotes around $tools!
@@ -91,41 +81,13 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     if is_command dpkg; then
         echo "Detected Debian based system"
         tools=
-        if ! is_command make; then
-            tools="$tools make"
-        fi
 
-        if ! dpkg -l build-essentials; then
-            tools="$tools build-essentials"
-        fi
-
-        if ! is_command direnv; then
-            tools="$tools direnv"
-        fi
-
-        if ! is_command unzip; then
-            tools="$tools unzip"
-        fi
-
-        if ! is_command wget; then
-            tools="$tools wget"
-        fi
-
-        if ! is_command curl; then
-            tools="$tools curl"
-        fi
-
-        if ! is_command npm; then
-            tools="$tools npm"
-        fi
-
-        if ! is_command jq; then
-            tools="$tools jq"
-        fi
-
-        if ! is_command readlink; then
-            tools="$tools coreutils"
-        fi
+        # shellcheck disable=SC2068
+        for dep in ${debian_deps[@]}; do
+            if ! dpkg -l "$dep" ; then
+                tools="$tools $dep"
+            fi
+        done
 
         cmd="apt-get"
 

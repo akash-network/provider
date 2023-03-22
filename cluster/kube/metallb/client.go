@@ -51,6 +51,7 @@ var (
 	errInvalidLeaseService = fmt.Errorf("%w lease service error", errMetalLB)
 )
 
+//go:generate mockery --name Client --structname MetalLBClient --filename metallb_client.go --output ../../mocks
 type Client interface {
 	GetIPAddressUsage(ctx context.Context) (uint, uint, error)
 	GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]v1beta2.IPLeaseState, error)

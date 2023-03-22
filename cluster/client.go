@@ -17,12 +17,12 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/sdl"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	"github.com/akash-network/node/sdl"
 	mquery "github.com/akash-network/node/x/market/query"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -44,6 +44,7 @@ var (
 
 var _ Client = (*nullClient)(nil)
 
+//go:generate mockery --name ReadClient
 type ReadClient interface {
 	LeaseStatus(context.Context, mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error)
 	ForwardedPortStatus(context.Context, mtypes.LeaseID) (map[string][]ctypes.ForwardedPortStatus, error)
@@ -62,6 +63,8 @@ type ReadClient interface {
 }
 
 // Client interface lease and deployment methods
+//
+//go:generate mockery --name Client
 type Client interface {
 	ReadClient
 	Deploy(ctx context.Context, lID mtypes.LeaseID, mgroup *manifest.Group) error
@@ -143,6 +146,7 @@ func (rp resourcePair) available() sdk.Int {
 type node struct {
 	id               string
 	cpu              resourcePair
+	gpu              resourcePair
 	memory           resourcePair
 	ephemeralStorage resourcePair
 }
@@ -186,6 +190,11 @@ nodes:
 
 				cpu := nd.cpu.dup()
 				if adjusted = cpu.subNLZ(res.Resources.CPU.Units); !adjusted {
+					continue nodes
+				}
+
+				gpu := nd.gpu.dup()
+				if adjusted = gpu.subNLZ(res.Resources.GPU.Units); !adjusted {
 					continue nodes
 				}
 
@@ -242,6 +251,7 @@ nodes:
 				currInventory.nodes[nodeName] = &node{
 					id:               nd.id,
 					cpu:              cpu,
+					gpu:              gpu,
 					memory:           memory,
 					ephemeralStorage: ephemeralStorage,
 				}
@@ -266,11 +276,13 @@ nodes:
 
 func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 	cpuTotal := uint64(0)
+	gpuTotal := uint64(0)
 	memoryTotal := uint64(0)
 	storageEphemeralTotal := uint64(0)
 	storageTotal := make(map[string]int64)
 
 	cpuAvailable := uint64(0)
+	gpuAvailable := uint64(0)
 	memoryAvailable := uint64(0)
 	storageEphemeralAvailable := uint64(0)
 	storageAvailable := make(map[string]int64)
@@ -290,12 +302,18 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 		}
 
 		cpuTotal += nd.cpu.allocatable.Uint64()
+		gpuTotal += nd.gpu.allocatable.Uint64()
+
 		memoryTotal += nd.memory.allocatable.Uint64()
 		storageEphemeralTotal += nd.ephemeralStorage.allocatable.Uint64()
 
 		tmp := nd.cpu.allocatable.Sub(nd.cpu.allocated)
 		invNode.Available.CPU = tmp.Uint64()
 		cpuAvailable += invNode.Available.CPU
+
+		tmp = nd.gpu.allocatable.Sub(nd.gpu.allocated)
+		invNode.Available.GPU = tmp.Uint64()
+		gpuAvailable += invNode.Available.GPU
 
 		tmp = nd.memory.allocatable.Sub(nd.memory.allocated)
 		invNode.Available.Memory = tmp.Uint64()
@@ -310,6 +328,7 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 
 	ret.TotalAllocatable = ctypes.InventoryMetricTotal{
 		CPU:              cpuTotal,
+		GPU:              gpuTotal,
 		Memory:           memoryTotal,
 		StorageEphemeral: storageEphemeralTotal,
 		Storage:          storageTotal,
@@ -317,6 +336,7 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 
 	ret.TotalAvailable = ctypes.InventoryMetricTotal{
 		CPU:              cpuAvailable,
+		GPU:              gpuAvailable,
 		Memory:           memoryAvailable,
 		StorageEphemeral: storageEphemeralAvailable,
 		Storage:          storageAvailable,
@@ -334,6 +354,7 @@ func (inv *inventory) dup() *inventory {
 		res.nodes = append(res.nodes, &node{
 			id:               nd.id,
 			cpu:              nd.cpu.dup(),
+			gpu:              nd.gpu.dup(),
 			memory:           nd.memory.dup(),
 			ephemeralStorage: nd.ephemeralStorage.dup(),
 		})
@@ -345,6 +366,7 @@ func (inv *inventory) dup() *inventory {
 const (
 	// 5 CPUs, 5Gi memory for null client.
 	nullClientCPU     = 5000
+	nullClientGPU     = 2
 	nullClientMemory  = 32 * unit.Gi
 	nullClientStorage = 512 * unit.Gi
 )
@@ -542,6 +564,10 @@ func (c *nullClient) Inventory(context.Context) (ctypes.Inventory, error) {
 				cpu: resourcePair{
 					allocatable: sdk.NewInt(nullClientCPU),
 					allocated:   sdk.NewInt(nullClientCPU - 100),
+				},
+				gpu: resourcePair{
+					allocatable: sdk.NewInt(nullClientGPU),
+					allocated:   sdk.NewInt(1),
 				},
 				memory: resourcePair{
 					allocatable: sdk.NewInt(nullClientMemory),

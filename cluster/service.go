@@ -12,9 +12,9 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/akash-network/node/pubsub"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	"github.com/akash-network/node/pubsub"
 
 	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -25,7 +25,10 @@ import (
 )
 
 // ErrNotRunning is the error when service is not running
-var ErrNotRunning = errors.New("not running")
+var (
+	ErrNotRunning      = errors.New("not running")
+	ErrInvalidResource = errors.New("invalid resource")
+)
 
 var (
 	deploymentManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
@@ -37,6 +40,8 @@ var (
 )
 
 // Cluster is the interface that wraps Reserve and Unreserve methods
+//
+//go:generate mockery --name Cluster
 type Cluster interface {
 	Reserve(mtypes.OrderID, atypes.ResourceGroup) (ctypes.Reservation, error)
 	Unreserve(mtypes.OrderID) error
@@ -49,6 +54,8 @@ type StatusClient interface {
 }
 
 // Service manage compute cluster for the provider.  Will eventually integrate with kubernetes, etc...
+//
+//go:generate mockery --name Service
 type Service interface {
 	StatusClient
 	Cluster

@@ -139,6 +139,8 @@ type Inventory interface {
 }
 
 // Deployment interface defined with LeaseID and ManifestGroup methods
+//
+//go:generate mockery --name Deployment --output ../../mocks
 type Deployment interface {
 	LeaseID() mtypes.LeaseID
 	ManifestGroup() manifest.Group

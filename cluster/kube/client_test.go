@@ -16,9 +16,9 @@ import (
 	"k8s.io/client-go/rest"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/testutil"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
