@@ -1,12 +1,12 @@
-package v1beta2
+package v2beta1
 
 import (
 	"math"
 	"testing"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta1"
-	atestutil "github.com/akash-network/node/testutil"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta2"
+	atestutil "github.com/akash-network/node/testutil"
 )
 
 // OverflowManifestGenerator generates a manifest maximum integer values

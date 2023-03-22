@@ -29,10 +29,13 @@ type ValidateClient interface {
 }
 
 // StatusClient is the interface which includes status of service
+//
+//go:generate mockery --name StatusClient
 type StatusClient interface {
 	Status(context.Context) (*Status, error)
 }
 
+//go:generate mockery --name Client
 type Client interface {
 	StatusClient
 	ValidateClient

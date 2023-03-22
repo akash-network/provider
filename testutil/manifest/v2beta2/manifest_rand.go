@@ -48,8 +48,8 @@ func (mg manifestGeneratorRand) Service(t testing.TB) manifest.Service {
 
 func (mg manifestGeneratorRand) ServiceExpose(t testing.TB) manifest.ServiceExpose {
 	return manifest.ServiceExpose{
-		Port:         uint16(rand.Intn(math.MaxUint16)), // nolint: gosec
-		ExternalPort: uint16(rand.Intn(math.MaxUint16)), // nolint: gosec
+		Port:         uint32(rand.Intn(math.MaxUint16)), // nolint: gosec
+		ExternalPort: uint32(rand.Intn(math.MaxUint16)), // nolint: gosec
 		Proto:        "TCP",
 		Service:      "svc",
 		Global:       true,

@@ -156,6 +156,18 @@ func (is *inventoryService) lookup(order mtypes.OrderID, resources atypes.Resour
 }
 
 func (is *inventoryService) reserve(order mtypes.OrderID, resources atypes.ResourceGroup) (ctypes.Reservation, error) {
+	for idx, res := range resources.GetResources() {
+		if res.Resources.CPU == nil {
+			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
+		}
+		if res.Resources.GPU == nil {
+			return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
+		}
+		if res.Resources.Memory == nil {
+			return nil, fmt.Errorf("%w: Memory resource at idx %d is nil", ErrInvalidResource, idx)
+		}
+	}
+
 	ch := make(chan inventoryResponse, 1)
 	req := inventoryRequest{
 		order:     order,

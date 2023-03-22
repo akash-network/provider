@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	atestutil "github.com/akash-network/node/testutil"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	atestutil "github.com/akash-network/node/testutil"
 )
 
 // OverflowManifestGenerator generates a manifest maximum integer values
@@ -45,10 +45,8 @@ func (mg manifestGeneratorOverflow) Service(t testing.TB) manifest.Service {
 			Memory: &types.Memory{
 				Quantity: types.NewResourceValue(math.MaxUint64),
 			},
-			GPU: types.GPUs{
-				types.GPU{
-					Units: types.NewResourceValue(math.MaxUint32),
-				},
+			GPU: &types.GPU{
+				Units: types.NewResourceValue(math.MaxUint32),
 			},
 			Storage: types.Volumes{
 				types.Storage{

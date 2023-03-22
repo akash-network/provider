@@ -11,10 +11,10 @@ import (
 	"github.com/boz/go-lifecycle"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/pubsub"
-	dquery "github.com/akash-network/node/x/deployment/query"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/node/pubsub"
+	dquery "github.com/akash-network/node/x/deployment/query"
 
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -39,11 +39,15 @@ var (
 )
 
 // StatusClient is the interface which includes status of service
+//
+//go:generate mockery --name StatusClient
 type StatusClient interface {
 	Status(context.Context) (*Status, error)
 }
 
 // Client is the interface that wraps HandleManifest method
+//
+//go:generate mockery --name Client
 type Client interface {
 	Submit(context.Context, dtypes.DeploymentID, manifest.Manifest) error
 	IsActive(context.Context, dtypes.DeploymentID) (bool, error)

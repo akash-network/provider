@@ -1,12 +1,12 @@
-package v1beta2
+package v2beta1
 
 import (
 	"testing"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta1"
-	atestutil "github.com/akash-network/node/testutil"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta2"
+	"github.com/akash-network/akash-api/go/testutil"
 )
 
 // AppManifestGenerator represents a real-world, deployable configuration.
@@ -24,7 +24,7 @@ func (mg manifestGeneratorApp) Manifest(t testing.TB) manifest.Manifest {
 func (mg manifestGeneratorApp) Group(t testing.TB) manifest.Group {
 	t.Helper()
 	return manifest.Group{
-		Name: atestutil.Name(t, "manifest-group"),
+		Name: testutil.Name(t, "manifest-group"),
 		Services: []manifest.Service{
 			mg.Service(t),
 		},
@@ -63,7 +63,7 @@ func (mg manifestGeneratorApp) ServiceExpose(t testing.TB) manifest.ServiceExpos
 		Global:  true,
 		Proto:   "TCP",
 		Hosts: []string{
-			atestutil.Hostname(t),
+			testutil.Hostname(t),
 		},
 	}
 }

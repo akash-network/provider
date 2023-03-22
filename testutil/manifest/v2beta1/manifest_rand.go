@@ -1,4 +1,4 @@
-package v1beta2
+package v2beta1
 
 import (
 	"math"
@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta1"
-	atestutil "github.com/akash-network/node/testutil"
+	"github.com/akash-network/akash-api/go/testutil"
+	tutilv1beta2 "github.com/akash-network/akash-api/go/testutil/v1beta2"
 )
 
 // RandManifestGenerator generates a manifest with random values
@@ -24,7 +25,7 @@ func (mg manifestGeneratorRand) Manifest(t testing.TB) manifest.Manifest {
 func (mg manifestGeneratorRand) Group(t testing.TB) manifest.Group {
 	t.Helper()
 	return manifest.Group{
-		Name: atestutil.Name(t, "manifest-group"),
+		Name: testutil.Name(t, "manifest-group"),
 		Services: []manifest.Service{
 			mg.Service(t),
 		},
@@ -38,7 +39,7 @@ func (mg manifestGeneratorRand) Service(t testing.TB) manifest.Service {
 		Image:     "quay.io/ovrclk/demo-app",
 		Args:      []string{"run"},
 		Env:       []string{"AKASH_TEST_SERVICE=true"},
-		Resources: atestutil.ResourceUnits(t),
+		Resources: tutilv1beta2.ResourceUnits(t),
 		Count:     rand.Uint32(), // nolint: gosec
 		Expose: []manifest.ServiceExpose{
 			mg.ServiceExpose(t),
@@ -48,13 +49,13 @@ func (mg manifestGeneratorRand) Service(t testing.TB) manifest.Service {
 
 func (mg manifestGeneratorRand) ServiceExpose(t testing.TB) manifest.ServiceExpose {
 	return manifest.ServiceExpose{
-		Port:         uint16(rand.Intn(math.MaxUint16)), // nolint: gosec
-		ExternalPort: uint16(rand.Intn(math.MaxUint16)), // nolint: gosec
+		Port:         uint32(rand.Intn(math.MaxUint16)), // nolint: gosec
+		ExternalPort: uint32(rand.Intn(math.MaxUint16)), // nolint: gosec
 		Proto:        "TCP",
 		Service:      "svc",
 		Global:       true,
 		Hosts: []string{
-			atestutil.Hostname(t),
+			testutil.Hostname(t),
 		},
 	}
 }
