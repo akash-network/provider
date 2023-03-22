@@ -8,11 +8,11 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	akashclient "github.com/akash-network/node/client"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	cutils "github.com/akash-network/node/x/cert/utils"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	gwrest "github.com/akash-network/provider/gateway/rest"

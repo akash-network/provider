@@ -17,15 +17,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	audittypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
 	clientmocks "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/testutil"
-	audittypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
 	clustermocks "github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/session"

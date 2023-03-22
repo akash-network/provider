@@ -11,9 +11,9 @@ import (
 
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	mquery "github.com/akash-network/node/x/market/query"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/operator/waiter"

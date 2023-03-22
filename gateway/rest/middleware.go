@@ -16,8 +16,8 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mquery "github.com/akash-network/node/x/market/query"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mquery "github.com/akash-network/node/x/market/query"
 )
 
 type contextKey int

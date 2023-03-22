@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/akash-network/node/testutil"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/cluster/mocks"
 	cluster "github.com/akash-network/provider/cluster/types/v1beta3"

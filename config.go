@@ -5,9 +5,9 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/akash-api/go/node/types/constants"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/akash-network/akash-api/go/node/types/constants"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
 	"github.com/akash-network/provider/bidengine"
 )
