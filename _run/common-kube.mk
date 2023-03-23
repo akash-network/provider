@@ -101,6 +101,9 @@ kube-cluster-setup-e2e-ci: \
 	kustomize-deploy-services \
 	kube-deployments-rollout
 
+.PHONY: kube-cluster-delete
+kube-cluster-delete: kube-cluster-delete-$(KUBE_SSH_NODE_NAME)
+
 .PHONY: kube-setup-ingress
 kube-setup-ingress: kube-setup-ingress-$(KIND_CONFIG)
 
