@@ -189,8 +189,8 @@ github.com/akash-network/ledger-go v0.14.3 h1:LCEFkTfgGA2xFMN2CtiKvXKE7dh0QSM77P
 github.com/akash-network/ledger-go v0.14.3/go.mod h1:NfsjfFvno9Kaq6mfpsKz4sqjnAVVEsVsnBJfKB4ueAs=
 github.com/akash-network/ledger-go/cosmos v0.14.3 h1:bEI9jLHM+Lm55idi4RfJlDez4/rVJs7E1MT0U2whYqI=
 github.com/akash-network/ledger-go/cosmos v0.14.3/go.mod h1:SjAfheQTE4rWk0ir+wjbOWxwj8nc8E4AZ08NdsvYG24=
-github.com/akash-network/node v0.23.0-rc6 h1:L3P9D/O+mpvT/bY7c4wBVpSab5SI7mJl9WE6XLPr1+Y=
-github.com/akash-network/node v0.23.0-rc6/go.mod h1:uki3RO5UplGDkY5ew1i7TtuEkpzQvYoaAv4Y4UbpULU=
+github.com/akash-network/node v0.23.0-rc7 h1:yOfa+MWENKCjir64oJG2oGJHHQbVqfHa+Jh6kz0Uvek=
+github.com/akash-network/node v0.23.0-rc7/go.mod h1:uki3RO5UplGDkY5ew1i7TtuEkpzQvYoaAv4Y4UbpULU=
 github.com/alecthomas/participle/v2 v2.0.0-alpha7 h1:cK4vjj0VSgb3lN1nuKA5F7dw+1s1pWBe5bx7nNCnN+c=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
 github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
