@@ -10,8 +10,33 @@ on:
       - v*
 
 jobs:
-  goreleaser:
+  ensure-dry-run:
     runs-on: ubuntu-latest
+    steps:
+      - name: Ensure release/dry-run PASS
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          running-workflow-name: 'release/dry-run'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success
+  ensure-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure tests PASS
+        uses: lewagon/wait-on-check-action@v1.3.1
+        with:
+          ref: ${{ github.ref }}
+          check-name: 'tests'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 10
+          allowed-conclusions: success
+  publish:
+    runs-on: ubuntu-latest
+    needs:
+      - ensure-dry-run
+      - ensure-tests
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
@@ -30,8 +55,6 @@ jobs:
         uses: docker/setup-buildx-action@v2
       - name: release version
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-      - name: release dry-run
-        run: make release
       - name: Login to GHCR
         uses: docker/login-action@v2
         with:
@@ -48,7 +71,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   homebrew:
     runs-on: ubuntu-latest
-    needs: [ goreleaser ]
+    needs: [ publish ]
     steps:
       - uses: actions/checkout@v3
         with:
