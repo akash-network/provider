@@ -194,8 +194,10 @@ nodes:
 				}
 
 				gpu := nd.gpu.dup()
-				if adjusted = gpu.subNLZ(res.Resources.GPU.Units); !adjusted {
-					continue nodes
+				if res.Resources.GPU != nil {
+					if adjusted = gpu.subNLZ(res.Resources.GPU.Units); !adjusted {
+						continue nodes
+					}
 				}
 
 				memory := nd.memory.dup()
