@@ -76,6 +76,8 @@ func (b *workload) container() corev1.Container {
 		// fixme get custom resource name from inventory
 		kcontainer.Resources.Requests["nvidia.com/gpu"] = resource.NewQuantity(int64(requestedGPU.Value()), resource.DecimalSI).DeepCopy()
 		kcontainer.Resources.Limits["nvidia.com/gpu"] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()
+		// todo fetch it from settings
+		b.runtimeClassName = "nvidia"
 	}
 
 	if mem := b.service.Resources.Memory; mem != nil {
