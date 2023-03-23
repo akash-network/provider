@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/akash-network/akash-api v0.0.11
-	github.com/akash-network/node v0.23.0-rc4
+	github.com/akash-network/node v0.23.0-rc6
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/boz/go-lifecycle v0.1.1-0.20190620234137-5139c86739b8
 	github.com/cosmos/cosmos-sdk v0.45.15
