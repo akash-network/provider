@@ -135,33 +135,33 @@ kind)
     ;;
 esac
 
-case "${1:-metrics}" in
-    crd)
-        install_crd
-        ;;
-    ns)
-        install_ns
-        ;;
-    metrics)
-        install_crd
-        install_ns
-        install_metrics
-        ;;
-    calico-metrics)
-        install_crd
-        install_ns
-        install_metrics
-        install_network_policies
-        ;;
-    networking)
-        install_ns
-        install_network_policies
-        ;;
-    config-file)
-        shift
-        config_file "$@"
-        ;;
-    *)
-        usage "$@"
-        ;;
-esac
+#case "${1:-metrics}" in
+#    crd)
+#        install_crd
+#        ;;
+#    ns)
+#        install_ns
+#        ;;
+#    metrics)
+#        install_crd
+#        install_ns
+#        install_metrics
+#        ;;
+#    calico-metrics)
+#        install_crd
+#        install_ns
+#        install_metrics
+#        install_network_policies
+#        ;;
+#    networking)
+#        install_ns
+#        install_network_policies
+#        ;;
+#    config-file)
+#        shift
+#        config_file "$@"
+#        ;;
+#    *)
+#        usage "$@"
+#        ;;
+#esac
