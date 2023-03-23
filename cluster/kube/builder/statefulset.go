@@ -32,6 +32,9 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 	replicas := int32(b.service.Count)
 	falseValue := false
 
+	// fixme b.runtimeClassName is updated on call to the container()
+	containers := []corev1.Container{b.container()}
+
 	var effectiveRuntimeClassName *string
 	if len(b.runtimeClassName) != 0 && b.runtimeClassName != runtimeClassNoneValue {
 		effectiveRuntimeClassName = &b.runtimeClassName
@@ -57,7 +60,7 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 						RunAsNonRoot: &falseValue,
 					},
 					AutomountServiceAccountToken: &falseValue,
-					Containers:                   []corev1.Container{b.container()},
+					Containers:                   containers,
 					ImagePullSecrets:             b.imagePullSecrets(),
 				},
 			},

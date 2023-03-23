@@ -35,7 +35,10 @@ const (
 	akashDeploymentPolicyName   = "akash-deployment-restrictions"
 )
 
-const runtimeClassNoneValue = "none"
+const (
+	runtimeClassNoneValue = "none"
+	runtimeClassNvidia    = "nvidia"
+)
 
 const (
 	envVarAkashGroupSequence         = "AKASH_GROUP_SEQUENCE"
