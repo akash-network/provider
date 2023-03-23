@@ -32,6 +32,9 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 	replicas := int32(b.service.Count)
 	falseValue := false
 
+	// fixme b.runtimeClassName is updated on call to the container()
+	containers := []corev1.Container{b.container()}
+
 	var effectiveRuntimeClassName *string
 	if len(b.runtimeClassName) != 0 && b.runtimeClassName != runtimeClassNoneValue {
 		effectiveRuntimeClassName = &b.runtimeClassName
@@ -57,7 +60,7 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 						RunAsNonRoot: &falseValue,
 					},
 					AutomountServiceAccountToken: &falseValue,
-					Containers:                   []corev1.Container{b.container()},
+					Containers:                   containers,
 					ImagePullSecrets:             b.imagePullSecrets(),
 				},
 			},
@@ -68,6 +71,11 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 }
 
 func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:golint,unparam
+	var effectiveRuntimeClassName *string
+	if len(b.runtimeClassName) != 0 && b.runtimeClassName != runtimeClassNoneValue {
+		effectiveRuntimeClassName = &b.runtimeClassName
+	}
+
 	replicas := int32(b.service.Count)
 	obj.Labels = b.labels()
 	obj.Spec.Selector.MatchLabels = b.labels()
@@ -75,6 +83,7 @@ func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) 
 	obj.Spec.Template.Labels = b.labels()
 	obj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
 	obj.Spec.Template.Spec.ImagePullSecrets = b.imagePullSecrets()
+	obj.Spec.Template.Spec.RuntimeClassName = effectiveRuntimeClassName
 
 	return obj, nil
 }
