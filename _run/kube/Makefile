@@ -1,6 +1,7 @@
 KUBE_SETUP_PREREQUISITES   ?= \
 
 KUBE_CLUSTER_CREATE_TARGET := kind
+KUBE_SSH_NODE_NAME         ?= kind
 
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \

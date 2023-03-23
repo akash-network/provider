@@ -58,16 +58,15 @@ kube-upload-images: kube-upload-images-$(KUBE_CLUSTER_CREATE_TARGET)
 
 .PHONY: kube-upload-images-kind
 kube-upload-images-kind: $(KIND)
-	$(AP_ROOT)/script/load_docker2kind.sh "$(DOCKER_LOAD_IMAGES)" $(KUBE_SSH_NODE_NAME)
+	$(AP_ROOT)/script/load_docker2kind.sh "$(DOCKER_LOAD_IMAGES)" $(KIND_NAME)
 
 .PHONY: kube-upload-images-default
 kube-upload-images-default:
 	$(AP_ROOT)/script/load_docker2ctr.sh "$(DOCKER_LOAD_IMAGES)" $(KUBE_SSH_NODE_NAME)
 
-$(KUBE_CREATE): $(AP_RUN_DIR)
-	@echo "assuming kubernetes cluster already created manually"
-	$(AP_ROOT)/script/setup-kube.sh ns
-	$(AP_ROOT)/script/setup-kube.sh crd
+$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET)
+	$(AP_ROOT)/script/setup-kube.sh $(KUBE_SSH_NODE_NAME) init
+	#$(AP_ROOT)/script/setup-kube.sh crd
 	touch $@
 
 .INTERMEDIATE: kube-cluster-create-default
@@ -80,7 +79,7 @@ kube-cluster-check-info:
 .PHONY: kube-cluster-setup
 kube-cluster-setup: init \
 	kube-prepare-images \
-	kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET) \
+	$(KUBE_CREATE) \
 	kube-cluster-check-info \
 	kube-setup-ingress \
 	kube-upload-images \
@@ -91,7 +90,7 @@ kube-cluster-setup: init \
 
 # dedicated target to setup cluster on local machine
 .PHONY: kube-cluster-setup-e2e
-kube-cluster-setup-e2e: kube-cluster-create-kind kube-cluster-setup-e2e-ci
+kube-cluster-setup-e2e: $(KUBE_CREATE) kube-cluster-setup-e2e-ci
 
 # dedicated target to perform setup within Github Actions CI
 .PHONY: kube-cluster-setup-e2e-ci
