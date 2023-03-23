@@ -44,7 +44,7 @@ func (mg manifestGeneratorApp) Service(t testing.TB) manifest.Service {
 				Quantity: types.NewResourceValue(128 * unit.Mi),
 			},
 			GPU: &types.GPU{
-				Units: types.NewResourceValue(1000),
+				Units: types.NewResourceValue(0),
 			},
 			Storage: types.Volumes{
 				types.Storage{

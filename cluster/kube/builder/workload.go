@@ -67,7 +67,7 @@ func (b *workload) container() corev1.Container {
 		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(cpu.Units.Value()), resource.Milli).DeepCopy()
 	}
 
-	if gpu := b.service.Resources.GPU; gpu != nil {
+	if gpu := b.service.Resources.GPU; gpu != nil && gpu.Units.Value() > 0 {
 		requestedGPU := sdlutil.ComputeCommittedResources(b.settings.GPUCommitLevel, gpu.Units)
 		// GPUs are only supposed to be specified in the limits section, which means
 		//  - can specify GPU limits without specifying requests, because Kubernetes will use the limit as the request value by default.
