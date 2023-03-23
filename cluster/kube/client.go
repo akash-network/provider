@@ -368,7 +368,7 @@ func (c *client) LeaseLogs(ctx context.Context, lid mtypes.LeaseID,
 		listOpts.LabelSelector = fmt.Sprintf(builder.AkashManifestServiceLabelName+" in (%s)", services)
 	}
 
-	c.log.Error("filtering pods", "labelSelector", listOpts.LabelSelector)
+	c.log.Info("filtering pods", "labelSelector", listOpts.LabelSelector)
 
 	pods, err := c.kc.CoreV1().Pods(builder.LidNS(lid)).List(ctx, listOpts)
 	label := metricsutils.SuccessLabel
