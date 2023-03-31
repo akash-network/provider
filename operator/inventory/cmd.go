@@ -120,9 +120,7 @@ func Cmd() *cobra.Command {
 			})
 
 			group.Go(func() error {
-				select {
-				case <-cmd.Context().Done():
-				}
+				_ = <-cmd.Context().Done()
 				return srv.Shutdown(cmd.Context())
 			})
 
