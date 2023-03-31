@@ -65,9 +65,14 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 
     # shellcheck disable=SC2068
     for dep in ${macos_deps[@]}; do
+        echo -n "detecting $dep ..."
+        status="(installed)"
         if ! brew list "$dep" >/dev/null 2>&1 ; then
             tools="$tools $dep"
+            status="(not installed)"
         fi
+
+        echo " $status"
     done
 
     if [[ "$tools" != "" ]]; then
@@ -84,9 +89,13 @@ elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
 
         # shellcheck disable=SC2068
         for dep in ${debian_deps[@]}; do
+            echo -n "detecting $dep ..."
+            status="(installed)"
             if ! dpkg -l "$dep" ; then
                 tools="$tools $dep"
+                status="(not installed)"
             fi
+            echo " $status"
         done
 
         cmd="apt-get"
