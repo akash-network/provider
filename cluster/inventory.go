@@ -160,9 +160,9 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources atypes.Resou
 		if res.Resources.CPU == nil {
 			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
 		}
-		if res.Resources.GPU == nil {
-			return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
-		}
+		// if res.Resources.GPU == nil {
+		// 	return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
+		// }
 		if res.Resources.Memory == nil {
 			return nil, fmt.Errorf("%w: Memory resource at idx %d is nil", ErrInvalidResource, idx)
 		}
