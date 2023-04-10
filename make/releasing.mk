@@ -17,11 +17,7 @@ ifeq ($(GORELEASER_MOUNT_CONFIG),true)
 	GORELEASER_IMAGE := -v $(HOME)/.docker/config.json:/root/.docker/config.json $(GORELEASER_IMAGE)
 endif
 
-ifeq ($(OS),Windows_NT)
-$(error Windows, really?)
-else
-	DETECTED_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
-endif
+DETECTED_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
 
 # on MacOS disable deprecation warnings security framework
 ifeq ($(DETECTED_OS), Darwin)
