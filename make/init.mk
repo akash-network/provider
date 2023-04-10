@@ -2,8 +2,12 @@ ifeq (, $(shell which direnv))
 $(warning "No direnv in $(PATH), consider installing. https://direnv.net")
 endif
 
+ifeq ($(OS),Windows_NT)
+$(error "Windows is not supported as build host")
+endif
+
 # expecting GNU make >= 4.0. so comparing major version only
-MAKE_MAJOR_VERSION        := $(shell echo $(MAKE_VERSION) | cut -d"." -f1)
+MAKE_MAJOR_VERSION := $(shell echo $(MAKE_VERSION) | cut -d "." -f1)
 
 ifneq (true, $(shell [ $(MAKE_MAJOR_VERSION) -ge 4 ] && echo true))
 $(error "make version is outdated. min required 4.0")
