@@ -1,5 +1,4 @@
 //go:build k8s_integration
-// +build k8s_integration
 
 package v2beta2_test
 
@@ -37,12 +36,9 @@ func TestWriteRead(t *testing.T) {
 		for _, spec := range mtestutil.Generators {
 			// ensure decode(encode(obj)) == obj
 
-			var (
-				lid   = atestutil.LeaseID(t)
-				group = spec.Generator.Group(t)
-			)
+			lid := atestutil.LeaseID(t)
+			group := spec.Generator.Group(t)
 
-			// create local k8s manifest object
 			kmani, err := crd.NewManifest(ns, lid, &group)
 
 			require.NoError(t, err, spec.Name)
@@ -95,8 +91,8 @@ func withNamespace(ctx context.Context, t testing.TB, fn func(*rest.Config, stri
 
 func kubeConfig(t testing.TB) *rest.Config {
 	t.Helper()
-	cfgpath := path.Join(homedir.HomeDir(), ".kube", "config")
-	config, err := clientcmd.BuildConfigFromFlags("", cfgpath)
+	cfgPath := path.Join(homedir.HomeDir(), ".kube", "config")
+	config, err := clientcmd.BuildConfigFromFlags("", cfgPath)
 	require.NoError(t, err)
 	return config
 }

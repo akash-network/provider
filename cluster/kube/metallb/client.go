@@ -54,11 +54,11 @@ var (
 //go:generate mockery --name Client --structname MetalLBClient --filename metallb_client.go --output ../../mocks
 type Client interface {
 	GetIPAddressUsage(ctx context.Context) (uint, uint, error)
-	GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]v1beta2.IPLeaseState, error)
+	GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]v1beta3.IPLeaseState, error)
 
 	CreateIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error
 	PurgeIPPassthrough(ctx context.Context, directive ctypes.ClusterIPPassthroughDirective) error
-	GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough, error)
+	GetIPPassthroughs(ctx context.Context) ([]v1beta3.IPPassthrough, error)
 	DetectPoolChanges(ctx context.Context) (<-chan struct{}, error)
 
 	Stop()
@@ -262,7 +262,7 @@ func (ipls ipLeaseState) GetProtocol() manifest.ServiceProtocol {
 	return ipls.protocol
 }
 
-func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]v1beta2.IPLeaseState, error) {
+func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]v1beta3.IPLeaseState, error) {
 	ns := builder.LidNS(leaseID)
 	servicePager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return c.kube.CoreV1().Services(ns).List(ctx, opts)
@@ -279,7 +279,7 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 		return nil, err
 	}
 
-	result := make([]v1beta2.IPLeaseState, 0)
+	result := make([]v1beta3.IPLeaseState, 0)
 	err = servicePager.EachListItem(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector.String(),
 	},
@@ -430,7 +430,7 @@ func (c *client) CreateIPPassthrough(ctx context.Context, directive ctypes.Clust
 	return nil
 }
 
-func (c *client) GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough, error) {
+func (c *client) GetIPPassthroughs(ctx context.Context) ([]v1beta3.IPPassthrough, error) {
 	servicePager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return c.kube.CoreV1().Services(metav1.NamespaceAll).List(ctx, opts)
 	})
@@ -446,7 +446,7 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]v1beta2.IPPassthrough
 		return nil, err
 	}
 
-	result := make([]v1beta2.IPPassthrough, 0)
+	result := make([]v1beta3.IPPassthrough, 0)
 	err = servicePager.EachListItem(ctx,
 		metav1.ListOptions{
 			LabelSelector: labelSelector.String(),

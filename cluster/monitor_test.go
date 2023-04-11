@@ -52,7 +52,7 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 	lid := testutil.LeaseID(t)
 
 	group := &manifest.Group{}
-	group.Services = make([]manifest.Service, 1)
+	group.Services = make(manifest.Services, 1)
 	group.Services[0].Name = serviceName
 	group.Services[0].Expose = make([]manifest.ServiceExpose, 1)
 	group.Services[0].Expose[0].ExternalPort = 2000
@@ -94,7 +94,7 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 	lid := testutil.LeaseID(t)
 
 	group := &manifest.Group{}
-	group.Services = make([]manifest.Service, 1)
+	group.Services = make(manifest.Services, 1)
 	group.Services[0].Name = serviceName
 	group.Services[0].Expose = make([]manifest.ServiceExpose, 1)
 	group.Services[0].Expose[0].ExternalPort = 2000

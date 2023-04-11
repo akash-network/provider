@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	sdlutil "github.com/akash-network/node/sdl/util"
@@ -25,7 +26,7 @@ type netPol struct {
 
 var _ NetPol = (*netPol)(nil)
 
-func BuildNetPol(settings Settings, lid mtypes.LeaseID, group *manitypes.Group) NetPol {
+func BuildNetPol(settings Settings, lid mtypes.LeaseID, group *mani.Group) NetPol {
 	return &netPol{builder: builder{settings: settings, lid: lid, group: group}}
 }
 

@@ -612,7 +612,7 @@ func TestServiceStatusWithNoManifest(t *testing.T) {
 
 	deploymentsMock.On("Get", mock.Anything, serviceName, metav1.GetOptions{}).Return(&deployment, nil)
 
-	services := make([]manifest.Service, 2)
+	services := make(manifest.Services, 2)
 	services[0] = manifest.Service{
 		Name:      "someService",
 		Image:     "best/image",
@@ -686,7 +686,7 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 
 	deploymentsMock.On("Get", mock.Anything, serviceName, metav1.GetOptions{}).Return(&deployment, nil)
 
-	services := make([]manifest.Service, 2)
+	services := make(manifest.Services, 2)
 	services[0] = manifest.Service{
 		Name:      "someService",
 		Image:     "best/image",

@@ -1,4 +1,4 @@
-package v1beta2
+package v1beta3
 
 import (
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"

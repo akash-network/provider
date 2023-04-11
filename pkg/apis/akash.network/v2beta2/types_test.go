@@ -15,18 +15,16 @@ func Test_Manifest_encoding(t *testing.T) {
 	for _, spec := range mtestutil.Generators {
 		// ensure decode(encode(obj)) == obj
 
-		var (
-			lid  = atestutil.LeaseID(t)
-			mgrp = spec.Generator.Group(t)
-		)
+		lid := atestutil.LeaseID(t)
+		mgroup := spec.Generator.Group(t)
 
-		kmani, err := NewManifest("foo", lid, &mgrp)
+		kmani, err := NewManifest("foo", lid, &mgroup)
 		require.NoError(t, err, spec.Name)
 
 		deployment, err := kmani.Deployment()
 		require.NoError(t, err, spec.Name)
 
 		assert.Equal(t, lid, deployment.LeaseID(), spec.Name)
-		assert.Equal(t, mgrp, deployment.ManifestGroup(), spec.Name)
+		assert.Equal(t, mgroup, deployment.ManifestGroup(), spec.Name)
 	}
 }

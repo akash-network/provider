@@ -1,4 +1,4 @@
-package v1beta2
+package v1beta3
 
 import (
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"

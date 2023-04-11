@@ -5,12 +5,13 @@ import (
 	"context"
 	"io"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
-
 	eventsv1 "k8s.io/api/events/v1"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta1"
+	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta1"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta2"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta2"
 
@@ -55,6 +56,15 @@ type InventoryNodeMetric struct {
 	CPU              uint64 `json:"cpu"`
 	Memory           uint64 `json:"memory"`
 	StorageEphemeral uint64 `json:"storage_ephemeral"`
+}
+
+type Service struct {
+	maniv2beta1.Service `json:",inline"`
+}
+
+type Group struct {
+	Name     string
+	Services []Service
 }
 
 func (inv *InventoryMetricTotal) AddResources(res types.Resources) {
@@ -133,7 +143,7 @@ type Inventory interface {
 // Deployment interface defined with LeaseID and ManifestGroup methods
 type Deployment interface {
 	LeaseID() mtypes.LeaseID
-	ManifestGroup() manifest.Group
+	ManifestGroup() Group
 }
 
 // ServiceLog stores name, stream and scanner

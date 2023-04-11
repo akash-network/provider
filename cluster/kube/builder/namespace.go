@@ -1,10 +1,10 @@
 package builder
 
 import (
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
 
@@ -20,7 +20,7 @@ type ns struct {
 
 var _ NS = (*ns)(nil)
 
-func BuildNS(settings Settings, lid mtypes.LeaseID, group *manitypes.Group) NS {
+func BuildNS(settings Settings, lid mtypes.LeaseID, group *mani.Group) NS {
 	return &ns{builder: builder{settings: settings, lid: lid, group: group}}
 }
 

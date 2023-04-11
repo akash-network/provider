@@ -27,6 +27,10 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 		&ManifestList{},
 	)
 	scheme.AddKnownTypes(SchemeGroupVersion,
+		&LeaseParamsService{},
+		&LeaseParamsServiceList{})
+
+	scheme.AddKnownTypes(SchemeGroupVersion,
 		&InventoryRequest{},
 		&InventoryRequestList{},
 		&Inventory{},

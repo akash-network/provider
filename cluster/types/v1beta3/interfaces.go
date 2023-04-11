@@ -1,10 +1,11 @@
-package v1beta2
+package v1beta3
 
 import (
 	"context"
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
 
@@ -14,4 +15,8 @@ type HostnameServiceClient interface {
 	ReleaseHostnames(leaseID mtypes.LeaseID) error
 	CanReserveHostnames(hostnames []string, ownerAddr sdktypes.Address) error
 	PrepareHostnamesForTransfer(ctx context.Context, hostnames []string, leaseID mtypes.LeaseID) error
+}
+
+type MGroup interface {
+	ManifestGroup() mani.Group
 }
