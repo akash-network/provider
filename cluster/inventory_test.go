@@ -173,7 +173,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	deployment := &mocks.Deployment{}
 	deployment.On("LeaseID").Return(lid)
 
-	groupServices := make([]manifest.Service, 1)
+	groupServices := make(manifest.Services, 1)
 
 	serviceCount := testutil.RandRangeInt(1, 10)
 	serviceEndpoints := make([]types.Endpoint, serviceCount)

@@ -3,18 +3,18 @@ package kube
 import (
 	"context"
 
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 )
 
-func cleanupStaleResources(ctx context.Context, kc kubernetes.Interface, lid mtypes.LeaseID, group *manifest.Group) error {
+func cleanupStaleResources(ctx context.Context, kc kubernetes.Interface, lid mtypes.LeaseID, group *mani.Group) error {
 	ns := builder.LidNS(lid)
 
 	// build label selector for objects not in current manifest group

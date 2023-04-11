@@ -1,4 +1,4 @@
-package v1beta2
+package v1beta3
 
 import (
 	"bufio"
@@ -13,7 +13,6 @@ import (
 	"github.com/akash-network/node/sdl"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 )
 
@@ -136,14 +135,6 @@ type LeaseStatus struct {
 type Inventory interface {
 	Adjust(Reservation) error
 	Metrics() InventoryMetrics
-}
-
-// Deployment interface defined with LeaseID and ManifestGroup methods
-//
-//go:generate mockery --name Deployment --output ../../mocks
-type Deployment interface {
-	LeaseID() mtypes.LeaseID
-	ManifestGroup() manifest.Group
 }
 
 // ServiceLog stores name, stream and scanner

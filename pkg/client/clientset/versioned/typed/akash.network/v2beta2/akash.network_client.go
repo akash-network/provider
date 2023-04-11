@@ -30,6 +30,7 @@ type AkashV2beta2Interface interface {
 	RESTClient() rest.Interface
 	InventoriesGetter
 	InventoryRequestsGetter
+	LeaseParamsServicesGetter
 	ManifestsGetter
 	ProviderHostsGetter
 	ProviderLeasedIPsGetter
@@ -46,6 +47,10 @@ func (c *AkashV2beta2Client) Inventories() InventoryInterface {
 
 func (c *AkashV2beta2Client) InventoryRequests() InventoryRequestInterface {
 	return newInventoryRequests(c)
+}
+
+func (c *AkashV2beta2Client) LeaseParamsServices(namespace string) LeaseParamsServiceInterface {
+	return newLeaseParamsServices(c, namespace)
 }
 
 func (c *AkashV2beta2Client) Manifests(namespace string) ManifestInterface {

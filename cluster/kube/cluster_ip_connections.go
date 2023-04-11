@@ -18,7 +18,6 @@ import (
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	"github.com/akash-network/provider/cluster/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -134,7 +133,7 @@ func (c *client) PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 	return result
 }
 
-func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceEvent, error) {
+func (c *client) ObserveIPState(ctx context.Context) (<-chan ctypes.IPResourceEvent, error) {
 	var lastResourceVersion string
 	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		resources, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).List(ctx, opts)
@@ -184,7 +183,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceE
 			return nil, err
 		}
 
-		leaseID, err := v.Spec.LeaseID.ToAkash()
+		leaseID, err := v.Spec.LeaseID.FromCRD()
 		if err != nil {
 			return nil, err
 		}
@@ -210,7 +209,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceE
 
 	data = nil
 
-	output := make(chan v1beta2.IPResourceEvent)
+	output := make(chan ctypes.IPResourceEvent)
 
 	go func() {
 		defer close(output)
@@ -237,7 +236,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan v1beta2.IPResourceE
 					c.log.Error("invalid provider address in provider host", "addr", plip.Spec.LeaseID.Provider, "err", err)
 					continue // Ignore event
 				}
-				leaseID, err := plip.Spec.LeaseID.ToAkash()
+				leaseID, err := plip.Spec.LeaseID.FromCRD()
 				if err != nil {
 					c.log.Error("invalid lease ID", "err", err)
 					continue // Ignore event

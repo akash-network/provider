@@ -9,11 +9,12 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta1"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta2"
+	mtypesv1beta3 "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/types/v1beta2"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 )
 
@@ -57,19 +58,19 @@ func (m Manifest) Deployment() (ctypes.Deployment, error) {
 
 type deployment struct {
 	lid   mtypes.LeaseID
-	group maniv2beta1.Group
+	group ctypes.Group
 }
 
 func (d deployment) LeaseID() mtypes.LeaseID {
 	return d.lid
 }
 
-func (d deployment) ManifestGroup() maniv2beta1.Group {
+func (d deployment) ManifestGroup() ctypes.Group {
 	return d.group
 }
 
 // NewManifest creates new manifest with provided details. Returns error in case of failure.
-func NewManifest(ns string, lid mtypes.LeaseID, mgroup *maniv2beta1.Group) (*Manifest, error) {
+func NewManifest(ns string, lid mtypes.LeaseID, mgroup *ctypes.Group) (*Manifest, error) {
 	group, err := manifestGroupFromAkash(mgroup)
 	if err != nil {
 		return nil, err
@@ -81,7 +82,7 @@ func NewManifest(ns string, lid mtypes.LeaseID, mgroup *maniv2beta1.Group) (*Man
 			APIVersion: "akash.network/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterutil.LeaseIDToNamespace(lid),
+			Name:      clusterutil.LeaseIDToNamespace(mtypesv1beta3.LeaseID(lid)),
 			Namespace: ns,
 		},
 		Spec: ManifestSpec{
@@ -146,10 +147,10 @@ type ManifestGroup struct {
 }
 
 // ToAkash returns akash group details formatted from manifest group
-func (m ManifestGroup) toAkash() (maniv2beta1.Group, error) {
-	am := maniv2beta1.Group{
+func (m ManifestGroup) toAkash() (ctypes.Group, error) {
+	am := ctypes.Group{
 		Name:     m.Name,
-		Services: make([]maniv2beta1.Service, 0, len(m.Services)),
+		Services: make([]ctypes.Service, 0, len(m.Services)),
 	}
 
 	for _, svc := range m.Services {
@@ -164,7 +165,7 @@ func (m ManifestGroup) toAkash() (maniv2beta1.Group, error) {
 }
 
 // ManifestGroupFromAkash returns manifest group instance from akash group
-func manifestGroupFromAkash(m *maniv2beta1.Group) (ManifestGroup, error) {
+func manifestGroupFromAkash(m *ctypes.Group) (ManifestGroup, error) {
 	ma := ManifestGroup{
 		Name:     m.Name,
 		Services: make([]ManifestService, 0, len(m.Services)),
@@ -212,27 +213,29 @@ type ManifestService struct {
 	Params *ManifestServiceParams `json:"params,omitempty"`
 }
 
-func (ms ManifestService) toAkash() (maniv2beta1.Service, error) {
+func (ms ManifestService) toAkash() (ctypes.Service, error) {
 	res, err := ms.Resources.toAkash()
 	if err != nil {
-		return maniv2beta1.Service{}, err
+		return ctypes.Service{}, err
 	}
 
-	ams := &maniv2beta1.Service{
-		Name:      ms.Name,
-		Image:     ms.Image,
-		Command:   ms.Command,
-		Args:      ms.Args,
-		Env:       ms.Env,
-		Resources: res,
-		Count:     ms.Count,
-		Expose:    make([]maniv2beta1.ServiceExpose, 0, len(ms.Expose)),
+	ams := &ctypes.Service{
+		Service: maniv2beta1.Service{
+			Name:      ms.Name,
+			Image:     ms.Image,
+			Command:   ms.Command,
+			Args:      ms.Args,
+			Env:       ms.Env,
+			Resources: res,
+			Count:     ms.Count,
+			Expose:    make([]maniv2beta1.ServiceExpose, 0, len(ms.Expose)),
+		},
 	}
 
 	for _, expose := range ms.Expose {
 		value, err := expose.toAkash()
 		if err != nil {
-			return maniv2beta1.Service{}, err
+			return ctypes.Service{}, err
 		}
 		ams.Expose = append(ams.Expose, value)
 
@@ -261,7 +264,7 @@ func (ms ManifestService) toAkash() (maniv2beta1.Service, error) {
 	return *ams, nil
 }
 
-func manifestServiceFromAkash(ams maniv2beta1.Service) (ManifestService, error) {
+func manifestServiceFromAkash(ams ctypes.Service) (ManifestService, error) {
 	resources, err := resourceUnitsFromAkash(ams.Resources)
 	if err != nil {
 		return ManifestService{}, err

@@ -27,7 +27,6 @@ import (
 	"github.com/akash-network/provider/cluster"
 	clusterClient "github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/metallb"
-	"github.com/akash-network/provider/cluster/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -211,7 +210,7 @@ func (op *ipOperator) updateCounts(parentCtx context.Context) error {
 	return nil
 }
 
-func (op *ipOperator) recordEventError(ev v1beta2.IPResourceEvent, failure error) {
+func (op *ipOperator) recordEventError(ev ctypes.IPResourceEvent, failure error) {
 	// ff no error, no action
 	if failure == nil {
 		return
@@ -228,11 +227,11 @@ func (op *ipOperator) recordEventError(ev v1beta2.IPResourceEvent, failure error
 	op.flagIgnoredLeases()
 }
 
-func (op *ipOperator) applyEvent(ctx context.Context, ev v1beta2.IPResourceEvent) error {
+func (op *ipOperator) applyEvent(ctx context.Context, ev ctypes.IPResourceEvent) error {
 	op.log.Debug("apply event", "event-type", ev.GetEventType(), "lease", ev.GetLeaseID())
 	switch ev.GetEventType() {
 	case ctypes.ProviderResourceDelete:
-		// note that on delete the resource might be gone anyways because the namespace is deleted
+		// note that on delete the resource might be gone anyway because the namespace is deleted
 		return op.applyDeleteEvent(ctx, ev)
 	case ctypes.ProviderResourceAdd, ctypes.ProviderResourceUpdate:
 		if op.leasesIgnored.IsFlagged(ev.GetLeaseID()) {
@@ -247,7 +246,7 @@ func (op *ipOperator) applyEvent(ctx context.Context, ev v1beta2.IPResourceEvent
 	}
 }
 
-func (op *ipOperator) applyDeleteEvent(parentCtx context.Context, ev v1beta2.IPResourceEvent) error {
+func (op *ipOperator) applyDeleteEvent(parentCtx context.Context, ev ctypes.IPResourceEvent) error {
 	directive := buildIPDirective(ev)
 
 	// Delete events are a one-shot type thing. The operator always queries for existing CRDs but can't
@@ -267,7 +266,7 @@ func (op *ipOperator) applyDeleteEvent(parentCtx context.Context, ev v1beta2.IPR
 	return err
 }
 
-func buildIPDirective(ev v1beta2.IPResourceEvent) ctypes.ClusterIPPassthroughDirective {
+func buildIPDirective(ev ctypes.IPResourceEvent) ctypes.ClusterIPPassthroughDirective {
 	return ctypes.ClusterIPPassthroughDirective{
 		LeaseID:      ev.GetLeaseID(),
 		ServiceName:  ev.GetServiceName(),
@@ -283,7 +282,7 @@ func getStateKey(leaseID mtypes.LeaseID, sharingKey string, externalPort uint32)
 	return fmt.Sprintf("%v-%s-%d", leaseID.GetOwner(), sharingKey, externalPort)
 }
 
-func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev v1beta2.IPResourceEvent) error {
+func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev ctypes.IPResourceEvent) error {
 	leaseID := ev.GetLeaseID()
 
 	uid := getStateKey(ev.GetLeaseID(), ev.GetSharingKey(), ev.GetExternalPort())

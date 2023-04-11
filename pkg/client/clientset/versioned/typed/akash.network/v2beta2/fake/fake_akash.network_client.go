@@ -36,6 +36,10 @@ func (c *FakeAkashV2beta2) InventoryRequests() v2beta2.InventoryRequestInterface
 	return &FakeInventoryRequests{c}
 }
 
+func (c *FakeAkashV2beta2) LeaseParamsServices(namespace string) v2beta2.LeaseParamsServiceInterface {
+	return &FakeLeaseParamsServices{c, namespace}
+}
+
 func (c *FakeAkashV2beta2) Manifests(namespace string) v2beta2.ManifestInterface {
 	return &FakeManifests{c, namespace}
 }

@@ -14,17 +14,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	sdlutil "github.com/akash-network/node/sdl/util"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
-	manifest "github.com/akash-network/provider/manifest"
+	"github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/session"
 )
 
@@ -61,25 +61,25 @@ type deploymentManager struct {
 	state deploymentState
 
 	lease  mtypes.LeaseID
-	mgroup *maniv2beta2.Group
+	mgroup *mani.Group
 
 	monitor          *deploymentMonitor
 	wg               sync.WaitGroup
-	updatech         chan *maniv2beta2.Group
+	updatech         chan *mani.Group
 	teardownch       chan struct{}
 	currentHostnames map[string]struct{}
 
 	log             log.Logger
 	lc              lifecycle.Lifecycle
-	hostnameService clustertypes.HostnameServiceClient
+	hostnameService ctypes.HostnameServiceClient
 
 	config Config
 
 	serviceShuttingDown <-chan struct{}
 }
 
-func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *maniv2beta2.Group, isNewLease bool) *deploymentManager {
-	logger := s.log.With("cmp", "deployment-manager", "lease", lease, "manifest-group", mgroup.Name)
+func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *mani.Group, isNewLease bool) *deploymentManager {
+	logger := s.log.With("cmp", "deployment-manager", "lease", lease, "manifest-group", mgroup.GetName())
 
 	dm := &deploymentManager{
 		bus:                 s.bus,
@@ -89,7 +89,7 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *maniv2beta2.
 		lease:               lease,
 		mgroup:              mgroup,
 		wg:                  sync.WaitGroup{},
-		updatech:            make(chan *maniv2beta2.Group),
+		updatech:            make(chan *mani.Group),
 		teardownch:          make(chan struct{}),
 		log:                 logger,
 		lc:                  lifecycle.New(),
@@ -116,7 +116,7 @@ func newDeploymentManager(s *service, lease mtypes.LeaseID, mgroup *maniv2beta2.
 	return dm
 }
 
-func (dm *deploymentManager) update(mgroup *maniv2beta2.Group) error {
+func (dm *deploymentManager) update(mgroup *mani.Group) error {
 	select {
 	case dm.updatech <- mgroup:
 		return nil
@@ -319,7 +319,7 @@ func (dm *deploymentManager) startTeardown() <-chan error {
 }
 
 type serviceExposeWithServiceName struct {
-	expose maniv2beta2.ServiceExpose
+	expose mani.ServiceExpose
 	name   string
 }
 
@@ -394,7 +394,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	for _, hostname := range withheldHostnames {
 		blockedHostnames[hostname] = struct{}{}
 	}
-	hosts := make(map[string]maniv2beta2.ServiceExpose)
+	hosts := make(map[string]mani.ServiceExpose)
 	leasedIPs := make([]serviceExposeWithServiceName, 0)
 	hostToServiceName := make(map[string]string)
 
@@ -435,7 +435,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		// Check if the IP exists in the compute cluster but not in the presently used set of IPs
 		_, stillInUse := ipsInThisRequest[currentIP.SharingKey]
 		if !stillInUse {
-			proto, err := maniv2beta2.ParseServiceProtocol(currentIP.Protocol)
+			proto, err := mani.ParseServiceProtocol(currentIP.Protocol)
 			if err != nil {
 				return withheldHostnames, nil, err
 			}

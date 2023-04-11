@@ -57,8 +57,6 @@ replace (
 	github.com/zondax/hid => github.com/troian/hid v0.13.2
 
 	github.com/zondax/ledger-go => github.com/akash-network/ledger-go v0.14.3
-
-//google.golang.org/grpc => google.golang.org/grpc v1.33.2
 )
 
 require (
