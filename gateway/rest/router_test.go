@@ -604,7 +604,7 @@ func mockManifestGroupsForRouterTest(rt *routerTest, leaseID mtypes.LeaseID) {
 			Resources: v2beta2.ResourceUnits{
 				CPU:    1000,
 				Memory: "3333",
-				Storage: []v2beta2.ManifestServiceStorage{{
+				Storage: []v2beta2.ResourceUnitsStorage{{
 					Name: "",
 					Size: "4444",
 				}},

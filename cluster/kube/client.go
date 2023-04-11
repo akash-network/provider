@@ -20,7 +20,7 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/sdl"
@@ -168,7 +168,7 @@ func (c *client) Deployments(ctx context.Context) ([]ctypes.Deployment, error) {
 	return deployments, nil
 }
 
-func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *manifest.Group) error {
+func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *mapi.Group) error {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
 		return kubeclienterrors.ErrNotConfiguredWithSettings
@@ -193,6 +193,23 @@ func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *manifest
 		return err
 	}
 
+	params := make(crd.ParamsServices, 0, len(group.Services))
+
+	for _, svc := range group.Services {
+		sParams := crd.ParamsService{}
+
+		if svc.Resources.GPU.Units.Value() > 0 {
+			sParams.Params.RuntimeClass = "nvidia"
+		}
+
+		params = append(params, sParams)
+	}
+
+	if err := applyServicesParams(ctx, c.ac, builder.BuildParamsLeases(c.log, settings, c.ns, lid, params)); err != nil {
+		c.log.Error("applying manifest", "err", err, "lease", lid)
+		return err
+	}
+
 	if err := cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
 		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
 		return err
@@ -210,12 +227,12 @@ func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *manifest
 		}
 
 		if persistent {
-			if err := applyStatefulSet(ctx, c.kc, builder.BuildStatefulSet(c.log, settings, lid, group, service)); err != nil {
+			if err := applyStatefulSet(ctx, c.kc, builder.BuildStatefulSet(c.log, settings, lid, group, params, svcIdx)); err != nil {
 				c.log.Error("applying statefulSet", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
 		} else {
-			if err := applyDeployment(ctx, c.kc, builder.NewDeployment(c.log, settings, lid, group, service)); err != nil {
+			if err := applyDeployment(ctx, c.kc, builder.NewDeployment(c.log, settings, lid, group, params, svcIdx)); err != nil {
 				c.log.Error("applying deployment", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
@@ -226,7 +243,7 @@ func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *manifest
 			continue
 		}
 
-		serviceBuilderLocal := builder.BuildService(c.log, settings, lid, group, service, false)
+		serviceBuilderLocal := builder.BuildService(c.log, settings, lid, group, svcIdx, false)
 		if serviceBuilderLocal.Any() {
 			if err := applyService(ctx, c.kc, serviceBuilderLocal); err != nil {
 				c.log.Error("applying local service", "err", err, "lease", lid, "service", service.Name)
@@ -234,7 +251,7 @@ func (c *client) Deploy(ctx context.Context, lid mtypes.LeaseID, group *manifest
 			}
 		}
 
-		serviceBuilderGlobal := builder.BuildService(c.log, settings, lid, group, service, true)
+		serviceBuilderGlobal := builder.BuildService(c.log, settings, lid, group, svcIdx, true)
 		if serviceBuilderGlobal.Any() {
 			if err := applyService(ctx, c.kc, serviceBuilderGlobal); err != nil {
 				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
@@ -449,9 +466,9 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 						isValid := true
 						switch port.Protocol {
 						case corev1.ProtocolTCP:
-							v.Proto = manifest.TCP
+							v.Proto = mapi.TCP
 						case corev1.ProtocolUDP:
-							v.Proto = manifest.UDP
+							v.Proto = mapi.UDP
 						default:
 							isValid = false // Skip this, since the Protocol is set to something not supported by Akash
 						}
@@ -468,7 +485,7 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 	return forwardedPorts, nil
 }
 
-// todo: limit number of results and do pagination / streaming
+// LeaseStatus todo: limit number of results and do pagination / streaming
 func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error) {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
@@ -604,11 +621,11 @@ exposeCheckLoop:
 			found = true
 			for _, expose := range service.Expose {
 
-				proto, err := manifest.ParseServiceProtocol(expose.Proto)
+				proto, err := mapi.ParseServiceProtocol(expose.Proto)
 				if err != nil {
 					return nil, err
 				}
-				mse := manifest.ServiceExpose{
+				mse := mapi.ServiceExpose{
 					Port:         uint32(expose.Port),
 					ExternalPort: uint32(expose.ExternalPort),
 					Proto:        proto,

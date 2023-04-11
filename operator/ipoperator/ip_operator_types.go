@@ -8,7 +8,7 @@ import (
 	"github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
-	"github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 /*
@@ -18,7 +18,7 @@ import (
 type managedIP struct {
 	presentLease        mtypes.LeaseID
 	presentServiceName  string
-	lastEvent           v1beta2.IPResourceEvent
+	lastEvent           ctypes.IPResourceEvent
 	presentSharingKey   string
 	presentExternalPort uint32
 	presentPort         uint32

@@ -1,9 +1,9 @@
 package builder
 
 import (
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/tendermint/tendermint/libs/log"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -25,7 +25,7 @@ type manifest struct {
 
 var _ Manifest = (*manifest)(nil)
 
-func BuildManifest(log log.Logger, settings Settings, ns string, lid mtypes.LeaseID, group *manitypes.Group) Manifest {
+func BuildManifest(log log.Logger, settings Settings, ns string, lid mtypes.LeaseID, group *mani.Group) Manifest {
 	return &manifest{
 		builder: builder{
 			log:      log.With("module", "kube-builder"),
@@ -42,7 +42,6 @@ func (b *manifest) labels() map[string]string {
 }
 
 func (b *manifest) Create() (*crd.Manifest, error) {
-
 	obj, err := crd.NewManifest(b.mns, b.lid, b.group)
 
 	if err != nil {

@@ -65,13 +65,17 @@ func TestLidNsSanity(t *testing.T) {
 
 func TestGlobalServiceBuilder(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{}
-	service := &manitypes.Service{
-		Name: "myservice",
+	group := &manitypes.Group{
+		Services: manitypes.Services{
+			manitypes.Service{
+				Name: "myservice",
+			},
+		},
 	}
+
 	mySettings := NewDefaultSettings()
 	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, service, true)
+	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, true)
 	require.NotNil(t, serviceBuilder)
 	// Should have name ending with suffix
 	require.Equal(t, "myservice-np", serviceBuilder.Name())
@@ -81,13 +85,16 @@ func TestGlobalServiceBuilder(t *testing.T) {
 
 func TestLocalServiceBuilder(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{}
-	service := &manitypes.Service{
-		Name: "myservice",
+	group := &manitypes.Group{
+		Services: manitypes.Services{
+			manitypes.Service{
+				Name: "myservice",
+			},
+		},
 	}
 	mySettings := NewDefaultSettings()
 	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, service, false)
+	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, false)
 	require.NotNil(t, serviceBuilder)
 	// Should have name verbatim
 	require.Equal(t, "myservice", serviceBuilder.Name())
@@ -97,16 +104,20 @@ func TestLocalServiceBuilder(t *testing.T) {
 
 func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{}
 	exposesServices := make([]manitypes.ServiceExpose, 1)
 	exposesServices[0].Global = false
-	service := &manitypes.Service{
-		Name:   "myservice",
-		Expose: exposesServices,
+	group := &manitypes.Group{
+		Services: manitypes.Services{
+			manitypes.Service{
+				Name:   "myservice",
+				Expose: exposesServices,
+			},
+		},
 	}
+
 	mySettings := NewDefaultSettings()
 	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, service, true)
+	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, true)
 
 	// Should not have any work to do
 	require.False(t, serviceBuilder.Any())
@@ -114,7 +125,6 @@ func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 
 func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{}
 	exposesServices := make([]manitypes.ServiceExpose, 2)
 	exposesServices[0] = manitypes.ServiceExpose{
 		Global:       true,
@@ -128,13 +138,18 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 		Port:         2000,
 		ExternalPort: 2001,
 	}
-	service := &manitypes.Service{
-		Name:   "myservice",
-		Expose: exposesServices,
+	group := &manitypes.Group{
+		Services: manitypes.Services{
+			manitypes.Service{
+				Name:   "myservice",
+				Expose: exposesServices,
+			},
+		},
 	}
+
 	mySettings := NewDefaultSettings()
 	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, service, true)
+	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, true)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())
@@ -151,16 +166,21 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 
 func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{}
 	exposesServices := make([]manitypes.ServiceExpose, 1)
 	exposesServices[0].Global = true
-	service := &manitypes.Service{
-		Name:   "myservice",
-		Expose: exposesServices,
+
+	group := &manitypes.Group{
+		Services: manitypes.Services{
+			manitypes.Service{
+				Name:   "myservice",
+				Expose: exposesServices,
+			},
+		},
 	}
+
 	mySettings := NewDefaultSettings()
 	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, service, false)
+	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, false)
 
 	// Should have work to do
 	require.False(t, serviceBuilder.Any())
@@ -168,7 +188,6 @@ func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 
 func TestLocalServiceBuilderWithLocalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{}
 	exposesServices := make([]manitypes.ServiceExpose, 2)
 	exposesServices[0] = manitypes.ServiceExpose{
 		Global:       true,
@@ -182,13 +201,18 @@ func TestLocalServiceBuilderWithLocalServices(t *testing.T) {
 		Port:         2000,
 		ExternalPort: 2001,
 	}
-	service := &manitypes.Service{
-		Name:   "myservice",
-		Expose: exposesServices,
+	group := &manitypes.Group{
+		Services: manitypes.Services{
+			manitypes.Service{
+				Name:   "myservice",
+				Expose: exposesServices,
+			},
+		},
 	}
+
 	mySettings := NewDefaultSettings()
 	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, service, false)
+	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, false)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())

@@ -47,6 +47,7 @@ func TestNewClient(t *testing.T) {
 	// create lease
 	lid := atestutil.LeaseID(t)
 	group := mtestutil.AppManifestGenerator.Group(t)
+
 	ns := builder.LidNS(lid)
 
 	settings := builder.Settings{

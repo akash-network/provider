@@ -26,10 +26,6 @@ const (
 	inventoryOperatorQueryTimeout = 5 * time.Second
 )
 
-const (
-	resourceNvidiaGPU = "nvidia.com/gpu"
-)
-
 type node struct {
 	id               string
 	arch             string
@@ -378,7 +374,7 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 
 		// Create an entry with the allocatable amount for the node
 		cpu := knode.Status.Allocatable.Cpu().DeepCopy()
-		gpu := knode.Status.Allocatable.Name(resourceNvidiaGPU, resource.DecimalSI).DeepCopy()
+		gpu := knode.Status.Allocatable.Name(builder.ResourceNvidiaGPU, resource.DecimalSI).DeepCopy()
 		memory := knode.Status.Allocatable.Memory().DeepCopy()
 		storage := knode.Status.Allocatable.StorageEphemeral().DeepCopy()
 		entry := &node{
@@ -456,7 +452,7 @@ func (nd *node) addAllocatedResources(rl corev1.ResourceList) {
 			nd.memory.allocated.Add(quantity)
 		case corev1.ResourceEphemeralStorage:
 			nd.ephemeralStorage.allocated.Add(quantity)
-		case resourceNvidiaGPU:
+		case builder.ResourceNvidiaGPU:
 			nd.gpu.allocated.Add(quantity)
 		}
 	}

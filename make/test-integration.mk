@@ -16,7 +16,7 @@ INTEGRATION_VARS := TEST_INTEGRATION=true
 test-e2e-integration:
 	# Assumes cluster created and configured:
 	# ```
-	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kind-cluster-setup-e2e
+	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e
 	# ```
 	$(KIND_VARS) $(INTEGRATION_VARS) go test -count=1 -mod=readonly -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 1500s
 
@@ -32,7 +32,7 @@ test-query-app:
 test-k8s-integration:
 	# Assumes cluster created and configured:
 	# ```
-	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kind-cluster-setup-e2e
+	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e
 	# ```
 	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./pkg/apis/akash.network/v2beta2
 	go test -count=1 -v -tags "$(BUILD_TAGS_K8S_INTEGRATION)" ./cluster/kube

@@ -1,20 +1,19 @@
 package builder
 
-// nolint:deadcode,golint
-
 import (
 	"fmt"
 	"strconv"
 
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	manifesttypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	clusterUtil "github.com/akash-network/provider/cluster/util"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
@@ -23,16 +22,15 @@ const (
 	AkashNetworkStorageClasses    = "akash.network/storageclasses"
 	AkashServiceTarget            = "akash.network/service-target"
 	AkashMetalLB                  = "metal-lb"
+	akashDeploymentPolicyName     = "akash-deployment-restrictions"
 
-	akashNetworkNamespace = "akash.network/namespace"
-
+	akashNetworkNamespace       = "akash.network/namespace"
 	AkashLeaseOwnerLabelName    = "akash.network/lease.id.owner"
 	AkashLeaseDSeqLabelName     = "akash.network/lease.id.dseq"
 	AkashLeaseGSeqLabelName     = "akash.network/lease.id.gseq"
 	AkashLeaseOSeqLabelName     = "akash.network/lease.id.oseq"
 	AkashLeaseProviderLabelName = "akash.network/lease.id.provider"
 	AkashLeaseManifestVersion   = "akash.network/manifest.version"
-	akashDeploymentPolicyName   = "akash-deployment-restrictions"
 )
 
 const (
@@ -65,7 +63,8 @@ type builder struct {
 	log      log.Logger
 	settings Settings
 	lid      mtypes.LeaseID
-	group    *manifesttypes.Group
+	group    *mani.Group
+	sparams  crd.ParamsServices
 }
 
 var _ builderBase = (*builder)(nil)

@@ -8,6 +8,8 @@ import (
 	"github.com/akash-network/node/testutil"
 
 	"github.com/stretchr/testify/require"
+
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 func TestDeploySetsEnvironmentVariables(t *testing.T) {
@@ -22,8 +24,11 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 
 	mani, err := sdl.Manifest()
 	require.NoError(t, err)
-	service := mani.GetGroups()[0].Services[0]
-	deploymentBuilder := NewDeployment(log, settings, lid, &mani.GetGroups()[0], &service)
+
+	sparams := make(crd.ParamsServices, len(mani.GetGroups()[0].Services))
+
+	deploymentBuilder := NewDeployment(log, settings, lid, &mani.GetGroups()[0], sparams, 0)
+
 	require.NotNil(t, deploymentBuilder)
 
 	dbuilder := deploymentBuilder.(*deployment)

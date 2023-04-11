@@ -3,7 +3,7 @@ package event
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 )
@@ -19,13 +19,13 @@ type LeaseWon struct {
 // to be provisioned by the Provider.
 type ManifestReceived struct {
 	LeaseID    mtypes.LeaseID
-	Manifest   *maniv2beta1.Manifest
+	Manifest   *mani.Manifest
 	Deployment *dtypes.QueryDeploymentResponse
 	Group      *dtypes.Group
 }
 
 // ManifestGroup returns group if present in manifest or nil
-func (ev ManifestReceived) ManifestGroup() *maniv2beta1.Group {
+func (ev ManifestReceived) ManifestGroup() *mani.Group {
 	for _, mgroup := range *ev.Manifest {
 		if mgroup.Name == ev.Group.GroupSpec.Name {
 			mgroup := mgroup
@@ -50,7 +50,7 @@ const (
 // ClusterDeployment stores leaseID, group details and deployment status
 type ClusterDeployment struct {
 	LeaseID mtypes.LeaseID
-	Group   *maniv2beta1.Group
+	Group   *mani.Group
 	Status  ClusterDeploymentStatus
 }
 

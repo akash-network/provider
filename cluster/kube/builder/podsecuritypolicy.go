@@ -1,12 +1,14 @@
 package builder
 
 import (
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/api/policy/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 type PspRestricted interface {
@@ -20,8 +22,19 @@ type pspRestricted struct {
 	builder
 }
 
-func BuildPSP(settings Settings, lid mtypes.LeaseID, group *manitypes.Group) PspRestricted { // nolint:golint,unparam
-	return &pspRestricted{builder: builder{settings: settings, lid: lid, group: group}}
+func BuildPSP(
+	settings Settings,
+	lid mtypes.LeaseID,
+	group *mani.Group,
+	sparams crd.ParamsServices) PspRestricted { // nolint:golint,unparam
+	return &pspRestricted{
+		builder: builder{
+			settings: settings,
+			lid:      lid,
+			group:    group,
+			sparams:  sparams,
+		},
+	}
 }
 
 func (p *pspRestricted) Name() string {
