@@ -82,7 +82,7 @@ type Client interface {
 		tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error)
 
 	// ConnectHostnameToDeployment Connect a given hostname to a deployment
-	ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective) error
+	ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective, tlsEnabled bool) error
 	// RemoveHostnameFromDeployment Remove a given hostname from a deployment
 	RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error
 
@@ -415,7 +415,7 @@ func (c *nullClient) GetHostnameDeploymentConnections(_ context.Context) ([]ctyp
 	return nil, errNotImplemented
 }
 
-func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ ctypes.ConnectHostnameToDeploymentDirective) error {
+func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ ctypes.ConnectHostnameToDeploymentDirective, _ bool) error {
 	return errNotImplemented
 }
 
