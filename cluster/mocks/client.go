@@ -90,7 +90,7 @@ func (_c *Client_AllHostnames_Call) RunAndReturn(run func(context.Context) ([]v1
 }
 
 // ConnectHostnameToDeployment provides a mock function with given fields: ctx, directive
-func (_m *Client) ConnectHostnameToDeployment(ctx context.Context, directive v1beta3.ConnectHostnameToDeploymentDirective) error {
+func (_m *Client) ConnectHostnameToDeployment(ctx context.Context, directive v1beta3.ConnectHostnameToDeploymentDirective, tlsEnabled bool) error {
 	ret := _m.Called(ctx, directive)
 
 	var r0 error
