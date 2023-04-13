@@ -47,6 +47,8 @@ type hostnameOperator struct {
 
 	flagHostnamesData  operatorcommon.PrepareFlagFn
 	flagIgnoreListData operatorcommon.PrepareFlagFn
+
+	env map[string]string
 }
 
 func (op *hostnameOperator) run(parentCtx context.Context) error {
@@ -389,7 +391,7 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev ctypes
 		if shouldConnect {
 			op.log.Debug("Updating ingress")
 			// Update or create the existing ingress
-			err = op.client.ConnectHostnameToDeployment(ctx, directive)
+			err = op.client.ConnectHostnameToDeployment(ctx, directive, op.env["AKASH_SSL_ENABLED"] != "")
 		}
 	} else {
 		op.log.Debug("Swapping ingress to new deployment")
@@ -398,7 +400,7 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev ctypes
 		if err == nil {
 			// Remove the current entry, if the next action succeeds then it gets inserted below
 			delete(op.hostnames, ev.GetHostname())
-			err = op.client.ConnectHostnameToDeployment(ctx, directive)
+			err = op.client.ConnectHostnameToDeployment(ctx, directive, op.env["AKASH_SSL_ENABLED"] != "")
 		}
 	}
 
@@ -427,6 +429,7 @@ func newHostnameOperator(logger log.Logger, client cluster.Client, config operat
 		cfg:           config,
 		server:        opHTTP,
 		leasesIgnored: operatorcommon.NewIgnoreList(ilc),
+		env:           clusterutil.EnvironmentVariablesToMap(),
 	}
 
 	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)

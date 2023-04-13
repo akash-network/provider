@@ -80,7 +80,7 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 	return result
 }
 
-func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective) error {
+func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective, tlsEnabled bool) error {
 	ingressName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)
@@ -92,6 +92,16 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctyp
 	labels[builder.AkashManagedLabelName] = "true"
 	builder.AppendLeaseLabels(directive.LeaseID, labels)
 
+	var tls []netv1.IngressTLS
+	if tlsEnabled {
+		tls = []netv1.IngressTLS{
+			{
+				Hosts:      []string{directive.Hostname},
+				SecretName: fmt.Sprintf("%s-tls", ingressName),
+			},
+		}
+	}
+
 	ingressClassName := akashIngressClassName
 	obj := &netv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
@@ -102,12 +112,7 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctyp
 		Spec: netv1.IngressSpec{
 			IngressClassName: &ingressClassName,
 			Rules:            rules,
-			TLS: []netv1.IngressTLS{
-				{
-					Hosts:      []string{directive.Hostname},
-					SecretName: fmt.Sprintf("%s-tls", ingressName),
-				},
-			},
+			TLS:              tls,
 		},
 	}
 
