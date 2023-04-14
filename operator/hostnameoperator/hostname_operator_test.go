@@ -424,7 +424,7 @@ func TestHostnameOperatorApplyAdd(t *testing.T) {
 	}
 	s.client.On("GetManifestGroup", mock.Anything, leaseID).Return(true, mg, nil)
 	directive := buildDirective(ev, serviceExpose) // result tested in other unit tests
-	s.client.On("ConnectHostnameToDeployment", mock.Anything, directive).Return(nil)
+	s.client.On("ConnectHostnameToDeployment", mock.Anything, directive, mock.Anything).Return(nil)
 
 	managed := grabManagedHostnames(t, s.op.server.GetRouter().ServeHTTP)
 	require.Empty(t, managed)
@@ -511,7 +511,7 @@ func TestHostnameOperatorApplyAddMultipleServices(t *testing.T) {
 	}
 	s.client.On("GetManifestGroup", mock.Anything, leaseID).Return(true, mg, nil)
 	directive := buildDirective(ev, serviceExpose) // result tested in other unit tests
-	s.client.On("ConnectHostnameToDeployment", mock.Anything, directive).Return(nil)
+	s.client.On("ConnectHostnameToDeployment", mock.Anything, directive, mock.Anything).Return(nil)
 
 	err := s.op.applyEvent(s.ctx, ev)
 	require.NoError(t, err)
@@ -596,9 +596,9 @@ func TestHostnameOperatorApplyUpdate(t *testing.T) {
 	s.client.On("GetManifestGroup", mock.Anything, secondLeaseID).Return(true, mg2, nil)
 
 	directive := buildDirective(ev, serviceExpose) // result tested in other unit tests
-	s.client.On("ConnectHostnameToDeployment", mock.Anything, directive).Return(nil)
+	s.client.On("ConnectHostnameToDeployment", mock.Anything, directive, mock.Anything).Return(nil)
 	secondDirective := buildDirective(secondEv, secondServiceExpose) // result tested in other unit tests
-	s.client.On("ConnectHostnameToDeployment", mock.Anything, secondDirective).Return(nil)
+	s.client.On("ConnectHostnameToDeployment", mock.Anything, secondDirective, mock.Anything).Return(nil)
 
 	s.client.On("RemoveHostnameFromDeployment", mock.Anything, hostname, leaseID, false).Return(nil)
 
