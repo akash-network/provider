@@ -24,13 +24,13 @@ import (
 
 const (
 	akashIngressClassName = "akash-ingress-class"
+	root                  = "nginx.ingress.kubernetes.io"
+	certManager           = "cert-manager.io"
 )
 
-func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDirective, env map[string]string) map[string]string {
+func (c *client) kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDirective) map[string]string {
 	// For kubernetes/ingress-nginx
 	// https://github.com/kubernetes/ingress-nginx
-	const root = "nginx.ingress.kubernetes.io"
-	const certManager = "cert-manager.io"
 
 	readTimeout := math.Ceil(float64(directive.ReadTimeout) / 1000.0)
 	sendTimeout := math.Ceil(float64(directive.SendTimeout) / 1000.0)
@@ -67,12 +67,12 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 		}
 	}
 
-	switch env["AKASH_PROVIDER_ISSUER_TYPE"] {
+	switch c.env["AKASH_PROVIDER_ISSUER_TYPE"] {
 	case "cluster-issuer":
-		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = env["AKASH_PROVIDER_ISSUER_NAME"]
+		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = c.env["AKASH_PROVIDER_ISSUER_NAME"]
 		break
 	case "issuer":
-		result[fmt.Sprintf("%s/issuer", certManager)] = env["AKASH_PROVIDER_ISSUER_NAME"]
+		result[fmt.Sprintf("%s/issuer", certManager)] = c.env["AKASH_PROVIDER_ISSUER_NAME"]
 		break
 	}
 
@@ -107,7 +107,7 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctyp
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        ingressName,
 			Labels:      labels,
-			Annotations: kubeNginxIngressAnnotations(directive, c.env),
+			Annotations: c.kubeNginxIngressAnnotations(directive),
 		},
 		Spec: netv1.IngressSpec{
 			IngressClassName: &ingressClassName,
