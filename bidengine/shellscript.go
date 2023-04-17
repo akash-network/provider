@@ -161,8 +161,11 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	stderrBuf := &bytes.Buffer{}
 	cmd.Stderr = stderrBuf
 
+	denom := req.GSpec.Price().Denom
+
 	subprocEnv := os.Environ()
 	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", req.Owner))
+	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_DENOM=%s", denom))
 	cmd.Env = subprocEnv
 
 	err = cmd.Run()
