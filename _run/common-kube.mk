@@ -9,11 +9,6 @@ KUBE_UPLOAD_AKASH_IMAGE    ?= false
 KUBE_CLUSTER_CREATE_TARGET ?= default
 KUBE_ROLLOUT_TIMEOUT       ?= 90
 
-# certain targets need to use bash
-# detect where bash is installed
-# use akash-node-ready target as example
-BASH_PATH                 := $(shell which bash)
-
 INGRESS_CONFIG_PATH       ?= ../ingress-nginx.yaml
 CALICO_MANIFEST           ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
 

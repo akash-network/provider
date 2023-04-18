@@ -6,11 +6,21 @@ ifeq ($(OS),Windows_NT)
 $(error "Windows is not supported as build host")
 endif
 
+# certain targets need to use bash
+# detect where bash is installed
+# use akash-node-ready target as example
+BASH_PATH := $(shell which bash)
+
 # expecting GNU make >= 4.0. so comparing major version only
 MAKE_MAJOR_VERSION := $(shell echo $(MAKE_VERSION) | cut -d "." -f1)
-
 ifneq (true, $(shell [ $(MAKE_MAJOR_VERSION) -ge 4 ] && echo true))
 $(error "make version is outdated. min required 4.0")
+endif
+
+# expecting BASH >= 4.x. so comparing major version only
+BASH_MAJOR_VERSION := $(shell $(BASH_PATH) -c 'echo $$BASH_VERSINFO')
+ifneq (true, $(shell [ $(BASH_MAJOR_VERSION) -ge 4 ] && echo true))
+$(error "bash version $(shell $(BASH_PATH) -c 'echo $$BASH_VERSION') is outdated. min required 4.0")
 endif
 
 # AP_ROOT may not be set if environment does not support/use direnv
@@ -24,7 +34,7 @@ ifndef AP_ROOT
 	AKASH               ?= $(AP_DEVCACHE_BIN)/akash
 
 	# setup .cache bins first in paths to have precedence over already installed same tools for system wide use
-	PATH         := $(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)
+	PATH                := $(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)
 endif
 
 -include $(AP_ROOT)/.devenv
