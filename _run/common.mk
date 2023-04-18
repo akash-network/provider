@@ -8,10 +8,6 @@ comma := ,
 
 SKIP_BUILD  ?= false
 
-ifndef AKASH_HOME
-$(error AKASH_HOME is not set)
-endif
-
 export AKASH_KEYRING_BACKEND    = test
 export AKASH_GAS_ADJUSTMENT     = 2
 export AKASH_CHAIN_ID           = local
