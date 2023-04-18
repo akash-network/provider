@@ -67,12 +67,12 @@ func (c *client) kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToD
 		}
 	}
 
-	switch c.env["AKASH_PROVIDER_ISSUER_TYPE"] {
-	case "cluster-issuer":
-		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = c.env["AKASH_PROVIDER_ISSUER_NAME"]
+	switch c.cfg.issuerType {
+	case clusterIssuer:
+		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = c.cfg.issuerName
 		break
-	case "issuer":
-		result[fmt.Sprintf("%s/issuer", certManager)] = c.env["AKASH_PROVIDER_ISSUER_NAME"]
+	case issuer:
+		result[fmt.Sprintf("%s/issuer", certManager)] = c.cfg.issuerName
 		break
 	}
 
