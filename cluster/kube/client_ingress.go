@@ -67,12 +67,12 @@ func (c *client) kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToD
 		}
 	}
 
-	switch c.cfg.issuerType {
+	switch c.cfg.ssl.issuerType {
 	case clusterIssuer:
-		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = c.cfg.issuerName
+		result[fmt.Sprintf("%s/cluster-issuer", certManager)] = c.cfg.ssl.issuerName
 		break
 	case issuer:
-		result[fmt.Sprintf("%s/issuer", certManager)] = c.cfg.issuerName
+		result[fmt.Sprintf("%s/issuer", certManager)] = c.cfg.ssl.issuerName
 		break
 	}
 
