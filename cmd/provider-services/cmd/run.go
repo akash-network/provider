@@ -94,9 +94,6 @@ const (
 	FlagBidPriceIPScale                  = "bid-price-ip-scale"
 	FlagEnableIPOperator                 = "ip-operator"
 	FlagTxBroadcastTimeout               = "tx-broadcast-timeout"
-	FlagSslEnabled                       = "ssl"
-	FlagSslIssuerType                    = "ssl-issuer-type"
-	FlagSslIssuerName                    = "ssl-issuer-name"
 )
 
 const (
@@ -353,8 +350,8 @@ func RunCmd() *cobra.Command {
 		return nil
 	}
 
-	cmd.Flags().Bool(FlagSslEnabled, false, "enable issuing of SSL certificates on the provider's ingress controller. defaults to false")
-	if err := viper.BindPFlag(FlagSslEnabled, cmd.Flags().Lookup(FlagSslEnabled)); err != nil {
+	cmd.Flags().Bool(providerflags.FlagSslEnabled, false, "enable issuing of SSL certificates on the provider's ingress controller. defaults to false")
+	if err := viper.BindPFlag(providerflags.FlagSslEnabled, cmd.Flags().Lookup(providerflags.FlagSslEnabled)); err != nil {
 		return nil
 	}
 
@@ -770,10 +767,10 @@ func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command, 
 	}
 
 	var sslCfg kube.Ssl
-	if viper.GetBool(FlagSslEnabled) {
+	if viper.GetBool(providerflags.FlagSslEnabled) {
 		sslCfg = kube.Ssl{
-			IssuerName: viper.GetString(FlagSslIssuerName),
-			IssuerType: viper.GetString(FlagSslIssuerType),
+			IssuerName: viper.GetString(providerflags.FlagSslIssuerName),
+			IssuerType: viper.GetString(providerflags.FlagSslIssuerType),
 		}
 	}
 	ccfg := kube.ClientConfig{Ssl: sslCfg}

@@ -9,5 +9,8 @@ const (
 	FlagWebRefreshInterval = "web-refresh-interval"
 	FlagRetryDelay         = "retry-delay"
 
-	FlagKubeConfig = "kubeconfig"
+	FlagKubeConfig    = "kubeconfig"
+	FlagSslEnabled    = "ssl"
+	FlagSslIssuerType = "ssl-issuer-type"
+	FlagSslIssuerName = "ssl-issuer-name"
 )
