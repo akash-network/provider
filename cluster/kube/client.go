@@ -56,7 +56,7 @@ type client struct {
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
-	cfg               clientConfig
+	cfg               ClientConfig
 }
 
 func (c *client) String() string {
@@ -65,7 +65,7 @@ func (c *client) String() string {
 
 // NewClient returns new Kubernetes Client instance with provided logger, host and ns. Returns error in-case of failure
 // configPath may be the empty string
-func NewClient(ctx context.Context, log log.Logger, ns string, configPath string) (Client, error) {
+func NewClient(ctx context.Context, log log.Logger, ns string, configPath string, ccfg ClientConfig) (Client, error) {
 	config, err := clientcommon.OpenKubeConfig(configPath, log)
 	if err != nil {
 		return nil, errors.Wrap(err, "kube: error building config flags")
@@ -92,11 +92,6 @@ func NewClient(ctx context.Context, log log.Logger, ns string, configPath string
 		return nil, errors.Wrap(err, "kube: error creating metrics client")
 	}
 
-	ccfg, err := configFromEnv()
-	if err != nil {
-		return nil, errors.Wrap(err, "kube: error creating client configuration")
-	}
-
 	return &client{
 		kc:                kc,
 		ac:                mc,
@@ -104,7 +99,7 @@ func NewClient(ctx context.Context, log log.Logger, ns string, configPath string
 		ns:                ns,
 		log:               log.With("client", "kube"),
 		kubeContentConfig: config,
-		cfg:               *ccfg,
+		cfg:               ccfg,
 	}, nil
 }
 

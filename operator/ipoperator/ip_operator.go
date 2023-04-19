@@ -579,13 +579,13 @@ func doIPOperator(cmd *cobra.Command) error {
 	poolName := viper.GetString(flagMetalLbPoolName)
 	logger := operatorcommon.OpenLogger().With("operator", "ip")
 
-	opcfg := operatorcommon.GetOperatorConfigFromViper()
-	_, err := sdk.AccAddressFromBech32(opcfg.ProviderAddress)
+	config := operatorcommon.GetOperatorConfigFromViper()
+	_, err := sdk.AccAddressFromBech32(config.ProviderAddress)
 	if err != nil {
 		return fmt.Errorf("%w: provider address must valid bech32", err)
 	}
 
-	client, err := clusterClient.NewClient(cmd.Context(), logger, ns, configPath)
+	client, err := clusterClient.NewClient(cmd.Context(), logger, ns, configPath, config.ClientConfig)
 	if err != nil {
 		return err
 	}
@@ -603,7 +603,7 @@ func doIPOperator(cmd *cobra.Command) error {
 	logger.Info("clients", "kube", client, "metallb", mllbc)
 	logger.Info("HTTP listening", "address", listenAddr)
 
-	op, err := newIPOperator(logger, client, opcfg, operatorcommon.IgnoreListConfigFromViper(), mllbc)
+	op, err := newIPOperator(logger, client, config, operatorcommon.IgnoreListConfigFromViper(), mllbc)
 	if err != nil {
 		return err
 	}

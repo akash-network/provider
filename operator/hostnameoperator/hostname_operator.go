@@ -429,7 +429,6 @@ func newHostnameOperator(logger log.Logger, client cluster.Client, config operat
 		cfg:           config,
 		server:        opHTTP,
 		leasesIgnored: operatorcommon.NewIgnoreList(ilc),
-		env:           clusterutil.EnvironmentVariablesToMap(),
 	}
 
 	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)
@@ -448,7 +447,7 @@ func doHostnameOperator(cmd *cobra.Command) error {
 	logger := operatorcommon.OpenLogger().With("op", "hostname")
 	logger.Info("HTTP listening", "address", listenAddr)
 
-	client, err := clusterClient.NewClient(cmd.Context(), logger, ns, configPath)
+	client, err := clusterClient.NewClient(cmd.Context(), logger, ns, configPath, config.ClientConfig)
 	if err != nil {
 		return err
 	}
