@@ -76,7 +76,7 @@ func TestNewClient(t *testing.T) {
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
+	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath, ClientConfig{})
 
 	require.NoError(t, err)
 
