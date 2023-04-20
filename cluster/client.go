@@ -82,7 +82,7 @@ type Client interface {
 		tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error)
 
 	// ConnectHostnameToDeployment Connect a given hostname to a deployment
-	ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective, tlsEnabled bool) error
+	ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective, sslEnabled bool) error
 	// RemoveHostnameFromDeployment Remove a given hostname from a deployment
 	RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error
 

@@ -38,7 +38,7 @@ func TestNewClientNSNotFound(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
 
-	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
+	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath, ClientConfig{})
 	require.True(t, kubeErrors.IsNotFound(err))
 	require.Nil(t, ac)
 }
