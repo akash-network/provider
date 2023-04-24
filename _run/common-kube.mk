@@ -7,7 +7,7 @@ include ../common-kind.mk
 KUBE_SSH_NODE_NAME         ?= akash-gpu
 KUBE_UPLOAD_AKASH_IMAGE    ?= false
 KUBE_CLUSTER_CREATE_TARGET ?= default
-KUBE_ROLLOUT_TIMEOUT       ?= 90
+KUBE_ROLLOUT_TIMEOUT       ?= 180
 
 INGRESS_CONFIG_PATH       ?= ../ingress-nginx.yaml
 CALICO_MANIFEST           ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
