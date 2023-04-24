@@ -21,7 +21,7 @@ kind-install-helm-chart-loki:
 	helm upgrade --install promtail grafana/promtail \
 		--version $(PROMTAIL_VERSION) \
 		--namespace loki-stack \
-		-f ../promtail-values.yaml
+		-f ../promtail-values.yamlk
 	helm upgrade --install grafana grafana/grafana \
 		--version $(GRAFANA_VERSION) \
 		--namespace loki-stack \
