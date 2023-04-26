@@ -81,6 +81,7 @@ kube-cluster-setup: init \
 	kustomize-init \
 	kustomize-deploy-services \
 	kube-deployments-rollout \
+	kube-install-helm-charts \
 	kube-setup-$(AP_RUN_NAME)
 
 # dedicated target to setup cluster on local machine
@@ -94,7 +95,8 @@ kube-cluster-setup-e2e-ci: \
 	kube-upload-images \
 	kustomize-init \
 	kustomize-deploy-services \
-	kube-deployments-rollout
+	kube-deployments-rollout \
+	kube-install-helm-charts
 
 .PHONY: kube-cluster-delete
 kube-cluster-delete: kube-cluster-delete-$(KUBE_SSH_NODE_NAME)
