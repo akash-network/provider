@@ -3,6 +3,7 @@ KUBE_CREATE                := $(AP_RUN_DIR)/.kube-create
 
 include ../common-kustomize.mk
 include ../common-kind.mk
+include ../common-helm.mk
 
 KUBE_SSH_NODE_NAME         ?= akash-gpu
 KUBE_UPLOAD_AKASH_IMAGE    ?= false
