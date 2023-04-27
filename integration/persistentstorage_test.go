@@ -11,8 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/google/uuid"
+
+	"github.com/cosmos/cosmos-sdk/client/flags"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/stretchr/testify/assert"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
@@ -16,22 +15,21 @@ import (
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
-	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
 
-type E2EEscrowMonitor struct {
+type E2EContainerToContainer struct {
 	IntegrationTestSuite
 }
 
-func (s *E2EEscrowMonitor) TestE2EEscrowMonitor() {
+func (s *E2EContainerToContainer) TestE2EContainerToContainer() {
 	// create a deployment
-	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-escrow.yaml")
+	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-c2c.yaml")
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
 		Owner: s.keyTenant.GetAddress().String(),
-		DSeq:  uint64(1000),
+		DSeq:  uint64(100),
 	}
 
 	// Create Deployments
@@ -89,19 +87,10 @@ func (s *E2EEscrowMonitor) TestE2EEscrowMonitor() {
 	s.Require().NoError(err)
 	s.Require().Equal(`{"SET":[true,"OK"]}`, string(bodyData))
 
-	s.Require().NoError(s.waitForBlocksCommitted(5))
-
-	// Get the lease status
-	_, err = providerCmd.ProviderLeaseStatusExec(
-		s.validator.ClientCtx,
-		fmt.Sprintf("--%s=%v", "dseq", lid.DSeq),
-		fmt.Sprintf("--%s=%v", "gseq", lid.GSeq),
-		fmt.Sprintf("--%s=%v", "oseq", lid.OSeq),
-		fmt.Sprintf("--%s=%v", "provider", lid.Provider),
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
-	)
-	assert.NoError(s.T(), err)
-	// data := ctypes.LeaseStatus{}
-	// err = json.Unmarshal(cmdResult.Bytes(), &data)
+	// Hit the endpoint to read a key in redis, foo
+	appURL = fmt.Sprintf("http://%s:%s/GET/foo", s.appHost, s.appPort)
+	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
+	bodyData, err = io.ReadAll(httpResp.Body)
+	s.Require().NoError(err)
+	s.Require().Equal(`{"GET":"bar"}`, string(bodyData)) // Check that the value is bar
 }
