@@ -12,7 +12,8 @@ import (
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
 
-	"github.com/akash-network/akash-api/go/sdkutil"
+	// init default cosmos-sdk config
+	_ "github.com/akash-network/akash-api/go/sdkutil"
 	"github.com/akash-network/node/app"
 	acmd "github.com/akash-network/node/cmd/akash/cmd"
 	ecmd "github.com/akash-network/node/events/cmd"
@@ -24,7 +25,6 @@ import (
 )
 
 func NewRootCmd() *cobra.Command {
-	sdkutil.InitSDKConfig()
 
 	encodingConfig := app.MakeEncodingConfig()
 
