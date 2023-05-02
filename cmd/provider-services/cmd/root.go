@@ -56,6 +56,8 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(migrate())
 	cmd.AddCommand(RunResourceServerCmd())
 	cmd.AddCommand(MigrateEndpointsCmd())
+	cmd.AddCommand(SDL2ManifestCmd())
+
 	cmd.AddCommand(operator.Cmd())
 	cmd.AddCommand(version.NewVersionCommand())
 
