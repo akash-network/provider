@@ -56,6 +56,9 @@ func makeMocks(s *orderTestScaffold) {
 	cpu := atypes.CPU{}
 	cpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().MinUnitCPU))
 
+	gpu := atypes.GPU{}
+	gpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().MinUnitGPU))
+
 	memory := atypes.Memory{}
 	memory.Quantity = atypes.NewResourceValue(dtypes.GetValidationConfig().MinUnitMemory)
 
@@ -67,6 +70,7 @@ func makeMocks(s *orderTestScaffold) {
 
 	clusterResources := atypes.ResourceUnits{
 		CPU:     &cpu,
+		GPU:     &gpu,
 		Memory:  &memory,
 		Storage: storage,
 	}
@@ -155,7 +159,7 @@ func makeOrderForTest(t *testing.T, checkForExistingBid bool, bidState mtypes.Bi
 	if callerConfig != nil {
 		cfg = *callerConfig // Copy values from caller
 	}
-	// Overwrite some with stuff built in this function
+	// Overwrite some with stuff built-in this function
 	cfg.PricingStrategy = pricing
 	cfg.Deposit = mtypes.DefaultBidMinDeposit
 	cfg.MaxGroupVolumes = constants.DefaultMaxGroupVolumes
