@@ -1,12 +1,7 @@
-name: tests
+name: Integration tests
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-  schedule:
-   - cron: '0 */12 * * *'
+  workflow_call:
 
 env:
   KUBE_SSH_NODE_NAME: kind

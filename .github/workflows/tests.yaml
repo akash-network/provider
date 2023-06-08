@@ -1,10 +1,16 @@
 name: tests
 
+defaults:
+  run:
+    shell: bash
+
 on:
   pull_request:
   push:
     branches:
       - main
+    tags:
+      - v*
 
 jobs:
   build-bins:
@@ -60,6 +66,32 @@ jobs:
       - name: lint make-sublinters
         run: make test-sublinters
 
+  release-dry-run:
+    runs-on: ubuntu-latest
+    env:
+      DOCKER_CLI_EXPERIMENTAL: "enabled"
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: c-py/action-dotenv-to-setenv@v3
+        with:
+          env-file: .env
+      - uses: actions/setup-go@v3
+        with:
+          go-version: "${{ env.GOLANG_VERSION }}"
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      - uses: fregante/setup-git-user@v1
+      - name: configure git tag
+        run: echo "RELEASE_TAG=v$(./script/semver.sh bump patch $(git describe --tags --abbrev=0))" >> $GITHUB_ENV
+      - name: git tag
+        run: git tag -a ${{ env.RELEASE_TAG }} -m ${{ env.RELEASE_TAG }}
+      - name: release dry-run
+        run: make release
+
   coverage:
     runs-on: ubuntu-latest
     steps:
@@ -77,3 +109,43 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           files: .cache/tests/coverage.txt
+
+  yamlcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: check-yml-count
+        run: |
+          if [[ $(git ls-files '*.yml' ':!:.codecov.yml' | wc -l) -ne 0 ]]; then git ls-files '*.yml' ':!:.codecov.yml' && exit 1;fi
+
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+      - run: make shellcheck
+
+  integration-tests:
+    uses: ./.github/workflows/integration-tests.yaml
+
+  dispatch-release:
+    runs-on: ubuntu-latest
+    if: startsWith(github.event.ref, 'refs/tags/v')
+    needs:
+      - build-bins
+      - tests
+      - lint
+      - release-dry-run
+      - coverage
+      - yamlcheck
+      - shellcheck
+      - integration-tests
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: trigger release process
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: release.yaml
