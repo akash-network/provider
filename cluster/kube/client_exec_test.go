@@ -107,7 +107,11 @@ func withExecTestScaffold(t *testing.T, changePod func(pod *corev1.Pod) error, t
 	require.NoError(t, err)
 	require.Len(t, mani, 1)
 
-	s.crdManifest, err = crd.NewManifest(testKubeClientNs, s.leaseID, &mani[0])
+	sparams := crd.ClusterSettings{
+		SchedulerParams: make([]*crd.SchedulerParams, len(mani[0].Services)),
+	}
+
+	s.crdManifest, err = crd.NewManifest(testKubeClientNs, s.leaseID, &mani[0], sparams)
 	require.NoError(t, err)
 	require.NotNil(t, s.crdManifest)
 

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: operator-discovery
+  namespace: akash-services
+  labels:
+    akash.network: "true"
+    app.kubernetes.io/name: akash
+    app.kubernetes.io/instance: discovery
+    app.kubernetes.io/component: operator
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: akash
+      app.kubernetes.io/instance: discovery
+      app.kubernetes.io/component: operator
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        app: inventory-operator
+        app.kubernetes.io/name: akash
+        app.kubernetes.io/instance: discovery
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: operator-discovery
+      containers:
+        - name: operator-discovery
+          image: ghcr.io/akash-network/provider
+          args:
+            - "provider-services"
+            - "operator"
+            - "inventory"
+          imagePullPolicy: IfNotPresent
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          ports:
+            - containerPort: 8080
+              name: api
+              protocol: TCP

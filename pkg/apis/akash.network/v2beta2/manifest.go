@@ -1,6 +1,8 @@
 package v2beta2
 
 import (
+	"fmt"
+
 	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
@@ -46,7 +48,8 @@ type ManifestService struct {
 	// Overlay Network Links
 	Expose []ManifestServiceExpose `json:"expose,omitempty"`
 	// Miscellaneous service parameters
-	Params *ManifestServiceParams `json:"params,omitempty"`
+	Params          *ManifestServiceParams `json:"params,omitempty"`
+	SchedulerParams *SchedulerParams       `json:"scheduler_params,omitempty"`
 }
 
 // ManifestGroup stores metadata, name and list of SDL manifest services
@@ -79,6 +82,33 @@ type ManifestServiceParams struct {
 	Storage []ManifestStorageParams `json:"storage,omitempty"`
 }
 
+// type NodeAffinity struct {
+// 	Required []corev1.NodeSelectorRequirement `json:"required"`
+// }
+//
+// type Affinity struct {
+// 	Node *NodeAffinity `json:"node"`
+// }
+
+type SchedulerResourceGPU struct {
+	Vendor string `json:"vendor"`
+	Model  string `json:"model"`
+}
+
+type SchedulerResources struct {
+	GPU *SchedulerResourceGPU `json:"gpu"`
+}
+
+type SchedulerParams struct {
+	RuntimeClass string              `json:"runtime_class"`
+	Resources    *SchedulerResources `json:"resources,omitempty"`
+	// Affinity     *Affinity `json:"affinity"`
+}
+
+type ClusterSettings struct {
+	SchedulerParams []*SchedulerParams `json:"scheduler_params"`
+}
+
 // ManifestServiceExpose stores exposed ports and accepted hosts details
 type ManifestServiceExpose struct {
 	Port                   uint16                           `json:"port,omitempty"`
@@ -102,8 +132,16 @@ type ManifestServiceExposeHTTPOptions struct {
 }
 
 // NewManifest creates new manifest with provided details. Returns error in case of failure.
-func NewManifest(ns string, lid mtypes.LeaseID, mgroup *mani.Group) (*Manifest, error) {
-	group, err := manifestGroupToCRD(mgroup)
+func NewManifest(ns string, lid mtypes.LeaseID, mgroup *mani.Group, settings ClusterSettings) (*Manifest, error) {
+	if len(mgroup.Services) != len(settings.SchedulerParams) {
+		return nil, fmt.Errorf("%w: group services don't not match scheduler services count (%d) != (%d)",
+			ErrInvalidArgs,
+			len(mgroup.Services),
+			len(settings.SchedulerParams),
+		)
+	}
+
+	group, err := manifestGroupToCRD(mgroup, settings)
 	if err != nil {
 		return nil, err
 	}
@@ -125,46 +163,55 @@ func NewManifest(ns string, lid mtypes.LeaseID, mgroup *mani.Group) (*Manifest, 
 }
 
 // Deployment returns the cluster.Deployment that the saved manifest represents.
-func (m *Manifest) Deployment() (ctypes.Deployment, error) {
+func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 	lid, err := m.Spec.LeaseID.FromCRD()
 	if err != nil {
 		return nil, err
 	}
 
-	group, err := m.Spec.Group.fromCRD()
+	group, schedulerParams, err := m.Spec.Group.fromCRD()
 	if err != nil {
 		return nil, err
 	}
-	return deployment{lid: lid, group: group}, nil
+
+	return &deployment{
+		lid:     lid,
+		group:   group,
+		cparams: schedulerParams,
+	}, nil
 }
 
 // toAkash returns akash group details formatted from manifest group
-func (m *ManifestGroup) fromCRD() (mani.Group, error) {
+func (m *ManifestGroup) fromCRD() (mani.Group, []*SchedulerParams, error) {
 	am := mani.Group{
 		Name:     m.Name,
 		Services: make([]mani.Service, 0, len(m.Services)),
 	}
 
+	scheduleParams := make([]*SchedulerParams, 0, len(m.Services))
+
 	for _, svc := range m.Services {
 		asvc, err := svc.fromCRD()
 		if err != nil {
-			return am, err
+			return am, nil, err
 		}
 		am.Services = append(am.Services, asvc)
+
+		scheduleParams = append(scheduleParams, svc.SchedulerParams)
 	}
 
-	return am, nil
+	return am, scheduleParams, nil
 }
 
 // manifestGroupToCRD returns manifest group instance from akash group
-func manifestGroupToCRD(m *mani.Group) (ManifestGroup, error) {
+func manifestGroupToCRD(m *mani.Group, settings ClusterSettings) (ManifestGroup, error) {
 	ma := ManifestGroup{
 		Name:     m.Name,
 		Services: make([]ManifestService, 0, len(m.Services)),
 	}
 
-	for _, svc := range m.Services {
-		service, err := manifestServiceFromProvider(svc)
+	for i, svc := range m.Services {
+		service, err := manifestServiceFromProvider(svc, settings.SchedulerParams[i])
 		if err != nil {
 			return ManifestGroup{}, err
 		}
@@ -224,21 +271,22 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 	return *ams, nil
 }
 
-func manifestServiceFromProvider(ams mani.Service) (ManifestService, error) {
+func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerParams) (ManifestService, error) {
 	resources, err := resourceUnitsFromAkash(ams.Resources)
 	if err != nil {
 		return ManifestService{}, err
 	}
 
 	ms := ManifestService{
-		Name:      ams.Name,
-		Image:     ams.Image,
-		Command:   ams.Command,
-		Args:      ams.Args,
-		Env:       ams.Env,
-		Resources: resources,
-		Count:     ams.Count,
-		Expose:    make([]ManifestServiceExpose, 0, len(ams.Expose)),
+		Name:            ams.Name,
+		Image:           ams.Image,
+		Command:         ams.Command,
+		Args:            ams.Args,
+		Env:             ams.Env,
+		Resources:       resources,
+		Count:           ams.Count,
+		Expose:          make([]ManifestServiceExpose, 0, len(ams.Expose)),
+		SchedulerParams: schedulerParams,
 	}
 
 	for _, expose := range ams.Expose {

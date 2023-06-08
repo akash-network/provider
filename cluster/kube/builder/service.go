@@ -4,15 +4,11 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
-	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
-
 	sdlutil "github.com/akash-network/node/sdl/util"
 )
 
@@ -24,35 +20,25 @@ type Service interface {
 }
 
 type service struct {
-	workload
+	Workload
 	requireNodePort bool
 }
 
 var _ Service = (*service)(nil)
 
-func BuildService(
-	log log.Logger,
-	settings Settings,
-	lid mtypes.LeaseID,
-	group *mani.Group,
-	serviceIdx int,
-	requireNodePort bool) Service {
-	return &service{
-		workload: workload{
-			builder: builder{
-				settings: settings,
-				log:      log.With("module", "kube-builder"),
-				lid:      lid,
-				group:    group,
-			},
-			serviceIdx: serviceIdx,
-		},
+func BuildService(workload Workload, requireNodePort bool) Service {
+	ss := &service{
+		Workload:        workload,
 		requireNodePort: requireNodePort,
 	}
+
+	ss.Workload.log = ss.Workload.log.With("object", "service", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+
+	return ss
 }
 
 func (b *service) Name() string {
-	basename := b.workload.Name()
+	basename := b.Workload.Name()
 	if b.requireNodePort {
 		return makeGlobalServiceNameFromBasename(basename)
 	}
@@ -120,7 +106,7 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 }
 
 func (b *service) Any() bool {
-	service := &b.group.Services[b.serviceIdx]
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	for _, expose := range service.Expose {
 		exposeIsIngress := sdlutil.ShouldBeIngress(expose)
@@ -143,7 +129,7 @@ var errUnsupportedProtocol = errors.New("Unsupported protocol for service")
 var errInvalidServiceBuilder = errors.New("service builder invalid")
 
 func (b *service) ports() ([]corev1.ServicePort, error) {
-	service := &b.group.Services[b.serviceIdx]
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	ports := make([]corev1.ServicePort, 0, len(service.Expose))
 	portsAdded := make(map[int32]struct{})

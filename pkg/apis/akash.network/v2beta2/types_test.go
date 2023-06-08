@@ -17,14 +17,15 @@ func Test_Manifest_encoding(t *testing.T) {
 
 		lid := atestutil.LeaseID(t)
 		mgroup := spec.Generator.Group(t)
+		sparams := make([]*SchedulerParams, len(mgroup.Services))
 
-		kmani, err := NewManifest("foo", lid, &mgroup)
+		kmani, err := NewManifest("foo", lid, &mgroup, ClusterSettings{SchedulerParams: sparams})
 		require.NoError(t, err, spec.Name)
 
 		deployment, err := kmani.Deployment()
 		require.NoError(t, err, spec.Name)
 
 		assert.Equal(t, lid, deployment.LeaseID(), spec.Name)
-		assert.Equal(t, mgroup, deployment.ManifestGroup(), spec.Name)
+		assert.Equal(t, &mgroup, deployment.ManifestGroup(), spec.Name)
 	}
 }

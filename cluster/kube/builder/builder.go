@@ -2,16 +2,18 @@ package builder
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
-
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/tendermint/tendermint/libs/log"
+
+	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clusterUtil "github.com/akash-network/provider/cluster/util"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -21,16 +23,16 @@ const (
 	AkashManifestServiceLabelName = "akash.network/manifest-service"
 	AkashNetworkStorageClasses    = "akash.network/storageclasses"
 	AkashServiceTarget            = "akash.network/service-target"
+	AkashServiceCapabilityGPU     = "akash.network/capability/gpu"
 	AkashMetalLB                  = "metal-lb"
 	akashDeploymentPolicyName     = "akash-deployment-restrictions"
-
-	akashNetworkNamespace       = "akash.network/namespace"
-	AkashLeaseOwnerLabelName    = "akash.network/lease.id.owner"
-	AkashLeaseDSeqLabelName     = "akash.network/lease.id.dseq"
-	AkashLeaseGSeqLabelName     = "akash.network/lease.id.gseq"
-	AkashLeaseOSeqLabelName     = "akash.network/lease.id.oseq"
-	AkashLeaseProviderLabelName = "akash.network/lease.id.provider"
-	AkashLeaseManifestVersion   = "akash.network/manifest.version"
+	akashNetworkNamespace         = "akash.network/namespace"
+	AkashLeaseOwnerLabelName      = "akash.network/lease.id.owner"
+	AkashLeaseDSeqLabelName       = "akash.network/lease.id.dseq"
+	AkashLeaseGSeqLabelName       = "akash.network/lease.id.gseq"
+	AkashLeaseOSeqLabelName       = "akash.network/lease.id.oseq"
+	AkashLeaseProviderLabelName   = "akash.network/lease.id.provider"
+	AkashLeaseManifestVersion     = "akash.network/manifest.version"
 )
 
 const (
@@ -53,6 +55,51 @@ var (
 	tcpProtocol = corev1.Protocol("TCP")
 )
 
+type IClusterDeployment interface {
+	LeaseID() mtypes.LeaseID
+	ManifestGroup() *mani.Group
+	ClusterParams() crd.ClusterSettings
+}
+
+type ClusterDeployment struct {
+	Lid     mtypes.LeaseID
+	Group   *mani.Group
+	Sparams crd.ClusterSettings
+}
+
+var _ IClusterDeployment = (*ClusterDeployment)(nil)
+
+func ClusterDeploymentFromDeployment(d ctypes.IDeployment) (IClusterDeployment, error) {
+	cparams, valid := d.ClusterParams().(crd.ClusterSettings)
+	if !valid {
+		// nolint: goerr113
+		return nil, fmt.Errorf("kube-cluster: unexpected type from ClusterParams(). expected (%s), actual (%s)",
+			reflect.TypeOf(crd.ClusterSettings{}),
+			reflect.TypeOf(d.ClusterParams()),
+		)
+	}
+
+	cd := &ClusterDeployment{
+		Lid:     d.LeaseID(),
+		Group:   d.ManifestGroup(),
+		Sparams: cparams,
+	}
+
+	return cd, nil
+}
+
+func (d *ClusterDeployment) LeaseID() mtypes.LeaseID {
+	return d.Lid
+}
+
+func (d *ClusterDeployment) ManifestGroup() *mani.Group {
+	return d.Group
+}
+
+func (d *ClusterDeployment) ClusterParams() crd.ClusterSettings {
+	return d.Sparams
+}
+
 type builderBase interface {
 	NS() string
 	Name() string
@@ -60,17 +107,15 @@ type builderBase interface {
 }
 
 type builder struct {
-	log      log.Logger
-	settings Settings
-	lid      mtypes.LeaseID
-	group    *mani.Group
-	sparams  crd.ParamsServices
+	log        log.Logger
+	settings   Settings
+	deployment IClusterDeployment
 }
 
 var _ builderBase = (*builder)(nil)
 
 func (b *builder) NS() string {
-	return LidNS(b.lid)
+	return LidNS(b.deployment.LeaseID())
 }
 
 func (b *builder) Name() string {
@@ -80,7 +125,7 @@ func (b *builder) Name() string {
 func (b *builder) labels() map[string]string {
 	return map[string]string{
 		AkashManagedLabelName: "true",
-		akashNetworkNamespace: LidNS(b.lid),
+		akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
 	}
 }
 

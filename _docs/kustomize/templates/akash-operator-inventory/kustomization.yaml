@@ -4,7 +4,7 @@ namespace: akash-services
 resources:
   - ../../../../../_docs/kustomize/akash-operator-inventory
 
-patchesJson6902:
+patches:
   - path: docker-image.yaml
     target:
       kind: Deployment

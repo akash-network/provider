@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: akash-services
 resources:
   - ../../../../../_docs/kustomize/akash-operator-hostname
-patchesJson6902:
+patches:
   - path: docker-image.yaml
     target:
       kind: Deployment

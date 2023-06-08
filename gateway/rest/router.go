@@ -107,9 +107,18 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ipopcl
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
 
+	vrouter := router.NewRoute().Subrouter()
+	vrouter.Use(requireOwner())
+
 	// GET /validate
 	// validate endpoint checks if provider will bid on given groupspec
-	router.HandleFunc("/validate",
+	vrouter.HandleFunc("/validate",
+		validateHandler(log, pclient)).
+		Methods("GET")
+
+	// GET /wiboy (aka would I bid on you)
+	// validate endpoint checks if provider will bid on given groupspec
+	vrouter.HandleFunc("/wiboy",
 		validateHandler(log, pclient)).
 		Methods("GET")
 
@@ -528,6 +537,8 @@ func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFun
 			return
 		}
 
+		owner := requestOwner(req)
+
 		var gspec dtypes.GroupSpec
 
 		if err := json.Unmarshal(data, &gspec); err != nil {
@@ -535,7 +546,7 @@ func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFun
 			return
 		}
 
-		validate, err := cl.Validate(req.Context(), gspec)
+		validate, err := cl.Validate(req.Context(), owner, gspec)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

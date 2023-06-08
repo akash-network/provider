@@ -39,7 +39,10 @@ func TestWriteRead(t *testing.T) {
 			lid := atestutil.LeaseID(t)
 			group := spec.Generator.Group(t)
 
-			kmani, err := crd.NewManifest(ns, lid, &group)
+			csettings := crd.ClusterSettings{
+				SchedulerParams: make([]*crd.SchedulerParams, len(group.Services)),
+			}
+			kmani, err := crd.NewManifest(ns, lid, &group, csettings)
 
 			require.NoError(t, err, spec.Name)
 
@@ -55,7 +58,7 @@ func TestWriteRead(t *testing.T) {
 			require.NoError(t, err, spec.Name)
 
 			assert.Equal(t, lid, deployment.LeaseID(), spec.Name)
-			assert.Equal(t, group, deployment.ManifestGroup(), spec.Name)
+			assert.Equal(t, &group, deployment.ManifestGroup(), spec.Name)
 		}
 	})
 }

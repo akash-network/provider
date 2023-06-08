@@ -16,11 +16,13 @@ func newReservation(order mtypes.OrderID, resources atypes.ResourceGroup) *reser
 }
 
 type reservation struct {
-	order            mtypes.OrderID
-	resources        atypes.ResourceGroup
-	allocated        bool
-	endpointQuantity uint
-	ipsConfirmed     bool
+	order             mtypes.OrderID
+	resources         atypes.ResourceGroup
+	adjustedResources []atypes.Resources
+	clusterParams     interface{}
+	endpointQuantity  uint
+	allocated         bool
+	ipsConfirmed      bool
 }
 
 var _ ctypes.Reservation = (*reservation)(nil)
@@ -31,6 +33,18 @@ func (r *reservation) OrderID() mtypes.OrderID {
 
 func (r *reservation) Resources() atypes.ResourceGroup {
 	return r.resources
+}
+
+func (r *reservation) SetAllocatedResources(val []atypes.Resources) {
+	r.adjustedResources = val
+}
+
+func (r *reservation) SetClusterParams(val interface{}) {
+	r.clusterParams = val
+}
+
+func (r *reservation) ClusterParams() interface{} {
+	return r.clusterParams
 }
 
 func (r *reservation) Allocated() bool {

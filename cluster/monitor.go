@@ -11,11 +11,11 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/tendermint/tendermint/libs/log"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/util/runner"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
@@ -41,8 +41,7 @@ type deploymentMonitor struct {
 	session session.Session
 	client  Client
 
-	lease  mtypes.LeaseID
-	mgroup *manifest.Group
+	deployment ctypes.IDeployment
 
 	attempts int
 	log      log.Logger
@@ -56,8 +55,7 @@ func newDeploymentMonitor(dm *deploymentManager) *deploymentMonitor {
 		bus:             dm.bus,
 		session:         dm.session,
 		client:          dm.client,
-		lease:           dm.lease,
-		mgroup:          dm.mgroup,
+		deployment:      dm.deployment,
 		log:             dm.log.With("cmp", "deployment-monitor"),
 		lc:              lifecycle.New(),
 		clusterSettings: dm.config.ClusterSettings,
@@ -168,7 +166,7 @@ func (m *deploymentMonitor) runCheck(ctx context.Context) <-chan runner.Result {
 func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 	clientCtx := util.ApplyToContext(ctx, m.clusterSettings)
 
-	status, err := m.client.LeaseStatus(clientCtx, m.lease)
+	status, err := m.client.LeaseStatus(clientCtx, m.deployment.LeaseID())
 
 	if err != nil {
 		m.log.Error("lease status", "err", err)
@@ -177,7 +175,7 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 
 	badsvc := 0
 
-	for _, spec := range m.mgroup.Services {
+	for _, spec := range m.deployment.ManifestGroup().Services {
 		service, foundService := status[spec.Name]
 		if foundService {
 			if uint32(service.Available) < spec.Count {
@@ -203,7 +201,7 @@ func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Res
 	return runner.Do(func() runner.Result {
 		// TODO: retry, timeout
 		err := m.session.Client().Tx().Broadcast(ctx, &mtypes.MsgCloseBid{
-			BidID: m.lease.BidID(),
+			BidID: m.deployment.LeaseID().BidID(),
 		})
 		if err != nil {
 			m.log.Error("closing deployment", "err", err)
@@ -216,8 +214,8 @@ func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Res
 
 func (m *deploymentMonitor) publishStatus(status event.ClusterDeploymentStatus) {
 	if err := m.bus.Publish(event.ClusterDeployment{
-		LeaseID: m.lease,
-		Group:   m.mgroup,
+		LeaseID: m.deployment.LeaseID(),
+		Group:   m.deployment.ManifestGroup(),
 		Status:  status,
 	}); err != nil {
 		m.log.Error("publishing manifest group deployed event", "err", err, "status", status)

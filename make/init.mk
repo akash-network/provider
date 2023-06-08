@@ -54,7 +54,17 @@ endif
 
 BINS                         := $(PROVIDER_SERVICES) akash
 
-export GO                    := GO111MODULE=$(GO111MODULE) go
+GOWORK                       ?= on
+
+GO_MOD                       ?= vendor
+ifeq ($(GOWORK), on)
+GO_MOD                       := readonly
+endif
+
+export GO                           := GO111MODULE=$(GO111MODULE) go
+GO_BUILD                     := $(GO) build -mod=$(GO_MOD)
+GO_TEST                      := $(GO) test -mod=$(GO_MOD)
+GO_VET                       := $(GO) vet -mod=$(GO_MOD)
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")

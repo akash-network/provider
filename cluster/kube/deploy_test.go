@@ -14,6 +14,8 @@ import (
 	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
@@ -48,6 +50,14 @@ func TestDeploy(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx = context.WithValue(ctx, builder.SettingsKey, builder.NewDefaultSettings())
-	err = client.Deploy(ctx, leaseID, &mani.GetGroups()[0])
+	group := &mani.GetGroups()[0]
+	cdep := &ctypes.Deployment{
+		Lid:    leaseID,
+		MGroup: group,
+		CParams: crd.ClusterSettings{
+			SchedulerParams: make([]*crd.SchedulerParams, len(group.Services)),
+		},
+	}
+	err = client.Deploy(ctx, cdep)
 	require.NoError(t, err)
 }

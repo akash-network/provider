@@ -2,6 +2,7 @@ KUBE_SETUP_PREREQUISITES   ?= \
 
 KUBE_CLUSTER_CREATE_TARGET := kind
 KUBE_SSH_NODE_NAME         ?= kind
+KUBE_DOCKER_IMAGE_ARCH     := $(shell uname -m | sed "s/x86_64/amd64/g")
 
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \

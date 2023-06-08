@@ -455,7 +455,7 @@ func TestServiceStatusNoServiceWithName(t *testing.T) {
 		Services: nil,
 	}
 
-	m, err := crd.NewManifest(testKubeClientNs, lid, mg)
+	m, err := crd.NewManifest(testKubeClientNs, lid, mg, crd.ClusterSettings{SchedulerParams: nil})
 	require.NoError(t, err)
 	akashMock := akashclient_fake.NewSimpleClientset(m)
 
@@ -495,7 +495,7 @@ func TestServiceStatusNoCRDManifest(t *testing.T) {
 		Services: nil,
 	}
 
-	m, err := crd.NewManifest(testKubeClientNs+"a", lid, mg)
+	m, err := crd.NewManifest(testKubeClientNs+"a", lid, mg, crd.ClusterSettings{SchedulerParams: nil})
 	require.NoError(t, err)
 	akashMock := akashclient_fake.NewSimpleClientset(m)
 
@@ -575,7 +575,11 @@ func TestServiceStatusWithIngress(t *testing.T) {
 		Services: services,
 	}
 
-	m, err := crd.NewManifest(testKubeClientNs, lid, mg)
+	cparams := crd.ClusterSettings{
+		SchedulerParams: make([]*crd.SchedulerParams, len(mg.Services)),
+	}
+
+	m, err := crd.NewManifest(testKubeClientNs, lid, mg, cparams)
 	require.NoError(t, err)
 	akashMock := akashclient_fake.NewSimpleClientset(m, fakeProviderHost("abcd.com", lid, "echo", 9000))
 
@@ -730,7 +734,11 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 		Services: services,
 	}
 
-	m, err := crd.NewManifest(testKubeClientNs, lid, mg)
+	cparams := crd.ClusterSettings{
+		SchedulerParams: make([]*crd.SchedulerParams, len(mg.Services)),
+	}
+
+	m, err := crd.NewManifest(testKubeClientNs, lid, mg, cparams)
 	require.NoError(t, err)
 	akashMock := akashclient_fake.NewSimpleClientset(m)
 

@@ -175,26 +175,3 @@ func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest)
 	}
 	return err
 }
-
-func applyServicesParams(ctx context.Context, kc crdapi.Interface, b builder.ParamsServices) error {
-	obj, err := kc.AkashV2beta2().LeaseParamsServices(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
-
-	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "akash-parameters-get", err, errors.IsNotFound)
-
-	switch {
-	case err == nil:
-		// TODO - only run this update if it would change something
-		obj, err = b.Update(obj)
-		if err == nil {
-			_, err = kc.AkashV2beta2().LeaseParamsServices(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-parameters-update", err)
-		}
-	case errors.IsNotFound(err):
-		obj, err = b.Create()
-		if err == nil {
-			_, err = kc.AkashV2beta2().LeaseParamsServices(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-parameters-create", err)
-		}
-	}
-	return err
-}

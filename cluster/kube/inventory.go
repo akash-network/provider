@@ -3,19 +3,17 @@ package kube
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/sdl"
-	metricsutils "github.com/akash-network/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -25,18 +23,6 @@ import (
 const (
 	inventoryOperatorQueryTimeout = 5 * time.Second
 )
-
-type node struct {
-	id               string
-	arch             string
-	cpu              resourcePair
-	gpu              resourcePair
-	memory           resourcePair
-	ephemeralStorage resourcePair
-	volumesAttached  resourcePair
-	volumesMounted   resourcePair
-	storageClasses   map[string]bool
-}
 
 type clusterNodes map[string]*node
 
@@ -65,123 +51,129 @@ func (inv *inventory) dup() inventory {
 	return dup
 }
 
-func (nd *node) allowsStorageClasses(volumes types.Volumes) bool {
-	for _, storage := range volumes {
-		attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
-		if persistent, set := attr.AsBool(); !set || !persistent {
+// tryAdjust cluster inventory
+// It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
+// Seconds indicates if cluster-wide resources satisfy (true) requirements
+func (inv *inventory) tryAdjust(node string, res *types.ResourceUnits) (*crd.SchedulerParams, bool, bool) {
+	nd := inv.nodes[node].dup()
+	sparams := &crd.SchedulerParams{}
+
+	if !nd.tryAdjustCPU(res.CPU) {
+		return nil, false, true
+	}
+
+	if !nd.tryAdjustGPU(res.GPU, sparams) {
+		return nil, false, true
+	}
+
+	if !nd.tryAdjustMemory(res.Memory) {
+		return nil, false, true
+	}
+
+	storageClasses := inv.storageClasses.dup()
+
+	for i, storage := range res.Storage {
+		attrs, err := ctypes.ParseStorageAttributes(storage.Attributes)
+		if err != nil {
+			return nil, false, false
+		}
+
+		if !attrs.Persistent {
+			if !nd.tryAdjustEphemeralStorage(&res.Storage[i]) {
+				return nil, false, true
+			}
 			continue
 		}
 
-		attr = storage.Attributes.Find(sdl.StorageAttributeClass)
-		if class, set := attr.AsString(); set {
-			if _, allowed := nd.storageClasses[class]; !allowed {
-				return false
-			}
+		if !nd.capabilities.Storage.HasClass(attrs.Class) {
+			return nil, false, true
+		}
+
+		// if !nd.tryAdjustVolumesAttached(types.NewResourceValue(1)) {
+		// 	return nil, false, true
+		// }
+
+		// no need to check if storageClass map has class present as it has been validated
+		// for particular node during inventory fetch
+		if !storageClasses[attrs.Class].subNLZ(storage.Quantity) {
+			// cluster storage does not have enough space thus break to error
+			return nil, false, false
 		}
 	}
 
-	return true
+	// all requirements for current group have been satisfied
+	// commit and move on
+	inv.nodes[node] = nd
+	inv.storageClasses = storageClasses
+
+	if reflect.DeepEqual(sparams, &crd.SchedulerParams{}) {
+		return nil, true, true
+	}
+
+	return sparams, true, true
 }
 
-func (inv *inventory) Adjust(reservation ctypes.Reservation) error {
+func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes.InventoryOption) error {
+	cfg := &ctypes.InventoryOptions{}
+	for _, opt := range opts {
+		cfg = opt(cfg)
+	}
+
 	resources := make([]types.Resources, len(reservation.Resources().GetResources()))
+	adjustedResources := make([]types.Resources, 0, len(reservation.Resources().GetResources()))
 	copy(resources, reservation.Resources().GetResources())
+
+	cparams := crd.ClusterSettings{
+		SchedulerParams: make([]*crd.SchedulerParams, len(reservation.Resources().GetResources())),
+	}
 
 	currInventory := inv.dup()
 
 nodes:
 	for nodeName := range currInventory.nodes {
 		for i := len(resources) - 1; i >= 0; i-- {
-			res := resources[i].Resources
+			adjusted := resources[i]
+
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				nd := currInventory.nodes[nodeName]
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeName, &adjusted.Resources)
+				if !cStatus {
+					// cannot satisfy cluster-wide resources, stop lookup
+					break nodes
+				}
 
-				// first check if reservation needs persistent storage
-				// and node handles such class
-				if !nd.allowsStorageClasses(res.Storage) {
+				if !nStatus {
+					// cannot satisfy node-wide resources, try with next node
 					continue nodes
 				}
 
-				var adjusted bool
-
-				cpu := nd.cpu.dup()
-				if adjusted = cpu.subMilliNLZ(res.CPU.Units); !adjusted {
-					continue nodes
-				}
-
-				gpu := nd.gpu.dup()
-				if res.GPU != nil {
-					if adjusted = gpu.subNLZ(res.GPU.Units); !adjusted {
-						continue nodes
-					}
-				}
-
-				memory := nd.memory.dup()
-				if adjusted = memory.subNLZ(res.Memory.Quantity); !adjusted {
-					continue nodes
-				}
-
-				ephemeralStorage := nd.ephemeralStorage.dup()
-				volumesAttached := nd.volumesAttached.dup()
-
-				storageClasses := currInventory.storageClasses.dup()
-
-				for _, storage := range res.Storage {
-					attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
-
-					if persistent, _ := attr.AsBool(); !persistent {
-						if adjusted = ephemeralStorage.subNLZ(storage.Quantity); !adjusted {
-							continue nodes
-						}
-						continue
-					}
-
-					// if volumesAttached, adjusted = volumesAttached.subNLZ(types.NewResourceValue(1)); !adjusted {
-					// 	continue nodes
-					// }
-
-					attr = storage.Attributes.Find(sdl.StorageAttributeClass)
-					class, _ := attr.AsString()
-
-					cstorage, isAvailable := storageClasses[class]
-					if !isAvailable {
-						break nodes
-					}
-
-					if adjusted = cstorage.subNLZ(storage.Quantity); !adjusted {
-						// cluster storage does not have enough space thus break to error
+				if sparams != nil {
+					if cparams.SchedulerParams[i] == nil {
+						cparams.SchedulerParams[i] = sparams
+					} else if !reflect.DeepEqual(sparams, cparams.SchedulerParams[i]) {
+						// all replicas of the same service are expected to have same node selectors and runtimes
+						// if they don't match then provider cannot bid
 						break nodes
 					}
 				}
-
-				// all requirements for current group have been satisfied
-				// commit and move on
-				currInventory.nodes[nodeName] = &node{
-					id:               nd.id,
-					arch:             nd.arch,
-					cpu:              *cpu,
-					gpu:              *gpu,
-					memory:           *memory,
-					ephemeralStorage: *ephemeralStorage,
-					volumesAttached:  *volumesAttached,
-					volumesMounted:   nd.volumesMounted,
-					storageClasses:   nd.storageClasses,
-				}
-
-				currInventory.storageClasses = storageClasses
 			}
 
 			// all replicas resources are fulfilled when count == 0.
 			// remove group from the list to prevent double request of the same resources
 			if resources[i].Count == 0 {
-				// tmpResources = append(tmpResources, resources[rIdx])
 				resources = append(resources[:i], resources[i+1:]...)
+				adjustedResources = append(adjustedResources, adjusted)
 			}
 		}
 	}
 
 	if len(resources) == 0 {
-		*inv = currInventory
+		if !cfg.DryRun {
+			*inv = currInventory
+		}
+
+		reservation.SetAllocatedResources(adjustedResources)
+		reservation.SetClusterParams(cparams)
+
 		return nil
 	}
 
@@ -289,7 +281,6 @@ func (c *client) fetchStorage(ctx context.Context) (clusterStorage, error) {
 
 	cstorage := make(clusterStorage)
 
-	// TODO - figure out if we can get this back via ServiceDiscoveryAgent query akash-services inventory-operator api
 	// discover inventory operator
 	// empty namespace mean search through all namespaces
 	svcResult, err := c.kc.CoreV1().Services(corev1.NamespaceAll).List(ctx, metav1.ListOptions{
@@ -345,14 +336,64 @@ func (c *client) fetchStorage(ctx context.Context) (clusterStorage, error) {
 	return cstorage, nil
 }
 
+// todo write unmarshaler
+func parseNodeCapabilities(labels map[string]string, cStorage clusterStorage) *crd.NodeInfoCapabilities {
+	capabilities := &crd.NodeInfoCapabilities{}
+
+	for k := range labels {
+		tokens := strings.Split(k, "/")
+		if len(tokens) < 3 ||
+			tokens[0] != builder.AkashManagedLabelName ||
+			tokens[1] != "capability" {
+			continue
+		}
+
+		tokens = tokens[2:]
+		switch tokens[0] {
+		case "gpu":
+			if len(tokens) < 1 {
+				continue
+			}
+
+			tokens = tokens[1:]
+			if tokens[0] == "vendor" {
+				capabilities.GPU.Vendor = tokens[1]
+				if tokens[2] == "model" {
+					capabilities.GPU.Vendor = tokens[3]
+				}
+			}
+		case "storage":
+			if len(tokens) < 2 {
+				continue
+			}
+
+			switch tokens[1] {
+			case "class":
+				capabilities.Storage.Classes = append(capabilities.Storage.Classes, tokens[2])
+			default:
+			}
+		}
+	}
+
+	// parse storage classes with legacy mode if new mode is not detected
+	if len(capabilities.Storage.Classes) == 0 {
+		if value, defined := labels[builder.AkashNetworkStorageClasses]; defined {
+			for _, class := range strings.Split(value, ".") {
+				if _, avail := cStorage[class]; avail {
+					capabilities.Storage.Classes = append(capabilities.Storage.Classes, class)
+				}
+			}
+		}
+	}
+
+	return capabilities
+}
+
 func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) (map[string]*node, error) {
 	// todo filter nodes by akash.network label
-	knodes, err := c.kc.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	label := metricsutils.SuccessLabel
-	if err != nil {
-		label = metricsutils.FailLabel
-	}
-	kubeCallsCounter.WithLabelValues("nodes-list", label).Inc()
+	knodes, err := wrapKubeCall("nodes-list", func() (*corev1.NodeList, error) {
+		return c.kc.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -364,7 +405,6 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 	podsPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return podsClient.List(ctx, opts)
 	})
-	zero := resource.NewMilliQuantity(0, "m")
 
 	retnodes := make(map[string]*node)
 	for _, knode := range knodes.Items {
@@ -372,46 +412,9 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 			continue
 		}
 
-		// Create an entry with the allocatable amount for the node
-		cpu := knode.Status.Allocatable.Cpu().DeepCopy()
-		gpu := knode.Status.Allocatable.Name(builder.ResourceNvidiaGPU, resource.DecimalSI).DeepCopy()
-		memory := knode.Status.Allocatable.Memory().DeepCopy()
-		storage := knode.Status.Allocatable.StorageEphemeral().DeepCopy()
-		entry := &node{
-			arch: knode.Status.NodeInfo.Architecture,
-			cpu: resourcePair{
-				allocatable: cpu,
-			},
-			gpu: resourcePair{
-				allocatable: gpu,
-			},
-			memory: resourcePair{
-				allocatable: memory,
-			},
-			ephemeralStorage: resourcePair{
-				allocatable: storage,
-			},
-			volumesAttached: resourcePair{
-				allocated: *resource.NewQuantity(int64(len(knode.Status.VolumesAttached)), resource.DecimalSI),
-			},
-			storageClasses: make(map[string]bool),
-		}
+		capabilities := parseNodeCapabilities(knode.Labels, cstorage)
 
-		if value, defined := knode.Labels[builder.AkashNetworkStorageClasses]; defined {
-			for _, class := range strings.Split(value, ".") {
-				if _, avail := cstorage[class]; avail {
-					entry.storageClasses[class] = true
-				}
-			}
-		}
-
-		// Initialize the allocated amount to for each node
-		zero.DeepCopyInto(&entry.cpu.allocated)
-		zero.DeepCopyInto(&entry.gpu.allocated)
-		zero.DeepCopyInto(&entry.memory.allocated)
-		zero.DeepCopyInto(&entry.ephemeralStorage.allocated)
-
-		retnodes[knode.Name] = entry
+		retnodes[knode.Name] = newNode(&knode.Status, capabilities)
 	}
 
 	// Go over each pod and sum the resources for it into the value for the pod it lives on
@@ -433,6 +436,7 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 		entry.addAllocatedResources(pod.Spec.Overhead)
 
 		retnodes[nodeName] = entry // Map is by value, so store the copy back into the map
+
 		return nil
 	})
 
@@ -443,49 +447,6 @@ func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) 
 	return retnodes, nil
 }
 
-func (nd *node) addAllocatedResources(rl corev1.ResourceList) {
-	for name, quantity := range rl {
-		switch name {
-		case corev1.ResourceCPU:
-			nd.cpu.allocated.Add(quantity)
-		case corev1.ResourceMemory:
-			nd.memory.allocated.Add(quantity)
-		case corev1.ResourceEphemeralStorage:
-			nd.ephemeralStorage.allocated.Add(quantity)
-		case builder.ResourceNvidiaGPU:
-			nd.gpu.allocated.Add(quantity)
-		}
-	}
-}
-
-func (nd *node) dup() *node {
-	res := &node{
-		id:               nd.id,
-		arch:             nd.arch,
-		cpu:              *nd.cpu.dup(),
-		gpu:              *nd.gpu.dup(),
-		memory:           *nd.memory.dup(),
-		ephemeralStorage: *nd.ephemeralStorage.dup(),
-		volumesAttached:  *nd.volumesAttached.dup(),
-		volumesMounted:   *nd.volumesMounted.dup(),
-		storageClasses:   make(map[string]bool),
-	}
-
-	for k, v := range nd.storageClasses {
-		res.storageClasses[k] = v
-	}
-
-	return res
-}
-
-func (cn clusterNodes) dup() clusterNodes {
-	ret := make(clusterNodes)
-
-	for name, nd := range cn {
-		ret[name] = nd.dup()
-	}
-	return ret
-}
 func (c *client) nodeIsActive(node corev1.Node) bool {
 	ready := false
 	issues := 0
