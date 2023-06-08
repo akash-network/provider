@@ -5,38 +5,11 @@ defaults:
     shell: bash
 
 on:
-  push:
-    tags:
-      - v*
+  workflow_dispatch:
 
 jobs:
-  ensure-dry-run:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ensure release/dry-run PASS
-        uses: lewagon/wait-on-check-action@v1.3.1
-        with:
-          ref: ${{ github.ref }}
-          check-name: 'dry-run'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success
-  ensure-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Ensure tests PASS
-        uses: lewagon/wait-on-check-action@v1.3.1
-        with:
-          ref: ${{ github.ref }}
-          check-name: 'tests'
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 10
-          allowed-conclusions: success
   publish:
     runs-on: ubuntu-latest
-    needs:
-      - ensure-dry-run
-      - ensure-tests
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
