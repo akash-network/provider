@@ -1,6 +1,7 @@
 package v2beta2
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 
@@ -12,17 +13,31 @@ import (
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 )
 
+var (
+	ErrInvalidArgs = fmt.Errorf("crd/%s: invalid args", crdVersion)
+)
+
+type Status struct {
+	State   string `json:"state,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
 type deployment struct {
-	lid   mtypes.LeaseID
-	group mani.Group
+	lid     mtypes.LeaseID
+	group   mani.Group
+	cparams interface{}
 }
 
 func (d deployment) LeaseID() mtypes.LeaseID {
 	return d.lid
 }
 
-func (d deployment) ManifestGroup() mani.Group {
-	return d.group
+func (d deployment) ManifestGroup() *mani.Group {
+	return &d.group
+}
+
+func (d deployment) ClusterParams() interface{} {
+	return d.cparams
 }
 
 // LeaseID stores deployment, group sequence, order, provider and metadata

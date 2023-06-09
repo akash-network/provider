@@ -26,14 +26,6 @@ type InventoryListerExpansion interface{}
 // InventoryRequestLister.
 type InventoryRequestListerExpansion interface{}
 
-// LeaseParamsServiceListerExpansion allows custom methods to be added to
-// LeaseParamsServiceLister.
-type LeaseParamsServiceListerExpansion interface{}
-
-// LeaseParamsServiceNamespaceListerExpansion allows custom methods to be added to
-// LeaseParamsServiceNamespaceLister.
-type LeaseParamsServiceNamespaceListerExpansion interface{}
-
 // ManifestListerExpansion allows custom methods to be added to
 // ManifestLister.
 type ManifestListerExpansion interface{}

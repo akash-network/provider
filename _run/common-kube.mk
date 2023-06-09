@@ -93,6 +93,7 @@ kube-cluster-setup-e2e: $(KUBE_CREATE) kube-cluster-setup-e2e-ci
 .PHONY: kube-cluster-setup-e2e-ci
 kube-cluster-setup-e2e-ci: \
 	kube-setup-ingress \
+	kube-prepare-images \
 	kube-upload-images \
 	kustomize-init \
 	kustomize-deploy-services \

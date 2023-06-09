@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -94,7 +93,7 @@ func newInventoryService(
 	client Client,
 	ipOperatorClient operatorclients.IPOperatorClient,
 	waiter waiter.OperatorWaiter,
-	deployments []ctypes.Deployment,
+	deployments []ctypes.IDeployment,
 ) (*inventoryService, error) {
 
 	sub, err := sub.Clone()
@@ -161,9 +160,9 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources atypes.Resou
 		if res.Resources.CPU == nil {
 			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
 		}
-		// if res.Resources.GPU == nil {
-		// 	return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
-		// }
+		if res.Resources.GPU == nil {
+			return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
+		}
 		if res.Resources.Memory == nil {
 			return nil, fmt.Errorf("%w: Memory resource at idx %d is nil", ErrInvalidResource, idx)
 		}
@@ -389,7 +388,10 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	// create new registration if capacity available
 	reservation := newReservation(req.order, resourcesToCommit)
 
-	is.log.Debug("reservation requested", "order", req.order, "resources", req.resources)
+	{
+		jReservation, _ := json.Marshal(req.resources.GetResources())
+		is.log.Debug("reservation requested", "order", req.order, "resources", jReservation)
+	}
 
 	if reservation.endpointQuantity != 0 {
 		if is.ipOperator == nil {
@@ -593,11 +595,9 @@ loop:
 			is.updateInventoryMetrics(metrics)
 
 			if fetchCount%is.config.InventoryResourceDebugFrequency == 0 {
-				buf := &bytes.Buffer{}
-				enc := json.NewEncoder(buf)
-				err := enc.Encode(&metrics)
+				data, err := json.Marshal(&metrics)
 				if err == nil {
-					is.log.Debug("cluster resources", "dump", buf.String())
+					is.log.Debug("cluster resources", "dump", data)
 				} else {
 					is.log.Error("unable to dump cluster inventory", "error", err.Error())
 				}
@@ -607,6 +607,7 @@ loop:
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
+					// FIXME check if call for Adjust actually needed to be here
 					if err := state.inventory.Adjust(r); err != nil {
 						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
 					}

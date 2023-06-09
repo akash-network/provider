@@ -227,13 +227,13 @@ func (_c *Client_DeclareIP_Call) RunAndReturn(run func(context.Context, marketv1
 	return _c
 }
 
-// Deploy provides a mock function with given fields: ctx, lID, mgroup
-func (_m *Client) Deploy(ctx context.Context, lID marketv1beta3.LeaseID, mgroup *v2beta2.Group) error {
-	ret := _m.Called(ctx, lID, mgroup)
+// Deploy provides a mock function with given fields: ctx, deployment
+func (_m *Client) Deploy(ctx context.Context, deployment v1beta3.IDeployment) error {
+	ret := _m.Called(ctx, deployment)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, *v2beta2.Group) error); ok {
-		r0 = rf(ctx, lID, mgroup)
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta3.IDeployment) error); ok {
+		r0 = rf(ctx, deployment)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -248,15 +248,14 @@ type Client_Deploy_Call struct {
 
 // Deploy is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
-//   - mgroup *v2beta2.Group
-func (_e *Client_Expecter) Deploy(ctx interface{}, lID interface{}, mgroup interface{}) *Client_Deploy_Call {
-	return &Client_Deploy_Call{Call: _e.mock.On("Deploy", ctx, lID, mgroup)}
+//   - deployment v1beta3.IDeployment
+func (_e *Client_Expecter) Deploy(ctx interface{}, deployment interface{}) *Client_Deploy_Call {
+	return &Client_Deploy_Call{Call: _e.mock.On("Deploy", ctx, deployment)}
 }
 
-func (_c *Client_Deploy_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID, mgroup *v2beta2.Group)) *Client_Deploy_Call {
+func (_c *Client_Deploy_Call) Run(run func(ctx context.Context, deployment v1beta3.IDeployment)) *Client_Deploy_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(*v2beta2.Group))
+		run(args[0].(context.Context), args[1].(v1beta3.IDeployment))
 	})
 	return _c
 }
@@ -266,25 +265,25 @@ func (_c *Client_Deploy_Call) Return(_a0 error) *Client_Deploy_Call {
 	return _c
 }
 
-func (_c *Client_Deploy_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, *v2beta2.Group) error) *Client_Deploy_Call {
+func (_c *Client_Deploy_Call) RunAndReturn(run func(context.Context, v1beta3.IDeployment) error) *Client_Deploy_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Deployments provides a mock function with given fields: _a0
-func (_m *Client) Deployments(_a0 context.Context) ([]v1beta3.Deployment, error) {
+func (_m *Client) Deployments(_a0 context.Context) ([]v1beta3.IDeployment, error) {
 	ret := _m.Called(_a0)
 
-	var r0 []v1beta3.Deployment
+	var r0 []v1beta3.IDeployment
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]v1beta3.Deployment, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) ([]v1beta3.IDeployment, error)); ok {
 		return rf(_a0)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []v1beta3.Deployment); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) []v1beta3.IDeployment); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]v1beta3.Deployment)
+			r0 = ret.Get(0).([]v1beta3.IDeployment)
 		}
 	}
 
@@ -315,12 +314,12 @@ func (_c *Client_Deployments_Call) Run(run func(_a0 context.Context)) *Client_De
 	return _c
 }
 
-func (_c *Client_Deployments_Call) Return(_a0 []v1beta3.Deployment, _a1 error) *Client_Deployments_Call {
+func (_c *Client_Deployments_Call) Return(_a0 []v1beta3.IDeployment, _a1 error) *Client_Deployments_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Client_Deployments_Call) RunAndReturn(run func(context.Context) ([]v1beta3.Deployment, error)) *Client_Deployments_Call {
+func (_c *Client_Deployments_Call) RunAndReturn(run func(context.Context) ([]v1beta3.IDeployment, error)) *Client_Deployments_Call {
 	_c.Call.Return(run)
 	return _c
 }

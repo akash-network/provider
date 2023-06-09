@@ -3,12 +3,13 @@ package v1beta3
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
-	eventsv1 "k8s.io/api/events/v1"
+	"strings"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/pkg/errors"
+	eventsv1 "k8s.io/api/events/v1"
 
 	"github.com/akash-network/node/sdl"
 
@@ -56,6 +57,70 @@ type InventoryNodeMetric struct {
 	GPU              uint64 `json:"gpu"`
 	Memory           uint64 `json:"memory"`
 	StorageEphemeral uint64 `json:"storage_ephemeral"`
+}
+
+type GPUAttributes map[string][]string
+
+type StorageAttributes struct {
+	Persistent bool   `json:"persistent"`
+	Class      string `json:"class,omitempty"`
+}
+
+func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
+	var nvidia []string
+	var amd []string
+
+	for _, attr := range attrs {
+		tokens := strings.Split(attr.Key, "/")
+		if len(tokens) != 4 {
+			return GPUAttributes{}, fmt.Errorf("invalid GPU attribute") // nolint: goerr113
+		}
+
+		switch tokens[0] {
+		case "vendor":
+		default:
+			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[0]) // nolint: goerr113
+		}
+
+		switch tokens[1] {
+		case "nvidia":
+			nvidia = append(nvidia, tokens[3])
+		case "amd":
+			amd = append(amd, tokens[3])
+		default:
+			return GPUAttributes{}, fmt.Errorf("unsupported GPU vendor (%s)", tokens[1]) // nolint: goerr113
+		}
+
+	}
+
+	res := make(GPUAttributes)
+	if len(nvidia) > 0 {
+		res["nvidia"] = nvidia
+	}
+
+	if len(amd) > 0 {
+		res["amd"] = amd
+	}
+
+	return res, nil
+}
+
+func ParseStorageAttributes(attrs types.Attributes) (StorageAttributes, error) {
+	attr := attrs.Find(sdl.StorageAttributePersistent)
+	persistent, _ := attr.AsBool()
+	attr = attrs.Find(sdl.StorageAttributeClass)
+	class, _ := attr.AsString()
+
+	if persistent && class == "" {
+		return StorageAttributes{}, fmt.Errorf("persistent volume must specify storage class") // nolint: goerr113
+	}
+
+	res := StorageAttributes{
+		Persistent: persistent,
+		Class:      class,
+	}
+
+	return res, nil
 }
 
 func (inv *InventoryMetricTotal) AddResources(res types.Resources) {
@@ -132,8 +197,21 @@ type LeaseStatus struct {
 	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
 }
 
+type InventoryOptions struct {
+	DryRun bool
+}
+
+type InventoryOption func(*InventoryOptions) *InventoryOptions
+
+func WithDryRun() InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.DryRun = true
+		return opts
+	}
+}
+
 type Inventory interface {
-	Adjust(Reservation) error
+	Adjust(ReservationGroup, ...InventoryOption) error
 	Metrics() InventoryMetrics
 }
 

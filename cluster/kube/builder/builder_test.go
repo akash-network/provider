@@ -10,25 +10,32 @@ import (
 
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	"github.com/akash-network/node/testutil"
+
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const testKubeClientNs = "nstest1111"
 
 func TestLidNsSanity(t *testing.T) {
 	log := testutil.Logger(t)
-	leaseID := testutil.LeaseID(t)
-
 	settings := NewDefaultSettings()
-	g := &manitypes.Group{}
 
-	mb := BuildManifest(log, settings, testKubeClientNs, leaseID, g)
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &manitypes.Group{},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{},
+		},
+	}
+
+	mb := BuildManifest(log, settings, testKubeClientNs, cdep)
 	require.Equal(t, testKubeClientNs, mb.NS())
 
 	m, err := mb.Create()
 	require.NoError(t, err)
-	require.Equal(t, m.Spec.LeaseID.DSeq, strconv.FormatUint(leaseID.DSeq, 10))
+	require.Equal(t, m.Spec.LeaseID.DSeq, strconv.FormatUint(cdep.Lid.DSeq, 10))
 
-	require.Equal(t, LidNS(leaseID), m.Name)
+	require.Equal(t, LidNS(cdep.Lid), m.Name)
 }
 
 // func TestNetworkPolicies(t *testing.T) {
@@ -65,17 +72,26 @@ func TestLidNsSanity(t *testing.T) {
 
 func TestGlobalServiceBuilder(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{
-		Services: manitypes.Services{
-			manitypes.Service{
-				Name: "myservice",
+	mySettings := NewDefaultSettings()
+
+	cdep := &ClusterDeployment{
+		Lid: testutil.LeaseID(t),
+		Group: &manitypes.Group{
+			Services: manitypes.Services{
+				manitypes.Service{
+					Name: "myservice",
+				},
+			},
+		},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{
+				nil,
 			},
 		},
 	}
 
-	mySettings := NewDefaultSettings()
-	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, true)
+	workload := NewWorkloadBuilder(myLog, mySettings, cdep, 0)
+	serviceBuilder := BuildService(workload, true)
 	require.NotNil(t, serviceBuilder)
 	// Should have name ending with suffix
 	require.Equal(t, "myservice-np", serviceBuilder.Name())
@@ -85,16 +101,24 @@ func TestGlobalServiceBuilder(t *testing.T) {
 
 func TestLocalServiceBuilder(t *testing.T) {
 	myLog := testutil.Logger(t)
-	group := &manitypes.Group{
-		Services: manitypes.Services{
-			manitypes.Service{
-				Name: "myservice",
+	mySettings := NewDefaultSettings()
+	cdep := &ClusterDeployment{
+		Lid: testutil.LeaseID(t),
+		Group: &manitypes.Group{
+			Services: manitypes.Services{
+				manitypes.Service{
+					Name: "myservice",
+				},
+			},
+		},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{
+				nil,
 			},
 		},
 	}
-	mySettings := NewDefaultSettings()
-	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, false)
+
+	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), false)
 	require.NotNil(t, serviceBuilder)
 	// Should have name verbatim
 	require.Equal(t, "myservice", serviceBuilder.Name())
@@ -106,18 +130,27 @@ func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
 	exposesServices := make([]manitypes.ServiceExpose, 1)
 	exposesServices[0].Global = false
-	group := &manitypes.Group{
-		Services: manitypes.Services{
-			manitypes.Service{
-				Name:   "myservice",
-				Expose: exposesServices,
+
+	mySettings := NewDefaultSettings()
+
+	cdep := &ClusterDeployment{
+		Lid: testutil.LeaseID(t),
+		Group: &manitypes.Group{
+			Services: manitypes.Services{
+				manitypes.Service{
+					Name:   "myservice",
+					Expose: exposesServices,
+				},
+			},
+		},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{
+				nil,
 			},
 		},
 	}
 
-	mySettings := NewDefaultSettings()
-	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, true)
+	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), true)
 
 	// Should not have any work to do
 	require.False(t, serviceBuilder.Any())
@@ -138,18 +171,27 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 		Port:         2000,
 		ExternalPort: 2001,
 	}
-	group := &manitypes.Group{
-		Services: manitypes.Services{
-			manitypes.Service{
-				Name:   "myservice",
-				Expose: exposesServices,
+
+	mySettings := NewDefaultSettings()
+
+	cdep := &ClusterDeployment{
+		Lid: testutil.LeaseID(t),
+		Group: &manitypes.Group{
+			Services: manitypes.Services{
+				manitypes.Service{
+					Name:   "myservice",
+					Expose: exposesServices,
+				},
+			},
+		},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{
+				nil,
 			},
 		},
 	}
 
-	mySettings := NewDefaultSettings()
-	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, true)
+	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), true)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())
@@ -169,18 +211,25 @@ func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 	exposesServices := make([]manitypes.ServiceExpose, 1)
 	exposesServices[0].Global = true
 
-	group := &manitypes.Group{
-		Services: manitypes.Services{
-			manitypes.Service{
-				Name:   "myservice",
-				Expose: exposesServices,
+	mySettings := NewDefaultSettings()
+	cdep := &ClusterDeployment{
+		Lid: testutil.LeaseID(t),
+		Group: &manitypes.Group{
+			Services: manitypes.Services{
+				manitypes.Service{
+					Name:   "myservice",
+					Expose: exposesServices,
+				},
+			},
+		},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{
+				nil,
 			},
 		},
 	}
 
-	mySettings := NewDefaultSettings()
-	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, false)
+	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), false)
 
 	// Should have work to do
 	require.False(t, serviceBuilder.Any())
@@ -201,18 +250,26 @@ func TestLocalServiceBuilderWithLocalServices(t *testing.T) {
 		Port:         2000,
 		ExternalPort: 2001,
 	}
-	group := &manitypes.Group{
-		Services: manitypes.Services{
-			manitypes.Service{
-				Name:   "myservice",
-				Expose: exposesServices,
+
+	mySettings := NewDefaultSettings()
+	cdep := &ClusterDeployment{
+		Lid: testutil.LeaseID(t),
+		Group: &manitypes.Group{
+			Services: manitypes.Services{
+				manitypes.Service{
+					Name:   "myservice",
+					Expose: exposesServices,
+				},
+			},
+		},
+		Sparams: v2beta2.ClusterSettings{
+			SchedulerParams: []*v2beta2.SchedulerParams{
+				nil,
 			},
 		},
 	}
 
-	mySettings := NewDefaultSettings()
-	lid := testutil.LeaseID(t)
-	serviceBuilder := BuildService(myLog, mySettings, lid, group, 0, false)
+	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), false)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())

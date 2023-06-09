@@ -63,6 +63,49 @@ func (_c *Reservation_Allocated_Call) RunAndReturn(run func() bool) *Reservation
 	return _c
 }
 
+// ClusterParams provides a mock function with given fields:
+func (_m *Reservation) ClusterParams() interface{} {
+	ret := _m.Called()
+
+	var r0 interface{}
+	if rf, ok := ret.Get(0).(func() interface{}); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(interface{})
+		}
+	}
+
+	return r0
+}
+
+// Reservation_ClusterParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClusterParams'
+type Reservation_ClusterParams_Call struct {
+	*mock.Call
+}
+
+// ClusterParams is a helper method to define mock.On call
+func (_e *Reservation_Expecter) ClusterParams() *Reservation_ClusterParams_Call {
+	return &Reservation_ClusterParams_Call{Call: _e.mock.On("ClusterParams")}
+}
+
+func (_c *Reservation_ClusterParams_Call) Run(run func()) *Reservation_ClusterParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Reservation_ClusterParams_Call) Return(_a0 interface{}) *Reservation_ClusterParams_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Reservation_ClusterParams_Call) RunAndReturn(run func() interface{}) *Reservation_ClusterParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // OrderID provides a mock function with given fields:
 func (_m *Reservation) OrderID() marketv1beta3.OrderID {
 	ret := _m.Called()
@@ -143,6 +186,72 @@ func (_c *Reservation_Resources_Call) Return(_a0 typesv1beta3.ResourceGroup) *Re
 }
 
 func (_c *Reservation_Resources_Call) RunAndReturn(run func() typesv1beta3.ResourceGroup) *Reservation_Resources_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetAllocatedResources provides a mock function with given fields: _a0
+func (_m *Reservation) SetAllocatedResources(_a0 []typesv1beta3.Resources) {
+	_m.Called(_a0)
+}
+
+// Reservation_SetAllocatedResources_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetAllocatedResources'
+type Reservation_SetAllocatedResources_Call struct {
+	*mock.Call
+}
+
+// SetAllocatedResources is a helper method to define mock.On call
+//   - _a0 []typesv1beta3.Resources
+func (_e *Reservation_Expecter) SetAllocatedResources(_a0 interface{}) *Reservation_SetAllocatedResources_Call {
+	return &Reservation_SetAllocatedResources_Call{Call: _e.mock.On("SetAllocatedResources", _a0)}
+}
+
+func (_c *Reservation_SetAllocatedResources_Call) Run(run func(_a0 []typesv1beta3.Resources)) *Reservation_SetAllocatedResources_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]typesv1beta3.Resources))
+	})
+	return _c
+}
+
+func (_c *Reservation_SetAllocatedResources_Call) Return() *Reservation_SetAllocatedResources_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Reservation_SetAllocatedResources_Call) RunAndReturn(run func([]typesv1beta3.Resources)) *Reservation_SetAllocatedResources_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetClusterParams provides a mock function with given fields: _a0
+func (_m *Reservation) SetClusterParams(_a0 interface{}) {
+	_m.Called(_a0)
+}
+
+// Reservation_SetClusterParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetClusterParams'
+type Reservation_SetClusterParams_Call struct {
+	*mock.Call
+}
+
+// SetClusterParams is a helper method to define mock.On call
+//   - _a0 interface{}
+func (_e *Reservation_Expecter) SetClusterParams(_a0 interface{}) *Reservation_SetClusterParams_Call {
+	return &Reservation_SetClusterParams_Call{Call: _e.mock.On("SetClusterParams", _a0)}
+}
+
+func (_c *Reservation_SetClusterParams_Call) Run(run func(_a0 interface{})) *Reservation_SetClusterParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(interface{}))
+	})
+	return _c
+}
+
+func (_c *Reservation_SetClusterParams_Call) Return() *Reservation_SetClusterParams_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Reservation_SetClusterParams_Call) RunAndReturn(run func(interface{})) *Reservation_SetClusterParams_Call {
 	_c.Call.Return(run)
 	return _c
 }

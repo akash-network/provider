@@ -3,9 +3,8 @@
 package mocks
 
 import (
+	marketv1beta3 "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	mock "github.com/stretchr/testify/mock"
-
-	v1beta3 "github.com/akash-network/akash-api/go/node/market/v1beta3"
 
 	v2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
 )
@@ -23,15 +22,58 @@ func (_m *Deployment) EXPECT() *Deployment_Expecter {
 	return &Deployment_Expecter{mock: &_m.Mock}
 }
 
-// LeaseID provides a mock function with given fields:
-func (_m *Deployment) LeaseID() v1beta3.LeaseID {
+// ClusterParams provides a mock function with given fields:
+func (_m *Deployment) ClusterParams() interface{} {
 	ret := _m.Called()
 
-	var r0 v1beta3.LeaseID
-	if rf, ok := ret.Get(0).(func() v1beta3.LeaseID); ok {
+	var r0 interface{}
+	if rf, ok := ret.Get(0).(func() interface{}); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(v1beta3.LeaseID)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(interface{})
+		}
+	}
+
+	return r0
+}
+
+// Deployment_ClusterParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClusterParams'
+type Deployment_ClusterParams_Call struct {
+	*mock.Call
+}
+
+// ClusterParams is a helper method to define mock.On call
+func (_e *Deployment_Expecter) ClusterParams() *Deployment_ClusterParams_Call {
+	return &Deployment_ClusterParams_Call{Call: _e.mock.On("ClusterParams")}
+}
+
+func (_c *Deployment_ClusterParams_Call) Run(run func()) *Deployment_ClusterParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Deployment_ClusterParams_Call) Return(_a0 interface{}) *Deployment_ClusterParams_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Deployment_ClusterParams_Call) RunAndReturn(run func() interface{}) *Deployment_ClusterParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// LeaseID provides a mock function with given fields:
+func (_m *Deployment) LeaseID() marketv1beta3.LeaseID {
+	ret := _m.Called()
+
+	var r0 marketv1beta3.LeaseID
+	if rf, ok := ret.Get(0).(func() marketv1beta3.LeaseID); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(marketv1beta3.LeaseID)
 	}
 
 	return r0
@@ -54,25 +96,27 @@ func (_c *Deployment_LeaseID_Call) Run(run func()) *Deployment_LeaseID_Call {
 	return _c
 }
 
-func (_c *Deployment_LeaseID_Call) Return(_a0 v1beta3.LeaseID) *Deployment_LeaseID_Call {
+func (_c *Deployment_LeaseID_Call) Return(_a0 marketv1beta3.LeaseID) *Deployment_LeaseID_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Deployment_LeaseID_Call) RunAndReturn(run func() v1beta3.LeaseID) *Deployment_LeaseID_Call {
+func (_c *Deployment_LeaseID_Call) RunAndReturn(run func() marketv1beta3.LeaseID) *Deployment_LeaseID_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ManifestGroup provides a mock function with given fields:
-func (_m *Deployment) ManifestGroup() v2beta2.Group {
+func (_m *Deployment) ManifestGroup() *v2beta2.Group {
 	ret := _m.Called()
 
-	var r0 v2beta2.Group
-	if rf, ok := ret.Get(0).(func() v2beta2.Group); ok {
+	var r0 *v2beta2.Group
+	if rf, ok := ret.Get(0).(func() *v2beta2.Group); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(v2beta2.Group)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v2beta2.Group)
+		}
 	}
 
 	return r0
@@ -95,12 +139,12 @@ func (_c *Deployment_ManifestGroup_Call) Run(run func()) *Deployment_ManifestGro
 	return _c
 }
 
-func (_c *Deployment_ManifestGroup_Call) Return(_a0 v2beta2.Group) *Deployment_ManifestGroup_Call {
+func (_c *Deployment_ManifestGroup_Call) Return(_a0 *v2beta2.Group) *Deployment_ManifestGroup_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Deployment_ManifestGroup_Call) RunAndReturn(run func() v2beta2.Group) *Deployment_ManifestGroup_Call {
+func (_c *Deployment_ManifestGroup_Call) RunAndReturn(run func() *v2beta2.Group) *Deployment_ManifestGroup_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -37,10 +37,10 @@ bins: $(BINS)
 
 .PHONY: build
 build:
-	$(GO) build -a  ./...
+	$(GO_BUILD) -a  ./...
 
 $(PROVIDER_SERVICES): modvendor
-	$(GO) build -o $@ $(BUILD_FLAGS) ./cmd/provider-services
+	$(GO_BUILD) -o $@ $(BUILD_FLAGS) ./cmd/provider-services
 
 .PHONY: provider-services
 provider-services: $(PROVIDER_SERVICES)

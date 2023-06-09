@@ -20,24 +20,25 @@ import (
 func TestMonitorInstantiate(t *testing.T) {
 	myLog := testutil.Logger(t)
 	bus := pubsub.NewBus()
-	lid := testutil.LeaseID(t)
 
-	group := &manifest.Group{}
 	client := &mocks.Client{}
+	deployment := &ctypes.Deployment{
+		Lid:    testutil.LeaseID(t),
+		MGroup: &manifest.Group{},
+	}
 
 	statusResult := &ctypes.LeaseStatus{}
-	client.On("LeaseStatus", mock.Anything, lid).Return(statusResult, nil)
+	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
 	lc := lifecycle.New()
 	myDeploymentManager := &deploymentManager{
-		bus:     bus,
-		session: mySession,
-		client:  client,
-		lease:   lid,
-		mgroup:  group,
-		log:     myLog,
-		lc:      lc,
+		bus:        bus,
+		session:    mySession,
+		client:     client,
+		deployment: deployment,
+		log:        myLog,
+		lc:         lc,
 	}
 	monitor := newDeploymentMonitor(myDeploymentManager)
 	require.NotNil(t, monitor)
@@ -49,7 +50,6 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 	const serviceName = "test"
 	myLog := testutil.Logger(t)
 	bus := pubsub.NewBus()
-	lid := testutil.LeaseID(t)
 
 	group := &manifest.Group{}
 	group.Services = make(manifest.Services, 1)
@@ -59,29 +59,32 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 	group.Services[0].Expose[0].Proto = manifest.TCP
 	group.Services[0].Expose[0].Port = 40000
 	client := &mocks.Client{}
+	deployment := &ctypes.Deployment{
+		Lid:    testutil.LeaseID(t),
+		MGroup: group,
+	}
 
 	statusResult := make(map[string]*ctypes.ServiceStatus)
-	client.On("LeaseStatus", mock.Anything, lid).Return(statusResult, nil)
+	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
 	sub, err := bus.Subscribe()
 	require.NoError(t, err)
 	lc := lifecycle.New()
 	myDeploymentManager := &deploymentManager{
-		bus:     bus,
-		session: mySession,
-		client:  client,
-		lease:   lid,
-		mgroup:  group,
-		log:     myLog,
-		lc:      lc,
+		bus:        bus,
+		session:    mySession,
+		client:     client,
+		deployment: deployment,
+		log:        myLog,
+		lc:         lc,
 	}
 	monitor := newDeploymentMonitor(myDeploymentManager)
 	require.NotNil(t, monitor)
 
 	ev := <-sub.Events()
 	result := ev.(event.ClusterDeployment)
-	require.Equal(t, lid, result.LeaseID)
+	require.Equal(t, deployment.LeaseID(), result.LeaseID)
 	require.Equal(t, event.ClusterDeploymentPending, result.Status)
 
 	monitor.lc.Shutdown(nil)
@@ -91,7 +94,6 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 	const serviceName = "test"
 	myLog := testutil.Logger(t)
 	bus := pubsub.NewBus()
-	lid := testutil.LeaseID(t)
 
 	group := &manifest.Group{}
 	group.Services = make(manifest.Services, 1)
@@ -102,6 +104,10 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 	group.Services[0].Expose[0].Port = 40000
 	group.Services[0].Count = 3
 	client := &mocks.Client{}
+	deployment := &ctypes.Deployment{
+		Lid:    testutil.LeaseID(t),
+		MGroup: group,
+	}
 
 	statusResult := make(map[string]*ctypes.ServiceStatus)
 	statusResult[serviceName] = &ctypes.ServiceStatus{
@@ -115,27 +121,26 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 		ReadyReplicas:      0,
 		AvailableReplicas:  0,
 	}
-	client.On("LeaseStatus", mock.Anything, lid).Return(statusResult, nil)
+	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
 	sub, err := bus.Subscribe()
 	require.NoError(t, err)
 	lc := lifecycle.New()
 	myDeploymentManager := &deploymentManager{
-		bus:     bus,
-		session: mySession,
-		client:  client,
-		lease:   lid,
-		mgroup:  group,
-		log:     myLog,
-		lc:      lc,
+		bus:        bus,
+		session:    mySession,
+		client:     client,
+		deployment: deployment,
+		log:        myLog,
+		lc:         lc,
 	}
 	monitor := newDeploymentMonitor(myDeploymentManager)
 	require.NotNil(t, monitor)
 
 	ev := <-sub.Events()
 	result := ev.(event.ClusterDeployment)
-	require.Equal(t, lid, result.LeaseID)
+	require.Equal(t, deployment.LeaseID(), result.LeaseID)
 	require.Equal(t, event.ClusterDeploymentDeployed, result.Status)
 
 	monitor.lc.Shutdown(nil)

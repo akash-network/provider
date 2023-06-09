@@ -66,9 +66,9 @@ type ReadClient interface {
 //go:generate mockery --name Client
 type Client interface {
 	ReadClient
-	Deploy(ctx context.Context, lID mtypes.LeaseID, mgroup *mani.Group) error
+	Deploy(ctx context.Context, deployment ctypes.IDeployment) error
 	TeardownLease(context.Context, mtypes.LeaseID) error
-	Deployments(context.Context) ([]ctypes.Deployment, error)
+	Deployments(context.Context) ([]ctypes.IDeployment, error)
 	Inventory(context.Context) (ctypes.Inventory, error)
 	Exec(ctx context.Context,
 		lID mtypes.LeaseID,
@@ -171,7 +171,7 @@ type inventory struct {
 
 var _ ctypes.Inventory = (*inventory)(nil)
 
-func (inv *inventory) Adjust(reservation ctypes.Reservation) error {
+func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes.InventoryOption) error {
 	resources := make([]types.Resources, len(reservation.Resources().GetResources()))
 	copy(resources, reservation.Resources().GetResources())
 
@@ -407,7 +407,7 @@ func (c *nullClient) RemoveHostnameFromDeployment(_ context.Context, _ string, _
 func (c *nullClient) ObserveHostnameState(_ context.Context) (<-chan ctypes.HostnameResourceEvent, error) {
 	return nil, errNotImplemented
 }
-func (c *nullClient) GetDeployments(_ context.Context, _ dtypes.DeploymentID) ([]ctypes.Deployment, error) {
+func (c *nullClient) GetDeployments(_ context.Context, _ dtypes.DeploymentID) ([]ctypes.IDeployment, error) {
 	return nil, errNotImplemented
 }
 
@@ -431,9 +431,12 @@ func (c *nullClient) PurgeDeclaredHostname(_ context.Context, _ mtypes.LeaseID, 
 	return errNotImplemented
 }
 
-func (c *nullClient) Deploy(ctx context.Context, lid mtypes.LeaseID, mgroup *mani.Group) error {
+func (c *nullClient) Deploy(ctx context.Context, deployment ctypes.IDeployment) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
+
+	lid := deployment.LeaseID()
+	mgroup := deployment.ManifestGroup()
 
 	ctx, cancel := context.WithCancel(ctx)
 	c.leases[mquery.LeasePath(lid)] = &nullLease{
@@ -551,7 +554,7 @@ func (c *nullClient) TeardownLease(_ context.Context, lid mtypes.LeaseID) error 
 	return nil
 }
 
-func (c *nullClient) Deployments(context.Context) ([]ctypes.Deployment, error) {
+func (c *nullClient) Deployments(context.Context) ([]ctypes.IDeployment, error) {
 	return nil, nil
 }
 

@@ -28,8 +28,6 @@ type Interface interface {
 	Inventories() InventoryInformer
 	// InventoryRequests returns a InventoryRequestInformer.
 	InventoryRequests() InventoryRequestInformer
-	// LeaseParamsServices returns a LeaseParamsServiceInformer.
-	LeaseParamsServices() LeaseParamsServiceInformer
 	// Manifests returns a ManifestInformer.
 	Manifests() ManifestInformer
 	// ProviderHosts returns a ProviderHostInformer.
@@ -57,11 +55,6 @@ func (v *version) Inventories() InventoryInformer {
 // InventoryRequests returns a InventoryRequestInformer.
 func (v *version) InventoryRequests() InventoryRequestInformer {
 	return &inventoryRequestInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
-// LeaseParamsServices returns a LeaseParamsServiceInformer.
-func (v *version) LeaseParamsServices() LeaseParamsServiceInformer {
-	return &leaseParamsServiceInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
 }
 
 // Manifests returns a ManifestInformer.

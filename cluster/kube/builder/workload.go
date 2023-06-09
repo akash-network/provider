@@ -4,13 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/akash-network/node/sdl"
 	sdlutil "github.com/akash-network/node/sdl/util"
@@ -19,7 +17,10 @@ import (
 )
 
 const (
-	ResourceNvidiaGPU = corev1.ResourceName("nvidia.com/gpu")
+	ResourceGPUNvidia = corev1.ResourceName("nvidia.com/gpu")
+	ResourceGPUAMD    = corev1.ResourceName("amd.com/gpu")
+	GPUVendorNvidia   = "nvidia"
+	GPUVendorAMD      = "amd"
 )
 
 type workloadBase interface {
@@ -27,36 +28,37 @@ type workloadBase interface {
 	Name() string
 }
 
-type workload struct {
+type Workload struct {
 	builder
 	serviceIdx int
 }
 
-var _ workloadBase = (*workload)(nil)
+var _ workloadBase = (*Workload)(nil)
 
-func newWorkloadBuilder(
+func NewWorkloadBuilder(
 	log log.Logger,
 	settings Settings,
-	lid mtypes.LeaseID,
-	group *mani.Group,
-	sparams crd.ParamsServices,
-	serviceIdx int) workload {
-	return workload{
+	deployment IClusterDeployment,
+	serviceIdx int) Workload {
+	return Workload{
 		builder: builder{
-			settings: settings,
-			log:      log.With("module", "kube-builder"),
-			lid:      lid,
-			group:    group,
-			sparams:  sparams,
+			settings:   settings,
+			log:        log.With("module", "kube-builder"),
+			deployment: deployment,
 		},
 		serviceIdx: serviceIdx,
 	}
 }
 
-func (b *workload) container() corev1.Container {
+func (b *Workload) Name() string {
+	return b.deployment.ManifestGroup().Services[b.serviceIdx].Name
+}
+
+func (b *Workload) container() corev1.Container {
 	falseValue := false
 
-	service := &b.group.Services[b.serviceIdx]
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	sparams := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
 
 	kcontainer := corev1.Container{
 		Name:    service.Name,
@@ -82,13 +84,22 @@ func (b *workload) container() corev1.Container {
 	}
 
 	if gpu := service.Resources.GPU; gpu != nil && gpu.Units.Value() > 0 {
-		requestedGPU := sdlutil.ComputeCommittedResources(b.settings.GPUCommitLevel, gpu.Units)
+		var resourceName corev1.ResourceName
+
+		switch sparams.Resources.GPU.Vendor {
+		case GPUVendorNvidia:
+			resourceName = ResourceGPUNvidia
+		case GPUVendorAMD:
+			resourceName = ResourceGPUAMD
+		default:
+			panic(fmt.Sprintf("requested for unsupported GPU vendor"))
+		}
+
 		// GPUs are only supposed to be specified in the limits section, which means
 		//  - can specify GPU limits without specifying requests, because Kubernetes will use the limit as the request value by default.
 		//  - can specify GPU in both limits and requests but these two values must be equal.
 		//  - cannot specify GPU requests without specifying limits.
-		// fixme get custom resource name from inventory
-		resourceName := ResourceNvidiaGPU
+		requestedGPU := sdlutil.ComputeCommittedResources(b.settings.GPUCommitLevel, gpu.Units)
 		kcontainer.Resources.Requests[resourceName] = resource.NewQuantity(int64(requestedGPU.Value()), resource.DecimalSI).DeepCopy()
 		kcontainer.Resources.Limits[resourceName] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()
 	}
@@ -143,10 +154,10 @@ func (b *workload) container() corev1.Container {
 	return kcontainer
 }
 
-func (b *workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
+func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	var pvcs []corev1.PersistentVolumeClaim // nolint:prealloc
 
-	service := &b.group.Services[b.serviceIdx]
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	for _, storage := range service.Resources.Storage {
 		attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
@@ -184,17 +195,82 @@ func (b *workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	return pvcs
 }
 
-func (b *workload) Name() string {
-	return b.group.Services[b.serviceIdx].Name
+func (b *Workload) runtimeClass() *string {
+	params := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
+	var effectiveRuntimeClassName *string
+
+	if params != nil {
+		if len(params.RuntimeClass) != 0 && params.RuntimeClass != runtimeClassNoneValue {
+			runtimeClass := new(string)
+			*runtimeClass = params.RuntimeClass
+			effectiveRuntimeClassName = runtimeClass
+		}
+	}
+
+	return effectiveRuntimeClassName
 }
 
-func (b *workload) labels() map[string]string {
+func (b *Workload) replicas() *int32 {
+	replicas := new(int32)
+	*replicas = int32(b.deployment.ManifestGroup().Services[b.serviceIdx].Count)
+
+	return replicas
+}
+
+func (b *Workload) affinity() *corev1.Affinity {
+	svc := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
+
+	if svc == nil || svc.Resources == nil {
+		return nil
+	}
+
+	selectors := nodeSelectorsFromResources(svc.Resources)
+	if len(selectors) == 0 {
+		return nil
+	}
+
+	affinity := &corev1.Affinity{
+		NodeAffinity: &corev1.NodeAffinity{
+			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+				NodeSelectorTerms: []corev1.NodeSelectorTerm{
+					{
+						MatchExpressions: selectors,
+					},
+				},
+			},
+		},
+	}
+
+	return affinity
+}
+
+func nodeSelectorsFromResources(res *crd.SchedulerResources) []corev1.NodeSelectorRequirement {
+	if res == nil {
+		return nil
+	}
+
+	var selectors []corev1.NodeSelectorRequirement
+
+	if gpu := res.GPU; gpu != nil {
+		selectors = append(selectors, corev1.NodeSelectorRequirement{
+			Key:      fmt.Sprintf("%s/vendor/%s/model/%s", AkashServiceCapabilityGPU, gpu.Vendor, gpu.Model),
+			Operator: "In",
+			Values: []string{
+				"true",
+			},
+		})
+	}
+
+	return selectors
+}
+
+func (b *Workload) labels() map[string]string {
 	obj := b.builder.labels()
-	obj[AkashManifestServiceLabelName] = b.group.Services[b.serviceIdx].Name
+	obj[AkashManifestServiceLabelName] = b.deployment.ManifestGroup().Services[b.serviceIdx].Name
 	return obj
 }
 
-func (b *workload) imagePullSecrets() []corev1.LocalObjectReference {
+func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
 	if b.settings.DockerImagePullSecretsName == "" {
 		return nil
 	}
@@ -202,13 +278,16 @@ func (b *workload) imagePullSecrets() []corev1.LocalObjectReference {
 	return []corev1.LocalObjectReference{{Name: b.settings.DockerImagePullSecretsName}}
 }
 
-func (b *workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, env []corev1.EnvVar) []corev1.EnvVar {
+func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, env []corev1.EnvVar) []corev1.EnvVar {
+	lid := b.deployment.LeaseID()
+
 	// Add each env. var. if it is not already set by the SDL
-	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashGroupSequence, b.lid.GetGSeq())
-	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashDeploymentSequence, b.lid.GetDSeq())
-	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOrderSequence, b.lid.GetOSeq())
-	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOwner, b.lid.Owner)
-	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, b.lid.Provider)
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashGroupSequence, lid.GetGSeq())
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashDeploymentSequence, lid.GetDSeq())
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOrderSequence, lid.GetOSeq())
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOwner, lid.Owner)
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, lid.Provider)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashClusterPublicHostname, b.settings.ClusterPublicHostname)
+
 	return env
 }

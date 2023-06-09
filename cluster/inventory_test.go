@@ -129,7 +129,7 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 	subscriber, err := bus.Subscribe()
 	require.NoError(t, err)
 
-	deployments := make([]ctypes.Deployment, 0)
+	deployments := make([]ctypes.IDeployment, 0)
 
 	clusterClient := &mocks.Client{}
 
@@ -169,8 +169,8 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	subscriber, err := bus.Subscribe()
 	require.NoError(t, err)
 
-	deployments := make([]ctypes.Deployment, 1)
-	deployment := &mocks.Deployment{}
+	deployments := make([]ctypes.IDeployment, 1)
+	deployment := &mocks.IDeployment{}
 	deployment.On("LeaseID").Return(lid)
 
 	groupServices := make(manifest.Services, 1)
@@ -213,7 +213,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		Services: groupServices,
 	}
 
-	deployment.On("ManifestGroup").Return(group)
+	deployment.On("ManifestGroup").Return(&group)
 	deployments[0] = deployment
 
 	clusterClient := &mocks.Client{}
@@ -449,7 +449,7 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 		scaffold.clusterClient,
 		nil,                    // No IP operator client
 		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.Deployment, 0))
+		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
@@ -494,7 +494,7 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 		scaffold.clusterClient,
 		mockIP,
 		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.Deployment, 0))
+		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
@@ -557,7 +557,7 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 		scaffold.clusterClient,
 		mockIP,
 		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.Deployment, 0))
+		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
@@ -661,7 +661,7 @@ func TestInventory_OverReservations(t *testing.T) {
 		scaffold.clusterClient,
 		nil,                    // No IP operator client
 		waiter.NewNullWaiter(), // Do not need to wait in test
-		make([]ctypes.Deployment, 0))
+		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 

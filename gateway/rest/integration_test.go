@@ -67,9 +67,10 @@ func Test_router_Validate(t *testing.T) {
 		}
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything).Return(expected, nil)
+		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(expected, nil)
 		withServer(t, addr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
-			client, err := NewClient(mocks.qclient, addr, nil)
+			cert := testutil.Certificate(t, testutil.AccAddress(t), testutil.CertificateOptionMocks(mocks.qclient))
+			client, err := NewClient(mocks.qclient, addr, cert.Cert)
 			assert.NoError(t, err)
 			result, err := client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.NoError(t, err)
@@ -81,9 +82,10 @@ func Test_router_Validate(t *testing.T) {
 	t.Run("failure", func(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything).Return(provider.ValidateGroupSpecResult{}, errors.New("oops"))
+		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(provider.ValidateGroupSpecResult{}, errors.New("oops"))
 		withServer(t, addr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
-			client, err := NewClient(mocks.qclient, addr, nil)
+			cert := testutil.Certificate(t, testutil.AccAddress(t), testutil.CertificateOptionMocks(mocks.qclient))
+			client, err := NewClient(mocks.qclient, addr, cert.Cert)
 			assert.NoError(t, err)
 			_, err = client.Validate(context.Background(), dtypes.GroupSpec{})
 			assert.Error(t, err)

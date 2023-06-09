@@ -24,7 +24,7 @@ func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		err := test.gclient.MigrateHostnames(ctx, []string{"foobar.com"}, dseq, gseq)
+		err := test.gwclient.MigrateHostnames(ctx, []string{"foobar.com"}, dseq, gseq)
 		require.Error(t, err)
 		require.IsType(t, ClientResponseError{}, err)
 		require.Regexp(t, `(?s)^.*destination deployment does not exist.*$`, err.(ClientResponseError).ClientError())
@@ -43,7 +43,7 @@ func TestRouteMigrateHostnameDeploymentDoesNotUse(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		err := test.gclient.MigrateHostnames(ctx, []string{"foobar.org"}, dseq, gseq)
+		err := test.gwclient.MigrateHostnames(ctx, []string{"foobar.org"}, dseq, gseq)
 		require.Error(t, err)
 		require.IsType(t, ClientResponseError{}, err)
 		require.Regexp(t, `(?s)^.*the hostname "foobar.org" is not used by this deployment.*$`, err.(ClientResponseError).ClientError())
@@ -87,7 +87,7 @@ func TestRouteMigrateHostname(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		err := test.gclient.MigrateHostnames(ctx, []string{hostname}, dseq, gseq)
+		err := test.gwclient.MigrateHostnames(ctx, []string{hostname}, dseq, gseq)
 		require.NoError(t, err)
 
 		require.Equal(t, 2, len(test.clusterService.Calls))
@@ -131,7 +131,7 @@ func TestRouteMigrateHostnamePrepareFails(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		err := test.gclient.MigrateHostnames(ctx, []string{hostname}, dseq, gseq)
+		err := test.gwclient.MigrateHostnames(ctx, []string{hostname}, dseq, gseq)
 		require.Error(t, err)
 		require.Regexp(t, `^.*remote server returned 500.*$`, err)
 		require.Equal(t, 1, len(test.clusterService.Calls))
@@ -177,7 +177,7 @@ func TestRouteMigrateHostnameTransferFails(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		err := test.gclient.MigrateHostnames(ctx, []string{hostname}, dseq, gseq)
+		err := test.gwclient.MigrateHostnames(ctx, []string{hostname}, dseq, gseq)
 		require.Error(t, err)
 		require.Regexp(t, `^.*remote server returned 500.*$`, err)
 		require.Equal(t, 2, len(test.clusterService.Calls))

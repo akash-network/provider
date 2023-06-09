@@ -15,6 +15,8 @@ import (
 
 	provider "github.com/akash-network/provider"
 
+	types "github.com/cosmos/cosmos-sdk/types"
+
 	v1beta3 "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
@@ -257,23 +259,23 @@ func (_c *Client_Status_Call) RunAndReturn(run func(context.Context) (*provider.
 	return _c
 }
 
-// Validate provides a mock function with given fields: _a0, _a1
-func (_m *Client) Validate(_a0 context.Context, _a1 deploymentv1beta3.GroupSpec) (provider.ValidateGroupSpecResult, error) {
-	ret := _m.Called(_a0, _a1)
+// Validate provides a mock function with given fields: _a0, _a1, _a2
+func (_m *Client) Validate(_a0 context.Context, _a1 types.Address, _a2 deploymentv1beta3.GroupSpec) (provider.ValidateGroupSpecResult, error) {
+	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 provider.ValidateGroupSpecResult
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, deploymentv1beta3.GroupSpec) (provider.ValidateGroupSpecResult, error)); ok {
-		return rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(context.Context, types.Address, deploymentv1beta3.GroupSpec) (provider.ValidateGroupSpecResult, error)); ok {
+		return rf(_a0, _a1, _a2)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, deploymentv1beta3.GroupSpec) provider.ValidateGroupSpecResult); ok {
-		r0 = rf(_a0, _a1)
+	if rf, ok := ret.Get(0).(func(context.Context, types.Address, deploymentv1beta3.GroupSpec) provider.ValidateGroupSpecResult); ok {
+		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Get(0).(provider.ValidateGroupSpecResult)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, deploymentv1beta3.GroupSpec) error); ok {
-		r1 = rf(_a0, _a1)
+	if rf, ok := ret.Get(1).(func(context.Context, types.Address, deploymentv1beta3.GroupSpec) error); ok {
+		r1 = rf(_a0, _a1, _a2)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -288,14 +290,15 @@ type Client_Validate_Call struct {
 
 // Validate is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 deploymentv1beta3.GroupSpec
-func (_e *Client_Expecter) Validate(_a0 interface{}, _a1 interface{}) *Client_Validate_Call {
-	return &Client_Validate_Call{Call: _e.mock.On("Validate", _a0, _a1)}
+//   - _a1 types.Address
+//   - _a2 deploymentv1beta3.GroupSpec
+func (_e *Client_Expecter) Validate(_a0 interface{}, _a1 interface{}, _a2 interface{}) *Client_Validate_Call {
+	return &Client_Validate_Call{Call: _e.mock.On("Validate", _a0, _a1, _a2)}
 }
 
-func (_c *Client_Validate_Call) Run(run func(_a0 context.Context, _a1 deploymentv1beta3.GroupSpec)) *Client_Validate_Call {
+func (_c *Client_Validate_Call) Run(run func(_a0 context.Context, _a1 types.Address, _a2 deploymentv1beta3.GroupSpec)) *Client_Validate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(deploymentv1beta3.GroupSpec))
+		run(args[0].(context.Context), args[1].(types.Address), args[2].(deploymentv1beta3.GroupSpec))
 	})
 	return _c
 }
@@ -305,7 +308,7 @@ func (_c *Client_Validate_Call) Return(_a0 provider.ValidateGroupSpecResult, _a1
 	return _c
 }
 
-func (_c *Client_Validate_Call) RunAndReturn(run func(context.Context, deploymentv1beta3.GroupSpec) (provider.ValidateGroupSpecResult, error)) *Client_Validate_Call {
+func (_c *Client_Validate_Call) RunAndReturn(run func(context.Context, types.Address, deploymentv1beta3.GroupSpec) (provider.ValidateGroupSpecResult, error)) *Client_Validate_Call {
 	_c.Call.Return(run)
 	return _c
 }

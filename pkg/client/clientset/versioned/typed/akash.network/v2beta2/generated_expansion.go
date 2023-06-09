@@ -22,8 +22,6 @@ type InventoryExpansion interface{}
 
 type InventoryRequestExpansion interface{}
 
-type LeaseParamsServiceExpansion interface{}
-
 type ManifestExpansion interface{}
 
 type ProviderHostExpansion interface{}

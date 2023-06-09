@@ -371,7 +371,11 @@ loop:
 			}
 			pricech = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
 				// Calculate price & bid
-				return runner.NewResult(o.cfg.PricingStrategy.CalculatePrice(ctx, group.GroupID.Owner, &group.GroupSpec))
+				priceReq := Request{
+					Owner: group.GroupID.Owner,
+					GSpec: &group.GroupSpec,
+				}
+				return runner.NewResult(o.cfg.PricingStrategy.CalculatePrice(ctx, priceReq))
 			}, pricingDuration))
 		case result := <-pricech:
 			pricech = nil

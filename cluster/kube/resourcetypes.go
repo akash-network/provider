@@ -19,12 +19,21 @@ type resourcePair struct {
 type clusterStorage map[string]*resourcePair
 
 func (cs clusterStorage) dup() clusterStorage {
-	res := make(clusterStorage, len(cs))
+	res := make(clusterStorage)
 	for class, resources := range cs {
 		res[class] = resources.dup()
 	}
 
 	return res
+}
+
+func newResourcePair(allocatable, allocated resource.Quantity) resourcePair {
+	rp := resourcePair{
+		allocatable: allocatable,
+		allocated:   allocated,
+	}
+
+	return rp
 }
 
 func rpNewFromAkash(res crd.ResourcePair) *resourcePair {
@@ -52,6 +61,7 @@ func (rp *resourcePair) subMilliNLZ(val types.ResourceValue) bool {
 
 	allocated := rp.allocated.DeepCopy()
 	allocated.Add(*resource.NewMilliQuantity(int64(val.Value()), resource.DecimalSI))
+
 	*rp = resourcePair{
 		allocatable: rp.allocatable.DeepCopy(),
 		allocated:   allocated,
@@ -81,7 +91,7 @@ func (rp *resourcePair) subNLZ(val types.ResourceValue) bool {
 	return true
 }
 
-func (rp resourcePair) available() resource.Quantity {
+func (rp *resourcePair) available() resource.Quantity {
 	result := rp.allocatable.DeepCopy()
 
 	if result.Value() == -1 {

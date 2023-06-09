@@ -12,7 +12,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
@@ -79,7 +79,7 @@ type manager struct {
 	data            dtypes.QueryDeploymentResponse
 	requests        []manifestRequest
 	pendingRequests []manifestRequest
-	manifests       []*maniv2beta1.Manifest
+	manifests       []*maniv2beta2.Manifest
 	versions        [][]byte
 
 	localLeases []event.LeaseWon
@@ -375,7 +375,7 @@ func (m *manager) validateRequests() {
 		return
 	}
 
-	manifests := make([]*maniv2beta1.Manifest, 0)
+	manifests := make([]*maniv2beta2.Manifest, 0)
 	for _, req := range m.requests {
 		// If the request context is complete then skip processing it
 		select {
@@ -431,11 +431,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return ErrManifestVersion
 	}
 
-	if err = maniv2beta1.ValidateManifest(req.value.Manifest); err != nil {
+	if err = maniv2beta2.ValidateManifest(req.value.Manifest); err != nil {
 		return err
 	}
 
-	if err = maniv2beta1.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
+	if err = maniv2beta2.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
 		return err
 	}
 
@@ -452,7 +452,7 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	return nil
 }
 
-func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta1.Manifest, groupNames []string) error {
+func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest, groupNames []string) error {
 	// Check if the hostnames are available. Do not block forever
 	ownerAddr, err := m.data.GetDeployment().DeploymentID.GetOwnerAddress()
 	if err != nil {

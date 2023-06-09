@@ -48,6 +48,15 @@ type orderTestScaffold struct {
 	reserveCallNotify chan int
 }
 
+type testBidPricingStrategy int64
+
+type alwaysFailsBidPricingStrategy struct {
+	failure error
+}
+
+var _ BidPricingStrategy = (*testBidPricingStrategy)(nil)
+var _ BidPricingStrategy = (*alwaysFailsBidPricingStrategy)(nil)
+
 func makeMocks(s *orderTestScaffold) {
 	groupResult := &dtypes.QueryGroupResponse{}
 	groupResult.Group.GroupSpec.Name = "testGroupName"
@@ -610,9 +619,7 @@ func Test_ShouldRecognizeLeaseCreatedIfBiddingIsSkipped(t *testing.T) {
 	require.Nil(t, broadcast)
 }
 
-type testBidPricingStrategy int64
-
-func (tbps testBidPricingStrategy) CalculatePrice(_ context.Context, _ string, gspec *dtypes.GroupSpec) (sdk.DecCoin, error) {
+func (tbps testBidPricingStrategy) CalculatePrice(_ context.Context, _ Request) (sdk.DecCoin, error) {
 	return sdk.NewInt64DecCoin(testutil.CoinDenom, int64(tbps)), nil
 }
 
@@ -642,11 +649,7 @@ func Test_BidOrderUsesBidPricingStrategy(t *testing.T) {
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
 }
 
-type alwaysFailsBidPricingStrategy struct {
-	failure error
-}
-
-func (afbps alwaysFailsBidPricingStrategy) CalculatePrice(_ context.Context, _ string, gspec *dtypes.GroupSpec) (sdk.DecCoin, error) {
+func (afbps alwaysFailsBidPricingStrategy) CalculatePrice(_ context.Context, _ Request) (sdk.DecCoin, error) {
 	return sdk.DecCoin{}, afbps.failure
 }
 

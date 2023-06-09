@@ -8,6 +8,9 @@ run:
   skip-dirs:
     - pkg/client
     - ".*/mocks"
+    - ".*/kubernetes_mock"
 
   # Skip vendor/ etc
   skip-dirs-use-default: true
+
+linters-settings:

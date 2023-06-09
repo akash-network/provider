@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/akash-network/node/sdl"
 	"github.com/akash-network/node/testutil"
-
-	"github.com/stretchr/testify/require"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -25,9 +25,16 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	mani, err := sdl.Manifest()
 	require.NoError(t, err)
 
-	sparams := make(crd.ParamsServices, len(mani.GetGroups()[0].Services))
+	sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
+	group := mani.GetGroups()[0]
 
-	deploymentBuilder := NewDeployment(log, settings, lid, &mani.GetGroups()[0], sparams, 0)
+	cdep := &ClusterDeployment{
+		Lid:     lid,
+		Group:   &group,
+		Sparams: crd.ClusterSettings{SchedulerParams: sparams},
+	}
+
+	deploymentBuilder := NewDeployment(NewWorkloadBuilder(log, settings, cdep, 0))
 
 	require.NotNil(t, deploymentBuilder)
 

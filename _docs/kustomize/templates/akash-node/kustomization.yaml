@@ -34,7 +34,7 @@ secretGenerator:
       - cache/config/priv_validator_key.json
       - cache/data/priv_validator_state.json
 
-patchesJson6902:
+patches:
 
   ##
   #  Configure gateway host in `gateway-host.yaml`.  This

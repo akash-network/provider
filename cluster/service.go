@@ -262,7 +262,7 @@ func (s *service) updateDeploymentManagerGauge() {
 	deploymentManagerGauge.Set(float64(len(s.managers)))
 }
 
-func (s *service) run(ctx context.Context, deployments []ctypes.Deployment) {
+func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
 
@@ -276,9 +276,7 @@ func (s *service) run(ctx context.Context, deployments []ctypes.Deployment) {
 	}
 
 	for _, deployment := range deployments {
-		key := deployment.LeaseID()
-		mgroup := deployment.ManifestGroup()
-		s.managers[key] = newDeploymentManager(s, deployment.LeaseID(), &mgroup, false)
+		s.managers[deployment.LeaseID()] = newDeploymentManager(s, deployment, false)
 		s.updateDeploymentManagerGauge()
 	}
 
@@ -299,20 +297,28 @@ loop:
 					break
 				}
 
-				if _, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup); err != nil {
+				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
+
+				if err != nil {
 					s.log.Error("error looking up manifest", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
 					break
 				}
 
+				deployment := &ctypes.Deployment{
+					Lid:     ev.LeaseID,
+					MGroup:  mgroup,
+					CParams: reservation.ClusterParams(),
+				}
+
 				key := ev.LeaseID
 				if manager := s.managers[key]; manager != nil {
-					if err := manager.update(mgroup); err != nil {
+					if err := manager.update(deployment); err != nil {
 						s.log.Error("updating deployment", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
 					}
 					break
 				}
 
-				s.managers[key] = newDeploymentManager(s, ev.LeaseID, mgroup, true)
+				s.managers[key] = newDeploymentManager(s, deployment, true)
 			case mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
@@ -322,15 +328,16 @@ loop:
 				Leases: uint32(len(s.managers)),
 			}
 		case dm := <-s.managerch:
-			s.log.Info("manager done", "lease", dm.lease)
+			s.log.Info("manager done", "lease", dm.deployment.LeaseID())
 
 			// unreserve resources
-			if err := s.inventory.unreserve(dm.lease.OrderID()); err != nil {
-				s.log.Error("unreserving inventory", "err", err,
-					"lease", dm.lease)
+			if err := s.inventory.unreserve(dm.deployment.LeaseID().OrderID()); err != nil {
+				s.log.Error("unreserving inventory",
+					"err", err,
+					"lease", dm.deployment.LeaseID())
 			}
 
-			delete(s.managers, dm.lease)
+			delete(s.managers, dm.deployment.LeaseID())
 		case req := <-s.checkDeploymentExistsRequestCh:
 			s.doCheckDeploymentExists(req)
 		}
@@ -340,7 +347,7 @@ loop:
 	for _, manager := range s.managers {
 		if manager != nil {
 			manager := <-s.managerch
-			s.log.Debug("manager done", "lease", manager.lease)
+			s.log.Debug("manager done", "lease", manager.deployment.LeaseID())
 		}
 	}
 
@@ -378,7 +385,7 @@ func (s *service) teardownLease(lid mtypes.LeaseID) {
 	}
 }
 
-func findDeployments(ctx context.Context, log log.Logger, client Client, _ session.Session) ([]ctypes.Deployment, error) {
+func findDeployments(ctx context.Context, log log.Logger, client Client, _ session.Session) ([]ctypes.IDeployment, error) {
 	deployments, err := client.Deployments(ctx)
 	if err != nil {
 		log.Error("fetching deployments", "err", err)

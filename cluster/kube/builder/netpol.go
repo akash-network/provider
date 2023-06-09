@@ -8,9 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	sdlutil "github.com/akash-network/node/sdl/util"
 )
 
@@ -26,8 +24,8 @@ type netPol struct {
 
 var _ NetPol = (*netPol)(nil)
 
-func BuildNetPol(settings Settings, lid mtypes.LeaseID, group *mani.Group) NetPol {
-	return &netPol{builder: builder{settings: settings, lid: lid, group: group}}
+func BuildNetPol(settings Settings, deployment IClusterDeployment) NetPol {
+	return &netPol{builder: builder{settings: settings, deployment: deployment}}
 }
 
 // Create a set of NetworkPolicies to restrict the ingress traffic to a Tenant's
@@ -46,7 +44,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      akashDeploymentPolicyName,
 				Labels:    b.labels(),
-				Namespace: LidNS(b.lid),
+				Namespace: LidNS(b.deployment.LeaseID()),
 			},
 			Spec: netv1.NetworkPolicySpec{
 				PodSelector: metav1.LabelSelector{},
@@ -60,7 +58,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 							{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
-										akashNetworkNamespace: LidNS(b.lid),
+										akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
 									},
 								},
 							},
@@ -89,7 +87,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 							{
 								NamespaceSelector: &metav1.LabelSelector{
 									MatchLabels: map[string]string{
-										akashNetworkNamespace: LidNS(b.lid),
+										akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
 									},
 								},
 							},
@@ -142,7 +140,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 		},
 	}
 
-	for _, service := range b.group.Services {
+	for _, service := range b.deployment.ManifestGroup().Services {
 		// find all the ports that are exposed directly
 		ports := make([]netv1.NetworkPolicyPort, 0)
 		portsWithIP := make([]netv1.NetworkPolicyPort, 0)
@@ -183,7 +181,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:    b.labels(),
 					Name:      policyName,
-					Namespace: LidNS(b.lid),
+					Namespace: LidNS(b.deployment.LeaseID()),
 				},
 				Spec: netv1.NetworkPolicySpec{
 					Ingress: []netv1.NetworkPolicyIngressRule{
@@ -211,7 +209,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:    b.labels(),
 					Name:      policyName,
-					Namespace: LidNS(b.lid),
+					Namespace: LidNS(b.deployment.LeaseID()),
 				},
 				Spec: netv1.NetworkPolicySpec{
 					Ingress: []netv1.NetworkPolicyIngressRule{

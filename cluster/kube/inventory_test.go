@@ -26,7 +26,8 @@ import (
 )
 
 type testReservation struct {
-	resources dtypes.GroupSpec
+	resources         dtypes.GroupSpec
+	adjustedResources []atypes.Resources
 }
 
 var _ ctypes.Reservation = (*testReservation)(nil)
@@ -39,9 +40,16 @@ func (r *testReservation) Resources() atypes.ResourceGroup {
 	return r.resources
 }
 
+func (r *testReservation) SetAllocatedResources(val []atypes.Resources) {
+	r.adjustedResources = val
+}
+
 func (r *testReservation) Allocated() bool {
 	return false
 }
+
+func (r *testReservation) SetClusterParams(_ interface{}) {}
+func (r *testReservation) ClusterParams() interface{}     { return nil }
 
 type inventoryScaffold struct {
 	kmock                   *kubernetesmocks.Interface
