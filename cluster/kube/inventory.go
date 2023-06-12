@@ -342,16 +342,19 @@ func parseNodeCapabilities(labels map[string]string, cStorage clusterStorage) *c
 
 	for k := range labels {
 		tokens := strings.Split(k, "/")
-		if len(tokens) < 3 ||
-			tokens[0] != builder.AkashManagedLabelName ||
-			tokens[1] != "capability" {
+		if len(tokens) != 2 && tokens[0] != builder.AkashManagedLabelName {
 			continue
 		}
 
-		tokens = tokens[2:]
+		tokens = strings.Split(tokens[1], ".")
+		if len(tokens) < 2 || tokens[0] != "capabilities" {
+			continue
+		}
+
+		tokens = tokens[1:]
 		switch tokens[0] {
 		case "gpu":
-			if len(tokens) < 1 {
+			if len(tokens) < 2 {
 				continue
 			}
 
@@ -359,7 +362,7 @@ func parseNodeCapabilities(labels map[string]string, cStorage clusterStorage) *c
 			if tokens[0] == "vendor" {
 				capabilities.GPU.Vendor = tokens[1]
 				if tokens[2] == "model" {
-					capabilities.GPU.Vendor = tokens[3]
+					capabilities.GPU.Model = tokens[3]
 				}
 			}
 		case "storage":
