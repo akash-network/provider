@@ -19,6 +19,7 @@ import (
 	"github.com/akash-network/node/testutil"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	akashclientfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 	kubernetesmocks "github.com/akash-network/provider/testutil/kubernetes_mock"
 	corev1mocks "github.com/akash-network/provider/testutil/kubernetes_mock/typed/core/v1"
@@ -517,6 +518,32 @@ func TestInventoryMultipleReplicasOutOfCapacity4(t *testing.T) {
 	err = inv.Adjust(multipleReplicasGenReservations(119525, 2))
 	require.Error(t, err)
 	require.EqualError(t, ctypes.ErrInsufficientCapacity, err.Error())
+}
+
+func TestParseCapabilities(t *testing.T) {
+	type testCase struct {
+		labels          map[string]string
+		expCapabilities *crd.NodeInfoCapabilities
+	}
+
+	tests := []testCase{
+		{
+			labels: map[string]string{
+				"akash.network/capabilities.gpu.vendor.nvidia.model.a100": "true",
+			},
+			expCapabilities: &crd.NodeInfoCapabilities{
+				GPU: crd.GPUCapabilities{
+					Vendor: "nvidia",
+					Model:  "a100",
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		caps := parseNodeCapabilities(test.labels, nil)
+		require.Equal(t, test.expCapabilities, caps)
+	}
 }
 
 // multipleReplicasGenNodes generates four nodes with following CPUs available
