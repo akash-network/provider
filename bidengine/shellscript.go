@@ -60,16 +60,34 @@ func parseMemory(res *atypes.Memory) uint64 {
 
 func parseGPU(resource *atypes.GPU) gpuElement {
 	res := gpuElement{
-		Units:      resource.Units.Value(),
-		Attributes: make(map[string]map[string]string),
+		Units: resource.Units.Value(),
+		Attributes: gpuAttributes{
+			Vendor: make(map[string]gpuVendorAttributes),
+		},
 	}
 
 	for _, attr := range resource.Attributes {
 		tokens := strings.Split(attr.Key, "/")
-		if _, exists := res.Attributes[tokens[0]]; !exists {
-			res.Attributes[tokens[0]] = make(map[string]string)
+
+		// vendor/nvidia/model/a100
+		switch tokens[0] {
+		case "vendor":
+			vendor := tokens[1]
+			model := tokens[3]
+			var ram *string
+
+			// vendor/nvidia/model/a100/ram/80Gi
+			if len(tokens) == 6 && tokens[4] == "ram" {
+				ram = new(string)
+				*ram = tokens[5]
+			}
+
+			res.Attributes.Vendor[vendor] = gpuVendorAttributes{
+				Model: model,
+				RAM:   ram,
+			}
+		default:
 		}
-		res.Attributes[tokens[0]][tokens[1]] = tokens[2]
 	}
 
 	return res

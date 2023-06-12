@@ -320,9 +320,18 @@ type storageElement struct {
 	Size  uint64 `json:"size"`
 }
 
+type gpuVendorAttributes struct {
+	Model string  `json:"model"`
+	RAM   *string `json:"ram,omitempty"`
+}
+
+type gpuAttributes struct {
+	Vendor map[string]gpuVendorAttributes `json:"vendor,omitempty"`
+}
+
 type gpuElement struct {
-	Units      uint64                       `json:"units"`
-	Attributes map[string]map[string]string `json:"attributes,omitempty"`
+	Units      uint64        `json:"units"`
+	Attributes gpuAttributes `json:"attributes"`
 }
 
 type dataForScriptElement struct {
