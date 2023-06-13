@@ -23,7 +23,6 @@ RELEASE_TAG            ?= $(shell git describe --tags --abbrev=0)
 IS_PREREL              := $(shell $(ROOT_DIR)/script/is_prerelease.sh "$(RELEASE_TAG)" && echo "true" || echo "false")
 
 GO_LINKMODE            ?= external
-GO_MOD                 ?= readonly
 BUILD_TAGS             ?= osusergo,netgo,static_build
 GORELEASER_STRIP_FLAGS ?=
 

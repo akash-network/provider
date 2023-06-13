@@ -5,6 +5,7 @@ on:
 
 env:
   KUBE_SSH_NODE_NAME: kind
+  GO_MOD: vendor
 
 jobs:
   crd-e2e:
@@ -19,7 +20,7 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
-      - name: fetch kind version from go modules
+      - name: Fetch kind version from go modules
         run: echo "KIND_VERSION=$(go list -mod=readonly -m -f '{{ .Version }}' sigs.k8s.io/kind)" >> $GITHUB_ENV
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
@@ -32,8 +33,6 @@ jobs:
           version: "${{ env.KIND_VERSION }}"
           image: "kindest/node:${{ env.KINDEST_VERSION }}"
           config: ./_run/kube/kind-config.yaml
-      - name: Docker Status
-        run: docker ps -a
       - name: Setup Ingress K8S
         run: KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kube-cluster-setup-e2e-ci
       - name: k8s-ingress
