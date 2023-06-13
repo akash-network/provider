@@ -3,13 +3,12 @@ module github.com/akash-network/provider
 go 1.18
 
 require (
-	github.com/akash-network/akash-api v0.0.19
-	github.com/akash-network/node v0.23.0-rc23
-	github.com/avast/retry-go v3.0.0+incompatible
-	github.com/boz/go-lifecycle v0.1.1-0.20190620234137-5139c86739b8
+	github.com/akash-network/akash-api v0.0.21
+	github.com/akash-network/node v0.23.0-rc24
+	github.com/avast/retry-go/v4 v4.3.4
+	github.com/boz/go-lifecycle v0.1.1
 	github.com/cosmos/cosmos-sdk v0.45.16
 	github.com/cskr/pubsub v1.0.2
-	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f
 	github.com/go-kit/kit v0.12.0
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
@@ -18,7 +17,7 @@ require (
 	github.com/gorilla/context v1.1.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
-	github.com/moby/term v0.0.0-20220808134915-39b0c02b01ae
+	github.com/moby/term v0.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.37.0
@@ -103,6 +102,7 @@ require (
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
+	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/dgraph-io/badger/v2 v2.2007.4 // indirect
 	github.com/dgraph-io/ristretto v0.0.3 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
