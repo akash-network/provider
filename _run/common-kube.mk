@@ -10,19 +10,28 @@ KUBE_UPLOAD_AKASH_IMAGE    ?= false
 KUBE_CLUSTER_CREATE_TARGET ?= default
 KUBE_ROLLOUT_TIMEOUT       ?= 180
 
-INGRESS_CONFIG_PATH       ?= ../ingress-nginx.yaml
-CALICO_MANIFEST           ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
+INGRESS_CONFIG_PATH        ?= ../ingress-nginx.yaml
+CALICO_MANIFEST            ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
 
 # when image is built locally, for example on M1 (arm64) and kubernetes cluster is running on amd64
 # we need to specify what arch to deploy as docker manifests can't be transferred locally
-KUBE_DOCKER_IMAGE_ARCH    ?= amd64
-#$(UNAME_ARCH)
+KUBE_DOCKER_IMAGE_ARCH     ?= $(shell uname -m | sed "s/x86_64/amd64/g")
+
+AKASH_LOCAL_DOCKER_IMAGE   ?= ghcr.io/akash-network/node:latest-$(KUBE_DOCKER_IMAGE_ARCH)
 
 ifeq ($(AKASH_SRC_IS_LOCAL), true)
-AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:latest-$(KUBE_DOCKER_IMAGE_ARCH)
+	AKASH_DOCKER_IMAGE        ?= $(AKASH_LOCAL_DOCKER_IMAGE)
+	AKASH_BUILD_LOCAL_IMAGE   := true
 else
-AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASH_VERSION)-$(KUBE_DOCKER_IMAGE_ARCH)
+	AKASH_BUILD_LOCAL_IMAGE   := false
+	AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASH_VERSION)-$(KUBE_DOCKER_IMAGE_ARCH)
+	ifeq ($(docker inspect --type=image $(AKASH_DOCKER_IMAGE) >/dev/null 2>&1), 1)
+		AKASH_DOCKER_IMAGE      := $(AKASH_LOCAL_DOCKER_IMAGE)
+		AKASH_BUILD_LOCAL_IMAGE := true
+		AKASH_LOCAL_PATH        := $(AP_ROOT)/vendor/$(NODE_MODULE)
+	endif
 endif
+
 DOCKER_IMAGE              ?= ghcr.io/akash-network/provider:latest-$(KUBE_DOCKER_IMAGE_ARCH)
 
 PROVIDER_HOSTNAME         ?= localhost
@@ -42,7 +51,7 @@ endif
  kube-prepare-images:
 ifneq ($(SKIP_BUILD), true)
 	make -C $(AP_ROOT) docker-image
-ifeq ($(AKASH_SRC_IS_LOCAL), true)
+ifeq ($(AKASH_BUILD_LOCAL_IMAGE), true)
 	make -C $(AKASH_LOCAL_PATH) docker-image
 else
 	docker pull $(AKASH_DOCKER_IMAGE)
@@ -93,7 +102,6 @@ kube-cluster-setup-e2e: $(KUBE_CREATE) kube-cluster-setup-e2e-ci
 .PHONY: kube-cluster-setup-e2e-ci
 kube-cluster-setup-e2e-ci: \
 	kube-setup-ingress \
-	kube-prepare-images \
 	kube-upload-images \
 	kustomize-init \
 	kustomize-deploy-services \
