@@ -23,7 +23,7 @@ const (
 	AkashManifestServiceLabelName = "akash.network/manifest-service"
 	AkashNetworkStorageClasses    = "akash.network/storageclasses"
 	AkashServiceTarget            = "akash.network/service-target"
-	AkashServiceCapabilityGPU     = "akash.network/capability.gpu"
+	AkashServiceCapabilityGPU     = "akash.network/capabilities.gpu"
 	AkashMetalLB                  = "metal-lb"
 	akashDeploymentPolicyName     = "akash-deployment-restrictions"
 	akashNetworkNamespace         = "akash.network/namespace"
