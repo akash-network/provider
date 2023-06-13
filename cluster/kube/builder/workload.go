@@ -253,7 +253,7 @@ func nodeSelectorsFromResources(res *crd.SchedulerResources) []corev1.NodeSelect
 
 	if gpu := res.GPU; gpu != nil {
 		selectors = append(selectors, corev1.NodeSelectorRequirement{
-			Key:      fmt.Sprintf("%s/vendor/%s/model/%s", AkashServiceCapabilityGPU, gpu.Vendor, gpu.Model),
+			Key:      fmt.Sprintf("%s/vendor.%s.model.%s", AkashServiceCapabilityGPU, gpu.Vendor, gpu.Model),
 			Operator: "In",
 			Values: []string{
 				"true",
