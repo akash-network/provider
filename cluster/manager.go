@@ -9,7 +9,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/avast/retry-go"
+	"github.com/avast/retry-go/v4"
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
