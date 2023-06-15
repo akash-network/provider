@@ -66,7 +66,6 @@ GO_BUILD                     := $(GO) build -mod=$(GO_MOD)
 GO_TEST                      := $(GO) test -mod=$(GO_MOD)
 GO_VET                       := $(GO) vet -mod=$(GO_MOD)
 
-NODE_MODULE                  := github.com/akash-network/node
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
 AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(NODE_MODULE)")
@@ -77,7 +76,6 @@ GOLANGCI_LINT_VERSION        ?= v1.51.2
 GOLANG_VERSION               ?= 1.16.1
 STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
-MODVENDOR_VERSION            ?= v0.3.0
 MOCKERY_VERSION              ?= 2.24.0
 K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
 
@@ -94,7 +92,6 @@ endif
 # <TOOL>_VERSION_FILE points to the marker file for the installed version.
 # If <TOOL>_VERSION_FILE is changed, the binary will be re-downloaded.
 STATIK_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/statik/$(STATIK_VERSION)
-MODVENDOR_VERSION_FILE           := $(AP_DEVCACHE_VERSIONS)/modvendor/$(MODVENDOR_VERSION)
 GIT_CHGLOG_VERSION_FILE          := $(AP_DEVCACHE_VERSIONS)/git-chglog/$(GIT_CHGLOG_VERSION)
 MOCKERY_VERSION_FILE             := $(AP_DEVCACHE_VERSIONS)/mockery/v$(MOCKERY_VERSION)
 K8S_CODE_GEN_VERSION_FILE        := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODE_GEN_VERSION)
@@ -102,14 +99,12 @@ GOLANGCI_LINT_VERSION_FILE       := $(AP_DEVCACHE_VERSIONS)/golangci-lint/$(GOLA
 AKASH_VERSION_FILE               := $(AP_DEVCACHE_VERSIONS)/akash/$(AKASH_VERSION)
 KIND_VERSION_FILE                := $(AP_DEVCACHE_VERSIONS)/kind/$(KIND_VERSION)
 
-MODVENDOR                         = $(AP_DEVCACHE_BIN)/modvendor
-SWAGGER_COMBINE                   = $(AP_DEVCACHE_NODE_BIN)/swagger-combine
 STATIK                           := $(AP_DEVCACHE_BIN)/statik
 GIT_CHGLOG                       := $(AP_DEVCACHE_BIN)/git-chglog
 MOCKERY                          := $(AP_DEVCACHE_BIN)/mockery
-K8S_GENERATE_GROUPS              := $(AP_ROOT)/vendor/k8s.io/code-generator/generate-groups.sh
+K8S_KUBE_CODEGEN_FILE            := generate-groups.sh
+K8S_KUBE_CODEGEN                 := $(AP_DEVCACHE_BIN)/$(K8S_KUBE_CODEGEN_FILE)
 K8S_GO_TO_PROTOBUF               := $(AP_DEVCACHE_BIN)/go-to-protobuf
-NPM                              := npm
 GOLANGCI_LINT                    := $(AP_DEVCACHE_BIN)/golangci-lint
 
 include $(AP_ROOT)/make/setup-cache.mk

@@ -24,14 +24,6 @@ ifeq ($(DETECTED_OS), Darwin)
 	export CGO_CFLAGS=-Wno-deprecated-declarations
 endif
 
-# if go.mod contains replace for any modules on local filesystem
-# mount them into docker during goreleaser build to exactly same path
-REPLACED_MODULES              := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
-ifneq ($(REPLACED_MODULES), )
-	GORELEASER_MOUNT_REPLACED := $(foreach mod, $(REPLACED_MODULES), -v $(mod):$(mod)\\)
-endif
-GORELEASER_MOUNT_REPLACED     := $(GORELEASER_MOUNT_REPLACED:\\=)
-
 .PHONY: bins
 bins: $(BINS)
 
@@ -39,7 +31,7 @@ bins: $(BINS)
 build:
 	$(GO_BUILD) -a  ./...
 
-$(PROVIDER_SERVICES): modvendor
+$(PROVIDER_SERVICES):
 	$(GO_BUILD) -o $@ $(BUILD_FLAGS) ./cmd/provider-services
 
 .PHONY: provider-services
@@ -54,7 +46,7 @@ install:
 	$(GO) install $(BUILD_FLAGS) ./cmd/provider-services
 
 .PHONY: docker-image
-docker-image: modvendor
+docker-image:
 	docker run \
 		--rm \
 		-e STABLE=$(IS_STABLE) \
@@ -64,8 +56,9 @@ docker-image: modvendor
 		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
 		-e LINKMODE="$(GO_LINKMODE)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
+		-e GOPATH=/go \
+		-v $(GOPATH):/go:ro \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		$(GORELEASER_MOUNT_REPLACED) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
@@ -82,7 +75,7 @@ gen-changelog: $(GIT_CHGLOG)
 	./script/genchangelog.sh "$(RELEASE_TAG)" .cache/changelog.md
 
 .PHONY: release
-release: modvendor gen-changelog
+release: gen-changelog
 	docker run \
 		--rm \
 		-e STABLE=$(IS_STABLE) \
@@ -95,7 +88,8 @@ release: modvendor gen-changelog
 		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		$(GORELEASER_MOUNT_REPLACED) \
+		-e GOPATH=/go \
+		-v $(GOPATH):/go:ro \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
