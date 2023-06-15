@@ -67,6 +67,8 @@ GO_TEST                      := $(GO) test -mod=$(GO_MOD)
 GO_VET                       := $(GO) vet -mod=$(GO_MOD)
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
+
+NODE_MODULE                  := github.com/akash-network/node
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
 AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(NODE_MODULE)")
 AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "$(NODE_MODULE)")
