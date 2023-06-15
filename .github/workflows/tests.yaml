@@ -58,7 +58,6 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
-      - run: make modvendor
       - run: make build
       - run: make test-vet
       - name: lint all
@@ -104,7 +103,6 @@ jobs:
       - uses: actions/setup-go@v3
         with:
           go-version: "${{ env.GOLANG_VERSION }}"
-      - run: make modvendor
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
