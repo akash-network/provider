@@ -27,8 +27,6 @@ type BidPricingStrategy interface {
 	CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error)
 }
 
-const denom = "uakt"
-
 var (
 	errAllScalesZero               = errors.New("at least one bid price must be a non-zero number")
 	errNoPriceScaleForStorageClass = errors.New("no pricing configured for storage class")
@@ -130,6 +128,7 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 	cpuTotal := decimal.NewFromInt(0)
 	memoryTotal := decimal.NewFromInt(0)
 	storageTotal := make(Storage)
+	denom := req.GSpec.Price().Denom
 
 	for k := range fp.storageScale {
 		storageTotal[k] = decimal.NewFromInt(0)
