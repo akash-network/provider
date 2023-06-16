@@ -65,10 +65,11 @@ type IntegrationTestSuite struct {
 const (
 	defaultGasPrice      = "0.03uakt"
 	defaultGasAdjustment = "1.4"
+	defaultMinDeposit    = "5000000uakt"
 )
 
 var (
-	deploymentDeposit = fmt.Sprintf("--deposit=%s", dtypes.DefaultDeploymentMinDeposit)
+	deploymentDeposit = fmt.Sprintf("--deposit=%s", defaultMinDeposit)
 )
 
 func cliGlobalFlags(args ...string) []string {
