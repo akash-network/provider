@@ -597,7 +597,7 @@ loop:
 			if fetchCount%is.config.InventoryResourceDebugFrequency == 0 {
 				data, err := json.Marshal(&metrics)
 				if err == nil {
-					is.log.Debug("cluster resources", "dump", data)
+					is.log.Debug(fmt.Sprintf("cluster resources dump=%s", string(data)))
 				} else {
 					is.log.Error("unable to dump cluster inventory", "error", err.Error())
 				}
