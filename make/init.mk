@@ -55,11 +55,7 @@ endif
 BINS                         := $(PROVIDER_SERVICES) akash
 
 GOWORK                       ?= on
-
-GO_MOD                       ?= vendor
-ifeq ($(GOWORK), on)
-GO_MOD                       := readonly
-endif
+GO_MOD                       ?= readonly
 
 export GO                    := GO111MODULE=$(GO111MODULE) go
 GO_BUILD                     := $(GO) build -mod=$(GO_MOD)
@@ -71,7 +67,7 @@ GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 NODE_MODULE                  := github.com/akash-network/node
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
 AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(NODE_MODULE)")
-AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Replace }}' "$(NODE_MODULE)")
+AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(NODE_MODULE)")
 AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(NODE_MODULE) | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
 GOLANGCI_LINT_VERSION        ?= v1.51.2

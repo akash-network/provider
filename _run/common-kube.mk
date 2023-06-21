@@ -25,11 +25,13 @@ ifeq ($(AKASH_SRC_IS_LOCAL), true)
 else
 	AKASH_BUILD_LOCAL_IMAGE   := false
 	AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASH_VERSION)-$(KUBE_DOCKER_IMAGE_ARCH)
-	ifeq ($(docker inspect --type=image $(AKASH_DOCKER_IMAGE) >/dev/null 2>&1), 1)
+	AKASH_DOCKER_IMAGE_EXISTS := $(shell docker inspect --type=image $(AKASH_DOCKER_IMAGE) >/dev/null 2>&1 && echo true || echo false)
+	ifeq ($(shell $(AKASH_DOCKER_IMAGE_EXISTS)), false)
 		AKASH_DOCKER_IMAGE      := $(AKASH_LOCAL_DOCKER_IMAGE)
 		AKASH_BUILD_LOCAL_IMAGE := true
-		AKASH_LOCAL_PATH        := $(AP_ROOT)/vendor/$(NODE_MODULE)
 	endif
+
+	undefine AKASH_DOCKER_IMAGE_EXISTS
 endif
 
 DOCKER_IMAGE              ?= ghcr.io/akash-network/provider:latest-$(KUBE_DOCKER_IMAGE_ARCH)
@@ -101,6 +103,7 @@ kube-cluster-setup-e2e: $(KUBE_CREATE) kube-cluster-setup-e2e-ci
 # dedicated target to perform setup within Github Actions CI
 .PHONY: kube-cluster-setup-e2e-ci
 kube-cluster-setup-e2e-ci: \
+	kube-prepare-images \
 	kube-setup-ingress \
 	kube-upload-images \
 	kustomize-init \
