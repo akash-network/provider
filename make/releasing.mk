@@ -45,6 +45,10 @@ docgen: $(PROVIRER_DEVCACHE)
 install:
 	$(GO) install $(BUILD_FLAGS) ./cmd/provider-services
 
+.PHONY: chmod-node-scripts
+chmod-node-scripts:
+	find "$(AKASH_LOCAL_PATH)/script" -type f -name '*.sh' -exec echo "chmod +x {}" \; -exec chmod +x {} \;
+
 .PHONY: docker-image
 docker-image:
 	docker run \

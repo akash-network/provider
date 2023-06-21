@@ -6,6 +6,10 @@ on:
 env:
   KUBE_SSH_NODE_NAME: kind
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   crd-e2e:
     env:
@@ -25,6 +29,10 @@ jobs:
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
+      - name: Go mod tidy
+        run: go mod tidy
+      - name: Make node scripts executable
+        run: make chmod-node-scripts
       - name: Prepare images
         run: make -s -C _run/kube kube-prepare-images
       - uses: engineerd/setup-kind@v0.5.0
