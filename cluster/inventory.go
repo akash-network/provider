@@ -390,7 +390,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 
 	{
 		jReservation, _ := json.Marshal(req.resources.GetResources())
-		is.log.Debug("reservation requested", "order", req.order, "resources", jReservation)
+		is.log.Debug("reservation requested", "order", req.order, fmt.Sprintf("resources=%s", jReservation))
 	}
 
 	if reservation.endpointQuantity != 0 {

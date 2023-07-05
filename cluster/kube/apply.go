@@ -12,6 +12,7 @@ import (
 	metricsutils "github.com/akash-network/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
@@ -153,7 +154,7 @@ func applyService(ctx context.Context, kc kubernetes.Interface, b builder.Servic
 	return err
 }
 
-func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest) error {
+func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest) (*crd.Manifest, error) {
 	obj, err := kc.AkashV2beta2().Manifests(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
 
 	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "akash-manifests-get", err, errors.IsNotFound)
@@ -173,5 +174,6 @@ func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest)
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-create", err)
 		}
 	}
-	return err
+
+	return obj, err
 }
