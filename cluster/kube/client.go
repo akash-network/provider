@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -219,12 +220,25 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) erro
 	}
 
 	cmanifest := builder.BuildManifest(c.log, settings, c.ns, cdeployment)
-	if err := applyManifest(ctx, c.ac, cmanifest); err != nil {
+	crdManifest, err := applyManifest(ctx, c.ac, cmanifest)
+	if err != nil {
 		c.log.Error("applying manifest", "err", err, "lease", lid)
 		return err
 	}
 
-	if err := cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
+	// log actual stored manifest if deployment fails
+	defer func() {
+		if err != nil {
+			jData, err := json.Marshal(crdManifest)
+			if err == nil {
+				c.log.Error("while deploying", "err", err, fmt.Sprintf("manifest=%s", string(jData)))
+			} else {
+				c.log.Error("dump manifest crd while deploying", "err", err)
+			}
+		}
+	}()
+
+	if err = cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
 		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
 		return err
 	}
@@ -243,12 +257,12 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) erro
 		}
 
 		if persistent {
-			if err := applyStatefulSet(ctx, c.kc, builder.BuildStatefulSet(workload)); err != nil {
+			if err = applyStatefulSet(ctx, c.kc, builder.BuildStatefulSet(workload)); err != nil {
 				c.log.Error("applying statefulSet", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
 		} else {
-			if err := applyDeployment(ctx, c.kc, builder.NewDeployment(workload)); err != nil {
+			if err = applyDeployment(ctx, c.kc, builder.NewDeployment(workload)); err != nil {
 				c.log.Error("applying deployment", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
@@ -261,7 +275,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) erro
 
 		serviceBuilderLocal := builder.BuildService(workload, false)
 		if serviceBuilderLocal.Any() {
-			if err := applyService(ctx, c.kc, serviceBuilderLocal); err != nil {
+			if err = applyService(ctx, c.kc, serviceBuilderLocal); err != nil {
 				c.log.Error("applying local service", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
@@ -269,7 +283,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) erro
 
 		serviceBuilderGlobal := builder.BuildService(workload, true)
 		if serviceBuilderGlobal.Any() {
-			if err := applyService(ctx, c.kc, serviceBuilderGlobal); err != nil {
+			if err = applyService(ctx, c.kc, serviceBuilderGlobal); err != nil {
 				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
