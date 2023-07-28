@@ -37,8 +37,6 @@ ifndef AP_ROOT
 	PATH                := $(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)
 endif
 
--include $(AP_ROOT)/.devenv
-
 UNAME_OS                   := $(shell uname -s)
 UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # uname reports x86_64. rename to amd64 to make it usable by goreleaser
