@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	sdlutil "github.com/akash-network/node/sdl/util"
 )
 
 type NetPol interface {
@@ -165,7 +164,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 				portsWithIP = append(portsWithIP, entry)
 			}
 
-			if !expose.Global || sdlutil.ShouldBeIngress(expose) {
+			if !expose.Global || expose.IsIngress() {
 				continue
 			}
 

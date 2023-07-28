@@ -65,9 +65,12 @@ spec:
                             type: array
                             items:
                               type: string
-                          unit:
+                          resources:
                             type: object
                             properties:
+                              id:
+                                type: number
+                                format: uint32
                               cpu:
                                 type: number
                                 format: uint32
@@ -166,27 +169,6 @@ spec:
                                         type: string
                                       model:
                                         type: string
-#                              affinity:
-#                                nullable: true
-#                                type: object
-#                                properties:
-#                                  node:
-#                                    nullable: true
-#                                    type: object
-#                                    properties:
-#                                      required:
-#                                        type: array
-#                                        items:
-#                                          type: object
-#                                          properties:
-#                                            key:
-#                                              type: string
-#                                            operator:
-#                                              type: string
-#                                            values:
-#                                              type: array
-#                                              items:
-#                                                type: string
     - name: v2beta1
       served: true
       storage: false

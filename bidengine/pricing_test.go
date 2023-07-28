@@ -61,7 +61,7 @@ func defaultGroupSpecCPUMem() *dtypes.GroupSpec {
 	gspec := &dtypes.GroupSpec{
 		Name:         "",
 		Requirements: atypes.PlacementRequirements{},
-		Resources:    make([]dtypes.Resource, 1),
+		Resources:    make(dtypes.ResourceUnits, 1),
 	}
 
 	cpu := atypes.CPU{}
@@ -70,13 +70,13 @@ func defaultGroupSpecCPUMem() *dtypes.GroupSpec {
 	memory := atypes.Memory{}
 	memory.Quantity = atypes.NewResourceValue(10000)
 
-	clusterResources := atypes.ResourceUnits{
+	clusterResources := atypes.Resources{
 		CPU:    &cpu,
 		Memory: &memory,
 	}
 
 	price := sdk.NewDecCoin("uakt", sdk.NewInt(23))
-	resource := dtypes.Resource{
+	resource := dtypes.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
 		Price:     price,
@@ -91,10 +91,10 @@ func defaultGroupSpec() *dtypes.GroupSpec {
 	gspec := &dtypes.GroupSpec{
 		Name:         "",
 		Requirements: atypes.PlacementRequirements{},
-		Resources:    make([]dtypes.Resource, 1),
+		Resources:    make(dtypes.ResourceUnits, 1),
 	}
 
-	clusterResources := atypes.ResourceUnits{
+	clusterResources := atypes.Resources{
 		CPU: &atypes.CPU{
 			Units: atypes.NewResourceValue(11),
 		},
@@ -111,7 +111,7 @@ func defaultGroupSpec() *dtypes.GroupSpec {
 		},
 	}
 	price := sdk.NewDecCoin(testutil.CoinDenom, sdk.NewInt(23))
-	resource := dtypes.Resource{
+	resource := dtypes.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
 		Price:     price,

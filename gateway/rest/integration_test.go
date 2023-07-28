@@ -160,13 +160,15 @@ func mockManifestGroups(m integrationMocks, leaseID mtypes.LeaseID) {
 			Image: testImageName,
 			Args:  nil,
 			Env:   nil,
-			Resources: v2beta2.ResourceUnits{
+			Resources: v2beta2.Resources{
 				CPU:    1000,
 				Memory: "3333",
-				Storage: []v2beta2.ResourceUnitsStorage{{
-					Name: "",
-					Size: "4444",
-				}},
+				Storage: []v2beta2.ResourcesStorage{
+					{
+						Name: "",
+						Size: "4444",
+					},
+				},
 			},
 			Count: 1,
 			Expose: []v2beta2.ManifestServiceExpose{{

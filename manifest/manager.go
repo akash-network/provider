@@ -16,8 +16,6 @@ import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/sdl"
-	sdlutil "github.com/akash-network/node/sdl/util"
 	"github.com/akash-network/node/util/runner"
 
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -384,7 +382,7 @@ func (m *manager) validateRequests() {
 		default:
 		}
 		if err := m.validateRequest(req); err != nil {
-			m.log.Error("invalid manifest", "err", err)
+			m.log.Error("invalid manifest: %s", err.Error())
 			req.ch <- err
 			continue
 		}
@@ -392,8 +390,8 @@ func (m *manager) validateRequests() {
 
 		// The manifest has been grabbed from the request but not published yet, store this response
 		m.pendingRequests = append(m.pendingRequests, req)
-
 	}
+
 	m.requests = nil // all requests processed at this time
 
 	m.log.Debug("requests valid", "num-requests", len(manifests))
@@ -413,7 +411,7 @@ func (m *manager) validateRequest(req manifestRequest) error {
 
 	// ensure that an uploaded manifest matches the hash declared on
 	// the Akash Deployment.Version
-	version, err := sdl.ManifestVersion(req.value.Manifest)
+	version, err := req.value.Manifest.Version()
 	if err != nil {
 		return err
 	}
@@ -431,11 +429,7 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return ErrManifestVersion
 	}
 
-	if err = maniv2beta2.ValidateManifest(req.value.Manifest); err != nil {
-		return err
-	}
-
-	if err = maniv2beta2.ValidateManifestWithDeployment(&req.value.Manifest, m.data.Groups); err != nil {
+	if err = req.value.Manifest.CheckAgainstDeployment(m.data.Groups); err != nil {
 		return err
 	}
 
@@ -444,6 +438,7 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	for _, lease := range m.localLeases {
 		groupNames = append(groupNames, lease.Group.GroupSpec.Name)
 	}
+
 	// Check that hostnames are not in use
 	if err = m.checkHostnamesForManifest(req.value.Manifest, groupNames); err != nil {
 		return err
@@ -475,8 +470,9 @@ func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest
 			// For each service that exposes via an Ingress, then require a hsotname
 			for _, service := range mgroup.Services {
 				for _, expose := range service.Expose {
-					if sdlutil.ShouldBeIngress(expose) && len(expose.Hosts) == 0 {
-						return fmt.Errorf("%w: service %q exposed on %d:%s must have a hostname", errManifestRejected, service.Name, sdlutil.ExposeExternalPort(expose), expose.Proto)
+					if expose.IsIngress() && len(expose.Hosts) == 0 {
+						return fmt.Errorf("%w: service %q exposed on %d:%s must have a hostname",
+							errManifestRejected, service.Name, expose.GetExternalPort(), expose.Proto)
 					}
 				}
 			}

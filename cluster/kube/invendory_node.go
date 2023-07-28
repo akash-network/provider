@@ -162,21 +162,6 @@ func sParamsEnsureResources(sparams *crd.SchedulerParams) {
 	}
 }
 
-//
-// func sParamsEnsureAffinityNode(sparams *crd.SchedulerParams) {
-// 	sParamsEnsureAffinity(sparams)
-//
-// 	if sparams.Affinity.Node == nil {
-// 		sparams.Affinity.Node = &crd.NodeAffinity{}
-// 	}
-// }
-//
-// func sParamsApplySelectors(sparams *crd.SchedulerParams, selectors []corev1.NodeSelectorRequirement) {
-// 	sParamsEnsureAffinityNode(sparams)
-//
-// 	sparams.Affinity.Node.Required = append(sparams.Affinity.Node.Required, selectors...)
-// }
-
 func (nd *node) tryAdjustMemory(res *types.Memory) bool {
 	return nd.memory.subNLZ(res.Quantity)
 }

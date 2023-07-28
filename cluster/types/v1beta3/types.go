@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
@@ -19,7 +20,8 @@ import (
 
 var (
 	// ErrInsufficientCapacity is the new error when capacity is insufficient
-	ErrInsufficientCapacity = errors.New("insufficient capacity")
+	ErrInsufficientCapacity  = errors.New("insufficient capacity")
+	ErrGroupResourceMismatch = errors.New("group resource mismatch")
 )
 
 // Status stores current leases and inventory statuses
@@ -123,25 +125,25 @@ func ParseStorageAttributes(attrs types.Attributes) (StorageAttributes, error) {
 	return res, nil
 }
 
-func (inv *InventoryMetricTotal) AddResources(res types.Resources) {
+func (inv *InventoryMetricTotal) AddResources(res dtypes.ResourceUnit) {
 	cpu := sdk.NewIntFromUint64(inv.CPU)
 	gpu := sdk.NewIntFromUint64(inv.GPU)
 	mem := sdk.NewIntFromUint64(inv.Memory)
 	ephemeralStorage := sdk.NewIntFromUint64(inv.StorageEphemeral)
 
-	if res.Resources.CPU != nil {
-		cpu = cpu.Add(res.Resources.CPU.Units.Val.MulRaw(int64(res.Count)))
+	if res.CPU != nil {
+		cpu = cpu.Add(res.CPU.Units.Val.MulRaw(int64(res.Count)))
 	}
 
-	if res.Resources.GPU != nil {
-		gpu = gpu.Add(res.Resources.GPU.Units.Val.MulRaw(int64(res.Count)))
+	if res.GPU != nil {
+		gpu = gpu.Add(res.GPU.Units.Val.MulRaw(int64(res.Count)))
 	}
 
-	if res.Resources.Memory != nil {
-		mem = mem.Add(res.Resources.Memory.Quantity.Val.MulRaw(int64(res.Count)))
+	if res.Memory != nil {
+		mem = mem.Add(res.Memory.Quantity.Val.MulRaw(int64(res.Count)))
 	}
 
-	for _, storage := range res.Resources.Storage {
+	for _, storage := range res.Storage {
 		if storageClass, found := storage.Attributes.Find(sdl.StorageAttributeClass).AsString(); !found {
 			ephemeralStorage = ephemeralStorage.Add(storage.Quantity.Val.MulRaw(int64(res.Count)))
 		} else {

@@ -60,7 +60,7 @@ var _ BidPricingStrategy = (*alwaysFailsBidPricingStrategy)(nil)
 func makeMocks(s *orderTestScaffold) {
 	groupResult := &dtypes.QueryGroupResponse{}
 	groupResult.Group.GroupSpec.Name = "testGroupName"
-	groupResult.Group.GroupSpec.Resources = make([]dtypes.Resource, 1)
+	groupResult.Group.GroupSpec.Resources = make(dtypes.ResourceUnits, 1)
 
 	cpu := atypes.CPU{}
 	cpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().MinUnitCPU))
@@ -77,14 +77,15 @@ func makeMocks(s *orderTestScaffold) {
 		},
 	}
 
-	clusterResources := atypes.ResourceUnits{
+	clusterResources := atypes.Resources{
+		ID:      1,
 		CPU:     &cpu,
 		GPU:     &gpu,
 		Memory:  &memory,
 		Storage: storage,
 	}
 	price := sdk.NewInt64DecCoin(testutil.CoinDenom, 23)
-	resource := dtypes.Resource{
+	resource := dtypes.ResourceUnit{
 		Resources: clusterResources,
 		Count:     2,
 		Price:     price,

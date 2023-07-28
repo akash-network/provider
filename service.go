@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/boz/go-lifecycle"
 	"github.com/pkg/errors"
 
@@ -268,18 +267,18 @@ func (s *service) run() {
 }
 
 type reservation struct {
-	resources         atypes.ResourceGroup
-	adjustedResources []atypes.Resources
+	resources         dtypes.ResourceGroup
+	adjustedResources dtypes.ResourceUnits
 	clusterParams     interface{}
 }
 
 var _ ctypes.ReservationGroup = (*reservation)(nil)
 
-func (r *reservation) Resources() atypes.ResourceGroup {
+func (r *reservation) Resources() dtypes.ResourceGroup {
 	return r.resources
 }
 
-func (r *reservation) SetAllocatedResources(val []atypes.Resources) {
+func (r *reservation) SetAllocatedResources(val dtypes.ResourceUnits) {
 	r.adjustedResources = val
 }
 

@@ -36,7 +36,8 @@ func (mg manifestGeneratorApp) Service(t testing.TB) manifest.Service {
 	return manifest.Service{
 		Name:  "demo",
 		Image: "ropes/akash-app:v1",
-		Resources: types.ResourceUnits{
+		Resources: types.Resources{
+			ID: 1,
 			CPU: &types.CPU{
 				Units: types.NewResourceValue(100),
 			},

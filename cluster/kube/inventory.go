@@ -2,16 +2,20 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
+
+	"github.com/tendermint/tendermint/libs/log"
 
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
@@ -29,14 +33,16 @@ type clusterNodes map[string]*node
 type inventory struct {
 	storageClasses clusterStorage
 	nodes          clusterNodes
+	log            log.Logger
 }
 
 var _ ctypes.Inventory = (*inventory)(nil)
 
-func newInventory(storage clusterStorage, nodes map[string]*node) *inventory {
+func newInventory(log log.Logger, storage clusterStorage, nodes map[string]*node) *inventory {
 	inv := &inventory{
 		storageClasses: storage,
 		nodes:          nodes,
+		log:            log,
 	}
 
 	return inv
@@ -46,6 +52,7 @@ func (inv *inventory) dup() inventory {
 	dup := inventory{
 		storageClasses: inv.storageClasses.dup(),
 		nodes:          inv.nodes.dup(),
+		log:            inv.log,
 	}
 
 	return dup
@@ -54,7 +61,7 @@ func (inv *inventory) dup() inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node string, res *types.ResourceUnits) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node string, res *types.Resources) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.nodes[node].dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -119,23 +126,46 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 		cfg = opt(cfg)
 	}
 
-	resources := make([]types.Resources, len(reservation.Resources().GetResources()))
-	adjustedResources := make([]types.Resources, 0, len(reservation.Resources().GetResources()))
-	copy(resources, reservation.Resources().GetResources())
+	origResources := reservation.Resources().GetResourceUnits()
+	resources := make(dtypes.ResourceUnits, 0, len(origResources))
+	adjustedResources := make(dtypes.ResourceUnits, 0, len(origResources))
+
+	for _, res := range origResources {
+		resources = append(resources, dtypes.ResourceUnit{
+			Resources: res.Resources.Dup(),
+			Count:     res.Count,
+		})
+
+		adjustedResources = append(adjustedResources, dtypes.ResourceUnit{
+			Resources: res.Resources.Dup(),
+			Count:     res.Count,
+		})
+	}
 
 	cparams := crd.ClusterSettings{
-		SchedulerParams: make([]*crd.SchedulerParams, len(reservation.Resources().GetResources())),
+		SchedulerParams: make([]*crd.SchedulerParams, len(reservation.Resources().GetResourceUnits())),
 	}
 
 	currInventory := inv.dup()
 
+	var err error
+
 nodes:
 	for nodeName := range currInventory.nodes {
 		for i := len(resources) - 1; i >= 0; i-- {
-			adjusted := resources[i]
+			adjustedGroup := false
+
+			var adjusted *types.Resources
+			if origResources[i].Count == resources[i].Count {
+				adjusted = &adjustedResources[i].Resources
+			} else {
+				adjustedGroup = true
+				res := adjustedResources[i].Resources.Dup()
+				adjusted = &res
+			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeName, &adjusted.Resources)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeName, adjusted)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes
@@ -146,14 +176,36 @@ nodes:
 					continue nodes
 				}
 
-				if sparams != nil {
-					if cparams.SchedulerParams[i] == nil {
-						cparams.SchedulerParams[i] = sparams
-					} else if !reflect.DeepEqual(sparams, cparams.SchedulerParams[i]) {
-						// all replicas of the same service are expected to have same node selectors and runtimes
-						// if they don't match then provider cannot bid
+				// at this point we expect all replicas of the same service to produce
+				// same adjusted resource units as well as cluster params
+				if adjustedGroup {
+					if !reflect.DeepEqual(adjusted, &adjustedResources[i].Resources) {
+						jFirstAdjusted, _ := json.Marshal(&adjustedResources[i].Resources)
+						jCurrAdjusted, _ := json.Marshal(adjusted)
+
+						inv.log.Error(fmt.Sprintf("resource mismatch between replicas within group:\n"+
+							"\tfirst adjusted replica: %s\n"+
+							"\tcurr adjusted replica: %s", string(jFirstAdjusted), string(jCurrAdjusted)))
+
+						err = ctypes.ErrGroupResourceMismatch
 						break nodes
 					}
+
+					// all replicas of the same service are expected to have same node selectors and runtimes
+					// if they don't match then provider cannot bid
+					if !reflect.DeepEqual(sparams, cparams.SchedulerParams[i]) {
+						jFirstSparams, _ := json.Marshal(cparams.SchedulerParams[i])
+						jCurrSparams, _ := json.Marshal(sparams)
+
+						inv.log.Error(fmt.Sprintf("scheduler params mismatch between replicas within group:\n"+
+							"\tfirst replica: %s\n"+
+							"\tcurr replica: %s", string(jFirstSparams), string(jCurrSparams)))
+
+						err = ctypes.ErrGroupResourceMismatch
+						break nodes
+					}
+				} else {
+					cparams.SchedulerParams[i] = sparams
 				}
 			}
 
@@ -161,7 +213,7 @@ nodes:
 			// remove group from the list to prevent double request of the same resources
 			if resources[i].Count == 0 {
 				resources = append(resources[:i], resources[i+1:]...)
-				adjustedResources = append(adjustedResources, adjusted)
+				goto nodes
 			}
 		}
 	}
@@ -175,6 +227,10 @@ nodes:
 		reservation.SetClusterParams(cparams)
 
 		return nil
+	}
+
+	if err != nil {
+		return err
 	}
 
 	return ctypes.ErrInsufficientCapacity
@@ -272,7 +328,7 @@ func (c *client) Inventory(ctx context.Context) (ctypes.Inventory, error) {
 		return nil, err
 	}
 
-	return newInventory(cstorage, knodes), nil
+	return newInventory(c.log.With("kube", "inventory"), cstorage, knodes), nil
 }
 
 func (c *client) fetchStorage(ctx context.Context) (clusterStorage, error) {

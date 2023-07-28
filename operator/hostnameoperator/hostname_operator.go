@@ -12,8 +12,6 @@ import (
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
-	sdlutil "github.com/akash-network/node/sdl/util"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tendermint/tendermint/libs/log"
@@ -334,10 +332,12 @@ func locateServiceFromManifest(ctx context.Context, client cluster.Client, lease
 			continue
 		}
 
-		if externalPort == uint32(sdlutil.ExposeExternalPort(manifest.ServiceExpose{
+		mse := manifest.ServiceExpose{
 			Port:         uint32(expose.Port),
 			ExternalPort: uint32(expose.ExternalPort),
-		})) {
+		}
+
+		if externalPort == uint32(mse.GetExternalPort()) {
 			selectedExpose = expose
 			break
 		}

@@ -138,7 +138,7 @@ func (is *inventoryService) ready() <-chan struct{} {
 	return is.readych
 }
 
-func (is *inventoryService) lookup(order mtypes.OrderID, resources atypes.ResourceGroup) (ctypes.Reservation, error) {
+func (is *inventoryService) lookup(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
 	ch := make(chan inventoryResponse, 1)
 	req := inventoryRequest{
 		order:     order,
@@ -155,15 +155,15 @@ func (is *inventoryService) lookup(order mtypes.OrderID, resources atypes.Resour
 	}
 }
 
-func (is *inventoryService) reserve(order mtypes.OrderID, resources atypes.ResourceGroup) (ctypes.Reservation, error) {
-	for idx, res := range resources.GetResources() {
-		if res.Resources.CPU == nil {
+func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
+	for idx, res := range resources.GetResourceUnits() {
+		if res.CPU == nil {
 			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
 		}
-		if res.Resources.GPU == nil {
+		if res.GPU == nil {
 			return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
 		}
-		if res.Resources.Memory == nil {
+		if res.Memory == nil {
 			return nil, fmt.Errorf("%w: Memory resource at idx %d is nil", ErrInvalidResource, idx)
 		}
 	}
@@ -231,7 +231,7 @@ func (is *inventoryService) status(ctx context.Context) (ctypes.InventoryStatus,
 
 type inventoryRequest struct {
 	order     mtypes.OrderID
-	resources atypes.ResourceGroup
+	resources dtypes.ResourceGroup
 	ch        chan<- inventoryResponse
 }
 
@@ -240,11 +240,12 @@ type inventoryResponse struct {
 	err   error
 }
 
-func (is *inventoryService) resourcesToCommit(rgroup atypes.ResourceGroup) atypes.ResourceGroup {
-	replacedResources := make([]dtypes.Resource, 0)
+func (is *inventoryService) resourcesToCommit(rgroup dtypes.ResourceGroup) dtypes.ResourceGroup {
+	replacedResources := make(dtypes.ResourceUnits, 0)
 
-	for _, resource := range rgroup.GetResources() {
-		runits := atypes.ResourceUnits{
+	for _, resource := range rgroup.GetResourceUnits() {
+		runits := atypes.Resources{
+			ID: resource.ID,
 			CPU: &atypes.CPU{
 				Units:      sdlutil.ComputeCommittedResources(is.config.CPUCommitLevel, resource.Resources.GetCPU().GetUnits()),
 				Attributes: resource.Resources.GetCPU().GetAttributes(),
@@ -272,7 +273,7 @@ func (is *inventoryService) resourcesToCommit(rgroup atypes.ResourceGroup) atype
 
 		runits.Storage = storage
 
-		v := dtypes.Resource{
+		v := dtypes.ResourceUnit{
 			Resources: runits,
 			Count:     resource.Count,
 			Price:     sdk.DecCoin{},
@@ -342,7 +343,7 @@ func updateReservationMetrics(reservations []*reservation) {
 			memoryTotal = &activeMemoryTotal
 			endpointsTotal = &activeEndpointsTotal
 		}
-		for _, resource := range reservation.Resources().GetResources() {
+		for _, resource := range reservation.Resources().GetResourceUnits() {
 			*cpuTotal += float64(resource.Resources.GetCPU().GetUnits().Value() * uint64(resource.Count))
 			*gpuTotal += float64(resource.Resources.GetGPU().GetUnits().Value() * uint64(resource.Count))
 			*memoryTotal += float64(resource.Resources.GetMemory().Quantity.Value() * uint64(resource.Count))
@@ -389,7 +390,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	reservation := newReservation(req.order, resourcesToCommit)
 
 	{
-		jReservation, _ := json.Marshal(req.resources.GetResources())
+		jReservation, _ := json.Marshal(req.resources.GetResourceUnits())
 		is.log.Debug("reservation requested", "order", req.order, fmt.Sprintf("resources=%s", jReservation))
 	}
 
@@ -727,7 +728,7 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.Inven
 			Storage: make(map[string]int64),
 		}
 
-		for _, resources := range reservation.Resources().GetResources() {
+		for _, resources := range reservation.Resources().GetResourceUnits() {
 			total.AddResources(resources)
 		}
 
@@ -751,7 +752,7 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.Inven
 func reservationCountEndpoints(reservation *reservation) uint {
 	var externalPortCount uint
 
-	resources := reservation.Resources().GetResources()
+	resources := reservation.Resources().GetResourceUnits()
 	// Count the number of endpoints per resource. The number of instances does not affect
 	// the number of ports
 	for _, resource := range resources {

@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -50,6 +51,10 @@ const (
 )
 
 var (
+	ErrKubeBuilder = errors.New("kube-builder")
+)
+
+var (
 	dnsPort     = intstr.FromInt(53)
 	udpProtocol = corev1.Protocol("UDP")
 	tcpProtocol = corev1.Protocol("TCP")
@@ -73,7 +78,8 @@ func ClusterDeploymentFromDeployment(d ctypes.IDeployment) (IClusterDeployment, 
 	cparams, valid := d.ClusterParams().(crd.ClusterSettings)
 	if !valid {
 		// nolint: goerr113
-		return nil, fmt.Errorf("kube-cluster: unexpected type from ClusterParams(). expected (%s), actual (%s)",
+		return nil, fmt.Errorf("%w: unexpected type from ClusterParams(). expected (%s), actual (%s)",
+			ErrKubeBuilder,
 			reflect.TypeOf(crd.ClusterSettings{}),
 			reflect.TypeOf(d.ClusterParams()),
 		)
@@ -83,6 +89,10 @@ func ClusterDeploymentFromDeployment(d ctypes.IDeployment) (IClusterDeployment, 
 		Lid:     d.LeaseID(),
 		Group:   d.ManifestGroup(),
 		Sparams: cparams,
+	}
+
+	if err := cd.validate(); err != nil {
+		return cd, err
 	}
 
 	return cd, nil
@@ -98,6 +108,42 @@ func (d *ClusterDeployment) ManifestGroup() *mani.Group {
 
 func (d *ClusterDeployment) ClusterParams() crd.ClusterSettings {
 	return d.Sparams
+}
+
+func (d *ClusterDeployment) validate() error {
+	if len(d.Group.Services) != len(d.Sparams.SchedulerParams) {
+		return fmt.Errorf("%w: group services count does not match scheduler params count (%d) != (%d)",
+			ErrKubeBuilder,
+			len(d.Group.Services),
+			len(d.Sparams.SchedulerParams))
+	}
+
+	for idx := range d.Group.Services {
+		svc := d.Group.Services[idx]
+		sParams := d.Sparams.SchedulerParams[idx]
+
+		if svc.Resources.CPU == nil {
+			return fmt.Errorf("%w: service %s. resource CPU cannot be nil", ErrKubeBuilder, svc.Name)
+		}
+
+		if svc.Resources.GPU == nil {
+			return fmt.Errorf("%w: service %s. resource GPU cannot be nil", ErrKubeBuilder, svc.Name)
+		}
+
+		if svc.Resources.Memory == nil {
+			return fmt.Errorf("%w: service %s. resource Memory cannot be nil", ErrKubeBuilder, svc.Name)
+		}
+
+		if svc.Resources.GPU.Units.Value() > 0 {
+			if sParams == nil ||
+				sParams.Resources == nil ||
+				sParams.Resources.GPU == nil {
+				return fmt.Errorf("%w: service %s. SchedulerParams.Resources.GPU must not be nil when GPU > 0", ErrKubeBuilder, svc.Name)
+			}
+		}
+	}
+
+	return nil
 }
 
 type builderBase interface {

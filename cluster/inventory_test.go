@@ -67,10 +67,11 @@ func newInventory(nodes ...string) ctypes.Inventory {
 }
 
 func TestInventory_reservationAllocatable(t *testing.T) {
-	mkrg := func(cpu uint64, gpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dtypes.Resource {
+	mkrg := func(cpu uint64, gpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dtypes.ResourceUnit {
 		endpoints := make([]types.Endpoint, endpointsCount)
-		return dtypes.Resource{
-			Resources: types.ResourceUnits{
+		return dtypes.ResourceUnit{
+			Resources: types.Resources{
+				ID: 1,
 				CPU: &types.CPU{
 					Units: types.NewResourceValue(cpu),
 				},
@@ -91,7 +92,7 @@ func TestInventory_reservationAllocatable(t *testing.T) {
 		}
 	}
 
-	mkres := func(allocated bool, res ...dtypes.Resource) *reservation {
+	mkres := func(allocated bool, res ...dtypes.ResourceUnit) *reservation {
 		return &reservation{
 			allocated: allocated,
 			resources: &dtypes.GroupSpec{Resources: res},
@@ -189,7 +190,8 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 
 	groupServices[0] = manifest.Service{
 		Count: 1,
-		Resources: types.ResourceUnits{
+		Resources: types.Resources{
+			ID: 1,
 			CPU: &types.CPU{
 				Units: types.NewResourceValue(1),
 			},
@@ -327,7 +329,8 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint, inventoryCall bool, node
 		}
 	}
 
-	deploymentRequirements := types.ResourceUnits{
+	deploymentRequirements := types.Resources{
+		ID: 1,
 		CPU: &types.CPU{
 			Units: types.NewResourceValue(4000),
 		},
@@ -397,7 +400,8 @@ func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Gro
 		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
 	}
 
-	deploymentRequirements := types.ResourceUnits{
+	deploymentRequirements := types.Resources{
+		ID: 1,
 		CPU: &types.CPU{
 			Units: types.NewResourceValue(4000),
 		},
@@ -619,7 +623,7 @@ func TestInventory_OverReservations(t *testing.T) {
 		}
 	}
 
-	deploymentRequirements := types.ResourceUnits{
+	deploymentRequirements := types.Resources{
 		CPU: &types.CPU{
 			Units: types.NewResourceValue(4000),
 		},

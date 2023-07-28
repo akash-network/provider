@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	"github.com/boz/go-lifecycle"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/pubsub"
 
 	"github.com/akash-network/provider/cluster/operatorclients"
@@ -43,7 +43,7 @@ var (
 //
 //go:generate mockery --name Cluster
 type Cluster interface {
-	Reserve(mtypes.OrderID, atypes.ResourceGroup) (ctypes.Reservation, error)
+	Reserve(mtypes.OrderID, dtypes.ResourceGroup) (ctypes.Reservation, error)
 	Unreserve(mtypes.OrderID) error
 }
 
@@ -215,7 +215,7 @@ func (s *service) Ready() <-chan struct{} {
 	return s.inventory.ready()
 }
 
-func (s *service) Reserve(order mtypes.OrderID, resources atypes.ResourceGroup) (ctypes.Reservation, error) {
+func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
 	return s.inventory.reserve(order, resources)
 }
 

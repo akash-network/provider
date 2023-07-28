@@ -43,7 +43,6 @@ func TestWriteRead(t *testing.T) {
 				SchedulerParams: make([]*crd.SchedulerParams, len(group.Services)),
 			}
 			kmani, err := crd.NewManifest(ns, lid, &group, csettings)
-
 			require.NoError(t, err, spec.Name)
 
 			// save to k8s
@@ -89,7 +88,6 @@ func withNamespace(ctx context.Context, t testing.TB, fn func(*rest.Config, stri
 
 	// invoke callback
 	fn(kcfg, nsname)
-
 }
 
 func kubeConfig(t testing.TB) *rest.Config {
