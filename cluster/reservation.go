@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/akash-network/provider/cluster/util"
 )
 
-func newReservation(order mtypes.OrderID, resources atypes.ResourceGroup) *reservation {
+func newReservation(order mtypes.OrderID, resources dtypes.ResourceGroup) *reservation {
 	return &reservation{
 		order:            order,
 		resources:        resources,
@@ -17,8 +18,8 @@ func newReservation(order mtypes.OrderID, resources atypes.ResourceGroup) *reser
 
 type reservation struct {
 	order             mtypes.OrderID
-	resources         atypes.ResourceGroup
-	adjustedResources []atypes.Resources
+	resources         dtypes.ResourceGroup
+	adjustedResources dtypes.ResourceUnits
 	clusterParams     interface{}
 	endpointQuantity  uint
 	allocated         bool
@@ -31,11 +32,11 @@ func (r *reservation) OrderID() mtypes.OrderID {
 	return r.order
 }
 
-func (r *reservation) Resources() atypes.ResourceGroup {
+func (r *reservation) Resources() dtypes.ResourceGroup {
 	return r.resources
 }
 
-func (r *reservation) SetAllocatedResources(val []atypes.Resources) {
+func (r *reservation) SetAllocatedResources(val dtypes.ResourceUnits) {
 	r.adjustedResources = val
 }
 

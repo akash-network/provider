@@ -17,7 +17,6 @@ import (
 	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	"github.com/akash-network/node/pubsub"
-	sdlutil "github.com/akash-network/node/sdl/util"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -402,7 +401,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	// Iterate over each entry, extracting the ingress services & leased IPs
 	for _, service := range dm.deployment.ManifestGroup().Services {
 		for _, expose := range service.Expose {
-			if sdlutil.ShouldBeIngress(expose) {
+			if expose.IsIngress() {
 				if dm.config.DeploymentIngressStaticHosts {
 					uid := manifest.IngressHost(dm.deployment.LeaseID(), service.Name)
 					host := fmt.Sprintf("%s.%s", uid, dm.config.DeploymentIngressDomain)
@@ -442,7 +441,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	}
 
 	for host, serviceExpose := range hosts {
-		externalPort := uint32(sdlutil.ExposeExternalPort(serviceExpose))
+		externalPort := uint32(serviceExpose.GetExternalPort())
 		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort)
 		if err != nil {
 			// TODO - counter
@@ -455,10 +454,10 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		endpointName := serviceExpose.expose.IP
 		sharingKey := clusterutil.MakeIPSharingKey(dm.deployment.LeaseID(), endpointName)
 
-		externalPort := sdlutil.ExposeExternalPort(serviceExpose.expose)
+		externalPort := serviceExpose.expose.GetExternalPort()
 		port := serviceExpose.expose.Port
 
-		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, uint32(port), uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
+		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
 		if err != nil {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
 				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)

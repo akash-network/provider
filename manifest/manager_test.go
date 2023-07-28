@@ -45,7 +45,7 @@ package manifest
 // 	if mani != nil {
 // 		m, err := mani.Manifest()
 // 		require.NoError(t, err)
-// 		version, err = sdl.ManifestVersion(m)
+// 		version, err = m.Version()
 // 		require.NoError(t, err)
 // 		require.NotNil(t, version)
 // 	} else {
@@ -256,7 +256,7 @@ package manifest
 // 	lid.GSeq = 99999
 // 	did := lid.DeploymentID()
 //
-// 	version, err := sdl.ManifestVersion(sdlManifest)
+// 	version, err := sdlManifest.Version()
 // 	require.NotNil(t, version)
 // 	require.NoError(t, err)
 // 	leases := []mtypes.Lease{{
@@ -309,7 +309,7 @@ package manifest
 // 		Group:   dgroup,
 // 		Price:   sdk.NewDecCoin("uakt", sdk.NewInt(111)),
 // 	}
-// 	version, err := sdl.ManifestVersion(sdlManifest)
+// 	version, err := sdlManifest.Version()
 // 	require.NotNil(t, version)
 //
 // 	require.NoError(t, err)
@@ -367,7 +367,7 @@ package manifest
 // 		Group:   dgroup,
 // 		Price:   sdk.NewDecCoinFromDec(testutil.CoinDenom, sdk.NewDec(111)),
 // 	}
-// 	version, err := sdl.ManifestVersion(sdlManifest)
+// 	version, err := sdlManifest.Version()
 // 	require.NotNil(t, version)
 // 	require.NoError(t, err)
 // 	leases := []mtypes.Lease{{
@@ -396,7 +396,7 @@ package manifest
 // 	sdlManifest, err = sdl2NewContainer.Manifest()
 // 	require.NoError(t, err)
 //
-// 	version, err = sdl.ManifestVersion(sdlManifest)
+// 	version, err = sdlManifestVersion()
 // 	require.NoError(t, err)
 //
 // 	update := dtypes.EventDeploymentUpdated{

@@ -9,7 +9,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 
 	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	sdlutil "github.com/akash-network/node/sdl/util"
 )
 
 type Service interface {
@@ -109,12 +108,11 @@ func (b *service) Any() bool {
 	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	for _, expose := range service.Expose {
-		exposeIsIngress := sdlutil.ShouldBeIngress(expose)
-		if b.requireNodePort && exposeIsIngress {
+		if b.requireNodePort && expose.IsIngress() {
 			continue
 		}
 
-		if !b.requireNodePort && exposeIsIngress {
+		if !b.requireNodePort && expose.IsIngress() {
 			return true
 		}
 
@@ -134,9 +132,8 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 	ports := make([]corev1.ServicePort, 0, len(service.Expose))
 	portsAdded := make(map[int32]struct{})
 	for i, expose := range service.Expose {
-		shouldBeIngress := sdlutil.ShouldBeIngress(expose)
-		if expose.Global == b.requireNodePort || (!b.requireNodePort && shouldBeIngress) {
-			if b.requireNodePort && shouldBeIngress {
+		if expose.Global == b.requireNodePort || (!b.requireNodePort && expose.IsIngress()) {
+			if b.requireNodePort && expose.IsIngress() {
 				continue
 			}
 
@@ -149,7 +146,7 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 			default:
 				return nil, errUnsupportedProtocol
 			}
-			externalPort := sdlutil.ExposeExternalPort(service.Expose[i])
+			externalPort := expose.GetExternalPort()
 			_, added := portsAdded[externalPort]
 			if !added {
 				portsAdded[externalPort] = struct{}{}

@@ -538,7 +538,7 @@ func TestServiceStatusWithIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.ResourceUnits{},
+		Resources: types.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -557,7 +557,7 @@ func TestServiceStatusWithIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.ResourceUnits{},
+		Resources: types.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -623,7 +623,7 @@ func TestServiceStatusWithNoManifest(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.ResourceUnits{},
+		Resources: types.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -642,7 +642,7 @@ func TestServiceStatusWithNoManifest(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.ResourceUnits{},
+		Resources: types.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -697,7 +697,7 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.ResourceUnits{},
+		Resources: types.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -716,7 +716,7 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.ResourceUnits{},
+		Resources: types.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{

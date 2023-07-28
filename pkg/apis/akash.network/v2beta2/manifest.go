@@ -42,7 +42,7 @@ type ManifestService struct {
 	Env     []string `json:"env,omitempty"`
 	// Resource requirements
 	// in current version of CRD it is named as unit
-	Resources ResourceUnits `json:"unit"`
+	Resources Resources `json:"resources"`
 	// Number of instances
 	Count uint32 `json:"count,omitempty"`
 	// Overlay Network Links
@@ -82,14 +82,6 @@ type ManifestServiceParams struct {
 	Storage []ManifestStorageParams `json:"storage,omitempty"`
 }
 
-// type NodeAffinity struct {
-// 	Required []corev1.NodeSelectorRequirement `json:"required"`
-// }
-//
-// type Affinity struct {
-// 	Node *NodeAffinity `json:"node"`
-// }
-
 type SchedulerResourceGPU struct {
 	Vendor string `json:"vendor"`
 	Model  string `json:"model"`
@@ -102,7 +94,6 @@ type SchedulerResources struct {
 type SchedulerParams struct {
 	RuntimeClass string              `json:"runtime_class"`
 	Resources    *SchedulerResources `json:"resources,omitempty"`
-	// Affinity     *Affinity `json:"affinity"`
 }
 
 type ClusterSettings struct {

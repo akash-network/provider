@@ -507,7 +507,7 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 		return false, nil
 	}
 
-	for _, resources := range group.GroupSpec.GetResources() {
+	for _, resources := range group.GroupSpec.GetResourceUnits() {
 		if len(resources.Resources.Storage) > o.cfg.MaxGroupVolumes {
 			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Resources.Storage), o.cfg.MaxGroupVolumes))
 			return false, nil
