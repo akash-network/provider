@@ -116,7 +116,10 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error) {
 	buf := &bytes.Buffer{}
 
-	dataForScript := make([]dataForScriptElement, len(req.GSpec.Resources))
+	dataForScript := &dataForScript{
+		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
+		Price:     req.GSpec.Price().String(),
+	}
 
 	// iterate over everything & sum it up
 	for i, group := range req.GSpec.Resources {
@@ -128,7 +131,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 		storageQuantity := parseStorage(group.Resources.Storage)
 		endpointQuantity := len(group.Resources.Endpoints)
 
-		dataForScript[i] = dataForScriptElement{
+		dataForScript.Resources[i] = dataForScriptElement{
 			CPU:              cpuQuantity,
 			GPU:              gpuQuantity,
 			Memory:           memoryQuantity,
