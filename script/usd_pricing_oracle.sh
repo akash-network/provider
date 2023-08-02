@@ -17,17 +17,17 @@ fi
 # * curl
 
 if ! command -v jq &> /dev/null ; then
-  echo "jq could not be found"
+  echo "jq could not be found" >&2
   exit 1
 fi
 
 if ! command -v bc &> /dev/null ; then
-  echo "bc could not be found"
+  echo "bc could not be found" >&2
   exit 1
 fi
 
 if ! command -v curl &> /dev/null ; then
-  echo "curl could not be found"
+  echo "curl could not be found" >&2
   exit 1
 fi
 
@@ -39,6 +39,7 @@ DEFAULT_API_URL="https://api.coingecko.com/api/v3/simple/price?ids=akash-network
 
 # These are the variables one can modify to change the USD scale for each resource kind
 CPU_USD_SCALE=0.10
+GPU_USD_SCALE=0.50
 MEMORY_USD_SCALE=0.02
 ENDPOINT_USD_SCALE=0.02
 
@@ -56,6 +57,7 @@ MAX_INT64=9223372036854775807
 # local variables used for calculation
 memory_total=0
 cpu_total=0
+gpu_total=0
 endpoint_total=0
 storage_cost_usd=0
 
@@ -63,7 +65,7 @@ storage_cost_usd=0
 read -r script_input
 
 # iterate over all the groups and calculate total quantity of each resource
-for group in $(jq -c '.[]' <<<"$script_input"); do
+for group in $(jq -c '.resources[]' <<<"$script_input"); do
   count=$(jq '.count' <<<"$group")
 
   memory_quantity=$(jq '.memory' <<<"$group")
@@ -73,6 +75,10 @@ for group in $(jq -c '.[]' <<<"$script_input"); do
   cpu_quantity=$(jq '.cpu' <<<"$group")
   cpu_quantity=$((cpu_quantity * count))
   cpu_total=$((cpu_total + cpu_quantity))
+
+  gpu_quantity=$(jq '.gpu.units' <<<"$group")
+  gpu_quantity=$((gpu_quantity * count))
+  gpu_total=$((gpu_total + gpu_quantity))
 
   for storage in $(jq -c '.storage[]' <<<"$group"); do
       storage_size=$(jq -r '.size' <<<"$storage")
@@ -95,11 +101,13 @@ done
 
 # calculate the total cost in USD for each resource
 cpu_cost_usd=$(bc -l <<<"${cpu_total}*${CPU_USD_SCALE}")
+gpu_cost_usd=$(bc -l <<<"${gpu_total}*${GPU_USD_SCALE}")
 memory_cost_usd=$(bc -l <<<"${memory_total}*${MEMORY_USD_SCALE}")
 endpoint_cost_usd=$(bc -l <<<"${endpoint_total}*${ENDPOINT_USD_SCALE}")
 
 # validate the USD cost for each resource
 if [ 1 -eq "$(bc <<<"${cpu_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${cpu_cost_usd}<=${MAX_INT64}")" ] ||
+  [ 1 -eq "$(bc <<<"${gpu_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${gpu_cost_usd}<=${MAX_INT64}")" ] ||
   [ 1 -eq "$(bc <<<"${memory_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${memory_cost_usd}<=${MAX_INT64}")" ] ||
   [ 1 -eq "$(bc <<<"${storage_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${storage_cost_usd}<=${MAX_INT64}")" ] ||
   [ 1 -eq "$(bc <<<"${endpoint_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${endpoint_cost_usd}<=${MAX_INT64}")" ]; then
@@ -108,7 +116,7 @@ if [ 1 -eq "$(bc <<<"${cpu_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${cpu_cost_usd}
 fi
 
 # finally, calculate the total cost in USD of all resources and validate it
-total_cost_usd=$(bc -l <<<"${cpu_cost_usd}+${memory_cost_usd}+${storage_cost_usd}+${endpoint_cost_usd}")
+total_cost_usd=$(bc -l <<<"${cpu_cost_usd}+${gpu_cost_usd}+${memory_cost_usd}+${storage_cost_usd}+${endpoint_cost_usd}")
 if [ 1 -eq "$(bc <<<"${total_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${total_cost_usd}<=${MAX_INT64}")" ]; then
   echo "invalid total cost $total_cost_usd" >&2
   exit 1
@@ -128,6 +136,7 @@ usd_per_akt=$(jq '."akash-network"."usd"' <<<"$API_RESPONSE")
 
 # validate the current USD price per AKT is not zero
 if [ 1 -eq "$(bc <<< "${usd_per_akt}==0")" ]; then
+  echo "invalid akt to usd price, cannot be 0" >&2
   exit 1
 fi
 

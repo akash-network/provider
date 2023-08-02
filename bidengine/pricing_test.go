@@ -663,19 +663,19 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 		_ = fin.Close()
 	}()
 	decoder := json.NewDecoder(fin)
-	data := make([]dataForScriptElement, 0)
+	data := dataForScript{}
 	err = decoder.Decode(&data)
 	require.NoError(t, err)
 
-	require.Len(t, data, len(gspec.Resources))
+	require.Len(t, data.Resources, len(gspec.Resources))
 
 	for i, r := range gspec.Resources {
-		require.Equal(t, r.Resources.CPU.Units.Val.Uint64(), data[i].CPU)
-		require.Equal(t, r.Resources.Memory.Quantity.Val.Uint64(), data[i].Memory)
-		require.Equal(t, r.Resources.Storage[0].Quantity.Val.Uint64(), data[i].Storage[0].Size)
-		require.Equal(t, r.Count, data[i].Count)
-		require.Equal(t, len(r.Resources.Endpoints), data[i].EndpointQuantity)
-		require.Equal(t, util.GetEndpointQuantityOfResourceUnits(r.Resources, atypes.Endpoint_LEASED_IP), data[i].IPLeaseQuantity)
+		require.Equal(t, r.Resources.CPU.Units.Val.Uint64(), data.Resources[i].CPU)
+		require.Equal(t, r.Resources.Memory.Quantity.Val.Uint64(), data.Resources[i].Memory)
+		require.Equal(t, r.Resources.Storage[0].Quantity.Val.Uint64(), data.Resources[i].Storage[0].Size)
+		require.Equal(t, r.Count, data.Resources[i].Count)
+		require.Equal(t, len(r.Resources.Endpoints), data.Resources[i].EndpointQuantity)
+		require.Equal(t, util.GetEndpointQuantityOfResourceUnits(r.Resources, atypes.Endpoint_LEASED_IP), data.Resources[i].IPLeaseQuantity)
 	}
 }
 
@@ -703,7 +703,7 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 	require.NotNil(t, pricing)
 
 	gspec := defaultGroupSpec()
-	gspec.Resources[0].Resources.Endpoints = make([]atypes.Endpoint, 7)
+	gspec.Resources[0].Resources.Endpoints = make(atypes.Endpoints, 7)
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
 		GSpec: gspec,

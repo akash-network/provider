@@ -342,3 +342,8 @@ type dataForScriptElement struct {
 	EndpointQuantity int              `json:"endpoint_quantity"`
 	IPLeaseQuantity  uint             `json:"ip_lease_quantity"`
 }
+
+type dataForScript struct {
+	Resources []dataForScriptElement `json:"resources"`
+	Price     string                 `json:"price"`
+}
