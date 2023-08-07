@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"runtime/debug"
 	"strings"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -242,8 +243,8 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	defer func() {
 		tmpErr := err
 
-		if r := recover(); r != nil {
-			c.log.Error(fmt.Sprintf("recovered from panic: %v", r))
+		if recover() != nil {
+			c.log.Error(fmt.Sprintf("recovered from panic: \n%s", string(debug.Stack())))
 			err = kubeclienterrors.ErrInternalError
 		}
 
