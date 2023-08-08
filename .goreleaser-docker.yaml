@@ -19,7 +19,7 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
 archives:
- - format: binary
+  - format: binary
 dockers:
   - dockerfile: Dockerfile
     use: buildx

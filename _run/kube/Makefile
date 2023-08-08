@@ -47,7 +47,7 @@ hostname-operator:
 clean-kube:
 
 .PHONY: kube-deployments-rollout
-kube-deployments-rollout:
+kube-deployments-rollout: #$(patsubst %, kube-deployment-rollout-%,$(KUSTOMIZE_INSTALLS))
 
 .PHONY: kube-setup-kube
 kube-setup-kube:

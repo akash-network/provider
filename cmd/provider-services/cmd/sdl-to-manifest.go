@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -24,7 +23,7 @@ func SDL2ManifestCmd() *cobra.Command {
 			case outputJSON:
 			case outputYAML:
 			default:
-				return errors.New(fmt.Sprintf("invalid output format \"%s\", expected json|yaml", format)) // nolint: goerr113, revive
+				return fmt.Errorf("invalid output format \"%s\", expected json|yaml", format) // nolint: goerr113
 			}
 
 			return nil

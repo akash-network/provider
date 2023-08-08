@@ -1,7 +1,7 @@
 FROM debian:bullseye
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
-COPY provider-services /bin/
+COPY provider-services /usr/bin/
 
 RUN \
     apt-get update \

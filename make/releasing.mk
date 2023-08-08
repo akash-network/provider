@@ -2,7 +2,6 @@ GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
 GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:v$(GOLANG_VERSION)
 GORELEASER_MOUNT_CONFIG  ?= false
-RELEASE_DOCKER_IMAGE     ?= ghcr.io/akash-network/provider
 
 ifeq ($(GORELEASER_RELEASE),true)
 	GORELEASER_SKIP_VALIDATE := false
@@ -45,9 +44,9 @@ docgen: $(PROVIRER_DEVCACHE)
 install:
 	$(GO) install $(BUILD_FLAGS) ./cmd/provider-services
 
-.PHONY: chmod-node-scripts
-chmod-node-scripts:
-	find "$(AKASH_LOCAL_PATH)/script" -type f -name '*.sh' -exec echo "chmod +x {}" \; -exec chmod +x {} \;
+.PHONY: chmod-akash-scripts
+chmod-akash-scripts:
+	find "$(AKASHD_LOCAL_PATH)/script" -type f -name '*.sh' -exec echo "chmod +x {}" \; -exec chmod +x {} \;
 
 .PHONY: docker-image
 docker-image:
