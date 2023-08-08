@@ -202,7 +202,7 @@ type deploymentApplies struct {
 	ns        builder.NS
 	netPol    builder.NetPol
 	cmanifest builder.Manifest
-	services  []deploymentService
+	services  []*deploymentService
 }
 
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
@@ -237,7 +237,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	group := cdeployment.ManifestGroup()
 
 	applies := deploymentApplies{
-		services: make([]deploymentService, 0, len(group.Services)),
+		services: make([]*deploymentService, 0, len(group.Services)),
 	}
 
 	defer func() {
@@ -272,7 +272,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 		service := &group.Services[svcIdx]
 
-		svc := deploymentService{}
+		svc := &deploymentService{}
 
 		persistent := false
 		for i := range service.Resources.Storage {
@@ -288,15 +288,15 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			svc.deployment = builder.NewDeployment(workload)
 		}
 
+		applies.services = append(applies.services, svc)
+
 		if len(service.Expose) == 0 {
-			c.log.Debug("no services", "lease", lid, "service", service.Name)
+			c.log.Debug("lease does not have services (no expose configuration provided)", "lease", lid, "service", service.Name)
 			continue
 		}
 
 		svc.localService = builder.BuildService(workload, false)
 		svc.globalService = builder.BuildService(workload, true)
-
-		applies.services = append(applies.services, svc)
 	}
 
 	if err := applyNS(ctx, c.kc, applies.ns); err != nil {
@@ -321,7 +321,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	}
 
 	for svcIdx := range group.Services {
-		applyObjs := &applies.services[svcIdx]
+		applyObjs := applies.services[svcIdx]
 		service := &group.Services[svcIdx]
 
 		if applyObjs.statefulSet != nil {
@@ -338,15 +338,15 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			}
 		}
 
-		if applyObjs.localService.Any() {
-			if err = applyService(ctx, c.kc, applyObjs.localService); err != nil {
+		if lsvc := applyObjs.localService; lsvc != nil && lsvc.Any() {
+			if err = applyService(ctx, c.kc, lsvc); err != nil {
 				c.log.Error("applying local service", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
 		}
 
-		if applyObjs.globalService.Any() {
-			if err = applyService(ctx, c.kc, applyObjs.globalService); err != nil {
+		if gsvc := applyObjs.globalService; gsvc != nil && gsvc.Any() {
+			if err = applyService(ctx, c.kc, gsvc); err != nil {
 				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
