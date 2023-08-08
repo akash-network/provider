@@ -11,6 +11,8 @@ endif
 # use akash-node-ready target as example
 BASH_PATH := $(shell which bash)
 
+SHELL := $(BASH_PATH)
+
 # expecting GNU make >= 4.0. so comparing major version only
 MAKE_MAJOR_VERSION := $(shell echo $(MAKE_VERSION) | cut -d "." -f1)
 ifneq (true, $(shell [ $(MAKE_MAJOR_VERSION) -ge 4 ] && echo true))
@@ -42,6 +44,8 @@ UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # uname reports x86_64. rename to amd64 to make it usable by goreleaser
 UNAME_ARCH                 ?= $(shell uname -m | sed "s/x86_64/amd64/g")
 
+SEMVER                     := $(ROOT_DIR)/script/semver.sh
+
 ifeq (, $(shell which wget))
 $(error "No wget in $(PATH), consider installing")
 endif
@@ -60,13 +64,36 @@ GO_BUILD                     := $(GO) build -mod=$(GO_MOD)
 GO_TEST                      := $(GO) test -mod=$(GO_MOD)
 GO_VET                       := $(GO) vet -mod=$(GO_MOD)
 
+DETECTED_GO_VERSION          := $(shell go version | cut -d ' ' -f 3 |  sed 's/go*//')
+
+ifeq ($(OS),Windows_NT)
+	DETECTED_OS := Windows
+else
+	DETECTED_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
+endif
+
+# on MacOS disable deprecation warnings security framework
+ifeq ($(DETECTED_OS), Darwin)
+	export CGO_CFLAGS=-Wno-deprecated-declarations
+
+	# on MacOS Sonoma Beta there is a bit of discrepancy between Go and new prime linker
+	clang_version := $(shell echo | clang -dM -E - | grep __clang_major__ | cut -d ' ' -f 3 | tr -d '\n')
+	go_has_ld_fix := $(shell $(SEMVER) compare "v$(DETECTED_GO_VERSION)" "v1.21.0" | tr -d '\n')
+
+	ifeq (15,$(clang_version))
+		ifeq (-1,$(go_has_ld_fix))
+			export CGO_LDFLAGS=-Wl,-ld_classic -Wno-deprecated-declarations
+		endif
+	endif
+endif
+
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 
-NODE_MODULE                  := github.com/akash-network/node
+AKASHD_MODULE                := github.com/akash-network/node
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
-AKASH_SRC_IS_LOCAL           := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(NODE_MODULE)")
-AKASH_LOCAL_PATH             := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(NODE_MODULE)")
-AKASH_VERSION                := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(NODE_MODULE) | cut -c2-)
+AKASHD_SRC_IS_LOCAL          := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
+AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")
+AKASHD_VERSION               := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(AKASHD_MODULE) | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
 GOLANGCI_LINT_VERSION        ?= v1.51.2
 GOLANG_VERSION               ?= 1.16.1
@@ -74,6 +101,17 @@ STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
 MOCKERY_VERSION              ?= 2.32.0
 K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
+
+AKASHD_BUILD_FROM_SRC        := $(AKASHD_SRC_IS_LOCAL)
+ifeq (false,$(AKASHD_BUILD_FROM_SRC))
+	AKASHD_BUILD_FROM_SRC := $(shell curl -sL \
+	  -H "Accept: application/vnd.github+json" \
+	  -H "Authorization: Bearer $${GITHUB_TOKEN}" \
+	  -H "X-GitHub-Api-Version: 2022-11-28" \
+	  https://api.github.com/repos/akash-network/node/releases/tags/v0.23.2-rc4 | jq -e --arg name "akash_darwin_all.zip" '.assets[] | select(.name==$$name)' > /dev/null 2>&1 && echo -n true || echo -n false)
+endif
+
+RELEASE_DOCKER_IMAGE         ?= ghcr.io/akash-network/provider
 
 ifeq (0, $(shell which kind &>/dev/null; echo $$?))
 	KIND_VERSION                 ?= $(shell kind --version | cut -d" " -f3)
@@ -92,7 +130,7 @@ GIT_CHGLOG_VERSION_FILE          := $(AP_DEVCACHE_VERSIONS)/git-chglog/$(GIT_CHG
 MOCKERY_VERSION_FILE             := $(AP_DEVCACHE_VERSIONS)/mockery/v$(MOCKERY_VERSION)
 K8S_CODE_GEN_VERSION_FILE        := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODE_GEN_VERSION)
 GOLANGCI_LINT_VERSION_FILE       := $(AP_DEVCACHE_VERSIONS)/golangci-lint/$(GOLANGCI_LINT_VERSION)
-AKASH_VERSION_FILE               := $(AP_DEVCACHE_VERSIONS)/akash/$(AKASH_VERSION)
+AKASHD_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/akash/$(AKASHD_VERSION)
 KIND_VERSION_FILE                := $(AP_DEVCACHE_VERSIONS)/kind/$(KIND_VERSION)
 
 STATIK                           := $(AP_DEVCACHE_BIN)/statik

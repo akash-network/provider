@@ -19,12 +19,12 @@ KUBE_DOCKER_IMAGE_ARCH     ?= $(shell uname -m | sed "s/x86_64/amd64/g")
 
 AKASH_LOCAL_DOCKER_IMAGE   ?= ghcr.io/akash-network/node:latest-$(KUBE_DOCKER_IMAGE_ARCH)
 
-ifeq ($(AKASH_SRC_IS_LOCAL), true)
+ifeq ($(AKASHD_BUILD_FROM_SRC), true)
 	AKASH_DOCKER_IMAGE        ?= $(AKASH_LOCAL_DOCKER_IMAGE)
 	AKASH_BUILD_LOCAL_IMAGE   := true
 else
 	AKASH_BUILD_LOCAL_IMAGE   := false
-	AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASH_VERSION)-$(KUBE_DOCKER_IMAGE_ARCH)
+	AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASHD_VERSION)-$(KUBE_DOCKER_IMAGE_ARCH)
 	AKASH_DOCKER_IMAGE_EXISTS := $(shell docker inspect --type=image $(AKASH_DOCKER_IMAGE) >/dev/null 2>&1 && echo true || echo false)
 	ifeq ($(shell $(AKASH_DOCKER_IMAGE_EXISTS)), false)
 		AKASH_DOCKER_IMAGE      := $(AKASH_LOCAL_DOCKER_IMAGE)
@@ -34,7 +34,7 @@ else
 	undefine AKASH_DOCKER_IMAGE_EXISTS
 endif
 
-DOCKER_IMAGE              ?= ghcr.io/akash-network/provider:latest-$(KUBE_DOCKER_IMAGE_ARCH)
+DOCKER_IMAGE              ?= $(RELEASE_DOCKER_IMAGE):latest-$(KUBE_DOCKER_IMAGE_ARCH)
 
 PROVIDER_HOSTNAME         ?= localhost
 PROVIDER_HOST              = $(PROVIDER_HOSTNAME):$(KIND_HTTP_PORT)
@@ -50,11 +50,20 @@ DOCKER_LOAD_IMAGES += $(AKASH_DOCKER_IMAGE)
 endif
 
 .PHONY: kube-prepare-images
- kube-prepare-images:
+kube-prepare-images: kube-prepare-image-provider-services kube-prepare-image-akash
+
+.PHONY: kube-prepare-image-provider-services
+kube-prepare-image-provider-services:
 ifneq ($(SKIP_BUILD), true)
 	make -C $(AP_ROOT) docker-image
+endif
+
+.PHONY: kube-prepare-image-akash
+kube-prepare-image-akash: RELEASE_DOCKER_IMAGE=ghcr.io/akash-network/node
+kube-prepare-image-akash:
+ifneq ($(SKIP_BUILD), true)
 ifeq ($(AKASH_BUILD_LOCAL_IMAGE), true)
-	make -C $(AKASH_LOCAL_PATH) docker-image
+	make -C $(AKASHD_LOCAL_PATH) docker-image
 else
 	docker pull $(AKASH_DOCKER_IMAGE)
 endif

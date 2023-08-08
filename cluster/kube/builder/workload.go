@@ -92,7 +92,7 @@ func (b *Workload) container() corev1.Container {
 		case GPUVendorAMD:
 			resourceName = ResourceGPUAMD
 		default:
-			panic(fmt.Sprintf("requested for unsupported GPU vendor"))
+			panic("requested for unsupported GPU vendor")
 		}
 
 		// GPUs are only supposed to be specified in the limits section, which means

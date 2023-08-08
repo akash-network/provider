@@ -10,7 +10,7 @@
 
 set -e
 
-if [[ $# -ne 2 ]]; then
+if [[ $# -lt 2 ]]; then
     echo "invalid amount of args"
     exit 1
 fi
@@ -120,6 +120,18 @@ command_kind() {
     esac
 }
 
+command_kustomize() {
+    case "$1" in
+    image)
+        shift
+
+        at=$1
+        image=$2
+            echo -e "- op: replace\n  path: /spec/template/spec/${at}/image\n  value: ${image}"
+        ;;
+    esac
+}
+
 case "${1}" in
 ssh)
     shift
@@ -128,6 +140,10 @@ ssh)
 kind)
     shift
     command_kind "$@"
+    ;;
+kustomize)
+    shift
+    command_kustomize "$@"
     ;;
 *)
     echo "invalid cluster type"

@@ -26,22 +26,22 @@ ifeq ($(UNAME_OS_LOWER), darwin)
 endif
 
 .PHONY: akash
-ifeq ($(AKASH_SRC_IS_LOCAL), true)
+ifeq ($(AKASHD_BUILD_FROM_SRC), true)
 akash:
 	@echo "compiling and installing Akash from local sources"
-	make -C $(AKASH_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
+	make -C $(AKASHD_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
 else
-$(AKASH_VERSION_FILE): $(AP_DEVCACHE)
-	@echo "Installing akash $(AKASH_VERSION) ..."
+$(AKASHD_VERSION_FILE): $(AP_DEVCACHE)
+	@echo "Installing akash $(AKASHD_VERSION) ..."
 	rm -f $(AKASH)
-	wget -q https://github.com/akash-network/node/releases/download/v$(AKASH_VERSION)/akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH).zip -O $(AP_DEVCACHE)/akash.zip
+	wget -q https://github.com/akash-network/node/releases/download/v$(AKASHD_VERSION)/akash_$(UNAME_OS_LOWER)_$(AKASH_INSTALL_ARCH).zip -O $(AP_DEVCACHE)/akash.zip
 	unzip -p $(AP_DEVCACHE)/akash.zip akash > $(AKASH)
 	chmod +x $(AKASH)
 	rm $(AP_DEVCACHE)/akash.zip
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
-akash: $(AKASH_VERSION_FILE)
+akash: $(AKASHD_VERSION_FILE)
 endif
 
 $(STATIK_VERSION_FILE): $(AP_DEVCACHE)

@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
@@ -25,15 +27,17 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	"github.com/cosmos/cosmos-sdk/server"
-	"github.com/cosmos/cosmos-sdk/testutil/network"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bankcli "github.com/cosmos/cosmos-sdk/x/bank/client/testutil"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	types "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	ttypes "github.com/akash-network/akash-api/go/node/take/v1beta3"
+
 	"github.com/akash-network/node/testutil"
 	clitestutil "github.com/akash-network/node/testutil/cli"
+	"github.com/akash-network/node/testutil/network"
 	ccli "github.com/akash-network/node/x/cert/client/cli"
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
 	"github.com/akash-network/node/x/provider/client/cli"
@@ -84,8 +88,34 @@ func cliGlobalFlags(args ...string) []string {
 func (s *IntegrationTestSuite) SetupSuite() {
 	s.appHost, s.appPort = appEnv(s.T())
 
+	const testCoin = "ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
+
 	// Create a network for test
-	cfg := testutil.DefaultConfig()
+	cfg := testutil.DefaultConfig(testutil.WithInterceptState(func(cdc codec.Codec, s string, istate json.RawMessage) json.RawMessage {
+		var res json.RawMessage
+
+		switch s {
+		case "take":
+			state := &ttypes.GenesisState{}
+			cdc.MustUnmarshalJSON(istate, state)
+
+			state.Params.DenomTakeRates = append(state.Params.DenomTakeRates, ttypes.DenomTakeRate{
+				Denom: testCoin,
+				Rate:  20,
+			})
+
+			res = cdc.MustMarshalJSON(state)
+		case "deployment":
+			state := &dtypes.GenesisState{}
+			cdc.MustUnmarshalJSON(istate, state)
+			state.Params.MinDeposits = append(state.Params.MinDeposits, sdk.NewInt64Coin(testCoin, 5000000))
+
+			res = cdc.MustMarshalJSON(state)
+		}
+
+		return res
+	}))
+
 	cfg.NumValidators = 1
 	cfg.MinGasPrices = fmt.Sprintf("0%s", testutil.CoinDenom)
 	s.cfg = cfg
@@ -105,7 +135,10 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.validator = s.network.Validators[0]
 
 	// Send coins value
-	sendTokens := sdk.NewCoin(s.cfg.BondDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4))
+	sendTokens := sdk.Coins{
+		sdk.NewCoin(s.cfg.BondDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
+		sdk.NewCoin(testCoin, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
+	}
 
 	// Setup a Provider key
 	s.keyProvider, err = s.validator.ClientCtx.Keyring.Key("keyFoo")
@@ -116,7 +149,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		s.validator.ClientCtx,
 		s.validator.Address,
 		s.keyProvider.GetAddress(),
-		sdk.NewCoins(sendTokens),
+		sendTokens,
 		cliGlobalFlags()...,
 	)
 	s.Require().NoError(err)
@@ -132,7 +165,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		s.validator.ClientCtx,
 		s.validator.Address,
 		s.keyTenant.GetAddress(),
-		sdk.NewCoins(sendTokens),
+		sendTokens,
 		cliGlobalFlags()...,
 	)
 	s.Require().NoError(err)
@@ -519,6 +552,7 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2EJWTServer))
+	suite.Run(t, new(E2ECustomCurrency))
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 
