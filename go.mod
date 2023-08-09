@@ -37,7 +37,7 @@ require (
 	k8s.io/code-generator v0.26.1
 	k8s.io/kubectl v0.24.2
 	k8s.io/metrics v0.24.2
-	sigs.k8s.io/kind v0.17.0
+	sigs.k8s.io/kind v0.20.0
 )
 
 replace (

@@ -13,7 +13,7 @@ defaults:
 jobs:
   crd-e2e:
     env:
-      KIND_NAME: kind
+      KIND_NAME: kube
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -33,14 +33,13 @@ jobs:
         run: go mod tidy
       - name: Make node scripts executable
         run: make chmod-akash-scripts
-      - name: Prepare images
-        run: make -s -C _run/kube kube-prepare-images
-      - uses: engineerd/setup-kind@v0.5.0
+      - uses: helm/kind-action@v1
         with:
           version: "${{ env.KIND_VERSION }}"
-          image: "kindest/node:${{ env.KINDEST_VERSION }}"
+          node_image: "kindest/node:${{ env.KINDEST_VERSION }}"
+          cluster_name: "${{ env.KIND_NAME }}"
           config: ./_run/kube/kind-config.yaml
-      - name: Setup Ingress K8S
+      - name: Configure Kind cluster
         run: KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kube-cluster-setup-e2e-ci
       - name: k8s-ingress
         run: make -s -C _run/kube kind-k8s-ip
