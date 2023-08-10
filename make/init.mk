@@ -44,8 +44,6 @@ UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 # uname reports x86_64. rename to amd64 to make it usable by goreleaser
 UNAME_ARCH                 ?= $(shell uname -m | sed "s/x86_64/amd64/g")
 
-SEMVER                     := $(ROOT_DIR)/script/semver.sh
-
 ifeq (, $(shell which wget))
 $(error "No wget in $(PATH), consider installing")
 endif
@@ -55,16 +53,25 @@ $(error "No realpath in $(PATH), consider installing")
 endif
 
 BINS                         := $(PROVIDER_SERVICES) akash
+SEMVER                     := $(ROOT_DIR)/script/semver.sh
+
+__local_go                   := $(shell GOTOOLCHAIN=local go version | cut -d ' ' -f 3 | sed 's/go*//' | tr -d '\n')
+__is_local_go_satisfies      := $(shell $(SEMVER) compare "v$(__local_go)" "v1.20.7"; echo $?)
+
+ifeq (-1, $(__is_local_go_satisfies))
+$(error "unsupported local go$(__local_go) version . min required go1.21.0")
+endif
+
+GO_VERSION                   := $(shell go mod edit -json | jq -r .Go | tr -d '\n')
+GOTOOLCHAIN                  := $(shell go mod edit -json | jq -r .Toolchain | tr -d '\n')
+GOTOOLCHAIN_SEMVER           := v$(shell echo "$(GOTOOLCHAIN)" | sed 's/go*//' | tr -d '\n')
 
 GOWORK                       ?= on
 GO_MOD                       ?= readonly
-
 export GO                    := GO111MODULE=$(GO111MODULE) go
 GO_BUILD                     := $(GO) build -mod=$(GO_MOD)
 GO_TEST                      := $(GO) test -mod=$(GO_MOD)
 GO_VET                       := $(GO) vet -mod=$(GO_MOD)
-
-DETECTED_GO_VERSION          := $(shell go version | cut -d ' ' -f 3 |  sed 's/go*//')
 
 ifeq ($(OS),Windows_NT)
 	DETECTED_OS := Windows
@@ -78,7 +85,7 @@ ifeq ($(DETECTED_OS), Darwin)
 
 	# on MacOS Sonoma Beta there is a bit of discrepancy between Go and new prime linker
 	clang_version := $(shell echo | clang -dM -E - | grep __clang_major__ | cut -d ' ' -f 3 | tr -d '\n')
-	go_has_ld_fix := $(shell $(SEMVER) compare "v$(DETECTED_GO_VERSION)" "v1.21.0" | tr -d '\n')
+	go_has_ld_fix := $(shell $(SEMVER) compare "$(GOTOOLCHAIN_SEMVER)" "v1.22.0" | tr -d '\n')
 
 	ifeq (15,$(clang_version))
 		ifeq (-1,$(go_has_ld_fix))
