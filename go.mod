@@ -1,6 +1,7 @@
 module github.com/akash-network/provider
 
-go 1.18
+go 1.20
+toolchain go1.21.0
 
 require (
 	github.com/akash-network/akash-api v0.0.26
