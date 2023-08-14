@@ -372,8 +372,9 @@ loop:
 			pricech = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
 				// Calculate price & bid
 				priceReq := Request{
-					Owner: group.GroupID.Owner,
-					GSpec: &group.GroupSpec,
+					Owner:          group.GroupID.Owner,
+					GSpec:          &group.GroupSpec,
+					PricePrecision: DefaultPricePrecision,
 				}
 				return runner.NewResult(o.cfg.PricingStrategy.CalculatePrice(ctx, priceReq))
 			}, pricingDuration))

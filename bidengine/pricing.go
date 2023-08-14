@@ -19,9 +19,14 @@ import (
 )
 
 type Request struct {
-	Owner string `json:"owner"`
-	GSpec *dtypes.GroupSpec
+	Owner          string `json:"owner"`
+	GSpec          *dtypes.GroupSpec
+	PricePrecision int
 }
+
+const (
+	DefaultPricePrecision = 6
+)
 
 type BidPricingStrategy interface {
 	CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error)
@@ -106,8 +111,10 @@ func MakeScalePricing(
 	return result, nil
 }
 
-var ErrBidQuantityInvalid = errors.New("A bid quantity is invalid")
-var ErrBidZero = errors.New("A bid of zero was produced")
+var (
+	ErrBidQuantityInvalid = errors.New("A bid quantity is invalid")
+	ErrBidZero            = errors.New("A bid of zero was produced")
+)
 
 func ceilBigRatToBigInt(v *big.Rat) *big.Int {
 	numerator := v.Num()
@@ -344,6 +351,7 @@ type dataForScriptElement struct {
 }
 
 type dataForScript struct {
-	Resources []dataForScriptElement `json:"resources"`
-	Price     string                 `json:"price"`
+	Resources      []dataForScriptElement `json:"resources"`
+	Price          sdk.DecCoin            `json:"price"`
+	PricePrecision *int                   `json:"price_precision,omitempty"`
 }
