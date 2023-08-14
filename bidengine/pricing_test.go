@@ -17,8 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akash-network/provider/cluster/util"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
@@ -28,6 +26,8 @@ import (
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/sdl"
 	"github.com/akash-network/node/testutil"
+
+	"github.com/akash-network/provider/cluster/util"
 )
 
 func Test_ScalePricingRejectsAllZero(t *testing.T) {
@@ -414,7 +414,7 @@ func Test_ScriptPricingFailsWhenScriptExitsWithoutWritingResultToStdout(t *testi
 	}
 
 	_, err = pricing.CalculatePrice(context.Background(), req)
-	require.Equal(t, io.EOF, errors.Unwrap(err))
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func Test_ScriptPricingFailsWhenScriptWritesZeroResult(t *testing.T) {
@@ -498,7 +498,7 @@ func Test_ScriptPricingFailsWhenScriptWritesOverflowResult(t *testing.T) {
 	scriptPath := path.Join(tempdir, "test_script.sh")
 	fout, err := os.OpenFile(scriptPath, os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	require.NoError(t, err)
-	// Write the maximum value, followed by zero so it is 10x
+	// Write the maximum value, followed by zero, so it is 10x
 	_, err = fmt.Fprintf(fout, "#!/bin/sh\necho %s0\nexit 0", sdk.MaxSortableDec.String())
 	require.NoError(t, err)
 	err = fout.Close()
@@ -514,7 +514,7 @@ func Test_ScriptPricingFailsWhenScriptWritesOverflowResult(t *testing.T) {
 	}
 
 	_, err = pricing.CalculatePrice(context.Background(), req)
-	require.Equal(t, ErrBidQuantityInvalid, err)
+	require.ErrorIs(t, err, ErrBidQuantityInvalid)
 }
 
 func Test_ScriptPricingReturnsResultFromScript(t *testing.T) {
@@ -682,8 +682,9 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 func Test_ScriptPricingFromScript(t *testing.T) {
 	const (
 		mockAPIResponse = `{"akash-network":{"usd":3.57}}`
-		expectedPrice   = 67843138
 	)
+
+	expectedPrice := fmt.Sprintf("%.*f", DefaultPricePrecision, 67843137.254901960)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -711,7 +712,10 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	require.Equal(t, sdk.NewDecCoin("uakt", sdk.NewInt(expectedPrice)).String(), price.String())
+	amount, err := sdk.NewDecFromStr(expectedPrice)
+	require.NoError(t, err)
+
+	require.Equal(t, sdk.NewDecCoinFromDec("uakt", amount).String(), price.String())
 }
 
 func TestRationalToIntConversion(t *testing.T) {

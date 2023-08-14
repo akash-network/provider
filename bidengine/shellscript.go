@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -118,7 +119,11 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 
 	dataForScript := &dataForScript{
 		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
-		Price:     req.GSpec.Price().String(),
+		Price:     req.GSpec.Price(),
+	}
+
+	if req.PricePrecision > 0 {
+		dataForScript.PricePrecision = &req.PricePrecision
 	}
 
 	// iterate over everything & sum it up
@@ -182,18 +187,14 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	}
 
 	// Decode the result
-	decoder := json.NewDecoder(outputBuf)
-	decoder.UseNumber()
-
-	var priceNumber json.Number
-	err = decoder.Decode(&priceNumber)
-	if err != nil {
-		return sdk.DecCoin{}, fmt.Errorf("%w: script failure %s", err, stderrBuf.String())
+	valueStr := strings.TrimSpace(outputBuf.String())
+	if valueStr == "" {
+		return sdk.DecCoin{}, fmt.Errorf("bid script must return amount:%w%w", io.EOF, ErrBidQuantityInvalid)
 	}
 
-	price, err := sdk.NewDecFromStr(priceNumber.String())
+	price, err := sdk.NewDecFromStr(valueStr)
 	if err != nil {
-		return sdk.DecCoin{}, ErrBidQuantityInvalid
+		return sdk.DecCoin{}, fmt.Errorf("%w%w", err, ErrBidQuantityInvalid)
 	}
 
 	if price.IsZero() {
@@ -201,10 +202,6 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	}
 
 	if price.IsNegative() {
-		return sdk.DecCoin{}, ErrBidQuantityInvalid
-	}
-
-	if !price.LTE(sdk.MaxSortableDec) {
 		return sdk.DecCoin{}, ErrBidQuantityInvalid
 	}
 
