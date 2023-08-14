@@ -64,6 +64,8 @@ storage_cost_usd=0
 # read the JSON in `stdin` into $script_input
 read -r script_input
 
+precision=$(jq -r '.price_precision // 6' <<<"$script_input")
+
 # iterate over all the groups and calculate total quantity of each resource
 for group in $(jq -c '.resources[]' <<<"$script_input"); do
   count=$(jq '.count' <<<"$group")
@@ -144,8 +146,5 @@ fi
 total_cost_akt=$(bc -l <<<"${total_cost_usd}/${usd_per_akt}")
 total_cost_uakt=$(bc -l <<<"${total_cost_akt}*1000000")
 
-# Round upwards to get an integer
-total_cost_uakt=$(echo "$total_cost_uakt" | jq 'def ceil: if . | floor == . then . else . + 1.0 | floor end; .|ceil')
-
-# return the price in uAKT
-echo "$total_cost_uakt"
+# DO NOT INCREASE PRECISION below, it gives varying results during tests on different hosts
+printf "%.*f" "$precision" "$total_cost_uakt"
