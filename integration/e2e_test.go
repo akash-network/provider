@@ -69,11 +69,14 @@ type IntegrationTestSuite struct {
 const (
 	defaultGasPrice      = "0.03uakt"
 	defaultGasAdjustment = "1.4"
-	defaultMinDeposit    = "5000000uakt"
+	uaktMinDeposit       = "5000000uakt"
+	axlUSDCDenom         = "ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
+	axlUSCDMinDeposit    = "5000000" + axlUSDCDenom
 )
 
 var (
-	deploymentDeposit = fmt.Sprintf("--deposit=%s", defaultMinDeposit)
+	deploymentUAktDeposit    = fmt.Sprintf("--deposit=%s", uaktMinDeposit)
+	deploymentAxlUSDCDeposit = fmt.Sprintf("--deposit=%s", axlUSCDMinDeposit)
 )
 
 func cliGlobalFlags(args ...string) []string {
@@ -88,8 +91,6 @@ func cliGlobalFlags(args ...string) []string {
 func (s *IntegrationTestSuite) SetupSuite() {
 	s.appHost, s.appPort = appEnv(s.T())
 
-	const testCoin = "ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
-
 	// Create a network for test
 	cfg := testutil.DefaultConfig(testutil.WithInterceptState(func(cdc codec.Codec, s string, istate json.RawMessage) json.RawMessage {
 		var res json.RawMessage
@@ -100,7 +101,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 			cdc.MustUnmarshalJSON(istate, state)
 
 			state.Params.DenomTakeRates = append(state.Params.DenomTakeRates, ttypes.DenomTakeRate{
-				Denom: testCoin,
+				Denom: axlUSDCDenom,
 				Rate:  20,
 			})
 
@@ -108,7 +109,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		case "deployment":
 			state := &dtypes.GenesisState{}
 			cdc.MustUnmarshalJSON(istate, state)
-			state.Params.MinDeposits = append(state.Params.MinDeposits, sdk.NewInt64Coin(testCoin, 5000000))
+			state.Params.MinDeposits = append(state.Params.MinDeposits, sdk.NewInt64Coin(axlUSDCDenom, 5000000))
 
 			res = cdc.MustMarshalJSON(state)
 		}
@@ -137,7 +138,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// Send coins value
 	sendTokens := sdk.Coins{
 		sdk.NewCoin(s.cfg.BondDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
-		sdk.NewCoin(testCoin, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
+		sdk.NewCoin(axlUSDCDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
 	}
 
 	// Setup a Provider key

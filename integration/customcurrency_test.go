@@ -37,14 +37,12 @@ func (s *E2ECustomCurrency) TestDefaultStorageClass() {
 		DSeq:  uint64(100),
 	}
 
-	deploymentDeposit := "--deposit=5000000ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
-
 	// Create Deployments
 	res, err := deploycli.TxCreateDeploymentExec(
 		s.validator.ClientCtx,
 		s.keyTenant.GetAddress(),
 		deploymentPath,
-		cliGlobalFlags(deploymentDeposit, fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+		cliGlobalFlags(deploymentAxlUSDCDeposit, fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(7))
