@@ -170,7 +170,7 @@ spec:
                                       model:
                                         type: string
     - name: v2beta1
-      served: true
+      served: false
       storage: false
       schema:
         openAPIV3Schema:
@@ -354,7 +354,7 @@ spec:
                   type: integer
     - name: v2beta1
       # Each version can be enabled/disabled by Served flag.
-      served: true
+      served: false
       # One and only one version must be marked as the storage version.
       storage: false
       schema:
@@ -390,6 +390,16 @@ metadata:
   annotations:
     "helm.sh/resource-policy": keep
 spec:
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: providerleasedips
+    # singular name to be used as an alias on the CLI and for display
+    singular: providerleasedip
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: ProviderLeasedIP
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+      - plip
   # group name to use for REST API: /apis/<group>/<version>
   group: akash.network
   scope: Namespaced
@@ -433,7 +443,7 @@ spec:
                   type: string
     - name: v2beta1
       # Each version can be enabled/disabled by Served flag.
-      served: true
+      served: false
       # One and only one version must be marked as the storage version.
       storage: false
       schema:
@@ -467,13 +477,3 @@ spec:
                   type: string
                 sharing_key:
                   type: string
-  names:
-    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
-    plural: providerleasedips
-    # singular name to be used as an alias on the CLI and for display
-    singular: providerleasedip
-    # kind is normally the CamelCased singular type. Your resource manifests use this.
-    kind: ProviderLeasedIP
-    # shortNames allow shorter string to match your resource on the CLI
-    shortNames:
-      - plip
