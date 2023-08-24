@@ -100,6 +100,8 @@ type ClusterSettings struct {
 	SchedulerParams []*SchedulerParams `json:"scheduler_params"`
 }
 
+type ReservationClusterSettings map[uint32]*SchedulerParams
+
 // ManifestServiceExpose stores exposed ports and accepted hosts details
 type ManifestServiceExpose struct {
 	Port                   uint16                           `json:"port,omitempty"`
@@ -166,9 +168,11 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 	}
 
 	return &deployment{
-		lid:     lid,
-		group:   group,
-		cparams: schedulerParams,
+		lid:   lid,
+		group: group,
+		cparams: ClusterSettings{
+			SchedulerParams: schedulerParams,
+		},
 	}, nil
 }
 

@@ -63,32 +63,47 @@ var (
 type IClusterDeployment interface {
 	LeaseID() mtypes.LeaseID
 	ManifestGroup() *mani.Group
+	UpdateManifest() bool
 	ClusterParams() crd.ClusterSettings
 }
 
 type ClusterDeployment struct {
-	Lid     mtypes.LeaseID
-	Group   *mani.Group
-	Sparams crd.ClusterSettings
+	Lid            mtypes.LeaseID
+	Group          *mani.Group
+	Sparams        crd.ClusterSettings
+	updateManifest bool
 }
 
 var _ IClusterDeployment = (*ClusterDeployment)(nil)
 
 func ClusterDeploymentFromDeployment(d ctypes.IDeployment) (IClusterDeployment, error) {
-	cparams, valid := d.ClusterParams().(crd.ClusterSettings)
-	if !valid {
-		// nolint: goerr113
-		return nil, fmt.Errorf("%w: unexpected type from ClusterParams(). expected (%s), actual (%s)",
+	var cparams crd.ClusterSettings
+
+	updateManifest := false
+
+	switch sparams := d.ClusterParams().(type) {
+	case crd.ClusterSettings:
+		cparams = sparams
+	case crd.ReservationClusterSettings:
+		var err error
+		cparams, err = buildClusterSettings(d.ManifestGroup(), sparams)
+		if err != nil {
+			return nil, err
+		}
+
+		updateManifest = true
+	default:
+		return nil, fmt.Errorf("%w: ClusterParams() returned result of unexpected type (%s)",
 			ErrKubeBuilder,
-			reflect.TypeOf(crd.ClusterSettings{}),
-			reflect.TypeOf(d.ClusterParams()),
+			reflect.TypeOf(sparams),
 		)
 	}
 
 	cd := &ClusterDeployment{
-		Lid:     d.LeaseID(),
-		Group:   d.ManifestGroup(),
-		Sparams: cparams,
+		Lid:            d.LeaseID(),
+		Group:          d.ManifestGroup(),
+		Sparams:        cparams,
+		updateManifest: updateManifest,
 	}
 
 	if err := cd.validate(); err != nil {
@@ -96,6 +111,25 @@ func ClusterDeploymentFromDeployment(d ctypes.IDeployment) (IClusterDeployment, 
 	}
 
 	return cd, nil
+}
+
+func buildClusterSettings(mgroup *mani.Group, reservation crd.ReservationClusterSettings) (crd.ClusterSettings, error) {
+	sparams := make([]*crd.SchedulerParams, 0, len(mgroup.Services))
+
+	for _, svc := range mgroup.Services {
+		params, exists := reservation[svc.Resources.ID]
+		if !exists {
+			return crd.ClusterSettings{}, fmt.Errorf("%w: reservation does not have SchedulerParams for ResourcesID (%d)", ErrKubeBuilder, svc.Resources.ID)
+		}
+
+		sparams = append(sparams, params)
+	}
+
+	res := crd.ClusterSettings{
+		SchedulerParams: sparams,
+	}
+
+	return res, nil
 }
 
 func (d *ClusterDeployment) LeaseID() mtypes.LeaseID {
@@ -108,6 +142,10 @@ func (d *ClusterDeployment) ManifestGroup() *mani.Group {
 
 func (d *ClusterDeployment) ClusterParams() crd.ClusterSettings {
 	return d.Sparams
+}
+
+func (d *ClusterDeployment) UpdateManifest() bool {
+	return d.updateManifest
 }
 
 func (d *ClusterDeployment) validate() error {

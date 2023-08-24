@@ -105,12 +105,16 @@ func TestNewClient(t *testing.T) {
 	assert.NoError(t, err)
 	require.Empty(t, deployments)
 
+	reservationCparams := make(crd.ReservationClusterSettings)
+
+	for _, svc := range group.Services {
+		reservationCparams[svc.Resources.ID] = nil
+	}
+
 	cdep := &ctypes.Deployment{
-		Lid:    lid,
-		MGroup: &group,
-		CParams: crd.ClusterSettings{
-			SchedulerParams: make([]*crd.SchedulerParams, len(group.Services)),
-		},
+		Lid:     lid,
+		MGroup:  &group,
+		CParams: reservationCparams,
 	}
 
 	// deploy lease

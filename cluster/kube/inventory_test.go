@@ -30,6 +30,7 @@ import (
 type testReservation struct {
 	resources         dtypes.GroupSpec
 	adjustedResources dtypes.ResourceUnits
+	cparams           interface{}
 }
 
 var _ ctypes.Reservation = (*testReservation)(nil)
@@ -50,8 +51,13 @@ func (r *testReservation) Allocated() bool {
 	return false
 }
 
-func (r *testReservation) SetClusterParams(_ interface{}) {}
-func (r *testReservation) ClusterParams() interface{}     { return nil }
+func (r *testReservation) SetClusterParams(val interface{}) {
+	r.cparams = val
+}
+
+func (r *testReservation) ClusterParams() interface{} {
+	return r.cparams
+}
 
 type inventoryScaffold struct {
 	kmock                   *kubernetesmocks.Interface
@@ -360,8 +366,20 @@ func TestInventoryMultipleReplicasFulFilled1(t *testing.T) {
 	require.NotNil(t, inv)
 	require.Len(t, inv.Metrics().Nodes, 4)
 
-	err = inv.Adjust(multipleReplicasGenReservations(100000, 0, 2))
+	reservation := multipleReplicasGenReservations(100000, 0, 2)
+	err = inv.Adjust(reservation)
 	require.NoError(t, err)
+	require.NotNil(t, reservation.cparams)
+	require.IsType(t, crd.ReservationClusterSettings{}, reservation.cparams)
+
+	cparams := reservation.cparams.(crd.ReservationClusterSettings)
+	require.Len(t, cparams, len(reservation.resources.Resources))
+	sparams, exists := cparams[reservation.resources.Resources[0].ID]
+
+	t.Logf("cparams: %v", cparams)
+
+	require.True(t, exists)
+	require.Nil(t, sparams)
 }
 
 func TestInventoryMultipleReplicasFulFilled2(t *testing.T) {

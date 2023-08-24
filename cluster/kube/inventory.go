@@ -142,9 +142,7 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 		})
 	}
 
-	cparams := crd.ClusterSettings{
-		SchedulerParams: make([]*crd.SchedulerParams, len(reservation.Resources().GetResourceUnits())),
-	}
+	cparams := make(crd.ReservationClusterSettings)
 
 	currInventory := inv.dup()
 
@@ -193,8 +191,8 @@ nodes:
 
 					// all replicas of the same service are expected to have same node selectors and runtimes
 					// if they don't match then provider cannot bid
-					if !reflect.DeepEqual(sparams, cparams.SchedulerParams[i]) {
-						jFirstSparams, _ := json.Marshal(cparams.SchedulerParams[i])
+					if !reflect.DeepEqual(sparams, cparams[adjusted.ID]) {
+						jFirstSparams, _ := json.Marshal(cparams[adjusted.ID])
 						jCurrSparams, _ := json.Marshal(sparams)
 
 						inv.log.Error(fmt.Sprintf("scheduler params mismatch between replicas within group:\n"+
@@ -205,7 +203,7 @@ nodes:
 						break nodes
 					}
 				} else {
-					cparams.SchedulerParams[i] = sparams
+					cparams[adjusted.ID] = sparams
 				}
 			}
 

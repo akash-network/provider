@@ -171,7 +171,7 @@ type inventory struct {
 
 var _ ctypes.Inventory = (*inventory)(nil)
 
-func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes.InventoryOption) error {
+func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, _ ...ctypes.InventoryOption) error {
 	resources := make(dtypes.ResourceUnits, len(reservation.Resources().GetResourceUnits()))
 	copy(resources, reservation.Resources().GetResourceUnits())
 
