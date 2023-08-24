@@ -109,13 +109,13 @@ GIT_CHGLOG_VERSION           ?= v0.15.1
 MOCKERY_VERSION              ?= 2.32.0
 K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
 
-AKASHD_BUILD_FROM_SRC        := $(AKASHD_SRC_IS_LOCAL)
-ifeq (false,$(AKASHD_BUILD_FROM_SRC))
+AKASHD_BUILD_FROM_SRC        := false
+ifeq (false,$(AKASHD_SRC_IS_LOCAL))
 	AKASHD_BUILD_FROM_SRC := $(shell curl -sL \
 	  -H "Accept: application/vnd.github+json" \
 	  -H "Authorization: Bearer $${GITHUB_TOKEN}" \
 	  -H "X-GitHub-Api-Version: 2022-11-28" \
-	  https://api.github.com/repos/akash-network/node/releases/tags/v0.23.2-rc4 | jq -e --arg name "akash_darwin_all.zip" '.assets[] | select(.name==$$name)' > /dev/null 2>&1 && echo -n true || echo -n false)
+	  https://api.github.com/repos/akash-network/node/releases/tags/$(AKASHD_VERSION) | jq -e --arg name "akash_darwin_all.zip" '.assets[] | select(.name==$$name)' > /dev/null 2>&1 && echo -n true || echo -n false)
 endif
 
 RELEASE_DOCKER_IMAGE         ?= ghcr.io/akash-network/provider

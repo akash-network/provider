@@ -30,6 +30,7 @@ bins: $(BINS)
 build:
 	$(GO_BUILD) -a  ./...
 
+.PHONY: $(PROVIDER_SERVICES)
 $(PROVIDER_SERVICES):
 	$(GO_BUILD) -o $@ $(BUILD_FLAGS) ./cmd/provider-services
 
@@ -37,7 +38,7 @@ $(PROVIDER_SERVICES):
 provider-services: $(PROVIDER_SERVICES)
 
 .PHONY: docgen
-docgen: $(PROVIRER_DEVCACHE)
+docgen: $(AP_DEVCACHE)
 	@echo TODO
 
 .PHONY: install
@@ -61,7 +62,7 @@ docker-image:
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-e GOPATH=/go \
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
-		-v $(GOPATH):/go:ro \
+		-v $(GOPATH):/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
@@ -94,7 +95,7 @@ release: gen-changelog
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
 		-e GOPATH=/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v $(GOPATH):/go:ro \
+		-v $(GOPATH):/go \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
