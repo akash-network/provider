@@ -116,6 +116,8 @@ ifeq (false,$(AKASHD_SRC_IS_LOCAL))
 	  -H "Authorization: Bearer $${GITHUB_TOKEN}" \
 	  -H "X-GitHub-Api-Version: 2022-11-28" \
 	  https://api.github.com/repos/akash-network/node/releases/tags/$(AKASHD_VERSION) | jq -e --arg name "akash_darwin_all.zip" '.assets[] | select(.name==$$name)' > /dev/null 2>&1 && echo -n true || echo -n false)
+else
+	AKASHD_BUILD_FROM_SRC := true
 endif
 
 RELEASE_DOCKER_IMAGE         ?= ghcr.io/akash-network/provider

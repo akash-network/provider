@@ -18,6 +18,13 @@ JWT_AUTH_HOSTNAME    ?= localhost
 JWT_AUTH_HOST        ?= $(JWT_AUTH_HOSTNAME):8444
 RESOURCE_SERVER_HOST ?= localhost:8445
 
+BLOCK_PERIOD               := 6.5
+LATEST_BLOCK_HEIGHT         = $(shell curl -sS "$(AKASH_NODE)/status?" | jq -r '.result.sync_info.latest_block_height')
+VOTING_PERIOD               = $(shell $(AKASH) query params subspace gov votingparams -o json | jq -r '.value' | sed 's/\\//g' | jq -r '.voting_period')
+MIN_DEPOSIT                 = $(shell $(AKASH) query params subspace gov depositparams -o json | jq -r '.value' | sed 's/\\//g' | jq -r '.min_deposit[0] | (.amount + .denom)')
+UPGRADE_HEIGHT_AFTER_PASS  ?= 20
+CALCULATE_UPGRADE_HEIGHT    = $(shell echo "$(LATEST_BLOCK_HEIGHT) + $(UPGRADE_HEIGHT_AFTER_PASS) + (($(VOTING_PERIOD) / 1000000000) / $(BLOCK_PERIOD))" | bc)
+
 .PHONY: multisig-send
 multisig-send:
 	$(AKASH) tx send \
@@ -304,3 +311,43 @@ provider-service-status:
 		--oseq      "$(OSEQ)"        \
 		--from      "$(KEY_NAME)" \
 		--provider  "$(PROVIDER_ADDRESS)"
+
+UPGRADE_NAME   ?= v0.24.0
+PROP_SUBMITTER ?= main
+
+.PHONY: prepare
+prepare:
+	docker pull $(AKASH_DOCKER_IMAGE)
+	docker pull $(DOCKER_IMAGE)
+	curl https://raw.githubusercontent.com/akash-network/provider/main/install.sh | bash -s -- -b $(AP_DEVCACHE_BIN) v0.2.1
+	curl https://raw.githubusercontent.com/akash-network/node/main/install.sh | bash -s -- -b $(AP_DEVCACHE_BIN) v0.22.9
+
+.PHONY: send-upgrade
+send-upgrade:
+	$(AKASH) tx gov submit-proposal software-upgrade $(UPGRADE_NAME) \
+		--yes \
+		--title=$(UPGRADE_NAME) \
+		--description=$(UPGRADE_NAME) \
+		--upgrade-height=$(CALCULATE_UPGRADE_HEIGHT) \
+		--deposit=$(MIN_DEPOSIT) \
+		--from=$(PROP_SUBMITTER)
+	$(AKASH) tx gov vote 1 yes -y --from validator
+
+PROVIDER_MIGRATE_DRYRUN ?= true
+
+.PHONY: provider-migrate
+provider-migrate:
+	$(PROVIDER_SERVICES) migrate v2beta2 \
+		--crd-dry-run=$(PROVIDER_MIGRATE_DRYRUN) \
+		--crd-v2beta1=https://raw.githubusercontent.com/akash-network/provider/v0.2.1/pkg/apis/akash.network/crd.yaml \
+		--crd-v2beta2=../../pkg/apis/akash.network/crd.yaml \
+		--crd-backup-path=$(AP_RUN_DIR)/migrate \
+		--from=$(PROVIDER_KEY_NAME)
+
+.PHONY: post-upgrade
+post-upgrade: post-upgrade-clean bins
+
+.PHONY: post-upgrade-clean
+post-upgrade-clean:
+	rm -f $(AP_DEVCACHE_BIN)/akash
+	rm -f $(AP_DEVCACHE_BIN)/provider-services

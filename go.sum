@@ -208,8 +208,8 @@ github.com/akash-network/ledger-go v0.14.3 h1:LCEFkTfgGA2xFMN2CtiKvXKE7dh0QSM77P
 github.com/akash-network/ledger-go v0.14.3/go.mod h1:NfsjfFvno9Kaq6mfpsKz4sqjnAVVEsVsnBJfKB4ueAs=
 github.com/akash-network/ledger-go/cosmos v0.14.3 h1:bEI9jLHM+Lm55idi4RfJlDez4/rVJs7E1MT0U2whYqI=
 github.com/akash-network/ledger-go/cosmos v0.14.3/go.mod h1:SjAfheQTE4rWk0ir+wjbOWxwj8nc8E4AZ08NdsvYG24=
-github.com/akash-network/node v0.24.0 h1:DcVS4cpKZOm2J5tDAhOrfcqS4biNZCEmJ+sDpt1G0sQ=
-github.com/akash-network/node v0.24.0/go.mod h1:XZ9uw7LgulUTwy4CtfQEJkntPG50+ypOViq5P2ImPG8=
+github.com/akash-network/node v0.24.2-rc0 h1:cwAtXuri2RyrI884G70g7mvO9b+H4Iapy9rHxi8JFA0=
+github.com/akash-network/node v0.24.2-rc0/go.mod h1:XI7OttMM4n2l8SmK80kN1YECw64I3y9Y6dasm7Ekjkw=
 github.com/alecthomas/participle/v2 v2.0.0-alpha7 h1:cK4vjj0VSgb3lN1nuKA5F7dw+1s1pWBe5bx7nNCnN+c=
 github.com/alecthomas/participle/v2 v2.0.0-alpha7/go.mod h1:NumScqsC42o9x+dGj8/YqsIfhrIQjFEOFovxotbBirA=
 github.com/alecthomas/template v0.0.0-20160405071501-a0175ee3bccc/go.mod h1:LOuyumcjzFXgccqObfd/Ljyb9UuFJ6TxHnclSeseNhc=
@@ -1178,8 +1178,6 @@ github.com/huin/goupnp v1.0.3-0.20220313090229-ca81a64b4204/go.mod h1:ZxNlw5WqJj
 github.com/huin/goutil v0.0.0-20170803182201-1ca381bf3150/go.mod h1:PpLOETDnJ0o3iZrZfqZzyLl6l7F3c6L1oWn7OICBi6o=
 github.com/hydrogen18/memlistener v0.0.0-20141126152155-54553eb933fb/go.mod h1:qEIFzExnS6016fRpRfxrExeVn2gbClQA99gQhnIcdhE=
 github.com/hydrogen18/memlistener v0.0.0-20200120041712-dcc25e7acd91/go.mod h1:qEIFzExnS6016fRpRfxrExeVn2gbClQA99gQhnIcdhE=
-github.com/ianlancetaylor/cgosymbolizer v0.0.0-20230801000641-8736a9d41aaa h1:FEZID0R3+pkWLvjmZJ2iL+SZTcb2+/PgVvoyQss/q/I=
-github.com/ianlancetaylor/cgosymbolizer v0.0.0-20230801000641-8736a9d41aaa/go.mod h1:DvXTE/K/RtHehxU8/GtDs4vFtfw64jJ3PaCnFri8CRg=
 github.com/ianlancetaylor/demangle v0.0.0-20181102032728-5e5cf60278f6/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
 github.com/imdario/mergo v0.3.5/go.mod h1:2EnlNZ0deacrJVfApfmtdGgDfMuh/nq6Ok1EcJh5FfA=

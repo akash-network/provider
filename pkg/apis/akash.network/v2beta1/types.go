@@ -214,7 +214,7 @@ type ManifestService struct {
 }
 
 func (ms ManifestService) toAkash() (ctypes.Service, error) {
-	res, err := ms.Resources.toAkash()
+	res, err := ms.Resources.ToAkash()
 	if err != nil {
 		return ctypes.Service{}, err
 	}
@@ -390,7 +390,7 @@ type ResourceUnits struct {
 	Storage []ManifestServiceStorage `json:"storage,omitempty"`
 }
 
-func (ru ResourceUnits) toAkash() (types.ResourceUnits, error) {
+func (ru ResourceUnits) ToAkash() (types.ResourceUnits, error) {
 	memory, err := strconv.ParseUint(ru.Memory, 10, 64)
 	if err != nil {
 		return types.ResourceUnits{}, err
