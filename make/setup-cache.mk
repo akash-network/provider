@@ -25,6 +25,10 @@ ifeq ($(UNAME_OS_LOWER), darwin)
 	AKASH_INSTALL_ARCH := all
 endif
 
+.PHONY: akash-rm
+akash-rm:
+	rm -f $(AKASHD_VERSION_FILE)
+
 .PHONY: akash
 ifeq ($(AKASHD_BUILD_FROM_SRC), true)
 akash:
@@ -41,7 +45,7 @@ $(AKASHD_VERSION_FILE): $(AP_DEVCACHE)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
-akash: $(AKASHD_VERSION_FILE)
+akash: akash-rm $(AKASHD_VERSION_FILE)
 endif
 
 $(STATIK_VERSION_FILE): $(AP_DEVCACHE)
