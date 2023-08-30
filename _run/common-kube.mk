@@ -12,6 +12,7 @@ KUBE_ROLLOUT_TIMEOUT       ?= 180
 
 INGRESS_CONFIG_PATH        ?= ../ingress-nginx.yaml
 CALICO_MANIFEST            ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
+CRD_FILE                   ?= $(AP_ROOT)/pkg/apis/akash.network/crd.yaml
 
 # when image is built locally, for example on M1 (arm64) and kubernetes cluster is running on amd64
 # we need to specify what arch to deploy as docker manifests can't be transferred locally
@@ -80,9 +81,11 @@ kube-upload-images-kind: $(KIND)
 kube-upload-images-default:
 	$(AP_ROOT)/script/load_docker2ctr.sh "$(DOCKER_LOAD_IMAGES)" $(KUBE_SSH_NODE_NAME)
 
-$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET)
-	$(AP_ROOT)/script/setup-kube.sh $(KUBE_SSH_NODE_NAME) init
-	#$(AP_ROOT)/script/setup-kube.sh crd
+.PHONY: kube-upload-crd
+kube-upload-crd:
+	$(SETUP_KUBE) --crd=$(CRD_FILE) $(KUBE_SSH_NODE_NAME) init
+
+$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET) kube-upload-crd
 	touch $@
 
 .INTERMEDIATE: kube-cluster-create-default
@@ -112,6 +115,7 @@ kube-cluster-setup-e2e: $(KUBE_CREATE) kube-cluster-setup-e2e-ci
 # dedicated target to perform setup within Github Actions CI
 .PHONY: kube-cluster-setup-e2e-ci
 kube-cluster-setup-e2e-ci: \
+	kube-upload-crd \
 	kube-prepare-images \
 	kube-setup-ingress \
 	kube-upload-images \
