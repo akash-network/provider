@@ -6,7 +6,7 @@ toolchain go1.21.0
 
 require (
 	github.com/akash-network/akash-api v0.0.28
-	github.com/akash-network/node v0.24.0
+	github.com/akash-network/node v0.24.2
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/boz/go-lifecycle v0.1.1
 	github.com/cosmos/cosmos-sdk v0.45.16
@@ -167,7 +167,6 @@ require (
 	github.com/hashicorp/vault/sdk v0.6.1-0.20221102145943-1e9b0a1225c3 // indirect
 	github.com/hashicorp/yamux v0.1.1 // indirect
 	github.com/hdevalence/ed25519consensus v0.0.0-20220222234857-c00d1f31bab3 // indirect
-	github.com/ianlancetaylor/cgosymbolizer v0.0.0-20230801000641-8736a9d41aaa // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/improbable-eng/grpc-web v0.14.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
