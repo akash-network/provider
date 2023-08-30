@@ -97,8 +97,8 @@ case "${1:-metrics}" in
         install_ns
         ;;
     metrics)
-        install_crd
-        install_ns
+#        install_crd
+#        install_ns
         install_metrics
         ;;
     calico-metrics)

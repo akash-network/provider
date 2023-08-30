@@ -10,12 +10,9 @@
 
 set -e
 
-if [[ $# -lt 2 ]]; then
-    echo "invalid amount of args"
-    exit 1
-fi
-
 rootdir="$(dirname "$0")/.."
+
+CRD_FILE=$rootdir/pkg/apis/akash.network/crd.yaml
 
 usage() {
     cat <<EOF
@@ -42,6 +39,73 @@ EOF
     exit 1
 }
 
+short_opts=h
+long_opts=help/crd:   # those who take an arg END with :
+
+while getopts ":$short_opts-:" o; do
+    case $o in
+        :)
+            echo >&2 "option -$OPTARG needs an argument"
+            continue
+            ;;
+        '?')
+            echo >&2 "bad option -$OPTARG"
+            continue
+            ;;
+        -)
+            o=${OPTARG%%=*}
+            OPTARG=${OPTARG#"$o"}
+            lo=/$long_opts/
+            case $lo in
+                *"/$o"[!/:]*"/$o"[!/:]*)
+                    echo >&2 "ambiguous option --$o"
+                    continue
+                    ;;
+                *"/$o"[:/]*)
+                    ;;
+                *)
+                    o=$o${lo#*"/$o"};
+                    o=${o%%[/:]*}
+                    ;;
+            esac
+
+            case $lo in
+                *"/$o/"*)
+                    OPTARG=
+                    ;;
+                *"/$o:/"*)
+                    case $OPTARG in
+                        '='*)
+                            OPTARG=${OPTARG#=}
+                            ;;
+                        *)
+                            eval "OPTARG=\$$OPTIND"
+                            if [ "$OPTIND" -le "$#" ] && [ "$OPTARG" != -- ]; then
+                                OPTIND=$((OPTIND + 1))
+                            else
+                                echo >&2 "option --$o needs an argument"
+                                continue
+                            fi
+                            ;;
+                    esac
+                    ;;
+            *) echo >&2 "unknown option --$o"; continue;;
+            esac
+    esac
+    case "$o" in
+        crd)
+            CRD_FILE=$OPTARG
+            ;;
+    esac
+    echo "OPT $o=$OPTARG"
+done
+shift "$((OPTIND - 1))"
+
+if [[ $# -lt 2 ]]; then
+    echo "invalid amount of args"
+    exit 1
+fi
+
 install_ns() {
     set -x
     kubectl apply -f "$rootdir/_docs/kustomize/networking/namespace.yaml"
@@ -54,7 +118,7 @@ install_network_policies() {
 
 install_crd() {
     set -x
-    kubectl apply -f "$rootdir/pkg/apis/akash.network/crd.yaml"
+    kubectl apply -f "$CRD_FILE"
     kubectl apply -f "$rootdir/_docs/kustomize/storage/storageclass.yaml"
     kubectl patch node "${KIND_NAME}-control-plane" -p '{"metadata":{"labels":{"akash.network/storageclasses":"beta2.default"}}}'
 }

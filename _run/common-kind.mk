@@ -10,7 +10,7 @@ endif
 
 KIND_IMG         ?= kindest/node:$(KINDEST_VERSION)
 K8S_CONTEXT      ?= $(shell kubectl config current-context)
-SETUP_KIND       := "$(AP_ROOT)/script/setup-kind.sh"
+SETUP_KIND       := $(AP_ROOT)/script/setup-kind.sh
 KIND_CONFIG      ?= default
 KIND_CONFIG_FILE := $(shell "$(SETUP_KIND)" config-file $$PWD $(KIND_CONFIG))
 
@@ -46,7 +46,7 @@ kind-port-bindings: $(KIND)
 	@echo $(KIND_PORT_BINDINGS)
 
 .INTERMEDIATE: kube-cluster-create-kind
-kube-cluster-create-kind:
+kube-cluster-create-kind: $(KIND)
 	$(KIND) create cluster --config "$(KIND_CONFIG_FILE)" --name "$(KIND_NAME)" --image "$(KIND_IMG)"
 
 .PHONY: kube-cluster-delete-kind
