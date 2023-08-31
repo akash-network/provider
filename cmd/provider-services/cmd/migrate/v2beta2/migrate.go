@@ -41,10 +41,10 @@ import (
 )
 
 const (
+	flagDryRun              = "crd-dry-run"
 	flagCrdBackupPath       = "crd-backup-path"
 	flagCrdRestoreOnly      = "crd-restore-only"
 	flagCrdBackupOnly       = "crd-backup-only"
-	flagCrdDryRun           = "crd-dry-run"
 	flagCleanDanglingLeases = "clean-dangling"
 	FlagKubeConfig          = "kubeconfig"
 	FlagK8sManifestNS       = "k8s-manifest-ns"
@@ -87,8 +87,8 @@ func MigrateCmd() *cobra.Command {
 		return nil
 	}
 
-	cmd.Flags().Bool(flagCrdDryRun, true, "patch CRDs and save them as files. this does not delete CRDs from cluster")
-	if err := viper.BindPFlag(flagCrdDryRun, cmd.Flags().Lookup(flagCrdDryRun)); err != nil {
+	cmd.Flags().Bool(flagDryRun, true, "patch CRDs and save them as files. this does not delete CRDs from cluster")
+	if err := viper.BindPFlag(flagDryRun, cmd.Flags().Lookup(flagDryRun)); err != nil {
 		return nil
 	}
 
@@ -216,7 +216,7 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 
 	restoreOnly := viper.GetBool(flagCrdRestoreOnly)
 	backupOnly := viper.GetBool(flagCrdBackupOnly)
-	dryRun := viper.GetBool(flagCrdDryRun)
+	dryRun := viper.GetBool(flagDryRun)
 	// cleanDanglingLeases := viper.GetBool(flagCleanDanglingLeases)
 
 	if !isKubectlAvail() {
@@ -296,7 +296,7 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 
 		var yes bool
 
-		if !isEmpty {
+		if !isEmpty && !restoreOnly {
 			yes, err = cli.GetConfirmation(cmd, "previous dry run already present. \"y\" to override. \"N\" to exit")
 			if err != nil {
 				return err
@@ -467,9 +467,7 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 
 		_ = spinner.Start()
 
-		if err = kubectl(cmd, "delete", string(crdOld), kubeConfig); err != nil {
-			return err
-		}
+		_ = kubectl(cmd, "delete", string(crdOld), kubeConfig)
 
 		if err = kubectl(cmd, "apply", string(crdNew), kubeConfig); err != nil {
 			return err
