@@ -124,7 +124,7 @@ func ManifestResourcesFromV2beta1(res dtypes.ResourceUnits, from v2beta1.Resourc
 
 			for _, vol := range svcRes.Storage {
 				for _, v := range units.Storage {
-					if vol.Name == v.Name && vol.Quantity.Value() == v.Quantity.Value() {
+					if vol.Quantity.Value() == v.Quantity.Value() {
 						matched--
 					}
 				}
