@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/akash-network/provider/cmd/provider-services/cmd/migrate/v2beta2"
 )
 
 func migrate() *cobra.Command {
@@ -9,7 +11,7 @@ func migrate() *cobra.Command {
 		Use: "migrate",
 	}
 
-	// cmd.AddCommand(migratecmd.V0_14ToV0_16())
+	cmd.AddCommand(v2beta2.MigrateCmd())
 
 	return cmd
 }
