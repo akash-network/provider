@@ -174,7 +174,7 @@ func ManifestServiceParamsFromV2beta1(from *v2beta1.ManifestServiceParams) *v2be
 	}
 
 	to := &v2beta2.ManifestServiceParams{
-		Storage: make([]v2beta2.ManifestStorageParams, len(from.Storage)),
+		Storage: make([]v2beta2.ManifestStorageParams, 0, len(from.Storage)),
 	}
 
 	for _, storage := range from.Storage {
