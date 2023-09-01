@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
@@ -159,7 +158,7 @@ func (c *client) GetManifestGroup(ctx context.Context, lID mtypes.LeaseID) (bool
 	})
 
 	if err != nil {
-		if kubeErrors.IsNotFound(err) {
+		if kerrors.IsNotFound(err) {
 			c.log.Info("CRD manifest not found", "lease-ns", leaseNamespace)
 			return false, crd.ManifestGroup{}, nil
 		}
@@ -764,7 +763,7 @@ func (c *client) leaseExists(ctx context.Context, lid mtypes.LeaseID) error {
 	})
 
 	if err != nil {
-		if kubeErrors.IsNotFound(err) {
+		if kerrors.IsNotFound(err) {
 			return kubeclienterrors.ErrLeaseNotFound
 		}
 

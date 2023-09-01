@@ -40,7 +40,6 @@ type ProviderHostsGetter interface {
 type ProviderHostInterface interface {
 	Create(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.CreateOptions) (*v2beta2.ProviderHost, error)
 	Update(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.UpdateOptions) (*v2beta2.ProviderHost, error)
-	UpdateStatus(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.UpdateOptions) (*v2beta2.ProviderHost, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*v2beta2.ProviderHost, error)
@@ -129,22 +128,6 @@ func (c *providerHosts) Update(ctx context.Context, providerHost *v2beta2.Provid
 		Namespace(c.ns).
 		Resource("providerhosts").
 		Name(providerHost.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(providerHost).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *providerHosts) UpdateStatus(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.UpdateOptions) (result *v2beta2.ProviderHost, err error) {
-	result = &v2beta2.ProviderHost{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("providerhosts").
-		Name(providerHost.Name).
-		SubResource("status").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(providerHost).
 		Do(ctx).

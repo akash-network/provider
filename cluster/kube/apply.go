@@ -111,7 +111,7 @@ func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Dep
 
 func applyStatefulSet(ctx context.Context, kc kubernetes.Interface, b builder.StatefulSet) error {
 	obj, err := kc.AppsV1().StatefulSets(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
-	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "deployments-get", err, errors.IsNotFound)
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "statefulset-get", err, errors.IsNotFound)
 
 	switch {
 	case err == nil:
@@ -119,14 +119,14 @@ func applyStatefulSet(ctx context.Context, kc kubernetes.Interface, b builder.St
 
 		if err == nil {
 			_, err = kc.AppsV1().StatefulSets(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-update", err)
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-update", err)
 
 		}
 	case errors.IsNotFound(err):
 		obj, err = b.Create()
 		if err == nil {
 			_, err = kc.AppsV1().StatefulSets(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-create", err)
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-create", err)
 		}
 	}
 	return err

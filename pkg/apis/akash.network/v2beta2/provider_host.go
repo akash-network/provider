@@ -11,8 +11,7 @@ type ProviderHost struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   ProviderHostSpec   `json:"spec,omitempty"`
-	Status ProviderHostStatus `json:"status,omitempty"`
+	Spec ProviderHostSpec `json:"spec,omitempty"`
 }
 
 // ProviderHostList

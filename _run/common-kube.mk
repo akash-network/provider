@@ -85,7 +85,8 @@ kube-upload-images-default:
 kube-upload-crd:
 	$(SETUP_KUBE) --crd=$(CRD_FILE) $(KUBE_SSH_NODE_NAME) init
 
-$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET) kube-upload-crd
+$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET)
+	$(SETUP_KUBE) --crd=$(CRD_FILE) $(KUBE_SSH_NODE_NAME) init
 	touch $@
 
 .INTERMEDIATE: kube-cluster-create-default

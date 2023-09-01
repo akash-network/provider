@@ -212,7 +212,6 @@ func fakeProviderHost(hostname string, leaseID mtypes.LeaseID, serviceName strin
 			ServiceName:  serviceName,
 			ExternalPort: externalPort,
 		},
-		Status: crd.ProviderHostStatus{},
 	}
 }
 

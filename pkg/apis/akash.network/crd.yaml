@@ -72,24 +72,73 @@ spec:
                                 type: number
                                 format: uint32
                               cpu:
-                                type: number
-                                format: uint32
-                              memory:
-                                type: string
-                                format: uint64
+                                type: object
+                                properties:
+                                  units:
+                                    type: number
+                                    format: uint32
+                                  attributes:
+                                    type: array
+                                    nullable: true
+                                    items:
+                                      type: object
+                                      properties:
+                                        key:
+                                          type: string
+                                        value:
+                                          type: string
                               gpu:
-                                type: number
-                                format: uint32
+                                type: object
+                                properties:
+                                  units:
+                                    type: number
+                                    format: uint32
+                                  attributes:
+                                    type: array
+                                    nullable: true
+                                    items:
+                                      type: object
+                                      properties:
+                                        key:
+                                          type: string
+                                        value:
+                                          type: string
+                              memory:
+                                type: object
+                                properties:
+                                  size:
+                                    type: string
+                                    format: uint64
+                                  attributes:
+                                    type: array
+                                    nullable: true
+                                    items:
+                                      type: object
+                                      properties:
+                                        key:
+                                          type: string
+                                        value:
+                                          type: string
                               storage:
                                 type: array
                                 items:
                                   type: object
                                   properties:
+                                    name:
+                                      type: string
                                     size:
                                       type: string
                                       format: uint64
-                                    name:
-                                      type: string
+                                    attributes:
+                                      type: array
+                                      nullable: true
+                                      items:
+                                        type: object
+                                        properties:
+                                          key:
+                                            type: string
+                                          value:
+                                            type: string
                           count:
                             type: number
                             format: uint64

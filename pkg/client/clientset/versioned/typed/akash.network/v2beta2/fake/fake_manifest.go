@@ -102,18 +102,6 @@ func (c *FakeManifests) Update(ctx context.Context, manifest *v2beta2.Manifest, 
 	return obj.(*v2beta2.Manifest), err
 }
 
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeManifests) UpdateStatus(ctx context.Context, manifest *v2beta2.Manifest, opts v1.UpdateOptions) (*v2beta2.Manifest, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(manifestsResource, "status", c.ns, manifest), &v2beta2.Manifest{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.Manifest), err
-}
-
 // Delete takes name of the manifest and deletes it. Returns an error if one occurs.
 func (c *FakeManifests) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.

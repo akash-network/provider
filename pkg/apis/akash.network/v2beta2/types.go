@@ -86,55 +86,92 @@ func LeaseIDFromAkash(id mtypes.LeaseID) LeaseID {
 	}
 }
 
-type ResourcesStorage struct {
-	Name string `json:"name"`
-	Size string `json:"size"`
+type ResourceCPU struct {
+	Units      uint32           `json:"units"`
+	Attributes types.Attributes `json:"attributes,omitempty"`
+}
+
+type ResourceGPU struct {
+	Units      uint32           `json:"units"`
+	Attributes types.Attributes `json:"attributes,omitempty"`
+}
+
+type ResourceMemory struct {
+	Size       string           `json:"size"`
+	Attributes types.Attributes `json:"attributes,omitempty"`
+}
+
+type ResourceVolume struct {
+	Name       string           `json:"name"`
+	Size       string           `json:"size"`
+	Attributes types.Attributes `json:"attributes,omitempty"`
+}
+
+type ResourceStorage []ResourceVolume
+
+func (ru ResourceCPU) ToAkash() *types.CPU {
+	return &types.CPU{
+		Units:      types.NewResourceValue(uint64(ru.Units)),
+		Attributes: ru.Attributes.Dup(),
+	}
+}
+
+func (ru ResourceGPU) ToAkash() *types.GPU {
+	return &types.GPU{
+		Units:      types.NewResourceValue(uint64(ru.Units)),
+		Attributes: ru.Attributes.Dup(),
+	}
+}
+
+func (ru ResourceMemory) ToAkash() *types.Memory {
+	size, _ := strconv.ParseUint(ru.Size, 10, 64)
+
+	return &types.Memory{
+		Quantity:   types.NewResourceValue(size),
+		Attributes: ru.Attributes.Dup(),
+	}
+}
+
+func (ru ResourceVolume) ToAkash() types.Storage {
+	size, _ := strconv.ParseUint(ru.Size, 10, 64)
+
+	return types.Storage{
+		Name:       ru.Name,
+		Quantity:   types.NewResourceValue(size),
+		Attributes: ru.Attributes.Dup(),
+	}
+}
+
+func (ru ResourceStorage) ToAkash() types.Volumes {
+	res := make(types.Volumes, 0, len(ru))
+
+	for _, vol := range ru {
+		res = append(res, vol.ToAkash())
+	}
+
+	return res
 }
 
 // Resources stores cpu, memory and storage details
 type Resources struct {
-	ID      uint32             `json:"id"`
-	CPU     uint32             `json:"cpu"`
-	GPU     uint32             `json:"gpu"`
-	Memory  string             `json:"memory"`
-	Storage []ResourcesStorage `json:"storage,omitempty"`
+	ID      uint32          `json:"id"`
+	CPU     ResourceCPU     `json:"cpu"`
+	GPU     ResourceGPU     `json:"gpu"`
+	Memory  ResourceMemory  `json:"memory"`
+	Storage ResourceStorage `json:"storage,omitempty"`
 }
 
-func (ru Resources) fromCRD() (types.Resources, error) {
-	memory, err := strconv.ParseUint(ru.Memory, 10, 64)
-	if err != nil {
-		return types.Resources{}, err
-	}
-
-	storage := make([]types.Storage, 0, len(ru.Storage))
-	for _, st := range ru.Storage {
-		size, err := strconv.ParseUint(st.Size, 10, 64)
-		if err != nil {
-			return types.Resources{}, err
-		}
-
-		storage = append(storage, types.Storage{
-			Name:     st.Name,
-			Quantity: types.NewResourceValue(size),
-		})
-	}
-
+func (ru *Resources) ToAkash() (types.Resources, error) {
 	return types.Resources{
-		ID: ru.ID,
-		CPU: &types.CPU{
-			Units: types.NewResourceValue(uint64(ru.CPU)),
-		},
-		GPU: &types.GPU{
-			Units: types.NewResourceValue(uint64(ru.GPU)),
-		},
-		Memory: &types.Memory{
-			Quantity: types.NewResourceValue(memory),
-		},
-		Storage: storage,
+		ID:      ru.ID,
+		CPU:     ru.CPU.ToAkash(),
+		GPU:     ru.GPU.ToAkash(),
+		Memory:  ru.Memory.ToAkash(),
+		Storage: ru.Storage.ToAkash(),
 	}, nil
 }
 
-func resourceUnitsFromAkash(aru types.Resources) (Resources, error) {
+func resourcesFromAkash(aru types.Resources) (Resources, error) {
 	res := Resources{
 		ID: aru.ID,
 	}
@@ -143,26 +180,29 @@ func resourceUnitsFromAkash(aru types.Resources) (Resources, error) {
 		if aru.CPU.Units.Value() > math.MaxUint32 {
 			return Resources{}, errors.New("k8s api: cpu units value overflows uint32")
 		}
-		res.CPU = uint32(aru.CPU.Units.Value())
+		res.CPU.Units = uint32(aru.CPU.Units.Value())
+		res.CPU.Attributes = aru.CPU.Attributes.Dup()
 	}
 
 	if aru.Memory != nil {
-		res.Memory = strconv.FormatUint(aru.Memory.Quantity.Value(), 10)
+		res.Memory.Size = strconv.FormatUint(aru.Memory.Quantity.Value(), 10)
+		res.Memory.Attributes = aru.Memory.Attributes.Dup()
 	}
 
 	if aru.GPU != nil {
-		// todo boundary check
 		if aru.GPU.Units.Value() > math.MaxUint32 {
 			return Resources{}, errors.New("k8s api: gpu units value overflows uint32")
 		}
-		res.GPU = uint32(aru.GPU.Units.Value())
+		res.GPU.Units = uint32(aru.GPU.Units.Value())
+		res.GPU.Attributes = aru.GPU.Attributes
 	}
 
-	res.Storage = make([]ResourcesStorage, 0, len(aru.Storage))
+	res.Storage = make(ResourceStorage, 0, len(aru.Storage))
 	for _, storage := range aru.Storage {
-		res.Storage = append(res.Storage, ResourcesStorage{
-			Name: storage.Name,
-			Size: strconv.FormatUint(storage.Quantity.Value(), 10),
+		res.Storage = append(res.Storage, ResourceVolume{
+			Name:       storage.Name,
+			Size:       strconv.FormatUint(storage.Quantity.Value(), 10),
+			Attributes: storage.Attributes.Dup(),
 		})
 	}
 
