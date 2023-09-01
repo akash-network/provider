@@ -426,7 +426,7 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 				_ = os.MkdirAll(ipsBackupPath, 0755)
 				for i := range oldIPs {
 					data, _ := json.MarshalIndent(&oldIPs[i], "", "  ")
-					if err = backupObject(hostsBackupPath+"/"+oldIPs[i].Name+".yaml", data); err != nil {
+					if err = backupObject(ipsBackupPath+"/"+oldIPs[i].Name+".yaml", data); err != nil {
 						return err
 					}
 
