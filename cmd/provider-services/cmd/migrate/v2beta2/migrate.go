@@ -479,7 +479,7 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 	if len(oldMani) > 0 {
 		spinner.Message("migrating manifests to v2beta2")
 		spinner.StopMessage("migrated manifests to v2beta2")
-		spinner.StopFailMessage("failed to migrate manifests to v2beta2")
+		spinner.StopFailMessage("some v2beta manifests may have failed")
 
 		_ = spinner.Start()
 
@@ -490,7 +490,6 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 
 			gspec, exists := activeLeases[nlid]
 			if !exists {
-				errs = append(errs, fmt.Errorf("no groupspec for lease %s", nlid)) // nolint goerr113
 				continue
 			}
 
@@ -550,8 +549,20 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 		_ = spinner.Start()
 
 		var errs []error
-
 		for _, host := range oldHosts {
+			nlid := mtypes.LeaseID{
+				Owner:    host.Spec.Owner,
+				DSeq:     host.Spec.Dseq,
+				GSeq:     host.Spec.Oseq,
+				OSeq:     host.Spec.Gseq,
+				Provider: host.Spec.Provider,
+			}
+
+			_, exists := activeLeases[nlid]
+			if !exists {
+				continue
+			}
+
 			nhost := &v2beta2.ProviderHost{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "ProviderHost",
@@ -607,6 +618,14 @@ func doMigrateCRDs(ctx context.Context, cmd *cobra.Command) (err error) {
 		var errs []error
 
 		for _, host := range oldIPs {
+			olid, _ := host.Spec.LeaseID.ToAkash()
+			nlid := mmigrate.LeaseIDFromV1beta2(olid)
+
+			_, exists := activeLeases[nlid]
+			if !exists {
+				continue
+			}
+
 			nIPs := &v2beta2.ProviderLeasedIP{
 				TypeMeta: metav1.TypeMeta{
 					Kind:       "ProviderLeasedIP",
