@@ -40,7 +40,6 @@ type ManifestsGetter interface {
 type ManifestInterface interface {
 	Create(ctx context.Context, manifest *v2beta2.Manifest, opts v1.CreateOptions) (*v2beta2.Manifest, error)
 	Update(ctx context.Context, manifest *v2beta2.Manifest, opts v1.UpdateOptions) (*v2beta2.Manifest, error)
-	UpdateStatus(ctx context.Context, manifest *v2beta2.Manifest, opts v1.UpdateOptions) (*v2beta2.Manifest, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*v2beta2.Manifest, error)
@@ -129,22 +128,6 @@ func (c *manifests) Update(ctx context.Context, manifest *v2beta2.Manifest, opts
 		Namespace(c.ns).
 		Resource("manifests").
 		Name(manifest.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(manifest).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *manifests) UpdateStatus(ctx context.Context, manifest *v2beta2.Manifest, opts v1.UpdateOptions) (result *v2beta2.Manifest, err error) {
-	result = &v2beta2.Manifest{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("manifests").
-		Name(manifest.Name).
-		SubResource("status").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(manifest).
 		Do(ctx).

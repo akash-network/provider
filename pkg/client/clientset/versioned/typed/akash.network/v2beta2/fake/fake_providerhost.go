@@ -102,18 +102,6 @@ func (c *FakeProviderHosts) Update(ctx context.Context, providerHost *v2beta2.Pr
 	return obj.(*v2beta2.ProviderHost), err
 }
 
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeProviderHosts) UpdateStatus(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.UpdateOptions) (*v2beta2.ProviderHost, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(providerhostsResource, "status", c.ns, providerHost), &v2beta2.ProviderHost{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.ProviderHost), err
-}
-
 // Delete takes name of the providerHost and deletes it. Returns an error if one occurs.
 func (c *FakeProviderHosts) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.

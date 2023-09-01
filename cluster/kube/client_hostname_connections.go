@@ -70,7 +70,6 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 			ServiceName:  serviceName,
 			ExternalPort: externalPort,
 		},
-		Status: crd.ProviderHostStatus{},
 	}
 
 	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)

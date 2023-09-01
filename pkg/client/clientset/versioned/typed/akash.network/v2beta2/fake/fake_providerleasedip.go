@@ -102,18 +102,6 @@ func (c *FakeProviderLeasedIPs) Update(ctx context.Context, providerLeasedIP *v2
 	return obj.(*v2beta2.ProviderLeasedIP), err
 }
 
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeProviderLeasedIPs) UpdateStatus(ctx context.Context, providerLeasedIP *v2beta2.ProviderLeasedIP, opts v1.UpdateOptions) (*v2beta2.ProviderLeasedIP, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(providerleasedipsResource, "status", c.ns, providerLeasedIP), &v2beta2.ProviderLeasedIP{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.ProviderLeasedIP), err
-}
-
 // Delete takes name of the providerLeasedIP and deletes it. Returns an error if one occurs.
 func (c *FakeProviderLeasedIPs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.

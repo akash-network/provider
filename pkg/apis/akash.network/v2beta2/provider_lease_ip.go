@@ -11,8 +11,7 @@ type ProviderLeasedIP struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   ProviderLeasedIPSpec   `json:"spec,omitempty"`
-	Status ProviderLeasedIPStatus `json:"status,omitempty"`
+	Spec ProviderLeasedIPSpec `json:"spec,omitempty"`
 }
 
 // ProviderLeasedIPList

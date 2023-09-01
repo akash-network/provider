@@ -2,8 +2,10 @@ package migrate
 
 import (
 	"fmt"
+	"strconv"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	"github.com/akash-network/node/sdl"
 
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -109,7 +111,7 @@ func ManifestServiceExposeFromV2beta1(from []v2beta1.ManifestServiceExpose) []v2
 }
 
 func ManifestResourcesFromV2beta1(res dtypes.ResourceUnits, from v2beta1.ResourceUnits, count uint32) (v2beta2.Resources, error) {
-	var resID uint32
+	var gRes *dtypes.ResourceUnit
 
 	svcRes, err := from.ToAkash()
 	if err != nil {
@@ -139,29 +141,60 @@ func ManifestResourcesFromV2beta1(res dtypes.ResourceUnits, from v2beta1.Resourc
 			if res[idx].Count >= count {
 				res[idx].Count -= count
 
-				resID = units.ID
+				gRes = &res[idx]
 
 				break
 			}
 		}
 	}
 
-	if resID == 0 {
+	if gRes == nil {
 		return v2beta2.Resources{}, fmt.Errorf("over-utilized resource group") // nolint goerr113
 	}
 
 	to := v2beta2.Resources{
-		ID:      resID,
-		CPU:     from.CPU,
-		GPU:     0, // GPU has been introduced in v2beta2
-		Memory:  from.Memory,
-		Storage: make([]v2beta2.ResourcesStorage, 0, len(from.Storage)),
+		ID: gRes.ID,
+		CPU: v2beta2.ResourceCPU{
+			Units:      from.CPU,
+			Attributes: gRes.CPU.Attributes.Dup(),
+		},
+		GPU: v2beta2.ResourceGPU{
+			Units:      0,
+			Attributes: nil,
+		},
+		Memory: v2beta2.ResourceMemory{
+			Size:       strconv.FormatUint(gRes.Memory.Quantity.Value(), 10),
+			Attributes: gRes.Memory.Attributes.Dup(),
+		},
+		Storage: make(v2beta2.ResourceStorage, 0, len(from.Storage)),
 	}
 
-	for _, storage := range from.Storage {
-		to.Storage = append(to.Storage, v2beta2.ResourcesStorage{
-			Name: storage.Name,
-			Size: storage.Size,
+	volumes := make(map[string]string)
+
+	for _, vl := range from.Storage {
+		volumes[vl.Name] = vl.Size
+	}
+
+	for _, storage := range gRes.Storage {
+		name := storage.Name
+
+		attrVal := storage.Attributes.Find(sdl.StorageAttributePersistent)
+		persistent, _ := attrVal.AsBool()
+
+		if persistent {
+			for nm, size := range volumes {
+				if nm != "default" && size == strconv.FormatUint(storage.Quantity.Value(), 10) {
+					name = nm
+					delete(volumes, nm)
+					break
+				}
+			}
+		}
+
+		to.Storage = append(to.Storage, v2beta2.ResourceVolume{
+			Name:       name,
+			Size:       strconv.FormatUint(storage.Quantity.Value(), 10),
+			Attributes: storage.Attributes.Dup(),
 		})
 	}
 

@@ -40,7 +40,6 @@ type ProviderLeasedIPsGetter interface {
 type ProviderLeasedIPInterface interface {
 	Create(ctx context.Context, providerLeasedIP *v2beta2.ProviderLeasedIP, opts v1.CreateOptions) (*v2beta2.ProviderLeasedIP, error)
 	Update(ctx context.Context, providerLeasedIP *v2beta2.ProviderLeasedIP, opts v1.UpdateOptions) (*v2beta2.ProviderLeasedIP, error)
-	UpdateStatus(ctx context.Context, providerLeasedIP *v2beta2.ProviderLeasedIP, opts v1.UpdateOptions) (*v2beta2.ProviderLeasedIP, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
 	Get(ctx context.Context, name string, opts v1.GetOptions) (*v2beta2.ProviderLeasedIP, error)
@@ -129,22 +128,6 @@ func (c *providerLeasedIPs) Update(ctx context.Context, providerLeasedIP *v2beta
 		Namespace(c.ns).
 		Resource("providerleasedips").
 		Name(providerLeasedIP.Name).
-		VersionedParams(&opts, scheme.ParameterCodec).
-		Body(providerLeasedIP).
-		Do(ctx).
-		Into(result)
-	return
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *providerLeasedIPs) UpdateStatus(ctx context.Context, providerLeasedIP *v2beta2.ProviderLeasedIP, opts v1.UpdateOptions) (result *v2beta2.ProviderLeasedIP, err error) {
-	result = &v2beta2.ProviderLeasedIP{}
-	err = c.client.Put().
-		Namespace(c.ns).
-		Resource("providerleasedips").
-		Name(providerLeasedIP.Name).
-		SubResource("status").
 		VersionedParams(&opts, scheme.ParameterCodec).
 		Body(providerLeasedIP).
 		Do(ctx).

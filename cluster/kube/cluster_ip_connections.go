@@ -99,7 +99,6 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 			Protocol:     proto.ToString(),
 			Port:         port,
 		},
-		Status: akashtypes.ProviderLeasedIPStatus{},
 	}
 
 	c.log.Info("declaring leased ip", "lease", lID,

@@ -19,8 +19,7 @@ type Manifest struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 
-	Spec   ManifestSpec   `json:"spec,omitempty"`
-	Status ManifestStatus `json:"status,omitempty"`
+	Spec ManifestSpec `json:"spec,omitempty"`
 }
 
 // ManifestList stores metadata and items list of manifest
@@ -36,12 +35,10 @@ type ManifestService struct {
 	// Service name
 	Name string `json:"name,omitempty"`
 	// Docker image
-	Image   string   `json:"image,omitempty"`
-	Command []string `json:"command,omitempty"`
-	Args    []string `json:"args,omitempty"`
-	Env     []string `json:"env,omitempty"`
-	// Resource requirements
-	// in current version of CRD it is named as unit
+	Image     string    `json:"image,omitempty"`
+	Command   []string  `json:"command,omitempty"`
+	Args      []string  `json:"args,omitempty"`
+	Env       []string  `json:"env,omitempty"`
 	Resources Resources `json:"resources"`
 	// Number of instances
 	Count uint32 `json:"count,omitempty"`
@@ -218,7 +215,7 @@ func manifestGroupToCRD(m *mani.Group, settings ClusterSettings) (ManifestGroup,
 }
 
 func (ms *ManifestService) fromCRD() (mani.Service, error) {
-	res, err := ms.Resources.fromCRD()
+	res, err := ms.Resources.ToAkash()
 	if err != nil {
 		return mani.Service{}, err
 	}
@@ -267,7 +264,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 }
 
 func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerParams) (ManifestService, error) {
-	resources, err := resourceUnitsFromAkash(ams.Resources)
+	resources, err := resourcesFromAkash(ams.Resources)
 	if err != nil {
 		return ManifestService{}, err
 	}
