@@ -112,13 +112,11 @@ func (c *rancher) run() error {
 						}
 
 						sc, exists := scs[obj.Name]
-
 						if !exists {
-							sc = &rancherStorage{
-								isRancher: obj.Provisioner == "rancher.io/local-path",
-							}
+							sc = &rancherStorage{}
 						}
 
+						sc.isRancher = obj.Provisioner == "rancher.io/local-path"
 						sc.isAkashManaged, _ = strconv.ParseBool(lblVal)
 						scs[obj.Name] = sc
 
@@ -140,7 +138,7 @@ func (c *rancher) run() error {
 							}
 						}
 					case watch.Deleted:
-						// volumes can remain without storage class so to keep metrics wight when storage class suddenly
+						// volumes can remain without storage class so to keep metrics right when storage class suddenly
 						// recreated we don't delete it
 					default:
 						break evtdone
@@ -148,6 +146,11 @@ func (c *rancher) run() error {
 
 					log.Info(msg, "name", obj.Name)
 				case *corev1.PersistentVolume:
+					if !scSynced {
+						pendingPVs = append(pendingPVs, evt)
+						break evtdone
+					}
+
 					switch evt.Type {
 					case watch.Added:
 						pvCount++
@@ -158,17 +161,17 @@ func (c *rancher) run() error {
 							break
 						}
 
-						if params, exists := scs[obj.Name]; !exists {
-							scs[obj.Spec.StorageClassName] = &rancherStorage{
-								allocated: uint64(resource.Value()),
-							}
+						if params, exists := scs[obj.Spec.StorageClassName]; !exists {
+							scSynced = false
+							pendingPVs = append(pendingPVs, evt)
+							break evtdone
 						} else {
 							params.allocated += uint64(resource.Value())
-						}
 
-						pvList, _ := KubeClientFromCtx(c.ctx).CoreV1().PersistentVolumes().List(c.ctx, metav1.ListOptions{})
-						if len(pvList.Items) == pvCount && !pvSynced {
-							pvSynced = true
+							pvList, _ := KubeClientFromCtx(c.ctx).CoreV1().PersistentVolumes().List(c.ctx, metav1.ListOptions{})
+							if len(pvList.Items) == pvCount && !pvSynced {
+								pvSynced = true
+							}
 						}
 					case watch.Deleted:
 						pvCount--
