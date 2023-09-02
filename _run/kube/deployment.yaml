@@ -2,54 +2,46 @@
 version: "2.0"
 
 services:
-  web:
-    image: quay.io/ovrclk/demo-app
+  grafana:
+    image: grafana/grafana
+    env:
+      - "BLA=test"
     expose:
-      - port: 80
+      - port: 3000
         as: 80
-        http_options:
-          max_body_size: 2097152
-          next_cases:
-            - off
-        accept:
-          - hello.localhost
         to:
           - global: true
-  bew:
-    image: quay.io/ovrclk/demo-app
-    expose:
-      - port: 80
-        as: 80
         accept:
-          - hello1.localhost
-        to:
-          - global: true
-
+          - webdistest.localhost
+    params:
+      storage:
+        data:
+          mount: /var/lib/grafana
 profiles:
   compute:
-    web:
+    grafana:
       resources:
         cpu:
-          units: 0.1
+          units: 1
         memory:
-          size: 16Mi
+          size: 256Mi
         storage:
-          size: 128Mi
+          - size: 512Mi
+          - name: data
+            size: 1Gi
+            attributes:
+              persistent: true
+              class: beta2
   placement:
     westcoast:
       attributes:
         region: us-west
       pricing:
-        web: 
+        grafana:
           denom: uakt
           amount: 1000
-
 deployment:
-  web:
+  grafana:
     westcoast:
-      profile: web
-      count: 1
-  bew:
-    westcoast:
-      profile: web
+      profile: grafana
       count: 1

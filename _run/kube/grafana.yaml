@@ -4,6 +4,8 @@ version: "2.0"
 services:
   grafana:
     image: grafana/grafana
+    env:
+      - "BLA=test"
     expose:
       - port: 3000
         as: 80
