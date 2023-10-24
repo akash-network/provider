@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"net"
 	"time"
+        "os"
 
 	"github.com/akash-network/node/util/runner"
 	"github.com/boz/go-lifecycle"
@@ -22,6 +23,16 @@ var (
 	errServiceDiscovery = errors.New("service discovery failure")
 	errServiceClient    = errors.New("service client failure")
 )
+
+// getEnv gets the value of an environment variable, or returns a default 
+// value if the environment variable is not set.
+func getEnv(key string, defaultVal string) string {
+	val := os.Getenv(key)
+	if val != "" {
+		return val
+	}
+	return defaultVal
+}
 
 func NewServiceDiscoveryAgent(logger log.Logger, kubeConfig *rest.Config, portName, serviceName, namespace string, endpoint *net.SRV) (ServiceDiscoveryAgent, error) {
 	// short circuit if a value is passed in, this is a convenience function for using manually specified values
@@ -231,7 +242,8 @@ func (sda *serviceDiscoveryAgent) discoverKube() (clientFactory, error) {
 
 func (sda *serviceDiscoveryAgent) discoverDNS() (clientFactory, error) {
 	// FUTURE - try and find a 3rd party API that allows timeouts to be put on this request
-	_, addrs, err := net.LookupSRV(sda.portName, "TCP", fmt.Sprintf("%s.%s.svc", sda.serviceName, sda.namespace))
+        clusterDomain := getEnv("CLUSTER_DOMAIN", "cluster.local")
+	_, addrs, err := net.LookupSRV(sda.portName, "TCP", fmt.Sprintf("%s.%s.svc.%s", sda.serviceName, sda.namespace, clusterDomain))
 	if err != nil {
 		sda.log.Error("dns discovery failed", "error", err, "portName", sda.portName, "service-name", sda.serviceName, "namespace", sda.namespace)
 		return nil, err
