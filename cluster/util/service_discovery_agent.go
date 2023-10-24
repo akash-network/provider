@@ -231,7 +231,7 @@ func (sda *serviceDiscoveryAgent) discoverKube() (clientFactory, error) {
 
 func (sda *serviceDiscoveryAgent) discoverDNS() (clientFactory, error) {
 	// FUTURE - try and find a 3rd party API that allows timeouts to be put on this request
-	_, addrs, err := net.LookupSRV(sda.portName, "TCP", fmt.Sprintf("%s.%s.svc.cluster.local", sda.serviceName, sda.namespace))
+	_, addrs, err := net.LookupSRV(sda.portName, "TCP", fmt.Sprintf("%s.%s.svc", sda.serviceName, sda.namespace))
 	if err != nil {
 		sda.log.Error("dns discovery failed", "error", err, "portName", sda.portName, "service-name", sda.serviceName, "namespace", sda.namespace)
 		return nil, err

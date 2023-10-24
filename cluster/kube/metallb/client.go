@@ -131,7 +131,7 @@ func (c *client) setupClient(ctx context.Context) error {
 can get stuff like this to access metal lb metrics
    75  nslookup -type=SRV _monitoring._tcp.
 
-  102  curl -I controller.metallb-system.svc.cluster.local:7472/metrics
+  102  curl -I controller.metallb-system.svc:7472/metrics
 
 */
 
