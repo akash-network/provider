@@ -25,18 +25,22 @@ ifneq (true, $(shell [ $(BASH_MAJOR_VERSION) -ge 4 ] && echo true))
 $(error "bash version $(shell $(BASH_PATH) -c 'echo $$BASH_VERSION') is outdated. min required 4.0")
 endif
 
-# AP_ROOT may not be set if environment does not support/use direnv
+ifeq (, $(shell which direnv))
+$(error "No direnv in $(PATH), consider installing. https://direnv.net")
+endif
+
+ifneq (1, $(AKASH_DIRENV_SET))
+$(error "no envrc detected. might need to run \"direnv allow\"")
+endif
+
+# AKASH_ROOT may not be set if environment does not support/use direnv
 # in this case define it manually as well as all required env variables
 ifndef AP_ROOT
-	AP_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../)
+$(error "AP_ROOT is not set. might need to run \"direnv allow\"")
+endif
 
-	include $(AP_ROOT)/.env
-
-	PROVIDER_SERVICES   ?= $(AP_DEVCACHE_BIN)/provider-services
-	AKASH               ?= $(AP_DEVCACHE_BIN)/akash
-
-	# setup .cache bins first in paths to have precedence over already installed same tools for system wide use
-	PATH                := $(AP_DEVCACHE_BIN):$(AP_DEVCACHE_NODE_BIN):$(PATH)
+ifeq (, $(GOTOOLCHAIN))
+$(error "GOTOOLCHAIN is not set")
 endif
 
 UNAME_OS                   := $(shell uname -s)
@@ -62,10 +66,6 @@ ifeq (-1, $(__is_local_go_satisfies))
 $(error "unsupported local go$(__local_go) version . min required go1.21.0")
 endif
 
-GO_VERSION                   := $(shell go mod edit -json | jq -r .Go | tr -d '\n')
-GOTOOLCHAIN                  := $(shell go mod edit -json | jq -r .Toolchain | tr -d '\n')
-GOTOOLCHAIN_SEMVER           := v$(shell echo "$(GOTOOLCHAIN)" | sed 's/go*//' | tr -d '\n')
-
 GOWORK                       ?= on
 GO_MOD                       ?= readonly
 export GO                    := GO111MODULE=$(GO111MODULE) go
@@ -77,21 +77,6 @@ ifeq ($(OS),Windows_NT)
 	DETECTED_OS := Windows
 else
 	DETECTED_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
-endif
-
-# on MacOS disable deprecation warnings security framework
-ifeq ($(DETECTED_OS), Darwin)
-	export CGO_CFLAGS=-Wno-deprecated-declarations
-
-	# on MacOS Sonoma Beta there is a bit of discrepancy between Go and new prime linker
-	clang_version := $(shell echo | clang -dM -E - | grep __clang_major__ | cut -d ' ' -f 3 | tr -d '\n')
-	go_has_ld_fix := $(shell $(SEMVER) compare "$(GOTOOLCHAIN_SEMVER)" "v1.22.0" | tr -d '\n')
-
-	ifeq (15,$(clang_version))
-		ifeq (-1,$(go_has_ld_fix))
-			export CGO_LDFLAGS=-Wl,-ld_classic -Wno-deprecated-declarations
-		endif
-	endif
 endif
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
