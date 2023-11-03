@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 SEMVER=$SCRIPT_DIR/semver.sh
 
@@ -28,6 +30,14 @@ function get_gotoolchain() {
 }
 
 function build_akash() {
+    dev_cache=${AP_DEVCACHE_BIN}
+    cd "$1" || exit 1
+    export AKASH_ROOT="$1"
+    source .env
+    make akash AKASH="${dev_cache}/akash"
+}
+
+function build_akash_docker() {
     cd "$1" || exit 1
     export AKASH_ROOT="$1"
     source .env
@@ -41,5 +51,9 @@ gotoolchain)
 build-akash)
     shift
     build_akash "$@"
+    ;;
+build-akash-docker)
+    shift
+    build_akash_docker "$@"
     ;;
 esac

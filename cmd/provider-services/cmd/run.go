@@ -25,7 +25,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
-	mparams "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	"github.com/akash-network/node/client"
 	"github.com/akash-network/node/cmd/common"

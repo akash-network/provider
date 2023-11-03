@@ -64,7 +64,7 @@ kube-prepare-image-akash: RELEASE_DOCKER_IMAGE=ghcr.io/akash-network/node
 kube-prepare-image-akash:
 ifneq ($(SKIP_BUILD), true)
 ifeq ($(AKASH_BUILD_LOCAL_IMAGE), true)
-	$(AP_ROOT)/script/tools.sh build-akash $(AKASHD_LOCAL_PATH)
+	$(AP_ROOT)/script/tools.sh build-akash-docker $(AKASHD_LOCAL_PATH)
 else
 	docker pull $(AKASH_DOCKER_IMAGE)
 endif

@@ -63,6 +63,49 @@ func (_c *ReservationGroup_ClusterParams_Call) RunAndReturn(run func() interface
 	return _c
 }
 
+// GetAllocatedResources provides a mock function with given fields:
+func (_m *ReservationGroup) GetAllocatedResources() deploymentv1beta3.ResourceUnits {
+	ret := _m.Called()
+
+	var r0 deploymentv1beta3.ResourceUnits
+	if rf, ok := ret.Get(0).(func() deploymentv1beta3.ResourceUnits); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(deploymentv1beta3.ResourceUnits)
+		}
+	}
+
+	return r0
+}
+
+// ReservationGroup_GetAllocatedResources_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAllocatedResources'
+type ReservationGroup_GetAllocatedResources_Call struct {
+	*mock.Call
+}
+
+// GetAllocatedResources is a helper method to define mock.On call
+func (_e *ReservationGroup_Expecter) GetAllocatedResources() *ReservationGroup_GetAllocatedResources_Call {
+	return &ReservationGroup_GetAllocatedResources_Call{Call: _e.mock.On("GetAllocatedResources")}
+}
+
+func (_c *ReservationGroup_GetAllocatedResources_Call) Run(run func()) *ReservationGroup_GetAllocatedResources_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ReservationGroup_GetAllocatedResources_Call) Return(_a0 deploymentv1beta3.ResourceUnits) *ReservationGroup_GetAllocatedResources_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ReservationGroup_GetAllocatedResources_Call) RunAndReturn(run func() deploymentv1beta3.ResourceUnits) *ReservationGroup_GetAllocatedResources_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Resources provides a mock function with given fields:
 func (_m *ReservationGroup) Resources() deploymentv1beta3.ResourceGroup {
 	ret := _m.Called()

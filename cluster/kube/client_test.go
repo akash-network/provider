@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/testutil"
 

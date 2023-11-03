@@ -14,8 +14,9 @@ import (
 
 	akashmanifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	providertypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+
 	qmock "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/testutil"
 
@@ -341,7 +342,15 @@ func createMocks() integrationMocks {
 	}
 }
 
-func withServer(t testing.TB, addr sdk.Address, pclient provider.Client, qclient *qmock.QueryClient, certs []tls.Certificate, ipoc operatorclients.IPOperatorClient, fn func(string)) {
+func withServer(
+	t testing.TB,
+	addr sdk.Address,
+	pclient provider.Client,
+	qclient *qmock.QueryClient,
+	certs []tls.Certificate,
+	ipoc operatorclients.IPOperatorClient,
+	fn func(string),
+) {
 	t.Helper()
 	router := newRouter(testutil.Logger(t), addr, pclient, ipoc, map[interface{}]interface{}{})
 

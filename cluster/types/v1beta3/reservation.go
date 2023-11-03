@@ -2,13 +2,14 @@ package v1beta3
 
 import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 )
 
 //go:generate mockery --name ReservationGroup --output ../../mocks
 type ReservationGroup interface {
 	Resources() dtypes.ResourceGroup
 	SetAllocatedResources(dtypes.ResourceUnits)
+	GetAllocatedResources() dtypes.ResourceUnits
 	SetClusterParams(interface{})
 	ClusterParams() interface{}
 }

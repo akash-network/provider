@@ -15,7 +15,7 @@ import (
 
 	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/pubsub"
 	metricsutils "github.com/akash-network/node/util/metrics"
 	"github.com/akash-network/node/util/runner"
@@ -337,8 +337,7 @@ loop:
 			o.log.Info("requesting reservation")
 			// Begin reserving resources from cluster.
 			clusterch = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
-				v := runner.NewResult(o.cluster.Reserve(o.orderID, group))
-				return v
+				return runner.NewResult(o.cluster.Reserve(o.orderID, group))
 			}, reservationDuration))
 
 		case result := <-clusterch:
@@ -400,8 +399,10 @@ loop:
 
 			o.log.Debug("submitting fulfillment", "price", price)
 
+			offer := mtypes.ResourceOfferFromRU(reservation.GetAllocatedResources())
+
 			// Begin submitting fulfillment
-			msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit)
+			msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
 			bidch = runner.Do(func() runner.Result {
 				return runner.NewResult(nil, o.session.Client().Tx().Broadcast(ctx, msg))
 			})

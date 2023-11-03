@@ -57,7 +57,7 @@ $(error "No realpath in $(PATH), consider installing")
 endif
 
 BINS                         := $(PROVIDER_SERVICES) akash
-SEMVER                     := $(ROOT_DIR)/script/semver.sh
+SEMVER                       := $(ROOT_DIR)/script/semver.sh
 
 __local_go                   := $(shell GOTOOLCHAIN=local go version | cut -d ' ' -f 3 | sed 's/go*//' | tr -d '\n')
 __is_local_go_satisfies      := $(shell $(SEMVER) compare "v$(__local_go)" "v1.20.7"; echo $?)

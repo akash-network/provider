@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	executil "k8s.io/client-go/util/exec"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"

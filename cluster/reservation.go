@@ -2,7 +2,7 @@ package cluster
 
 import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -38,6 +38,10 @@ func (r *reservation) Resources() dtypes.ResourceGroup {
 
 func (r *reservation) SetAllocatedResources(val dtypes.ResourceUnits) {
 	r.adjustedResources = val
+}
+
+func (r *reservation) GetAllocatedResources() dtypes.ResourceUnits {
+	return r.adjustedResources
 }
 
 func (r *reservation) SetClusterParams(val interface{}) {

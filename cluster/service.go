@@ -13,7 +13,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/pubsub"
 
 	"github.com/akash-network/provider/cluster/operatorclients"

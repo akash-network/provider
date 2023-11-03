@@ -14,7 +14,7 @@ import (
 
 	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/util/runner"
 
@@ -330,7 +330,6 @@ func (m *manager) fillAllRequests(response error) {
 		req.ch <- response
 	}
 	m.requests = nil
-
 }
 
 func (m *manager) emitReceivedEvents() {

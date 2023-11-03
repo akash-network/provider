@@ -4,20 +4,20 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	"github.com/akash-network/node/client"
+	aclient "github.com/akash-network/node/client"
 )
 
 // Session interface wraps Log, Client, Provider and ForModule methods
 type Session interface {
 	Log() log.Logger
-	Client() client.Client
+	Client() aclient.Client
 	Provider() *ptypes.Provider
 	ForModule(string) Session
 	CreatedAtBlockHeight() int64
 }
 
 // New returns new session instance with provided details
-func New(log log.Logger, client client.Client, provider *ptypes.Provider, createdAtBlockHeight int64) Session {
+func New(log log.Logger, client aclient.Client, provider *ptypes.Provider, createdAtBlockHeight int64) Session {
 	return session{
 		client:               client,
 		provider:             provider,
@@ -27,7 +27,7 @@ func New(log log.Logger, client client.Client, provider *ptypes.Provider, create
 }
 
 type session struct {
-	client               client.Client
+	client               aclient.Client
 	provider             *ptypes.Provider
 	log                  log.Logger
 	createdAtBlockHeight int64
@@ -37,7 +37,7 @@ func (s session) Log() log.Logger {
 	return s.log
 }
 
-func (s session) Client() client.Client {
+func (s session) Client() aclient.Client {
 	return s.client
 }
 

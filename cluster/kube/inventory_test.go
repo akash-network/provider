@@ -13,7 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/testutil"
@@ -45,6 +45,10 @@ func (r *testReservation) Resources() dtypes.ResourceGroup {
 
 func (r *testReservation) SetAllocatedResources(val dtypes.ResourceUnits) {
 	r.adjustedResources = val
+}
+
+func (r *testReservation) GetAllocatedResources() dtypes.ResourceUnits {
+	return r.adjustedResources
 }
 
 func (r *testReservation) Allocated() bool {

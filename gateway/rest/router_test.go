@@ -21,8 +21,9 @@ import (
 
 	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
+
 	qmock "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/sdl"
 	"github.com/akash-network/node/testutil"
@@ -122,7 +123,7 @@ func testCertHelper(t *testing.T, test *routerTest) {
 	test.pmclient.On(
 		"Submit",
 		mock.Anything,
-		mock.AnythingOfType("types.DeploymentID"),
+		mock.AnythingOfType("dtypes.DeploymentID"),
 		mock.AnythingOfType("v2beta2.Manifest"),
 	).Return(nil)
 

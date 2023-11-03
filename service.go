@@ -282,6 +282,10 @@ func (r *reservation) SetAllocatedResources(val dtypes.ResourceUnits) {
 	r.adjustedResources = val
 }
 
+func (r *reservation) GetAllocatedResources() dtypes.ResourceUnits {
+	return r.adjustedResources
+}
+
 func (r *reservation) SetClusterParams(val interface{}) {
 	r.clusterParams = val
 }

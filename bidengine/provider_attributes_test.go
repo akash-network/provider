@@ -9,15 +9,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
+
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	akashtypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+
 	clientmocks "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/session"
-
-	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	akashtypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 )
 
 type providerAttributesTestScaffold struct {
@@ -31,7 +32,11 @@ type providerAttributesTestScaffold struct {
 	providerAddr sdk.AccAddress
 }
 
-func setupProviderAttributesTestScaffold(t *testing.T, ttl time.Duration, clientFactory func(scaffold *providerAttributesTestScaffold) *clientmocks.QueryClient) *providerAttributesTestScaffold {
+func setupProviderAttributesTestScaffold(
+	t *testing.T,
+	ttl time.Duration,
+	clientFactory func(scaffold *providerAttributesTestScaffold,
+	) *clientmocks.QueryClient) *providerAttributesTestScaffold {
 	retval := &providerAttributesTestScaffold{
 		auditorAddr:  testutil.AccAddress(t),
 		providerAddr: testutil.AccAddress(t),

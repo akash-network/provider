@@ -30,15 +30,15 @@ import (
 )
 
 var (
-	// application's name
+	// Name application's name
 	Name = ""
-	// application binary name
+	// AppName application binary name
 	AppName = "<appd>"
-	// application's version string
+	// Version application's version string
 	Version = ""
-	// commit
+	// Commit commit
 	Commit = ""
-	// build tags
+	// BuildTags build tags
 	BuildTags = ""
 )
 
