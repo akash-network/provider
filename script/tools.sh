@@ -27,8 +27,19 @@ function get_gotoolchain() {
     echo -n "$gotoolchain"
 }
 
+function build_akash() {
+    cd "$1" || exit 1
+    export AKASH_ROOT="$1"
+    source .env
+    make docker-image
+}
+
 case "$1" in
 gotoolchain)
     get_gotoolchain
+    ;;
+build-akash)
+    shift
+    build_akash "$@"
     ;;
 esac
