@@ -63,17 +63,17 @@ func makeMocks(s *orderTestScaffold) {
 	groupResult.Group.GroupSpec.Resources = make(dtypes.ResourceUnits, 1)
 
 	cpu := atypes.CPU{}
-	cpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().MinUnitCPU))
+	cpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().Unit.Min.CPU))
 
 	gpu := atypes.GPU{}
-	gpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().MinUnitGPU))
+	gpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().Unit.Min.GPU))
 
 	memory := atypes.Memory{}
-	memory.Quantity = atypes.NewResourceValue(dtypes.GetValidationConfig().MinUnitMemory)
+	memory.Quantity = atypes.NewResourceValue(dtypes.GetValidationConfig().Unit.Min.Memory)
 
 	storage := atypes.Volumes{
 		atypes.Storage{
-			Quantity: atypes.NewResourceValue(dtypes.GetValidationConfig().MinUnitStorage),
+			Quantity: atypes.NewResourceValue(dtypes.GetValidationConfig().Unit.Min.Storage),
 		},
 	}
 
