@@ -15,7 +15,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"

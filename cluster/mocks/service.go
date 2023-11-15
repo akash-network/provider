@@ -10,9 +10,9 @@ import (
 
 	types "github.com/cosmos/cosmos-sdk/types"
 
-	typesv1beta3 "github.com/akash-network/provider/cluster/types/v1beta3"
+	v1beta3 "github.com/akash-network/provider/cluster/types/v1beta3"
 
-	v1beta3 "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	v1beta4 "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -115,14 +115,14 @@ func (_c *Service_Done_Call) RunAndReturn(run func() <-chan struct{}) *Service_D
 }
 
 // FindActiveLease provides a mock function with given fields: ctx, owner, dseq, gseq
-func (_m *Service) FindActiveLease(ctx context.Context, owner types.Address, dseq uint64, gseq uint32) (bool, v1beta3.LeaseID, v2beta2.ManifestGroup, error) {
+func (_m *Service) FindActiveLease(ctx context.Context, owner types.Address, dseq uint64, gseq uint32) (bool, v1beta4.LeaseID, v2beta2.ManifestGroup, error) {
 	ret := _m.Called(ctx, owner, dseq, gseq)
 
 	var r0 bool
-	var r1 v1beta3.LeaseID
+	var r1 v1beta4.LeaseID
 	var r2 v2beta2.ManifestGroup
 	var r3 error
-	if rf, ok := ret.Get(0).(func(context.Context, types.Address, uint64, uint32) (bool, v1beta3.LeaseID, v2beta2.ManifestGroup, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, types.Address, uint64, uint32) (bool, v1beta4.LeaseID, v2beta2.ManifestGroup, error)); ok {
 		return rf(ctx, owner, dseq, gseq)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Address, uint64, uint32) bool); ok {
@@ -131,10 +131,10 @@ func (_m *Service) FindActiveLease(ctx context.Context, owner types.Address, dse
 		r0 = ret.Get(0).(bool)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, types.Address, uint64, uint32) v1beta3.LeaseID); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, types.Address, uint64, uint32) v1beta4.LeaseID); ok {
 		r1 = rf(ctx, owner, dseq, gseq)
 	} else {
-		r1 = ret.Get(1).(v1beta3.LeaseID)
+		r1 = ret.Get(1).(v1beta4.LeaseID)
 	}
 
 	if rf, ok := ret.Get(2).(func(context.Context, types.Address, uint64, uint32) v2beta2.ManifestGroup); ok {
@@ -173,26 +173,26 @@ func (_c *Service_FindActiveLease_Call) Run(run func(ctx context.Context, owner 
 	return _c
 }
 
-func (_c *Service_FindActiveLease_Call) Return(_a0 bool, _a1 v1beta3.LeaseID, _a2 v2beta2.ManifestGroup, _a3 error) *Service_FindActiveLease_Call {
+func (_c *Service_FindActiveLease_Call) Return(_a0 bool, _a1 v1beta4.LeaseID, _a2 v2beta2.ManifestGroup, _a3 error) *Service_FindActiveLease_Call {
 	_c.Call.Return(_a0, _a1, _a2, _a3)
 	return _c
 }
 
-func (_c *Service_FindActiveLease_Call) RunAndReturn(run func(context.Context, types.Address, uint64, uint32) (bool, v1beta3.LeaseID, v2beta2.ManifestGroup, error)) *Service_FindActiveLease_Call {
+func (_c *Service_FindActiveLease_Call) RunAndReturn(run func(context.Context, types.Address, uint64, uint32) (bool, v1beta4.LeaseID, v2beta2.ManifestGroup, error)) *Service_FindActiveLease_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // HostnameService provides a mock function with given fields:
-func (_m *Service) HostnameService() typesv1beta3.HostnameServiceClient {
+func (_m *Service) HostnameService() v1beta3.HostnameServiceClient {
 	ret := _m.Called()
 
-	var r0 typesv1beta3.HostnameServiceClient
-	if rf, ok := ret.Get(0).(func() typesv1beta3.HostnameServiceClient); ok {
+	var r0 v1beta3.HostnameServiceClient
+	if rf, ok := ret.Get(0).(func() v1beta3.HostnameServiceClient); ok {
 		r0 = rf()
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(typesv1beta3.HostnameServiceClient)
+			r0 = ret.Get(0).(v1beta3.HostnameServiceClient)
 		}
 	}
 
@@ -216,12 +216,12 @@ func (_c *Service_HostnameService_Call) Run(run func()) *Service_HostnameService
 	return _c
 }
 
-func (_c *Service_HostnameService_Call) Return(_a0 typesv1beta3.HostnameServiceClient) *Service_HostnameService_Call {
+func (_c *Service_HostnameService_Call) Return(_a0 v1beta3.HostnameServiceClient) *Service_HostnameService_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Service_HostnameService_Call) RunAndReturn(run func() typesv1beta3.HostnameServiceClient) *Service_HostnameService_Call {
+func (_c *Service_HostnameService_Call) RunAndReturn(run func() v1beta3.HostnameServiceClient) *Service_HostnameService_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -270,23 +270,23 @@ func (_c *Service_Ready_Call) RunAndReturn(run func() <-chan struct{}) *Service_
 }
 
 // Reserve provides a mock function with given fields: _a0, _a1
-func (_m *Service) Reserve(_a0 v1beta3.OrderID, _a1 deploymentv1beta3.ResourceGroup) (typesv1beta3.Reservation, error) {
+func (_m *Service) Reserve(_a0 v1beta4.OrderID, _a1 deploymentv1beta3.ResourceGroup) (v1beta3.Reservation, error) {
 	ret := _m.Called(_a0, _a1)
 
-	var r0 typesv1beta3.Reservation
+	var r0 v1beta3.Reservation
 	var r1 error
-	if rf, ok := ret.Get(0).(func(v1beta3.OrderID, deploymentv1beta3.ResourceGroup) (typesv1beta3.Reservation, error)); ok {
+	if rf, ok := ret.Get(0).(func(v1beta4.OrderID, deploymentv1beta3.ResourceGroup) (v1beta3.Reservation, error)); ok {
 		return rf(_a0, _a1)
 	}
-	if rf, ok := ret.Get(0).(func(v1beta3.OrderID, deploymentv1beta3.ResourceGroup) typesv1beta3.Reservation); ok {
+	if rf, ok := ret.Get(0).(func(v1beta4.OrderID, deploymentv1beta3.ResourceGroup) v1beta3.Reservation); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(typesv1beta3.Reservation)
+			r0 = ret.Get(0).(v1beta3.Reservation)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(v1beta3.OrderID, deploymentv1beta3.ResourceGroup) error); ok {
+	if rf, ok := ret.Get(1).(func(v1beta4.OrderID, deploymentv1beta3.ResourceGroup) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)
@@ -301,43 +301,43 @@ type Service_Reserve_Call struct {
 }
 
 // Reserve is a helper method to define mock.On call
-//   - _a0 v1beta3.OrderID
+//   - _a0 v1beta4.OrderID
 //   - _a1 deploymentv1beta3.ResourceGroup
 func (_e *Service_Expecter) Reserve(_a0 interface{}, _a1 interface{}) *Service_Reserve_Call {
 	return &Service_Reserve_Call{Call: _e.mock.On("Reserve", _a0, _a1)}
 }
 
-func (_c *Service_Reserve_Call) Run(run func(_a0 v1beta3.OrderID, _a1 deploymentv1beta3.ResourceGroup)) *Service_Reserve_Call {
+func (_c *Service_Reserve_Call) Run(run func(_a0 v1beta4.OrderID, _a1 deploymentv1beta3.ResourceGroup)) *Service_Reserve_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(v1beta3.OrderID), args[1].(deploymentv1beta3.ResourceGroup))
+		run(args[0].(v1beta4.OrderID), args[1].(deploymentv1beta3.ResourceGroup))
 	})
 	return _c
 }
 
-func (_c *Service_Reserve_Call) Return(_a0 typesv1beta3.Reservation, _a1 error) *Service_Reserve_Call {
+func (_c *Service_Reserve_Call) Return(_a0 v1beta3.Reservation, _a1 error) *Service_Reserve_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Service_Reserve_Call) RunAndReturn(run func(v1beta3.OrderID, deploymentv1beta3.ResourceGroup) (typesv1beta3.Reservation, error)) *Service_Reserve_Call {
+func (_c *Service_Reserve_Call) RunAndReturn(run func(v1beta4.OrderID, deploymentv1beta3.ResourceGroup) (v1beta3.Reservation, error)) *Service_Reserve_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Status provides a mock function with given fields: _a0
-func (_m *Service) Status(_a0 context.Context) (*typesv1beta3.Status, error) {
+func (_m *Service) Status(_a0 context.Context) (*v1beta3.Status, error) {
 	ret := _m.Called(_a0)
 
-	var r0 *typesv1beta3.Status
+	var r0 *v1beta3.Status
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*typesv1beta3.Status, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (*v1beta3.Status, error)); ok {
 		return rf(_a0)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) *typesv1beta3.Status); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) *v1beta3.Status); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*typesv1beta3.Status)
+			r0 = ret.Get(0).(*v1beta3.Status)
 		}
 	}
 
@@ -368,22 +368,22 @@ func (_c *Service_Status_Call) Run(run func(_a0 context.Context)) *Service_Statu
 	return _c
 }
 
-func (_c *Service_Status_Call) Return(_a0 *typesv1beta3.Status, _a1 error) *Service_Status_Call {
+func (_c *Service_Status_Call) Return(_a0 *v1beta3.Status, _a1 error) *Service_Status_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *Service_Status_Call) RunAndReturn(run func(context.Context) (*typesv1beta3.Status, error)) *Service_Status_Call {
+func (_c *Service_Status_Call) RunAndReturn(run func(context.Context) (*v1beta3.Status, error)) *Service_Status_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // TransferHostname provides a mock function with given fields: ctx, leaseID, hostname, serviceName, externalPort
-func (_m *Service) TransferHostname(ctx context.Context, leaseID v1beta3.LeaseID, hostname string, serviceName string, externalPort uint32) error {
+func (_m *Service) TransferHostname(ctx context.Context, leaseID v1beta4.LeaseID, hostname string, serviceName string, externalPort uint32) error {
 	ret := _m.Called(ctx, leaseID, hostname, serviceName, externalPort)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, v1beta3.LeaseID, string, string, uint32) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, string, uint32) error); ok {
 		r0 = rf(ctx, leaseID, hostname, serviceName, externalPort)
 	} else {
 		r0 = ret.Error(0)
@@ -399,7 +399,7 @@ type Service_TransferHostname_Call struct {
 
 // TransferHostname is a helper method to define mock.On call
 //   - ctx context.Context
-//   - leaseID v1beta3.LeaseID
+//   - leaseID v1beta4.LeaseID
 //   - hostname string
 //   - serviceName string
 //   - externalPort uint32
@@ -407,9 +407,9 @@ func (_e *Service_Expecter) TransferHostname(ctx interface{}, leaseID interface{
 	return &Service_TransferHostname_Call{Call: _e.mock.On("TransferHostname", ctx, leaseID, hostname, serviceName, externalPort)}
 }
 
-func (_c *Service_TransferHostname_Call) Run(run func(ctx context.Context, leaseID v1beta3.LeaseID, hostname string, serviceName string, externalPort uint32)) *Service_TransferHostname_Call {
+func (_c *Service_TransferHostname_Call) Run(run func(ctx context.Context, leaseID v1beta4.LeaseID, hostname string, serviceName string, externalPort uint32)) *Service_TransferHostname_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(v1beta3.LeaseID), args[2].(string), args[3].(string), args[4].(uint32))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(string), args[4].(uint32))
 	})
 	return _c
 }
@@ -419,17 +419,17 @@ func (_c *Service_TransferHostname_Call) Return(_a0 error) *Service_TransferHost
 	return _c
 }
 
-func (_c *Service_TransferHostname_Call) RunAndReturn(run func(context.Context, v1beta3.LeaseID, string, string, uint32) error) *Service_TransferHostname_Call {
+func (_c *Service_TransferHostname_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, string, uint32) error) *Service_TransferHostname_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // Unreserve provides a mock function with given fields: _a0
-func (_m *Service) Unreserve(_a0 v1beta3.OrderID) error {
+func (_m *Service) Unreserve(_a0 v1beta4.OrderID) error {
 	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(v1beta3.OrderID) error); ok {
+	if rf, ok := ret.Get(0).(func(v1beta4.OrderID) error); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
@@ -444,14 +444,14 @@ type Service_Unreserve_Call struct {
 }
 
 // Unreserve is a helper method to define mock.On call
-//   - _a0 v1beta3.OrderID
+//   - _a0 v1beta4.OrderID
 func (_e *Service_Expecter) Unreserve(_a0 interface{}) *Service_Unreserve_Call {
 	return &Service_Unreserve_Call{Call: _e.mock.On("Unreserve", _a0)}
 }
 
-func (_c *Service_Unreserve_Call) Run(run func(_a0 v1beta3.OrderID)) *Service_Unreserve_Call {
+func (_c *Service_Unreserve_Call) Run(run func(_a0 v1beta4.OrderID)) *Service_Unreserve_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(v1beta3.OrderID))
+		run(args[0].(v1beta4.OrderID))
 	})
 	return _c
 }
@@ -461,7 +461,7 @@ func (_c *Service_Unreserve_Call) Return(_a0 error) *Service_Unreserve_Call {
 	return _c
 }
 
-func (_c *Service_Unreserve_Call) RunAndReturn(run func(v1beta3.OrderID) error) *Service_Unreserve_Call {
+func (_c *Service_Unreserve_Call) RunAndReturn(run func(v1beta4.OrderID) error) *Service_Unreserve_Call {
 	_c.Call.Return(run)
 	return _c
 }

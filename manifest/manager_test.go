@@ -12,7 +12,7 @@ package manifest
 // 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 // 	types "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 // 	escrowtypes "github.com/akash-network/akash-api/go/node/escrow/v1beta3"
-// 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+// 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 // 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 // 	"github.com/akash-network/akash-api/go/sdkutil"
 // 	clientMocks "github.com/akash-network/node/client/mocks"

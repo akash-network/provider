@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 )
 
 var allowedIPEndpointNameRegex = regexp.MustCompile(`^[a-z\d\-]+$`)

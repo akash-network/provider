@@ -2,7 +2,7 @@ package v1beta3
 
 import (
 	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 )
 
 // IDeployment interface defined with LeaseID and ManifestGroup methods

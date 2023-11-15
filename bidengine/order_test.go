@@ -19,7 +19,7 @@ import (
 
 	audittypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
@@ -42,8 +42,8 @@ type orderTestScaffold struct {
 	queryClient *clientmocks.QueryClient
 	client      *clientmocks.Client
 	txClient    *broadcastmocks.Client
-	cluster     *clustermocks.Cluster
 
+	cluster           *clustermocks.Cluster
 	broadcasts        chan sdk.Msg
 	reserveCallNotify chan int
 }
@@ -98,23 +98,24 @@ func makeMocks(s *orderTestScaffold) {
 	queryClientMock.On("Orders", mock.Anything, mock.Anything).Return(&mtypes.QueryOrdersResponse{}, nil)
 	queryClientMock.On("Provider", mock.Anything, mock.Anything).Return(&ptypes.QueryProviderResponse{}, nil)
 
-	txClientMock := &broadcastmocks.Client{}
+	txMocks := &broadcastmocks.Client{}
 	s.broadcasts = make(chan sdk.Msg, 1)
-	txClientMock.On("Broadcast", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	txMocks.On("Broadcast", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		s.broadcasts <- args.Get(1).(sdk.Msg)
 	}).Return(nil)
 
-	clientMock := &clientmocks.Client{}
-	clientMock.On("Query").Return(queryClientMock)
-	clientMock.On("Tx").Return(txClientMock)
+	clientMocks := &clientmocks.Client{}
+	clientMocks.On("Query").Return(queryClientMock)
+	clientMocks.On("Tx").Return(txMocks)
 
-	s.client = clientMock
+	s.client = clientMocks
 	s.queryClient = queryClientMock
-	s.txClient = txClientMock
+	s.txClient = txMocks
 
 	mockReservation := &clustermocks.Reservation{}
 	mockReservation.On("OrderID").Return(s.orderID)
 	mockReservation.On("Resources").Return(groupResult.Group)
+	mockReservation.On("GetAllocatedResources").Return(groupResult.Group.GroupSpec.Resources)
 
 	s.cluster = &clustermocks.Cluster{}
 	s.reserveCallNotify = make(chan int, 1)
@@ -128,7 +129,7 @@ func makeMocks(s *orderTestScaffold) {
 
 type nullProviderAttrSignatureService struct{}
 
-func (nullProviderAttrSignatureService) GetAuditorAttributeSignatures(auditor string) ([]audittypes.Provider, error) {
+func (nullProviderAttrSignatureService) GetAuditorAttributeSignatures(_ string) ([]audittypes.Provider, error) {
 	return nil, nil // Return no attributes & no error
 }
 
@@ -138,7 +139,14 @@ func (nullProviderAttrSignatureService) GetAttributes() (atypes.Attributes, erro
 
 const testBidCreatedAt = 1234556789
 
-func makeOrderForTest(t *testing.T, checkForExistingBid bool, bidState mtypes.Bid_State, pricing BidPricingStrategy, callerConfig *Config, sessionHeight int64) (*order, orderTestScaffold, <-chan int) {
+func makeOrderForTest(
+	t *testing.T,
+	checkForExistingBid bool,
+	bidState mtypes.Bid_State,
+	pricing BidPricingStrategy,
+	callerConfig *Config,
+	sessionHeight int64,
+) (*order, orderTestScaffold, <-chan int) {
 	if pricing == nil {
 		pricing = testBidPricingStrategy(1)
 		require.NotNil(t, pricing)
@@ -399,7 +407,6 @@ func Test_BidOrderAndThenLeaseCreated(t *testing.T) {
 }
 
 func Test_BidOrderAndThenLeaseCreatedForDifferentDeployment(t *testing.T) {
-
 	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, nil, testBidCreatedAt)
 
 	// Wait for first broadcast

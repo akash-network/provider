@@ -3,8 +3,8 @@ module github.com/akash-network/provider
 go 1.21
 
 require (
-	github.com/akash-network/akash-api v0.0.31
-	github.com/akash-network/node v0.26.2
+	github.com/akash-network/akash-api v0.0.32
+	github.com/akash-network/node v0.28.1-rc0
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/boz/go-lifecycle v0.1.1
 	github.com/cosmos/cosmos-sdk v0.45.16
@@ -28,7 +28,6 @@ require (
 	github.com/spf13/viper v1.16.0
 	github.com/stretchr/testify v1.8.4
 	github.com/tendermint/tendermint v0.34.27
-	github.com/theckman/yacspin v0.13.12
 	go.uber.org/zap v1.24.0
 	golang.org/x/sync v0.3.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -226,6 +225,7 @@ require (
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/tendermint/go-amino v0.16.0 // indirect
 	github.com/tendermint/tm-db v0.6.7 // indirect
+	github.com/theckman/yacspin v0.13.12 // indirect
 	github.com/tidwall/btree v1.5.0 // indirect
 	github.com/zondax/hid v0.9.1 // indirect
 	github.com/zondax/ledger-go v0.14.1 // indirect

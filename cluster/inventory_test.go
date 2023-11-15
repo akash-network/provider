@@ -11,7 +11,7 @@ import (
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/pubsub"

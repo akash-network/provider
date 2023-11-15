@@ -1,6 +1,6 @@
 package types
 
-import mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+import mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 type IPReservationRequest struct {
 	OrderID  mtypes.OrderID

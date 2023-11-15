@@ -3,7 +3,7 @@ package hostnameoperator
 import (
 	"time"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )

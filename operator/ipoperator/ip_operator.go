@@ -22,7 +22,7 @@ import (
 
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	"github.com/akash-network/provider/cluster"
 	clusterClient "github.com/akash-network/provider/cluster/kube"

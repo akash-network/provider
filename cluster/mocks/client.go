@@ -9,13 +9,13 @@ import (
 
 	io "io"
 
-	marketv1beta3 "github.com/akash-network/akash-api/go/node/market/v1beta3"
-
 	mock "github.com/stretchr/testify/mock"
 
 	remotecommand "k8s.io/client-go/tools/remotecommand"
 
 	v1beta3 "github.com/akash-network/provider/cluster/types/v1beta3"
+
+	v1beta4 "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	v2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
 
@@ -133,11 +133,11 @@ func (_c *Client_ConnectHostnameToDeployment_Call) RunAndReturn(run func(context
 }
 
 // DeclareHostname provides a mock function with given fields: ctx, lID, host, serviceName, externalPort
-func (_m *Client) DeclareHostname(ctx context.Context, lID marketv1beta3.LeaseID, host string, serviceName string, externalPort uint32) error {
+func (_m *Client) DeclareHostname(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32) error {
 	ret := _m.Called(ctx, lID, host, serviceName, externalPort)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, string, uint32) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, string, uint32) error); ok {
 		r0 = rf(ctx, lID, host, serviceName, externalPort)
 	} else {
 		r0 = ret.Error(0)
@@ -153,7 +153,7 @@ type Client_DeclareHostname_Call struct {
 
 // DeclareHostname is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 //   - host string
 //   - serviceName string
 //   - externalPort uint32
@@ -161,9 +161,9 @@ func (_e *Client_Expecter) DeclareHostname(ctx interface{}, lID interface{}, hos
 	return &Client_DeclareHostname_Call{Call: _e.mock.On("DeclareHostname", ctx, lID, host, serviceName, externalPort)}
 }
 
-func (_c *Client_DeclareHostname_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID, host string, serviceName string, externalPort uint32)) *Client_DeclareHostname_Call {
+func (_c *Client_DeclareHostname_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, host string, serviceName string, externalPort uint32)) *Client_DeclareHostname_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string), args[3].(string), args[4].(uint32))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(string), args[4].(uint32))
 	})
 	return _c
 }
@@ -173,17 +173,17 @@ func (_c *Client_DeclareHostname_Call) Return(_a0 error) *Client_DeclareHostname
 	return _c
 }
 
-func (_c *Client_DeclareHostname_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string, string, uint32) error) *Client_DeclareHostname_Call {
+func (_c *Client_DeclareHostname_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, string, uint32) error) *Client_DeclareHostname_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // DeclareIP provides a mock function with given fields: ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite
-func (_m *Client) DeclareIP(ctx context.Context, lID marketv1beta3.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta2.ServiceProtocol, sharingKey string, overwrite bool) error {
+func (_m *Client) DeclareIP(ctx context.Context, lID v1beta4.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta2.ServiceProtocol, sharingKey string, overwrite bool) error {
 	ret := _m.Called(ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, uint32, uint32, v2beta2.ServiceProtocol, string, bool) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, uint32, uint32, v2beta2.ServiceProtocol, string, bool) error); ok {
 		r0 = rf(ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)
 	} else {
 		r0 = ret.Error(0)
@@ -199,7 +199,7 @@ type Client_DeclareIP_Call struct {
 
 // DeclareIP is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 //   - serviceName string
 //   - port uint32
 //   - externalPort uint32
@@ -210,9 +210,9 @@ func (_e *Client_Expecter) DeclareIP(ctx interface{}, lID interface{}, serviceNa
 	return &Client_DeclareIP_Call{Call: _e.mock.On("DeclareIP", ctx, lID, serviceName, port, externalPort, proto, sharingKey, overwrite)}
 }
 
-func (_c *Client_DeclareIP_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta2.ServiceProtocol, sharingKey string, overwrite bool)) *Client_DeclareIP_Call {
+func (_c *Client_DeclareIP_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, serviceName string, port uint32, externalPort uint32, proto v2beta2.ServiceProtocol, sharingKey string, overwrite bool)) *Client_DeclareIP_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string), args[3].(uint32), args[4].(uint32), args[5].(v2beta2.ServiceProtocol), args[6].(string), args[7].(bool))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(uint32), args[4].(uint32), args[5].(v2beta2.ServiceProtocol), args[6].(string), args[7].(bool))
 	})
 	return _c
 }
@@ -222,7 +222,7 @@ func (_c *Client_DeclareIP_Call) Return(_a0 error) *Client_DeclareIP_Call {
 	return _c
 }
 
-func (_c *Client_DeclareIP_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string, uint32, uint32, v2beta2.ServiceProtocol, string, bool) error) *Client_DeclareIP_Call {
+func (_c *Client_DeclareIP_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, uint32, uint32, v2beta2.ServiceProtocol, string, bool) error) *Client_DeclareIP_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -325,15 +325,15 @@ func (_c *Client_Deployments_Call) RunAndReturn(run func(context.Context) ([]v1b
 }
 
 // Exec provides a mock function with given fields: ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq
-func (_m *Client) Exec(ctx context.Context, lID marketv1beta3.LeaseID, service string, podIndex uint, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, tty bool, tsq remotecommand.TerminalSizeQueue) (v1beta3.ExecResult, error) {
+func (_m *Client) Exec(ctx context.Context, lID v1beta4.LeaseID, service string, podIndex uint, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, tty bool, tsq remotecommand.TerminalSizeQueue) (v1beta3.ExecResult, error) {
 	ret := _m.Called(ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq)
 
 	var r0 v1beta3.ExecResult
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) (v1beta3.ExecResult, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) (v1beta3.ExecResult, error)); ok {
 		return rf(ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) v1beta3.ExecResult); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) v1beta3.ExecResult); ok {
 		r0 = rf(ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq)
 	} else {
 		if ret.Get(0) != nil {
@@ -341,7 +341,7 @@ func (_m *Client) Exec(ctx context.Context, lID marketv1beta3.LeaseID, service s
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) error); ok {
 		r1 = rf(ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq)
 	} else {
 		r1 = ret.Error(1)
@@ -357,7 +357,7 @@ type Client_Exec_Call struct {
 
 // Exec is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 //   - service string
 //   - podIndex uint
 //   - cmd []string
@@ -370,9 +370,9 @@ func (_e *Client_Expecter) Exec(ctx interface{}, lID interface{}, service interf
 	return &Client_Exec_Call{Call: _e.mock.On("Exec", ctx, lID, service, podIndex, cmd, stdin, stdout, stderr, tty, tsq)}
 }
 
-func (_c *Client_Exec_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID, service string, podIndex uint, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, tty bool, tsq remotecommand.TerminalSizeQueue)) *Client_Exec_Call {
+func (_c *Client_Exec_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, service string, podIndex uint, cmd []string, stdin io.Reader, stdout io.Writer, stderr io.Writer, tty bool, tsq remotecommand.TerminalSizeQueue)) *Client_Exec_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string), args[3].(uint), args[4].([]string), args[5].(io.Reader), args[6].(io.Writer), args[7].(io.Writer), args[8].(bool), args[9].(remotecommand.TerminalSizeQueue))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(uint), args[4].([]string), args[5].(io.Reader), args[6].(io.Writer), args[7].(io.Writer), args[8].(bool), args[9].(remotecommand.TerminalSizeQueue))
 	})
 	return _c
 }
@@ -382,21 +382,21 @@ func (_c *Client_Exec_Call) Return(_a0 v1beta3.ExecResult, _a1 error) *Client_Ex
 	return _c
 }
 
-func (_c *Client_Exec_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) (v1beta3.ExecResult, error)) *Client_Exec_Call {
+func (_c *Client_Exec_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) (v1beta3.ExecResult, error)) *Client_Exec_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ForwardedPortStatus provides a mock function with given fields: _a0, _a1
-func (_m *Client) ForwardedPortStatus(_a0 context.Context, _a1 marketv1beta3.LeaseID) (map[string][]v1beta3.ForwardedPortStatus, error) {
+func (_m *Client) ForwardedPortStatus(_a0 context.Context, _a1 v1beta4.LeaseID) (map[string][]v1beta3.ForwardedPortStatus, error) {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 map[string][]v1beta3.ForwardedPortStatus
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) (map[string][]v1beta3.ForwardedPortStatus, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) (map[string][]v1beta3.ForwardedPortStatus, error)); ok {
 		return rf(_a0, _a1)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) map[string][]v1beta3.ForwardedPortStatus); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) map[string][]v1beta3.ForwardedPortStatus); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
@@ -404,7 +404,7 @@ func (_m *Client) ForwardedPortStatus(_a0 context.Context, _a1 marketv1beta3.Lea
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)
@@ -420,14 +420,14 @@ type Client_ForwardedPortStatus_Call struct {
 
 // ForwardedPortStatus is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 func (_e *Client_Expecter) ForwardedPortStatus(_a0 interface{}, _a1 interface{}) *Client_ForwardedPortStatus_Call {
 	return &Client_ForwardedPortStatus_Call{Call: _e.mock.On("ForwardedPortStatus", _a0, _a1)}
 }
 
-func (_c *Client_ForwardedPortStatus_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID)) *Client_ForwardedPortStatus_Call {
+func (_c *Client_ForwardedPortStatus_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID)) *Client_ForwardedPortStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -437,21 +437,21 @@ func (_c *Client_ForwardedPortStatus_Call) Return(_a0 map[string][]v1beta3.Forwa
 	return _c
 }
 
-func (_c *Client_ForwardedPortStatus_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) (map[string][]v1beta3.ForwardedPortStatus, error)) *Client_ForwardedPortStatus_Call {
+func (_c *Client_ForwardedPortStatus_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) (map[string][]v1beta3.ForwardedPortStatus, error)) *Client_ForwardedPortStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetDeclaredIPs provides a mock function with given fields: ctx, leaseID
-func (_m *Client) GetDeclaredIPs(ctx context.Context, leaseID marketv1beta3.LeaseID) ([]akash_networkv2beta2.ProviderLeasedIPSpec, error) {
+func (_m *Client) GetDeclaredIPs(ctx context.Context, leaseID v1beta4.LeaseID) ([]akash_networkv2beta2.ProviderLeasedIPSpec, error) {
 	ret := _m.Called(ctx, leaseID)
 
 	var r0 []akash_networkv2beta2.ProviderLeasedIPSpec
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) ([]akash_networkv2beta2.ProviderLeasedIPSpec, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) ([]akash_networkv2beta2.ProviderLeasedIPSpec, error)); ok {
 		return rf(ctx, leaseID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) []akash_networkv2beta2.ProviderLeasedIPSpec); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) []akash_networkv2beta2.ProviderLeasedIPSpec); ok {
 		r0 = rf(ctx, leaseID)
 	} else {
 		if ret.Get(0) != nil {
@@ -459,7 +459,7 @@ func (_m *Client) GetDeclaredIPs(ctx context.Context, leaseID marketv1beta3.Leas
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r1 = rf(ctx, leaseID)
 	} else {
 		r1 = ret.Error(1)
@@ -475,14 +475,14 @@ type Client_GetDeclaredIPs_Call struct {
 
 // GetDeclaredIPs is a helper method to define mock.On call
 //   - ctx context.Context
-//   - leaseID marketv1beta3.LeaseID
+//   - leaseID v1beta4.LeaseID
 func (_e *Client_Expecter) GetDeclaredIPs(ctx interface{}, leaseID interface{}) *Client_GetDeclaredIPs_Call {
 	return &Client_GetDeclaredIPs_Call{Call: _e.mock.On("GetDeclaredIPs", ctx, leaseID)}
 }
 
-func (_c *Client_GetDeclaredIPs_Call) Run(run func(ctx context.Context, leaseID marketv1beta3.LeaseID)) *Client_GetDeclaredIPs_Call {
+func (_c *Client_GetDeclaredIPs_Call) Run(run func(ctx context.Context, leaseID v1beta4.LeaseID)) *Client_GetDeclaredIPs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -492,7 +492,7 @@ func (_c *Client_GetDeclaredIPs_Call) Return(_a0 []akash_networkv2beta2.Provider
 	return _c
 }
 
-func (_c *Client_GetDeclaredIPs_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) ([]akash_networkv2beta2.ProviderLeasedIPSpec, error)) *Client_GetDeclaredIPs_Call {
+func (_c *Client_GetDeclaredIPs_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) ([]akash_networkv2beta2.ProviderLeasedIPSpec, error)) *Client_GetDeclaredIPs_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -552,28 +552,28 @@ func (_c *Client_GetHostnameDeploymentConnections_Call) RunAndReturn(run func(co
 }
 
 // GetManifestGroup provides a mock function with given fields: _a0, _a1
-func (_m *Client) GetManifestGroup(_a0 context.Context, _a1 marketv1beta3.LeaseID) (bool, akash_networkv2beta2.ManifestGroup, error) {
+func (_m *Client) GetManifestGroup(_a0 context.Context, _a1 v1beta4.LeaseID) (bool, akash_networkv2beta2.ManifestGroup, error) {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 bool
 	var r1 akash_networkv2beta2.ManifestGroup
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) (bool, akash_networkv2beta2.ManifestGroup, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) (bool, akash_networkv2beta2.ManifestGroup, error)); ok {
 		return rf(_a0, _a1)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) bool); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) bool); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID) akash_networkv2beta2.ManifestGroup); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID) akash_networkv2beta2.ManifestGroup); ok {
 		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Get(1).(akash_networkv2beta2.ManifestGroup)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(2).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r2 = rf(_a0, _a1)
 	} else {
 		r2 = ret.Error(2)
@@ -589,14 +589,14 @@ type Client_GetManifestGroup_Call struct {
 
 // GetManifestGroup is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 func (_e *Client_Expecter) GetManifestGroup(_a0 interface{}, _a1 interface{}) *Client_GetManifestGroup_Call {
 	return &Client_GetManifestGroup_Call{Call: _e.mock.On("GetManifestGroup", _a0, _a1)}
 }
 
-func (_c *Client_GetManifestGroup_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID)) *Client_GetManifestGroup_Call {
+func (_c *Client_GetManifestGroup_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID)) *Client_GetManifestGroup_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -606,7 +606,7 @@ func (_c *Client_GetManifestGroup_Call) Return(_a0 bool, _a1 akash_networkv2beta
 	return _c
 }
 
-func (_c *Client_GetManifestGroup_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) (bool, akash_networkv2beta2.ManifestGroup, error)) *Client_GetManifestGroup_Call {
+func (_c *Client_GetManifestGroup_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) (bool, akash_networkv2beta2.ManifestGroup, error)) *Client_GetManifestGroup_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -719,15 +719,15 @@ func (_c *Client_KubeVersion_Call) RunAndReturn(run func() (*version.Info, error
 }
 
 // LeaseEvents provides a mock function with given fields: _a0, _a1, _a2, _a3
-func (_m *Client) LeaseEvents(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 string, _a3 bool) (v1beta3.EventsWatcher, error) {
+func (_m *Client) LeaseEvents(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 string, _a3 bool) (v1beta3.EventsWatcher, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	var r0 v1beta3.EventsWatcher
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, bool) (v1beta3.EventsWatcher, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, bool) (v1beta3.EventsWatcher, error)); ok {
 		return rf(_a0, _a1, _a2, _a3)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, bool) v1beta3.EventsWatcher); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, bool) v1beta3.EventsWatcher); ok {
 		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		if ret.Get(0) != nil {
@@ -735,7 +735,7 @@ func (_m *Client) LeaseEvents(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID, string, bool) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID, string, bool) error); ok {
 		r1 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r1 = ret.Error(1)
@@ -751,16 +751,16 @@ type Client_LeaseEvents_Call struct {
 
 // LeaseEvents is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 //   - _a2 string
 //   - _a3 bool
 func (_e *Client_Expecter) LeaseEvents(_a0 interface{}, _a1 interface{}, _a2 interface{}, _a3 interface{}) *Client_LeaseEvents_Call {
 	return &Client_LeaseEvents_Call{Call: _e.mock.On("LeaseEvents", _a0, _a1, _a2, _a3)}
 }
 
-func (_c *Client_LeaseEvents_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 string, _a3 bool)) *Client_LeaseEvents_Call {
+func (_c *Client_LeaseEvents_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 string, _a3 bool)) *Client_LeaseEvents_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string), args[3].(bool))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(bool))
 	})
 	return _c
 }
@@ -770,21 +770,21 @@ func (_c *Client_LeaseEvents_Call) Return(_a0 v1beta3.EventsWatcher, _a1 error) 
 	return _c
 }
 
-func (_c *Client_LeaseEvents_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string, bool) (v1beta3.EventsWatcher, error)) *Client_LeaseEvents_Call {
+func (_c *Client_LeaseEvents_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, bool) (v1beta3.EventsWatcher, error)) *Client_LeaseEvents_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // LeaseLogs provides a mock function with given fields: _a0, _a1, _a2, _a3, _a4
-func (_m *Client) LeaseLogs(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 string, _a3 bool, _a4 *int64) ([]*v1beta3.ServiceLog, error) {
+func (_m *Client) LeaseLogs(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 string, _a3 bool, _a4 *int64) ([]*v1beta3.ServiceLog, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3, _a4)
 
 	var r0 []*v1beta3.ServiceLog
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, bool, *int64) ([]*v1beta3.ServiceLog, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, bool, *int64) ([]*v1beta3.ServiceLog, error)); ok {
 		return rf(_a0, _a1, _a2, _a3, _a4)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, bool, *int64) []*v1beta3.ServiceLog); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, bool, *int64) []*v1beta3.ServiceLog); ok {
 		r0 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		if ret.Get(0) != nil {
@@ -792,7 +792,7 @@ func (_m *Client) LeaseLogs(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID, string, bool, *int64) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID, string, bool, *int64) error); ok {
 		r1 = rf(_a0, _a1, _a2, _a3, _a4)
 	} else {
 		r1 = ret.Error(1)
@@ -808,7 +808,7 @@ type Client_LeaseLogs_Call struct {
 
 // LeaseLogs is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 //   - _a2 string
 //   - _a3 bool
 //   - _a4 *int64
@@ -816,9 +816,9 @@ func (_e *Client_Expecter) LeaseLogs(_a0 interface{}, _a1 interface{}, _a2 inter
 	return &Client_LeaseLogs_Call{Call: _e.mock.On("LeaseLogs", _a0, _a1, _a2, _a3, _a4)}
 }
 
-func (_c *Client_LeaseLogs_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 string, _a3 bool, _a4 *int64)) *Client_LeaseLogs_Call {
+func (_c *Client_LeaseLogs_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 string, _a3 bool, _a4 *int64)) *Client_LeaseLogs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string), args[3].(bool), args[4].(*int64))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(bool), args[4].(*int64))
 	})
 	return _c
 }
@@ -828,21 +828,21 @@ func (_c *Client_LeaseLogs_Call) Return(_a0 []*v1beta3.ServiceLog, _a1 error) *C
 	return _c
 }
 
-func (_c *Client_LeaseLogs_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string, bool, *int64) ([]*v1beta3.ServiceLog, error)) *Client_LeaseLogs_Call {
+func (_c *Client_LeaseLogs_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, bool, *int64) ([]*v1beta3.ServiceLog, error)) *Client_LeaseLogs_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // LeaseStatus provides a mock function with given fields: _a0, _a1
-func (_m *Client) LeaseStatus(_a0 context.Context, _a1 marketv1beta3.LeaseID) (map[string]*v1beta3.ServiceStatus, error) {
+func (_m *Client) LeaseStatus(_a0 context.Context, _a1 v1beta4.LeaseID) (map[string]*v1beta3.ServiceStatus, error) {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 map[string]*v1beta3.ServiceStatus
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) (map[string]*v1beta3.ServiceStatus, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) (map[string]*v1beta3.ServiceStatus, error)); ok {
 		return rf(_a0, _a1)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) map[string]*v1beta3.ServiceStatus); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) map[string]*v1beta3.ServiceStatus); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
@@ -850,7 +850,7 @@ func (_m *Client) LeaseStatus(_a0 context.Context, _a1 marketv1beta3.LeaseID) (m
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)
@@ -866,14 +866,14 @@ type Client_LeaseStatus_Call struct {
 
 // LeaseStatus is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 func (_e *Client_Expecter) LeaseStatus(_a0 interface{}, _a1 interface{}) *Client_LeaseStatus_Call {
 	return &Client_LeaseStatus_Call{Call: _e.mock.On("LeaseStatus", _a0, _a1)}
 }
 
-func (_c *Client_LeaseStatus_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID)) *Client_LeaseStatus_Call {
+func (_c *Client_LeaseStatus_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID)) *Client_LeaseStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -883,7 +883,7 @@ func (_c *Client_LeaseStatus_Call) Return(_a0 map[string]*v1beta3.ServiceStatus,
 	return _c
 }
 
-func (_c *Client_LeaseStatus_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) (map[string]*v1beta3.ServiceStatus, error)) *Client_LeaseStatus_Call {
+func (_c *Client_LeaseStatus_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) (map[string]*v1beta3.ServiceStatus, error)) *Client_LeaseStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -997,11 +997,11 @@ func (_c *Client_ObserveIPState_Call) RunAndReturn(run func(context.Context) (<-
 }
 
 // PurgeDeclaredHostname provides a mock function with given fields: ctx, lID, hostname
-func (_m *Client) PurgeDeclaredHostname(ctx context.Context, lID marketv1beta3.LeaseID, hostname string) error {
+func (_m *Client) PurgeDeclaredHostname(ctx context.Context, lID v1beta4.LeaseID, hostname string) error {
 	ret := _m.Called(ctx, lID, hostname)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string) error); ok {
 		r0 = rf(ctx, lID, hostname)
 	} else {
 		r0 = ret.Error(0)
@@ -1017,15 +1017,15 @@ type Client_PurgeDeclaredHostname_Call struct {
 
 // PurgeDeclaredHostname is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 //   - hostname string
 func (_e *Client_Expecter) PurgeDeclaredHostname(ctx interface{}, lID interface{}, hostname interface{}) *Client_PurgeDeclaredHostname_Call {
 	return &Client_PurgeDeclaredHostname_Call{Call: _e.mock.On("PurgeDeclaredHostname", ctx, lID, hostname)}
 }
 
-func (_c *Client_PurgeDeclaredHostname_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID, hostname string)) *Client_PurgeDeclaredHostname_Call {
+func (_c *Client_PurgeDeclaredHostname_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, hostname string)) *Client_PurgeDeclaredHostname_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string))
 	})
 	return _c
 }
@@ -1035,17 +1035,17 @@ func (_c *Client_PurgeDeclaredHostname_Call) Return(_a0 error) *Client_PurgeDecl
 	return _c
 }
 
-func (_c *Client_PurgeDeclaredHostname_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string) error) *Client_PurgeDeclaredHostname_Call {
+func (_c *Client_PurgeDeclaredHostname_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string) error) *Client_PurgeDeclaredHostname_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PurgeDeclaredHostnames provides a mock function with given fields: ctx, lID
-func (_m *Client) PurgeDeclaredHostnames(ctx context.Context, lID marketv1beta3.LeaseID) error {
+func (_m *Client) PurgeDeclaredHostnames(ctx context.Context, lID v1beta4.LeaseID) error {
 	ret := _m.Called(ctx, lID)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r0 = rf(ctx, lID)
 	} else {
 		r0 = ret.Error(0)
@@ -1061,14 +1061,14 @@ type Client_PurgeDeclaredHostnames_Call struct {
 
 // PurgeDeclaredHostnames is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 func (_e *Client_Expecter) PurgeDeclaredHostnames(ctx interface{}, lID interface{}) *Client_PurgeDeclaredHostnames_Call {
 	return &Client_PurgeDeclaredHostnames_Call{Call: _e.mock.On("PurgeDeclaredHostnames", ctx, lID)}
 }
 
-func (_c *Client_PurgeDeclaredHostnames_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID)) *Client_PurgeDeclaredHostnames_Call {
+func (_c *Client_PurgeDeclaredHostnames_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID)) *Client_PurgeDeclaredHostnames_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -1078,17 +1078,17 @@ func (_c *Client_PurgeDeclaredHostnames_Call) Return(_a0 error) *Client_PurgeDec
 	return _c
 }
 
-func (_c *Client_PurgeDeclaredHostnames_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) error) *Client_PurgeDeclaredHostnames_Call {
+func (_c *Client_PurgeDeclaredHostnames_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) error) *Client_PurgeDeclaredHostnames_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PurgeDeclaredIP provides a mock function with given fields: ctx, lID, serviceName, externalPort, proto
-func (_m *Client) PurgeDeclaredIP(ctx context.Context, lID marketv1beta3.LeaseID, serviceName string, externalPort uint32, proto v2beta2.ServiceProtocol) error {
+func (_m *Client) PurgeDeclaredIP(ctx context.Context, lID v1beta4.LeaseID, serviceName string, externalPort uint32, proto v2beta2.ServiceProtocol) error {
 	ret := _m.Called(ctx, lID, serviceName, externalPort, proto)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string, uint32, v2beta2.ServiceProtocol) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string, uint32, v2beta2.ServiceProtocol) error); ok {
 		r0 = rf(ctx, lID, serviceName, externalPort, proto)
 	} else {
 		r0 = ret.Error(0)
@@ -1104,7 +1104,7 @@ type Client_PurgeDeclaredIP_Call struct {
 
 // PurgeDeclaredIP is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 //   - serviceName string
 //   - externalPort uint32
 //   - proto v2beta2.ServiceProtocol
@@ -1112,9 +1112,9 @@ func (_e *Client_Expecter) PurgeDeclaredIP(ctx interface{}, lID interface{}, ser
 	return &Client_PurgeDeclaredIP_Call{Call: _e.mock.On("PurgeDeclaredIP", ctx, lID, serviceName, externalPort, proto)}
 }
 
-func (_c *Client_PurgeDeclaredIP_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID, serviceName string, externalPort uint32, proto v2beta2.ServiceProtocol)) *Client_PurgeDeclaredIP_Call {
+func (_c *Client_PurgeDeclaredIP_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID, serviceName string, externalPort uint32, proto v2beta2.ServiceProtocol)) *Client_PurgeDeclaredIP_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string), args[3].(uint32), args[4].(v2beta2.ServiceProtocol))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string), args[3].(uint32), args[4].(v2beta2.ServiceProtocol))
 	})
 	return _c
 }
@@ -1124,17 +1124,17 @@ func (_c *Client_PurgeDeclaredIP_Call) Return(_a0 error) *Client_PurgeDeclaredIP
 	return _c
 }
 
-func (_c *Client_PurgeDeclaredIP_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string, uint32, v2beta2.ServiceProtocol) error) *Client_PurgeDeclaredIP_Call {
+func (_c *Client_PurgeDeclaredIP_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string, uint32, v2beta2.ServiceProtocol) error) *Client_PurgeDeclaredIP_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PurgeDeclaredIPs provides a mock function with given fields: ctx, lID
-func (_m *Client) PurgeDeclaredIPs(ctx context.Context, lID marketv1beta3.LeaseID) error {
+func (_m *Client) PurgeDeclaredIPs(ctx context.Context, lID v1beta4.LeaseID) error {
 	ret := _m.Called(ctx, lID)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r0 = rf(ctx, lID)
 	} else {
 		r0 = ret.Error(0)
@@ -1150,14 +1150,14 @@ type Client_PurgeDeclaredIPs_Call struct {
 
 // PurgeDeclaredIPs is a helper method to define mock.On call
 //   - ctx context.Context
-//   - lID marketv1beta3.LeaseID
+//   - lID v1beta4.LeaseID
 func (_e *Client_Expecter) PurgeDeclaredIPs(ctx interface{}, lID interface{}) *Client_PurgeDeclaredIPs_Call {
 	return &Client_PurgeDeclaredIPs_Call{Call: _e.mock.On("PurgeDeclaredIPs", ctx, lID)}
 }
 
-func (_c *Client_PurgeDeclaredIPs_Call) Run(run func(ctx context.Context, lID marketv1beta3.LeaseID)) *Client_PurgeDeclaredIPs_Call {
+func (_c *Client_PurgeDeclaredIPs_Call) Run(run func(ctx context.Context, lID v1beta4.LeaseID)) *Client_PurgeDeclaredIPs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -1167,17 +1167,17 @@ func (_c *Client_PurgeDeclaredIPs_Call) Return(_a0 error) *Client_PurgeDeclaredI
 	return _c
 }
 
-func (_c *Client_PurgeDeclaredIPs_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) error) *Client_PurgeDeclaredIPs_Call {
+func (_c *Client_PurgeDeclaredIPs_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) error) *Client_PurgeDeclaredIPs_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // RemoveHostnameFromDeployment provides a mock function with given fields: ctx, hostname, leaseID, allowMissing
-func (_m *Client) RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID marketv1beta3.LeaseID, allowMissing bool) error {
+func (_m *Client) RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID v1beta4.LeaseID, allowMissing bool) error {
 	ret := _m.Called(ctx, hostname, leaseID, allowMissing)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, marketv1beta3.LeaseID, bool) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, v1beta4.LeaseID, bool) error); ok {
 		r0 = rf(ctx, hostname, leaseID, allowMissing)
 	} else {
 		r0 = ret.Error(0)
@@ -1194,15 +1194,15 @@ type Client_RemoveHostnameFromDeployment_Call struct {
 // RemoveHostnameFromDeployment is a helper method to define mock.On call
 //   - ctx context.Context
 //   - hostname string
-//   - leaseID marketv1beta3.LeaseID
+//   - leaseID v1beta4.LeaseID
 //   - allowMissing bool
 func (_e *Client_Expecter) RemoveHostnameFromDeployment(ctx interface{}, hostname interface{}, leaseID interface{}, allowMissing interface{}) *Client_RemoveHostnameFromDeployment_Call {
 	return &Client_RemoveHostnameFromDeployment_Call{Call: _e.mock.On("RemoveHostnameFromDeployment", ctx, hostname, leaseID, allowMissing)}
 }
 
-func (_c *Client_RemoveHostnameFromDeployment_Call) Run(run func(ctx context.Context, hostname string, leaseID marketv1beta3.LeaseID, allowMissing bool)) *Client_RemoveHostnameFromDeployment_Call {
+func (_c *Client_RemoveHostnameFromDeployment_Call) Run(run func(ctx context.Context, hostname string, leaseID v1beta4.LeaseID, allowMissing bool)) *Client_RemoveHostnameFromDeployment_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(marketv1beta3.LeaseID), args[3].(bool))
+		run(args[0].(context.Context), args[1].(string), args[2].(v1beta4.LeaseID), args[3].(bool))
 	})
 	return _c
 }
@@ -1212,21 +1212,21 @@ func (_c *Client_RemoveHostnameFromDeployment_Call) Return(_a0 error) *Client_Re
 	return _c
 }
 
-func (_c *Client_RemoveHostnameFromDeployment_Call) RunAndReturn(run func(context.Context, string, marketv1beta3.LeaseID, bool) error) *Client_RemoveHostnameFromDeployment_Call {
+func (_c *Client_RemoveHostnameFromDeployment_Call) RunAndReturn(run func(context.Context, string, v1beta4.LeaseID, bool) error) *Client_RemoveHostnameFromDeployment_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ServiceStatus provides a mock function with given fields: _a0, _a1, _a2
-func (_m *Client) ServiceStatus(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 string) (*v1beta3.ServiceStatus, error) {
+func (_m *Client) ServiceStatus(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 string) (*v1beta3.ServiceStatus, error) {
 	ret := _m.Called(_a0, _a1, _a2)
 
 	var r0 *v1beta3.ServiceStatus
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string) (*v1beta3.ServiceStatus, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string) (*v1beta3.ServiceStatus, error)); ok {
 		return rf(_a0, _a1, _a2)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID, string) *v1beta3.ServiceStatus); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID, string) *v1beta3.ServiceStatus); ok {
 		r0 = rf(_a0, _a1, _a2)
 	} else {
 		if ret.Get(0) != nil {
@@ -1234,7 +1234,7 @@ func (_m *Client) ServiceStatus(_a0 context.Context, _a1 marketv1beta3.LeaseID, 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, marketv1beta3.LeaseID, string) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, v1beta4.LeaseID, string) error); ok {
 		r1 = rf(_a0, _a1, _a2)
 	} else {
 		r1 = ret.Error(1)
@@ -1250,15 +1250,15 @@ type Client_ServiceStatus_Call struct {
 
 // ServiceStatus is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 //   - _a2 string
 func (_e *Client_Expecter) ServiceStatus(_a0 interface{}, _a1 interface{}, _a2 interface{}) *Client_ServiceStatus_Call {
 	return &Client_ServiceStatus_Call{Call: _e.mock.On("ServiceStatus", _a0, _a1, _a2)}
 }
 
-func (_c *Client_ServiceStatus_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID, _a2 string)) *Client_ServiceStatus_Call {
+func (_c *Client_ServiceStatus_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID, _a2 string)) *Client_ServiceStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID), args[2].(string))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID), args[2].(string))
 	})
 	return _c
 }
@@ -1268,17 +1268,17 @@ func (_c *Client_ServiceStatus_Call) Return(_a0 *v1beta3.ServiceStatus, _a1 erro
 	return _c
 }
 
-func (_c *Client_ServiceStatus_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID, string) (*v1beta3.ServiceStatus, error)) *Client_ServiceStatus_Call {
+func (_c *Client_ServiceStatus_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID, string) (*v1beta3.ServiceStatus, error)) *Client_ServiceStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // TeardownLease provides a mock function with given fields: _a0, _a1
-func (_m *Client) TeardownLease(_a0 context.Context, _a1 marketv1beta3.LeaseID) error {
+func (_m *Client) TeardownLease(_a0 context.Context, _a1 v1beta4.LeaseID) error {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, marketv1beta3.LeaseID) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, v1beta4.LeaseID) error); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		r0 = ret.Error(0)
@@ -1294,14 +1294,14 @@ type Client_TeardownLease_Call struct {
 
 // TeardownLease is a helper method to define mock.On call
 //   - _a0 context.Context
-//   - _a1 marketv1beta3.LeaseID
+//   - _a1 v1beta4.LeaseID
 func (_e *Client_Expecter) TeardownLease(_a0 interface{}, _a1 interface{}) *Client_TeardownLease_Call {
 	return &Client_TeardownLease_Call{Call: _e.mock.On("TeardownLease", _a0, _a1)}
 }
 
-func (_c *Client_TeardownLease_Call) Run(run func(_a0 context.Context, _a1 marketv1beta3.LeaseID)) *Client_TeardownLease_Call {
+func (_c *Client_TeardownLease_Call) Run(run func(_a0 context.Context, _a1 v1beta4.LeaseID)) *Client_TeardownLease_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(marketv1beta3.LeaseID))
+		run(args[0].(context.Context), args[1].(v1beta4.LeaseID))
 	})
 	return _c
 }
@@ -1311,7 +1311,7 @@ func (_c *Client_TeardownLease_Call) Return(_a0 error) *Client_TeardownLease_Cal
 	return _c
 }
 
-func (_c *Client_TeardownLease_Call) RunAndReturn(run func(context.Context, marketv1beta3.LeaseID) error) *Client_TeardownLease_Call {
+func (_c *Client_TeardownLease_Call) RunAndReturn(run func(context.Context, v1beta4.LeaseID) error) *Client_TeardownLease_Call {
 	_c.Call.Return(run)
 	return _c
 }

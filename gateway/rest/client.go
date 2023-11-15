@@ -27,8 +27,9 @@ import (
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+
 	akashclient "github.com/akash-network/node/client"
 	cutils "github.com/akash-network/node/x/cert/utils"
 

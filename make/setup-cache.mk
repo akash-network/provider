@@ -33,7 +33,8 @@ akash-rm:
 ifeq ($(AKASHD_BUILD_FROM_SRC), true)
 akash:
 	@echo "compiling and installing Akash from local sources"
-	make -C $(AKASHD_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
+	$(AP_ROOT)/script/tools.sh build-akash $(AKASHD_LOCAL_PATH)
+#make -C $(AKASHD_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
 else
 $(AKASHD_VERSION_FILE): $(AP_DEVCACHE)
 	@echo "Installing akash $(AKASHD_VERSION) ..."

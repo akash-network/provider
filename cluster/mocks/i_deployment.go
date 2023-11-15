@@ -3,8 +3,9 @@
 package mocks
 
 import (
-	marketv1beta3 "github.com/akash-network/akash-api/go/node/market/v1beta3"
 	mock "github.com/stretchr/testify/mock"
+
+	v1beta4 "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	v2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
 )
@@ -66,14 +67,14 @@ func (_c *IDeployment_ClusterParams_Call) RunAndReturn(run func() interface{}) *
 }
 
 // LeaseID provides a mock function with given fields:
-func (_m *IDeployment) LeaseID() marketv1beta3.LeaseID {
+func (_m *IDeployment) LeaseID() v1beta4.LeaseID {
 	ret := _m.Called()
 
-	var r0 marketv1beta3.LeaseID
-	if rf, ok := ret.Get(0).(func() marketv1beta3.LeaseID); ok {
+	var r0 v1beta4.LeaseID
+	if rf, ok := ret.Get(0).(func() v1beta4.LeaseID); ok {
 		r0 = rf()
 	} else {
-		r0 = ret.Get(0).(marketv1beta3.LeaseID)
+		r0 = ret.Get(0).(v1beta4.LeaseID)
 	}
 
 	return r0
@@ -96,12 +97,12 @@ func (_c *IDeployment_LeaseID_Call) Run(run func()) *IDeployment_LeaseID_Call {
 	return _c
 }
 
-func (_c *IDeployment_LeaseID_Call) Return(_a0 marketv1beta3.LeaseID) *IDeployment_LeaseID_Call {
+func (_c *IDeployment_LeaseID_Call) Return(_a0 v1beta4.LeaseID) *IDeployment_LeaseID_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *IDeployment_LeaseID_Call) RunAndReturn(run func() marketv1beta3.LeaseID) *IDeployment_LeaseID_Call {
+func (_c *IDeployment_LeaseID_Call) RunAndReturn(run func() v1beta4.LeaseID) *IDeployment_LeaseID_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -10,8 +10,9 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+
 	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
 	clientmocks "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/testutil"
@@ -46,6 +47,7 @@ func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *
 	scaffold.client = &clientmocks.Client{}
 	scaffold.client.On("Tx").Return(txClientMock)
 	sess := session.New(testutil.Logger(t), scaffold.client, &scaffold.provider, -1)
+
 	require.NotNil(t, sess.Client())
 
 	wd := newWatchdog(sess, scaffold.parentCh, scaffold.doneCh, scaffold.leaseID, timeout)

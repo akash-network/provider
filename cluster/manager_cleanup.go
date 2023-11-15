@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	logger "github.com/tendermint/tendermint/libs/log"
 )
 

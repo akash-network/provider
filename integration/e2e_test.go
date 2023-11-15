@@ -31,7 +31,7 @@ import (
 	bankcli "github.com/cosmos/cosmos-sdk/x/bank/client/testutil"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	types "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	ttypes "github.com/akash-network/akash-api/go/node/take/v1beta3"
 

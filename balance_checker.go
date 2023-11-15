@@ -12,9 +12,10 @@ import (
 	tmrpc "github.com/tendermint/tendermint/rpc/core/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta3"
-	"github.com/akash-network/node/client"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+
 	aclient "github.com/akash-network/node/client"
+
 	"github.com/akash-network/node/pubsub"
 	netutil "github.com/akash-network/node/util/network"
 	"github.com/akash-network/node/util/runner"
@@ -68,7 +69,7 @@ type leaseCheckResponse struct {
 
 func newBalanceChecker(ctx context.Context,
 	bqc btypes.QueryClient,
-	aqc client.QueryClient,
+	aqc aclient.QueryClient,
 	accAddr sdk.AccAddress,
 	clientSession session.Session,
 	bus pubsub.Bus,

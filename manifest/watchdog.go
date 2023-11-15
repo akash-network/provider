@@ -9,7 +9,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/market/v1beta3"
+	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/util/runner"
 
 	"github.com/akash-network/provider/session"
