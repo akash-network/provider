@@ -65,6 +65,6 @@ jobs:
         with:
           token: ${{ secrets.GORELEASER_ACCESS_TOKEN }}
           repo: akash-network/homebrew-tap
-          ref: refs/heads/master
+          ref: refs/heads/main
           workflow: provider-services
           inputs: '{"tag": "${{ env.RELEASE_TAG }}"}'
