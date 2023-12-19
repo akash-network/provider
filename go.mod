@@ -3,8 +3,8 @@ module github.com/akash-network/provider
 go 1.21
 
 require (
-	github.com/akash-network/akash-api v0.0.33
-	github.com/akash-network/node v0.28.2
+	github.com/akash-network/akash-api v0.0.35
+	github.com/akash-network/node v0.30.1-rc0
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/boz/go-lifecycle v0.1.1
 	github.com/cosmos/cosmos-sdk v0.45.16
