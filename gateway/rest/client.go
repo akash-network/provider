@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
@@ -30,7 +31,6 @@ import (
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
-	akashclient "github.com/akash-network/node/client"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
 	"github.com/akash-network/provider"
@@ -86,7 +86,7 @@ type ServiceLogs struct {
 }
 
 // NewClient returns a new Client
-func NewClient(qclient akashclient.QueryClient, addr sdk.Address, certs []tls.Certificate) (Client, error) {
+func NewClient(qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certificate) (Client, error) {
 	res, err := qclient.Provider(context.Background(), &ptypes.QueryProviderRequest{Owner: addr.String()})
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func NewClient(qclient akashclient.QueryClient, addr sdk.Address, certs []tls.Ce
 	return newClient(qclient, addr, certs, uri), nil
 }
 
-func newClient(qclient akashclient.QueryClient, addr sdk.Address, certs []tls.Certificate, uri *url.URL) *client {
+func newClient(qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certificate, uri *url.URL) *client {
 	cl := &client{
 		host:    uri,
 		addr:    addr,
@@ -164,12 +164,12 @@ func (cd *ClientDirectory) GetClient(providerAddr sdk.Address) (Client, error) {
 		return client, nil
 	}
 
-	client, err := NewClient(akashclient.NewQueryClientFromCtx(cd.cosmosContext), providerAddr, []tls.Certificate{cd.clientCert})
-	if err != nil {
-		return nil, err
-	}
-
-	cd.clients[providerAddr.String()] = client // Store the client
+	// client, err := NewClient(akashclient.NewQueryClientFromCtx(cd.cosmosContext), providerAddr, []tls.Certificate{cd.clientCert})
+	// if err != nil {
+	// 	return nil, err
+	// }
+	//
+	// cd.clients[providerAddr.String()] = client // Store the client
 
 	return client, nil
 }

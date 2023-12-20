@@ -4,7 +4,9 @@ import (
 	"context"
 	"time"
 
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	"github.com/boz/go-lifecycle"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/tendermint/tendermint/libs/log"
 
@@ -67,9 +69,11 @@ func (wd *watchdog) run() {
 		wd.log.Info("watchdog closing bid")
 
 		runch = runner.Do(func() runner.Result {
-			return runner.NewResult(nil, wd.sess.Client().Tx().Broadcast(wd.ctx, &types.MsgCloseBid{
+			msg := &types.MsgCloseBid{
 				BidID: types.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
-			}))
+			}
+
+			return runner.NewResult(wd.sess.Client().Tx().Broadcast(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 		})
 	case err = <-wd.lc.ShutdownRequest():
 	}

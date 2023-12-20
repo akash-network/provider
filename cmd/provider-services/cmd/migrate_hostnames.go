@@ -8,9 +8,9 @@ import (
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
-	akashclient "github.com/akash-network/node/client"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
+	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -26,6 +26,13 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx := cmd.Context()
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
+
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
@@ -36,7 +43,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return markRPCServerError(err)
 	}
 
-	gclient, err := gwrest.NewClient(akashclient.NewQueryClientFromCtx(cctx), prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
 	if err != nil {
 		return err
 	}

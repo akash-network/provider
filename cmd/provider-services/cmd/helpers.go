@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/cosmos/cosmos-sdk/client"
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
@@ -16,7 +16,6 @@ import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/app"
-	akashclient "github.com/akash-network/node/client"
 )
 
 const (
@@ -94,7 +93,7 @@ func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
 	return addr, nil
 }
 
-func leasesForDeployment(ctx context.Context, cctx client.Context, flags *pflag.FlagSet, did dtypes.DeploymentID) ([]mtypes.LeaseID, error) {
+func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pflag.FlagSet, did dtypes.DeploymentID) ([]mtypes.LeaseID, error) {
 	filter := mtypes.LeaseFilters{
 		Owner: did.Owner,
 		DSeq:  did.DSeq,
@@ -118,8 +117,7 @@ func leasesForDeployment(ctx context.Context, cctx client.Context, flags *pflag.
 		filter.OSeq = val
 	}
 
-	cclient := akashclient.NewQueryClientFromCtx(cctx)
-	resp, err := cclient.Leases(ctx, &mtypes.QueryLeasesRequest{
+	resp, err := cl.Leases(ctx, &mtypes.QueryLeasesRequest{
 		Filters: filter,
 	})
 	if err != nil {

@@ -20,11 +20,11 @@ import (
 	"github.com/cosmos/cosmos-sdk/version"
 
 	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	qmock "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
-	qmock "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/sdl"
 	"github.com/akash-network/node/testutil"
 

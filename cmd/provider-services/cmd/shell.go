@@ -19,11 +19,11 @@ import (
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
-	akashclient "github.com/akash-network/node/client"
 	cutils "github.com/akash-network/node/x/cert/utils"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
+	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -34,7 +34,7 @@ const (
 )
 
 var (
-	errTerminalNotATty = errors.New("Input is not a terminal, cannot setup TTY")
+	errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
 )
 
 func LeaseShellCmd() *cobra.Command {
@@ -107,6 +107,13 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	ctx := cmd.Context()
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
+
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
@@ -118,12 +125,12 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 	lID := bidID.LeaseID()
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
+	cert, err := cutils.LoadAndQueryCertificateForAccount(ctx, cctx, nil)
 	if err != nil {
 		return markRPCServerError(err)
 	}
 
-	gclient, err := gwrest.NewClient(akashclient.NewQueryClientFromCtx(cctx), prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
 	if err != nil {
 		return err
 	}
@@ -133,7 +140,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	var terminalResizes chan remotecommand.TerminalSize
 	wg := &sync.WaitGroup{}
-	ctx, cancel := context.WithCancel(cmd.Context())
+	ctx, cancel := context.WithCancel(ctx)
 
 	if tsq != nil {
 		terminalResizes = make(chan remotecommand.TerminalSize, 1)

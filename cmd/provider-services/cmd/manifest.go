@@ -14,10 +14,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	akashclient "github.com/akash-network/node/client"
 	"github.com/akash-network/node/sdl"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
+	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -51,6 +51,13 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 
+	ctx := cmd.Context()
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
+
 	sdl, err := sdl.ReadFile(sdlpath)
 	if err != nil {
 		return err
@@ -72,7 +79,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	}
 
 	// owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), dtypes.DeploymentID{
+	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
 		Owner: cctx.GetFromAddress().String(),
 		DSeq:  dseq,
 	})
@@ -93,7 +100,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(akashclient.NewQueryClientFromCtx(cctx), prov, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
 		if err != nil {
 			return err
 		}

@@ -11,10 +11,10 @@ import (
 	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	aclient "github.com/akash-network/node/client"
 	"github.com/akash-network/node/pubsub"
 
 	"github.com/akash-network/provider/bidengine"
+	aclient "github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -56,7 +56,6 @@ type Service interface {
 
 // NewService creates and returns new Service instance
 // Simple wrapper around various services needed for running a provider.
-
 func NewService(ctx context.Context,
 	cctx client.Context,
 	accAddr sdk.AccAddress,
@@ -82,7 +81,13 @@ func NewService(ctx context.Context,
 	clusterConfig.DeploymentIngressDomain = cfg.DeploymentIngressDomain
 	clusterConfig.ClusterSettings = cfg.ClusterSettings
 
-	bc, err := newBalanceChecker(ctx, bankTypes.NewQueryClient(cctx), aclient.NewQueryClientFromCtx(cctx), accAddr, session, bus, cfg.BalanceCheckerCfg)
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+
+	bc, err := newBalanceChecker(ctx, bankTypes.NewQueryClient(cctx), cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
 	if err != nil {
 		session.Log().Error("starting balance checker", "err", err)
 		cancel()
