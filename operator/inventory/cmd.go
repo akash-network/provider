@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"sync"
@@ -93,6 +94,30 @@ func Cmd() *cobra.Command {
 				return err
 			}
 			storage = append(storage, st)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			// Channel to receive error messages from the goroutine
+			errChan := make(chan error, 1)
+
+			// Start FeatureDiscovery in a separate goroutine
+			go func() {
+				errChan <- FeatureDiscovery(ctx)
+			}()
+
+			// ... other code ...
+
+			select {
+			case err := <-errChan:
+				// Handle error from FeatureDiscovery
+				// You might log the error, or take corrective action
+				log.Printf("FeatureDiscovery encountered an error: %v", err)
+			case <-cmd.Context().Done():
+				// Handle the case where the main command is stopped
+				// Cancel the context used by FeatureDiscovery
+				cancel()
+			}
 
 			if st, err = NewRancher(cmd.Context()); err != nil {
 				return err
