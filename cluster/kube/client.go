@@ -51,7 +51,13 @@ type Client interface {
 
 var _ Client = (*client)(nil)
 
+// type invResp struct {
+// 	inv ctypes.Inventory
+// 	err error
+// }
+
 type client struct {
+	ctx               context.Context
 	kc                kubernetes.Interface
 	ac                akashclient.Interface
 	metc              metricsclient.Interface
@@ -105,14 +111,20 @@ func NewClient(ctx context.Context, log log.Logger, ns string, configPath string
 		return nil, fmt.Errorf("kube: error creating metrics client: %w", err)
 	}
 
-	return &client{
+	cl := &client{
+		ctx:               ctx,
 		kc:                kc,
 		ac:                mc,
 		metc:              metc,
 		ns:                ns,
 		log:               log.With("client", "kube"),
 		kubeContentConfig: config,
-	}, nil
+	}
+
+	// group := fromctx.ErrGroupFromCtx(ctx)
+	// group.Go(cl.inventoryRun)
+
+	return cl, nil
 }
 
 func (c *client) GetDeployment(ctx context.Context, dID dtypes.DeploymentID) ([]ctypes.IDeployment, error) {

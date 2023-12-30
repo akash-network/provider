@@ -3,10 +3,11 @@ kind: Service
 metadata:
   labels:
     akash.network: "true"
-    app.kubernetes.io/name: akash
-    app.kubernetes.io/instance: inventory
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/instance: inventory-service
     app.kubernetes.io/component: operator
-  name: inventory-operator
+    app.kubernetes.io/part-of: provider
+  name: operator-inventory
   namespace: akash-services
 spec:
   type: ClusterIP
@@ -15,7 +16,12 @@ spec:
       port: 8080
       targetPort: api
       appProtocol: http
+    - name: grpc
+      port: 8081
+      targetPort: grpc
+      appProtocol: tcp
   selector:
-    app.kubernetes.io/name: akash
-    app.kubernetes.io/instance: inventory
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/instance: inventory-service
     app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider

@@ -1,0 +1,77 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: operator-inventory
+  labels:
+    akash.network: "true"
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/instance: inventory-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: operator-inventory
+subjects:
+  - kind: ServiceAccount
+    name: operator-inventory
+    namespace: akash-services
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: operator-inventory-node
+  labels:
+    akash.network: "true"
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/instance: inventory-node
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: operator-inventory-node
+subjects:
+  - kind: ServiceAccount
+    name: operator-inventory-node
+    namespace: akash-services
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akash-ip-operator-manage-service
+subjects:
+  - kind: ServiceAccount
+    name: akash-ip-operator
+    namespace: akash-services
+roleRef:
+  kind: ClusterRole
+  name: akash-ip-op-manage-service
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akash-ip-operator-watch-providerleasedip
+subjects:
+  - kind: ServiceAccount
+    name: akash-ip-operator
+    namespace: akash-services
+roleRef:
+  kind: ClusterRole
+  name: akash-ip-op-watch-providerleasedip
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akash-ip-operator-watch-configmaps
+subjects:
+  - kind: ServiceAccount
+    name: akash-ip-operator
+    namespace: akash-services
+roleRef:
+  kind: ClusterRole
+  name: akash-ip-op-watch-configmaps
+  apiGroup: rbac.authorization.k8s.io

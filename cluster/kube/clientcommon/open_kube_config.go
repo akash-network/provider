@@ -12,7 +12,7 @@ import (
 
 func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
 	// Always bypass the default rate limiting
-	rateLimiter := flowcontrol.NewFakeAlwaysRateLimiter()
+	rateLimiter := flowcontrol.NewTokenBucketRateLimiter(1000, 3000)
 
 	// if cfgPath contains value it is either set to default value $HOME/.kube/config
 	// or explicitly by env/flag AP_KUBECONFIG/--kubeconfig
@@ -36,6 +36,7 @@ func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
 		return cfg, fmt.Errorf("%w: error building kubernetes config", err)
 	}
 	cfg.RateLimiter = rateLimiter
+	// cfg.Timeout
 
 	return cfg, err
 }

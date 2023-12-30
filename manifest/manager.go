@@ -334,12 +334,12 @@ func (m *manager) fillAllRequests(response error) {
 
 func (m *manager) emitReceivedEvents() {
 	if !m.fetched || len(m.manifests) == 0 {
-		m.log.Debug("emit received events skipped", "data", m.data, "manifests", len(m.manifests))
+		m.log.Debug("emit received events skipped", "manifests", len(m.manifests))
 		return
 	}
 
 	if len(m.localLeases) == 0 {
-		m.log.Debug("emit received events skips due to no leases", "data", m.data, "manifests", len(m.manifests))
+		m.log.Debug("emit received events skips due to no leases", "manifests", len(m.manifests))
 		m.fillAllRequests(ErrNoLeaseForDeployment)
 		return
 	}

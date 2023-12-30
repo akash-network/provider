@@ -25,7 +25,6 @@ import (
 )
 
 func NewRootCmd() *cobra.Command {
-
 	encodingConfig := app.MakeEncodingConfig()
 
 	cmd := &cobra.Command{

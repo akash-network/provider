@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
@@ -16,6 +17,7 @@ import (
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	"github.com/akash-network/akash-api/go/util/units"
 )
 
 var (
@@ -61,20 +63,38 @@ type InventoryNodeMetric struct {
 	StorageEphemeral uint64 `json:"storage_ephemeral"`
 }
 
-type GPUAttributes map[string][]string
+type GPUModelAttributes struct {
+	RAM       string
+	Interface string
+}
+
+type GPUModels map[string]*GPUModelAttributes
+
+type GPUAttributes map[string]GPUModels
 
 type StorageAttributes struct {
 	Persistent bool   `json:"persistent"`
 	Class      string `json:"class,omitempty"`
 }
 
+func (m GPUModels) ExistsOrWildcard(model string) (*GPUModelAttributes, bool) {
+	attr, exists := m[model]
+	if exists {
+		return attr, true
+	}
+
+	attr, exists = m["*"]
+
+	return attr, exists
+}
+
 func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
-	var nvidia []string
-	var amd []string
+	nvidia := make(GPUModels)
+	amd := make(GPUModels)
 
 	for _, attr := range attrs {
 		tokens := strings.Split(attr.Key, "/")
-		if len(tokens) != 4 {
+		if len(tokens) < 4 || len(tokens)%2 != 0 {
 			return GPUAttributes{}, fmt.Errorf("invalid GPU attribute") // nolint: goerr113
 		}
 
@@ -84,13 +104,55 @@ func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
 			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[0]) // nolint: goerr113
 		}
 
-		switch tokens[1] {
-		case "nvidia":
-			nvidia = append(nvidia, tokens[3])
-		case "amd":
-			amd = append(amd, tokens[3])
+		switch tokens[2] {
+		case "model":
 		default:
-			return GPUAttributes{}, fmt.Errorf("unsupported GPU vendor (%s)", tokens[1]) // nolint: goerr113
+			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[2]) // nolint: goerr113
+		}
+
+		vendor := tokens[1]
+		model := tokens[3]
+
+		var mattrs *GPUModelAttributes
+
+		if len(tokens) > 4 {
+			mattrs = &GPUModelAttributes{}
+
+			tokens = tokens[4:]
+
+			for i := 0; i < len(tokens); i += 2 {
+				key := tokens[i]
+				val := tokens[i+1]
+
+				switch key {
+				case "ram":
+					q, err := units.MemoryQuantityFromString(val)
+					if err != nil {
+						return GPUAttributes{}, err
+					}
+
+					mattrs.RAM = q.StringWithSuffix("Gi")
+				case "interface":
+					switch val {
+					case "pcie":
+					case "sxm":
+					default:
+						return GPUAttributes{}, fmt.Errorf("unsupported GPU interface (%s)", val) // nolint: goerr113
+					}
+
+					mattrs.Interface = val
+				default:
+				}
+			}
+		}
+
+		switch vendor {
+		case "nvidia":
+			nvidia[model] = mattrs
+		case "amd":
+			amd[model] = mattrs
+		default:
+			return GPUAttributes{}, fmt.Errorf("unsupported GPU vendor (%s)", vendor) // nolint: goerr113
 		}
 
 	}
@@ -215,6 +277,7 @@ func WithDryRun() InventoryOption {
 type Inventory interface {
 	Adjust(ReservationGroup, ...InventoryOption) error
 	Metrics() InventoryMetrics
+	Snapshot() inventoryV1.Cluster
 }
 
 // ServiceLog stores name, stream and scanner

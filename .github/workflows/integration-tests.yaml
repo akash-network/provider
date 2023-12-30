@@ -16,47 +16,123 @@ jobs:
       KIND_NAME: kube
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - name: Setup GOPATH
+        run: echo "GOPATH=$GITHUB_WORKSPACE/go" >> $GITHUB_ENV
+      - name: Ensure GOPATH dirs
+        run: mkdir -p ${{ env.GOPATH }}/{src,bin,pkg}
+      - name: Checkout codebase
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          set-safe-directory: true
+          path: go/src/github.com/akash-network/provider
       - name: Detect required Go version
+        working-directory: "${{ env.GOPATH }}/src/github.com/akash-network/provider"
         run: |
           toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
           echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
       - uses: actions/setup-go@v4
         with:
           go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
+      - name: Install tools
+        run: |
+          curl -sfL https://direnv.net/install.sh | bash
+          go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
+      - name: Hook direnv to bash
+        run: echo 'eval "$(direnv hook bash)"' >> $HOME/.bashrc
+      - name: Direnv allow
+        run: direnv allow ${{ env.GOPATH }}/src/github.com/akash-network/provider
+      - name: Checkout akash-api
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          AKASH_API_VERSION=$(go list -mod=readonly -m -f '{{ .Version }}' github.com/akash-network/akash-api)
+          echo "AKASH_API_VERSION=$AKASH_API_VERSION" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v4
+        with:
+          repository: "akash-network/akash-api"
+          fetch-depth: 0
+          set-safe-directory: true
+          path: go/src/github.com/akash-network/akash-api
+          ref: ${{ env.AKASH_API_VERSION }}
+      - name: Setup akash-api
+        run: |
+          direnv allow ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
+          cd ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
+          cat "$GITHUB_ENV" > "$GITHUB_WORKSPACE/env.backup"
+          direnv export gha >> "$GITHUB_ENV"
+      - name: Add akash-api to go.work
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
+        run: |
+          make modvendor
+          printf "use (\n\t.\n)\n" > ../provider/go.work
+          printf "\ngo ${{ env.GOVERSION }}\n" >> ../provider/go.work
+          printf "\nreplace (\n\tgithub.com/akash-network/akash-api => ../akash-api\n)\n" >> ../provider/go.work
+          cat "$GITHUB_WORKSPACE/env.backup" > "$GITHUB_ENV"
+      - name: Setup direnv for provider
+        run: direnv export gha >> "$GITHUB_ENV"
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
       - name: Fetch kind version from go modules
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: echo "KIND_VERSION=$(go list -mod=readonly -m -f '{{ .Version }}' sigs.k8s.io/kind)" >> $GITHUB_ENV
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v2
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
       - name: Go mod tidy
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: go mod tidy
       - name: Make node scripts executable
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: make chmod-akash-scripts
-      - uses: helm/kind-action@v1
+      - name: Setup kind
+        uses: helm/kind-action@v1
         with:
           version: "${{ env.KIND_VERSION }}"
           node_image: "kindest/node:${{ env.KINDEST_VERSION }}"
           cluster_name: "${{ env.KIND_NAME }}"
-          config: ./_run/kube/kind-config.yaml
+          config: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube/kind-config.yaml
       - name: Configure Kind cluster
-        run: KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kube-cluster-setup-e2e-ci
-      - name: k8s-ingress
-        run: make -s -C _run/kube kind-k8s-ip
-      - name: Kube Environment
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kube-cluster-setup-e2e-ci
+      - name: Setup K8S ingress
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          make -s -C _run/kube kind-k8s-ip
+      - name: K8S dump config
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           kubectl config view
+      - name: K8S dump cluster info
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
           kubectl cluster-info
+      - name: K8S dump running pods
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
           kubectl get pods,ingress,svc -A
+      - name: K8S wait for operator inventory
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          make -s -C _run/kube kube-deployment-rollout-operator-inventory
+      - name: K8S test operator inventory GRPC ports
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          __pod=$(kubectl -n akash-services get pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-node --no-headers -o custom-columns=":metadata.name")
+          kubectl -n akash-services port-forward --address 0.0.0.0 pod/$__pod 8444:grpc &
+          kubectl -n akash-services port-forward --address 0.0.0.0 service/operator-inventory 8445:grpc &
+          ./script/inventory-grpc-probe.sh --host=localhost:8444 --mode=plaintext akash.inventory.v1.NodeRPC/QueryNode
+          ./script/inventory-grpc-probe.sh --host=localhost:8445 --mode=plaintext akash.inventory.v1.ClusterRPC/QueryCluster
+          kubectl -n akash-services logs service/operator-inventory
       - name: Run E2E Tests
-        run: make test-e2e-integration
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          make test-e2e-integration
       - name: Run K8s Tests
-        run: make test-k8s-integration
-      - name: Post-Run Kube Environment
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          make test-k8s-integration
+      - name: Post-Run K8S environment
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           kubectl get ns,pods,ingress,svc -A

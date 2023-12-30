@@ -9,25 +9,23 @@ import (
 	"strings"
 	"time"
 
+	inventory "github.com/akash-network/akash-api/go/inventory/v1"
 	"github.com/go-logr/logr"
-	"github.com/pkg/errors"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
 	rookifactory "github.com/rook/rook/pkg/client/informers/externalversions"
+	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/watch"
 
-	"github.com/akash-network/node/util/runner"
-
 	akashv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 const (
 	crdDiscoverPeriod = 30 * time.Second
-)
-
-var (
-	errCephInventoryInProgress = errors.New("ceph inventory is being updated")
+	falseVal          = "false"
 )
 
 type stats struct {
@@ -80,6 +78,7 @@ type cephStorageClass struct {
 
 type cephStorageClasses map[string]cephStorageClass
 
+// nolint: unused
 func (sc cephStorageClasses) dup() cephStorageClasses {
 	res := make(cephStorageClasses, len(sc))
 
@@ -90,6 +89,7 @@ func (sc cephStorageClasses) dup() cephStorageClasses {
 	return res
 }
 
+// nolint: unused
 func (cc cephClusters) dup() cephClusters {
 	res := make(cephClusters, len(cc))
 
@@ -100,25 +100,47 @@ func (cc cephClusters) dup() cephClusters {
 	return res
 }
 
-type ceph struct {
-	exe    RemotePodCommandExecutor
-	ctx    context.Context
-	cancel context.CancelFunc
-	querier
+type scrapeResp struct {
+	storage inventory.ClusterStorage
+	err     error
 }
 
-func NewCeph(ctx context.Context) (Storage, error) {
+type scrapeReq struct {
+	scs      cephStorageClasses
+	clusters map[string]string
+	respch   chan<- scrapeResp
+}
+
+type ceph struct {
+	exe      RemotePodCommandExecutor
+	ctx      context.Context
+	cancel   context.CancelFunc
+	scrapech chan scrapeReq
+}
+
+func NewCeph(ctx context.Context) (QuerierStorage, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	c := &ceph{
-		exe:     NewRemotePodCommandExecutor(KubeConfigFromCtx(ctx), KubeClientFromCtx(ctx)),
-		ctx:     ctx,
-		cancel:  cancel,
-		querier: newQuerier(),
+		exe:      NewRemotePodCommandExecutor(fromctx.KubeConfigFromCtx(ctx), fromctx.KubeClientFromCtx(ctx)),
+		ctx:      ctx,
+		cancel:   cancel,
+		scrapech: make(chan scrapeReq, 1),
 	}
 
-	group := ErrGroupFromCtx(ctx)
-	group.Go(c.run)
+	startch := make(chan struct{}, 1)
+
+	group := fromctx.ErrGroupFromCtx(ctx)
+	group.Go(func() error {
+		return c.run(startch)
+	})
+	group.Go(c.scraper)
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-startch:
+	}
 
 	return c, nil
 }
@@ -139,31 +161,19 @@ func (c *ceph) crdInstalled(log logr.Logger, rc *rookclientset.Clientset) bool {
 	return false
 }
 
-func (c *ceph) run() error {
-	events := make(chan interface{}, 1000)
-
-	pubsub := PubSubFromCtx(c.ctx)
-
-	defer pubsub.Unsub(events)
-	pubsub.AddSub(events, "ns", "sc")
-
-	log := LogFromCtx(c.ctx).WithName("rook-ceph")
-
-	clusters := make(cephClusters)
-	scs := make(cephStorageClasses)
-
-	scrapeData := resp{
-		res: nil,
-		err: errCephInventoryInProgress,
-	}
-
-	scrapech := runner.Do(func() runner.Result {
-		return runner.NewResult(c.scrapeMetrics(c.ctx, scs.dup(), clusters.dup()))
-	})
+func (c *ceph) run(startch chan<- struct{}) error {
+	bus := fromctx.PubSubFromCtx(c.ctx)
 
 	cephClustersTopic := "cephclusters"
 
-	pubsub.AddSub(events, cephClustersTopic)
+	events := bus.Sub("ns", "sc", "pv", cephClustersTopic)
+
+	defer bus.Unsub(events)
+
+	log := fromctx.LogrFromCtx(c.ctx).WithName("rook-ceph")
+
+	clusters := make(cephClusters)
+	scs := make(cephStorageClasses)
 
 	rc := RookClientFromCtx(c.ctx)
 
@@ -171,6 +181,23 @@ func (c *ceph) run() error {
 	informer := factory.Ceph().V1().CephClusters().Informer()
 
 	crdDiscoverTick := time.NewTicker(1 * time.Second)
+
+	scrapeRespch := make(chan scrapeResp, 1)
+	scrapech := c.scrapech
+
+	startch <- struct{}{}
+
+	tryScrape := func() {
+		select {
+		case scrapech <- scrapeReq{
+			scs:      scs,
+			clusters: clusters,
+			respch:   scrapeRespch,
+		}:
+			scrapech = nil
+		default:
+		}
+	}
 
 	for {
 		select {
@@ -180,7 +207,7 @@ func (c *ceph) run() error {
 			if c.crdInstalled(log, rc) {
 				crdDiscoverTick.Stop()
 				InformKubeObjects(c.ctx,
-					pubsub,
+					bus,
 					informer,
 					cephClustersTopic)
 			} else {
@@ -214,7 +241,7 @@ func (c *ceph) run() error {
 					case watch.Modified:
 						lblVal := obj.Labels["akash.network"]
 						if lblVal == "" {
-							lblVal = "false"
+							lblVal = falseVal
 						}
 
 						sc := cephStorageClass{}
@@ -242,6 +269,7 @@ func (c *ceph) run() error {
 					}
 
 					log.Info(msg, "name", obj.Name)
+					tryScrape()
 				case *rookv1.CephCluster:
 					switch evt.Type {
 					case watch.Added:
@@ -256,30 +284,78 @@ func (c *ceph) run() error {
 						log.Info(msg, "ns", obj.Namespace, "name", obj.Name)
 						delete(clusters, obj.Name)
 					}
+				case *corev1.PersistentVolume:
+					tryScrape()
 				}
 			}
-		case req := <-c.reqch:
-			req.respCh <- scrapeData
-		case res := <-scrapech:
-			r := resp{}
-			if err := res.Error(); err != nil {
-				r.err = errCephInventoryInProgress
-				log.Error(err, "unable to pull ceph status")
+		case res := <-scrapeRespch:
+			if len(res.storage) > 0 {
+				bus.Pub(storageSignal{
+					driver:  "ceph",
+					storage: res.storage,
+				}, []string{topicStorage})
 			}
 
-			if data, valid := res.Value().([]akashv2beta2.InventoryClusterStorage); valid {
-				r.res = data
-			}
-
-			scrapeData = r
-
-			scrapech = runner.Do(func() runner.Result {
-				return runner.NewResult(c.scrapeMetrics(c.ctx, scs.dup(), clusters.dup()))
-			})
+			scrapech = c.scrapech
 		}
 	}
 }
 
+func (c *ceph) scraper() error {
+	log := fromctx.LogrFromCtx(c.ctx).WithName("rook-ceph")
+
+	for {
+		select {
+		case <-c.ctx.Done():
+			return c.ctx.Err()
+		case req := <-c.scrapech:
+			var res inventory.ClusterStorage
+
+			dfResults := make(map[string]dfResp, len(req.clusters))
+			for clusterID, ns := range req.clusters {
+				stdout, _, err := c.exe.ExecCommandInContainerWithFullOutputWithTimeout(c.ctx, "rook-ceph-tools", "rook-ceph-tools", ns, "ceph", "df", "--format", "json")
+				if err != nil {
+					log.Error(err, "unable to scrape ceph metrics")
+				}
+
+				rsp := dfResp{}
+
+				_ = json.Unmarshal([]byte(stdout), &rsp)
+
+				dfResults[clusterID] = rsp
+			}
+
+			for class, params := range req.scs {
+				df, exists := dfResults[params.clusterID]
+				if !exists || !params.isAkashManaged {
+					continue
+				}
+
+				for _, pool := range df.Pools {
+					if pool.Name == params.pool {
+						res = append(res, inventory.Storage{
+							Quantity: inventory.ResourcePair{
+								Allocated:   resource.NewQuantity(int64(pool.Stats.BytesUsed), resource.DecimalSI),
+								Allocatable: resource.NewQuantity(int64(pool.Stats.MaxAvail), resource.DecimalSI),
+							},
+							Info: inventory.StorageInfo{
+								Class: class,
+							},
+						})
+						break
+					}
+				}
+			}
+
+			req.respch <- scrapeResp{
+				storage: res,
+				err:     nil,
+			}
+		}
+	}
+}
+
+// nolint: unused
 func (c *ceph) scrapeMetrics(ctx context.Context, scs cephStorageClasses, clusters map[string]string) ([]akashv2beta2.InventoryClusterStorage, error) {
 	var res []akashv2beta2.InventoryClusterStorage
 

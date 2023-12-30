@@ -14,6 +14,7 @@ func Cmd() *cobra.Command {
 	}
 
 	cmd.AddCommand(inventory.Cmd())
+	cmd.AddCommand(cmdPsutil())
 
 	return cmd
 }

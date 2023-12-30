@@ -97,7 +97,6 @@ while getopts ":$short_opts-:" o; do
             CRD_FILE=$OPTARG
             ;;
     esac
-    echo "OPT $o=$OPTARG"
 done
 shift "$((OPTIND - 1))"
 
@@ -120,7 +119,6 @@ install_crd() {
     set -x
     kubectl apply -f "$CRD_FILE"
     kubectl apply -f "$rootdir/_docs/kustomize/storage/storageclass.yaml"
-    kubectl patch node "${KIND_NAME}-control-plane" -p '{"metadata":{"labels":{"akash.network/storageclasses":"beta2.default"}}}'
 }
 
 install_metrics() {

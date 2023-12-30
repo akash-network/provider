@@ -1,0 +1,37 @@
+{
+    "10de":{
+        "name": "nvidia",
+        "devices": {
+            "20b0": {
+                "name": "",
+                "interface": "SXM4",
+                "memory_size": "40Gi"
+            },
+            "20b1": {
+                "name": "",
+                "interface": "PCIe",
+                "memory_size": "40Gi"
+            },
+            "20b2": {
+                "name": "",
+                "interface": "SXM4",
+                "memory_size": "80Gi"
+            },
+            "20b3": {
+                "name": "",
+                "interface": "SXM",
+                "memory_size": "64Gi"
+            },
+            "20b5": {
+                "name": "",
+                "interface": "PCIe",
+                "memory_size": "80Gi"
+            },
+            "20f1": {
+                "name": "",
+                "interface": "PCIe",
+                "memory_size": "40Gi"
+            }
+        }
+    }
+}

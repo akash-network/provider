@@ -1,0 +1,75 @@
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: operator-inventory-node
+  namespace: akash-services
+  labels:
+    akash.network: "true"
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/instance: inventory-node
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: inventory
+      app.kubernetes.io/instance: inventory-node
+      app.kubernetes.io/component: operator
+      app.kubernetes.io/part-of: provider
+  template:
+    metadata:
+      labels:
+        akash.network: "true"
+        app.kubernetes.io/name: inventory
+        app.kubernetes.io/instance: inventory-node
+        app.kubernetes.io/component: operator
+        app.kubernetes.io/part-of: provider
+    spec:
+      serviceAccountName: operator-inventory-node
+      containers:
+        - name: inventory-node
+          image: ghcr.io/akash-network/provider
+          args:
+            - "provider-services"
+            - "operator"
+            - "inventory"
+            - "node"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+              name: api
+              protocol: TCP
+            - containerPort: 8081
+              name: grpc
+              protocol: TCP
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "250m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /metrics/health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /metrics/ready
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          env:
+            - name: AP_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: AP_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
