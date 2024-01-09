@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"time"
 
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -200,15 +202,16 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Result {
 	return runner.Do(func() runner.Result {
 		// TODO: retry, timeout
-		err := m.session.Client().Tx().Broadcast(ctx, &mtypes.MsgCloseBid{
+		msg := &mtypes.MsgCloseBid{
 			BidID: m.deployment.LeaseID().BidID(),
-		})
+		}
+		res, err := m.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 		if err != nil {
 			m.log.Error("closing deployment", "err", err)
 		} else {
 			m.log.Info("bidding on lease closed")
 		}
-		return runner.NewResult(nil, err)
+		return runner.NewResult(res, err)
 	})
 }
 

@@ -6,12 +6,12 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
-	akashclient "github.com/akash-network/node/client"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	cutils "github.com/akash-network/node/x/cert/utils"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
+	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -40,6 +40,13 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
+	ctx := cmd.Context()
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
+
 	svcName, err := cmd.Flags().GetString(FlagService)
 	if err != nil {
 		return err
@@ -60,7 +67,7 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return markRPCServerError(err)
 	}
 
-	gclient, err := gwrest.NewClient(akashclient.NewQueryClientFromCtx(cctx), prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
 	if err != nil {
 		return err
 	}

@@ -12,10 +12,10 @@ import (
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	akashclient "github.com/akash-network/node/client"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
+	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -45,6 +45,13 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		return err
 	}
 
+	ctx := cmd.Context()
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
+
 	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
 	if err != nil {
 		return markRPCServerError(err)
@@ -55,7 +62,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		return err
 	}
 
-	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), dtypes.DeploymentID{
+	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
 		Owner: cctx.GetFromAddress().String(),
 		DSeq:  dseq,
 	})
@@ -99,12 +106,10 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	streams := make([]result, 0, len(leases))
 
-	ctx := cmd.Context()
-
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(akashclient.NewQueryClientFromCtx(cctx), prov, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {

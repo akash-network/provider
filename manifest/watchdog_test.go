@@ -9,12 +9,11 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	clientmocks "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
-	broadcastmocks "github.com/akash-network/node/client/broadcaster/mocks"
-	clientmocks "github.com/akash-network/node/client/mocks"
 	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/session"
@@ -24,7 +23,7 @@ type watchdogTestScaffold struct {
 	client     *clientmocks.Client
 	parentCh   chan struct{}
 	doneCh     chan dtypes.DeploymentID
-	broadcasts chan sdk.Msg
+	broadcasts chan []sdk.Msg
 	leaseID    types.LeaseID
 	provider   ptypes.Provider
 }
@@ -33,16 +32,15 @@ func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *
 	scaffold := &watchdogTestScaffold{}
 	scaffold.parentCh = make(chan struct{})
 	scaffold.doneCh = make(chan dtypes.DeploymentID, 1)
-	scaffold.broadcasts = make(chan sdk.Msg)
 	scaffold.provider = testutil.Provider(t)
 	scaffold.leaseID = testutil.LeaseID(t)
 	scaffold.leaseID.Provider = scaffold.provider.Owner
-	scaffold.broadcasts = make(chan sdk.Msg, 1)
+	scaffold.broadcasts = make(chan []sdk.Msg, 1)
 
-	txClientMock := &broadcastmocks.Client{}
-	txClientMock.On("Broadcast", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
-		scaffold.broadcasts <- args.Get(1).(sdk.Msg)
-	}).Return(nil)
+	txClientMock := &clientmocks.TxClient{}
+	txClientMock.On("Broadcast", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		scaffold.broadcasts <- args.Get(1).([]sdk.Msg)
+	}).Return(&sdk.Result{}, nil)
 
 	scaffold.client = &clientmocks.Client{}
 	scaffold.client.On("Tx").Return(txClientMock)
@@ -55,7 +53,7 @@ func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *
 	return wd, scaffold
 }
 
-func TestWatchdogTimesout(t *testing.T) {
+func TestWatchdogTimeout(t *testing.T) {
 	wd, scaffold := makeWatchdogTestScaffold(t, 3*time.Second)
 
 	select {
@@ -65,10 +63,15 @@ func TestWatchdogTimesout(t *testing.T) {
 	}
 
 	// Check that close bid was sent
-	msg := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
-	closeBid, ok := msg.(*types.MsgCloseBid)
-	require.True(t, ok)
-	require.Equal(t, closeBid.BidID.LeaseID(), scaffold.leaseID)
+	broadcasts := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	require.IsType(t, []sdk.Msg{}, broadcasts)
+
+	msgs := broadcasts.([]sdk.Msg)
+	require.Len(t, msgs, 1)
+	require.IsType(t, &types.MsgCloseBid{}, msgs[0])
+
+	msg := msgs[0].(*types.MsgCloseBid)
+	require.Equal(t, scaffold.leaseID, msg.BidID.LeaseID())
 
 	deploymentID := testutil.ChannelWaitForValue(t, scaffold.doneCh)
 	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())

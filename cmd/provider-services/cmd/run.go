@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -19,26 +20,22 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/cosmos/cosmos-sdk/client/tx"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	"github.com/akash-network/node/client"
 	"github.com/akash-network/node/cmd/common"
 	"github.com/akash-network/node/events"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/sdl"
-	cmodule "github.com/akash-network/node/x/cert"
 	cutils "github.com/akash-network/node/x/cert/utils"
 	config2 "github.com/akash-network/node/x/provider/config"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
-	"github.com/akash-network/provider/client/broadcaster"
+	"github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -453,7 +450,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	dockerImagePullSecretsName := viper.GetString(FlagDockerImagePullSecretsName)
 	strategy := viper.GetString(FlagBidPricingStrategy)
 	deploymentIngressExposeLBHosts := viper.GetBool(FlagDeploymentIngressExposeLBHosts)
-	from := viper.GetString(flags.FlagFrom)
+	// from := viper.GetString(flags.FlagFrom)
 	overcommitPercentStorage := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentStorage)/100.0)
 	overcommitPercentCPU := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentCPU)/100.0)
 	// no GPU overcommit
@@ -469,7 +466,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	cachedResultMaxAge := viper.GetDuration(FlagCachedResultMaxAge)
 	rpcQueryTimeout := viper.GetDuration(FlagRPCQueryTimeout)
 	enableIPOperator := viper.GetBool(FlagEnableIPOperator)
-	txTimeout := viper.GetDuration(FlagTxBroadcastTimeout)
+	// txTimeout := viper.GetDuration(FlagTxBroadcastTimeout)
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
@@ -487,25 +484,23 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		metricsRouter = makeMetricsRouter()
 	}
 
-	cctx := sdkclient.GetClientContextFromCmd(cmd)
+	clGroup, clCtx := errgroup.WithContext(ctx)
 
-	_, _, _, err = sdkclient.GetFromFields(cctx, cctx.Keyring, from)
+	cctx, err := sdkclient.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	cctx, err = sdkclient.GetClientTxContext(cmd)
+	cl, err := client.DiscoverClient(clCtx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	txFactory := tx.NewFactoryCLI(cctx, cmd.Flags()).WithTxConfig(cctx.TxConfig).WithAccountRetriever(cctx.AccountRetriever)
-
-	keyname := cctx.GetFromName()
-	info, err := txFactory.Keybase().Key(keyname)
-	if err != nil {
-		return err
-	}
+	// keyname := cctx.GetFromName()
+	// info, err := txFactory.Keybase().Key(keyname)
+	// if err != nil {
+	// 	return err
+	// }
 
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
 
@@ -514,7 +509,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		certFromFlag = bytes.NewBufferString(val)
 	}
 
-	kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
+	kpm, err := cutils.NewKeyPairManager(cl.ClientContext(), cctx.FromAddress)
 	if err != nil {
 		return err
 	}
@@ -525,8 +520,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	// Check that the certificate exists on chain and is not revoked
-	cquery := cmodule.AppModuleBasic{}.GetQueryClient(cctx)
-	cresp, err := cquery.Certificates(cmd.Context(), &ctypes.QueryCertificatesRequest{
+	cresp, err := cl.Query().Certificates(cmd.Context(), &ctypes.QueryCertificatesRequest{
 		Filter: ctypes.CertificateFilter{
 			Owner:  cctx.FromAddress.String(),
 			Serial: x509cert.SerialNumber.String(),
@@ -541,23 +535,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return errors.Errorf("no valid found on chain certificate for account %s", cctx.FromAddress)
 	}
 
-	broadcasterInstance, err := broadcaster.NewSerialClient(cmd.Context(), logger, cctx, txTimeout, txFactory, info)
-	if err != nil {
-		return err
-	}
-
-	aclient := client.NewClientWithBroadcaster(
-		logger,
-		cctx,
-		txFactory,
-		info,
-		client.NewQueryClientFromCtx(cctx),
-		broadcasterInstance,
-	)
-
-	res, err := aclient.Query().Provider(
+	res, err := cl.Query().Provider(
 		cmd.Context(),
-		&ptypes.QueryProviderRequest{Owner: info.GetAddress().String()},
+		&ptypes.QueryProviderRequest{Owner: cctx.FromAddress.String()},
 	)
 	if err != nil {
 		return err
@@ -597,7 +577,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	currentBlockHeight := statusResult.SyncInfo.LatestBlockHeight
-	session := session.New(logger, aclient, pinfo, currentBlockHeight)
+	session := session.New(logger, cl, pinfo, currentBlockHeight)
 
 	if err := cctx.Client.Start(); err != nil {
 		return err
@@ -606,7 +586,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	bus := pubsub.NewBus()
 	defer bus.Close()
 
-	group, ctx := errgroup.WithContext(ctx)
+	group, ctx := errgroup.WithContext(clCtx)
 
 	// Provider service creation
 	config := provider.NewDefaultConfig()
@@ -682,7 +662,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	operatorWaiter := waiter.NewOperatorWaiter(cmd.Context(), logger, waitClients...)
 
-	service, err := provider.NewService(ctx, cctx, info.GetAddress(), session, bus, cclient, ipOperatorClient, operatorWaiter, config)
+	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, session, bus, cclient, ipOperatorClient, operatorWaiter, config)
 	if err != nil {
 		return err
 	}
@@ -691,7 +671,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		ctx,
 		logger,
 		service,
-		cquery,
+		cl.Query(),
 		ipOperatorClient,
 		gwaddr,
 		cctx.FromAddress,
@@ -701,6 +681,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
+
+	clGroup.Go(func() error {
+		return group.Wait()
+	})
 
 	group.Go(func() error {
 		return events.Publish(ctx, cctx.Client, "provider-cli", bus)
@@ -738,11 +722,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		})
 	}
 
-	err = group.Wait()
-	broadcasterInstance.Close()
+	err = clGroup.Wait()
+
 	if ipOperatorClient != nil {
 		ipOperatorClient.Stop()
 	}
+
 	hostnameOperatorClient.Stop()
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
 		return err

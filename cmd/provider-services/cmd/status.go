@@ -5,9 +5,9 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
-	akashclient "github.com/akash-network/node/client"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
+	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -36,7 +36,14 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return err
 	}
 
-	gclient, err := gwrest.NewClient(akashclient.NewQueryClientFromCtx(cctx), addr, nil)
+	ctx := cmd.Context()
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
+
+	gclient, err := gwrest.NewClient(cl, addr, nil)
 	if err != nil {
 		return err
 	}

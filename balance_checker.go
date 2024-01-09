@@ -11,10 +11,9 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmrpc "github.com/tendermint/tendermint/rpc/core/types"
 
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-
-	aclient "github.com/akash-network/node/client"
 
 	"github.com/akash-network/node/pubsub"
 	netutil "github.com/akash-network/node/util/network"
@@ -124,7 +123,7 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	}
 
 	var syncInfo *tmrpc.SyncInfo
-	syncInfo, resp.err = bc.session.Client().NodeSyncInfo(ctx)
+	syncInfo, resp.err = bc.session.Client().Node().SyncInfo(ctx)
 	if resp.err != nil {
 		return resp
 	}
@@ -187,14 +186,15 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 }
 
 func (bc *balanceChecker) startWithdraw(ctx context.Context, lid mtypes.LeaseID) error {
+	ctx, cancel := context.WithTimeout(ctx, withdrawTimeout)
+	defer cancel()
+
 	msg := &mtypes.MsgWithdrawLease{
 		LeaseID: lid,
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, withdrawTimeout)
-	defer cancel()
-
-	return bc.session.Client().Tx().Broadcast(ctx, msg)
+	_, err := bc.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+	return err
 }
 
 func (bc *balanceChecker) run(startCh chan<- error) {

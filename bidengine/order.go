@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"time"
 
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
@@ -404,7 +405,7 @@ loop:
 			// Begin submitting fulfillment
 			msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
 			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(nil, o.session.Client().Tx().Broadcast(ctx, msg))
+				return runner.NewResult(o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 			})
 
 		case result := <-bidch:
@@ -456,9 +457,11 @@ loop:
 		if bidPlaced {
 			o.log.Debug("closing bid", "order-id", o.orderID)
 
-			err := o.session.Client().Tx().Broadcast(ctx, &mtypes.MsgCloseBid{
+			msg := &mtypes.MsgCloseBid{
 				BidID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
-			})
+			}
+
+			_, err := o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 			if err != nil {
 				o.log.Error("closing bid", "err", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()

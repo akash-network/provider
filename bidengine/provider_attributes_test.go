@@ -14,7 +14,7 @@ import (
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	akashtypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
-	clientmocks "github.com/akash-network/node/client/mocks"
+	clientmocks "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/testutil"
 
