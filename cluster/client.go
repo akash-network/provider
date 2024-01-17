@@ -54,6 +54,8 @@ type ReadClient interface {
 	AllHostnames(context.Context) ([]ctypes.ActiveHostname, error)
 	GetManifestGroup(context.Context, mtypes.LeaseID) (bool, crd.ManifestGroup, error)
 
+	AllModerationFilters(context.Context) ([]ctypes.ActiveFilters, error)
+
 	ObserveHostnameState(ctx context.Context) (<-chan ctypes.HostnameResourceEvent, error)
 	GetHostnameDeploymentConnections(ctx context.Context) ([]ctypes.LeaseIDHostnameConnection, error)
 
@@ -604,6 +606,10 @@ func (c *nullClient) GetManifestGroup(context.Context, mtypes.LeaseID) (bool, cr
 }
 
 func (c *nullClient) AllHostnames(context.Context) ([]ctypes.ActiveHostname, error) {
+	return nil, nil
+}
+
+func (c *nullClient) AllModerationFilters(context.Context) ([]ctypes.ActiveFilters, error) {
 	return nil, nil
 }
 

@@ -208,3 +208,13 @@ func resourcesFromAkash(aru types.Resources) (Resources, error) {
 
 	return res, nil
 }
+
+type FilterName struct {
+	Rules	[]Rules          `json:"rules"`
+}
+
+type Rules struct {
+	Type	string	`json:"type"`
+	Allow	bool `json:"allow"`
+	Pattern	string `json:"size"`
+}

@@ -24,6 +24,8 @@ type InventoryRequestExpansion interface{}
 
 type ManifestExpansion interface{}
 
+type ModerationFilterExpansion interface{}
+
 type ProviderHostExpansion interface{}
 
 type ProviderLeasedIPExpansion interface{}

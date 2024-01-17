@@ -25,6 +25,10 @@ import (
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
+
+	clusterClient "github.com/akash-network/provider/cluster/kube"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	"github.com/spf13/viper"
 )
 
 // order manages bidding and general lifecycle handling of an order.
@@ -402,11 +406,64 @@ loop:
 
 			offer := mtypes.ResourceOfferFromRU(reservation.GetAllocatedResources())
 
-			// Begin submitting fulfillment
-			msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
-			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
-			})
+			// Check if the provider's address matches the allowed or denied wallet addresses.
+			var allowWalletAddress, denyWalletAddress []string
+			ownerAddress := o.orderID.Owner
+
+			// Fetching configuration path and namespace from viper.
+			configPath, ns := viper.GetString(providerflags.FlagKubeConfig), viper.GetString(providerflags.FlagK8sManifestNS)
+
+			// Initialize a new client for cluster operations.
+			client, err := clusterClient.NewClient(ctx, o.log, ns, configPath)
+			if err != nil {
+				o.log.Error("Failed to initialize cluster client", "err", err)
+				break loop
+			}
+
+			// Retrieving all moderation filters.
+			allModerationFilters, err := client.AllModerationFilters(ctx)
+			if err != nil {
+					o.log.Error("Failed to retrieve moderation filters", "error", err)
+					break loop
+			}
+
+			// Filtering allowed and denied wallet addresses based on moderation filters.
+			for _, allFilters := range allModerationFilters {
+					if allFilters.Type == "TenantAddress" && allFilters.Allow {
+							allowWalletAddress = append(allowWalletAddress, allFilters.Pattern)
+					}
+					if allFilters.Type == "TenantAddress" && !allFilters.Allow {
+							denyWalletAddress = append(denyWalletAddress, allFilters.Pattern)
+					}
+			}
+
+			// Check if both allowWalletAddress and denyWalletAddress are empty
+			if len(allowWalletAddress) == 0 && len(denyWalletAddress) == 0 {
+				// Both lists are empty, proceeding to create and submit the bid
+				// Begin submitting fulfillment
+				msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
+				bidch = runner.Do(func() runner.Result {
+					return runner.NewResult(o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+				})
+			} else {
+				// Checking if the owner's address is in the allow or deny list and acting accordingly.
+				if ContainsString(allowWalletAddress, ownerAddress) {
+						// Address is allowed, proceeding to create and submit the bid.
+						// Begin submitting fulfillment
+						msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
+						bidch = runner.Do(func() runner.Result {
+							return runner.NewResult(o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+						})
+				} else if ContainsString(denyWalletAddress, ownerAddress) {
+						o.log.Info("Wallet Address Check", "denyWalletAddress", denyWalletAddress, "foundAddress", ownerAddress)
+						o.log.Error("Bid not placed: deployer's address is denied", "address", ownerAddress)
+						break loop
+				} else {
+						o.log.Info("Wallet Address Check", "allowedAddresses", allowWalletAddress, "foundAddress", ownerAddress)
+						o.log.Error("Bid not placed: deployer's address is not in the allow list", "address", ownerAddress)
+						break loop
+				}
+			}
 
 		case result := <-bidch:
 			bidch = nil
@@ -486,6 +543,15 @@ loop:
 	if pricech != nil {
 		<-pricech
 	}
+}
+
+func ContainsString(slice []string, target string) bool {
+	for _, element := range slice {
+			if element == target {
+					return true
+			}
+	}
+	return false
 }
 
 func (o *order) shouldBid(group *dtypes.Group) (bool, error) {

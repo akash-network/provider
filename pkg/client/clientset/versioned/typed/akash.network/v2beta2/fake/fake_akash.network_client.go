@@ -40,6 +40,10 @@ func (c *FakeAkashV2beta2) Manifests(namespace string) v2beta2.ManifestInterface
 	return &FakeManifests{c, namespace}
 }
 
+func (c *FakeAkashV2beta2) ModerationFilters(namespace string) v2beta2.ModerationFilterInterface {
+	return &FakeModerationFilters{c, namespace}
+}
+
 func (c *FakeAkashV2beta2) ProviderHosts(namespace string) v2beta2.ProviderHostInterface {
 	return &FakeProviderHosts{c, namespace}
 }

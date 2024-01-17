@@ -31,6 +31,7 @@ type AkashV2beta2Interface interface {
 	InventoriesGetter
 	InventoryRequestsGetter
 	ManifestsGetter
+	ModerationFiltersGetter
 	ProviderHostsGetter
 	ProviderLeasedIPsGetter
 }
@@ -50,6 +51,10 @@ func (c *AkashV2beta2Client) InventoryRequests() InventoryRequestInterface {
 
 func (c *AkashV2beta2Client) Manifests(namespace string) ManifestInterface {
 	return newManifests(c, namespace)
+}
+
+func (c *AkashV2beta2Client) ModerationFilters(namespace string) ModerationFilterInterface {
+	return newModerationFilters(c, namespace)
 }
 
 func (c *AkashV2beta2Client) ProviderHosts(namespace string) ProviderHostInterface {

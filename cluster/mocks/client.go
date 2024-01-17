@@ -89,6 +89,60 @@ func (_c *Client_AllHostnames_Call) RunAndReturn(run func(context.Context) ([]v1
 	return _c
 }
 
+// AllHostnames provides a mock function with given fields: _a0
+func (_m *Client) AllModerationFilters(_a0 context.Context) ([]v1beta3.ActiveFilters, error) {
+	ret := _m.Called(_a0)
+
+	var r0 []v1beta3.ActiveFilters
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) ([]v1beta3.ActiveFilters, error)); ok {
+		return rf(_a0)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) []v1beta3.ActiveFilters); ok {
+		r0 = rf(_a0)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]v1beta3.ActiveFilters)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(_a0)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Client_ActiveFilters_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ActiveFilters'
+type Client_ActiveFilters_Call struct {
+	*mock.Call
+}
+
+// ActiveFilters is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *Client_Expecter) ActiveFilters(_a0 interface{}) *Client_ActiveFilters_Call {
+	return &Client_ActiveFilters_Call{Call: _e.mock.On("ActiveFilters", _a0)}
+}
+
+func (_c *Client_ActiveFilters_Call) Run(run func(_a0 context.Context)) *Client_ActiveFilters_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *Client_ActiveFilters_Call) Return(_a0 []v1beta3.ActiveFilters, _a1 error) *Client_ActiveFilters_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_ActiveFilters_Call) RunAndReturn(run func(context.Context) ([]v1beta3.ActiveFilters, error)) *Client_ActiveFilters_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ConnectHostnameToDeployment provides a mock function with given fields: ctx, directive
 func (_m *Client) ConnectHostnameToDeployment(ctx context.Context, directive v1beta3.ConnectHostnameToDeploymentDirective) error {
 	ret := _m.Called(ctx, directive)
