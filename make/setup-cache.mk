@@ -70,7 +70,7 @@ $(GIT_CHGLOG): $(GIT_CHGLOG_VERSION_FILE)
 $(MOCKERY_VERSION_FILE): $(AP_DEVCACHE)
 	@echo "installing mockery $(MOCKERY_VERSION) ..."
 	rm -f $(MOCKERY)
-	GOBIN=$(AP_DEVCACHE_BIN) go install -ldflags '-s -w -X github.com/vektra/mockery/v2/pkg/config.SemVer=$(MOCKERY_VERSION)' github.com/vektra/mockery/v2@v$(MOCKERY_VERSION)
+	GOBIN=$(AP_DEVCACHE_BIN) go install -ldflags '-s -w -X $(MOCKERY_PACKAGE_NAME)/pkg/config.SemVer=$(MOCKERY_VERSION)' $(MOCKERY_PACKAGE_NAME)@$(MOCKERY_VERSION)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@

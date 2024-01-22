@@ -28,6 +28,7 @@ require (
 	github.com/spf13/viper v1.16.0
 	github.com/stretchr/testify v1.8.4
 	github.com/tendermint/tendermint v0.34.27
+	github.com/vektra/mockery/v2 v2.40.1
 	go.uber.org/zap v1.24.0
 	golang.org/x/net v0.14.0
 	golang.org/x/sync v0.3.0
