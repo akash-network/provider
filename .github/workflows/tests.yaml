@@ -123,6 +123,30 @@ jobs:
         with:
           files: .cache/tests/coverage.txt
 
+  codegen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - name: Detect required Go version
+        run: |
+          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
+          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
+      - uses: actions/setup-go@v4
+        with:
+          go-version: "${{ env.GOVERSION }}"
+      - name: Setup direnv
+        uses: HatsuneMiku3939/direnv-action@v1
+      - name: Run codegen
+        run: make codegen
+      - name: Ensure no files changed/added/removed
+        run: |
+          if [[ -z "$(git status --short)" ]]; then
+              git status
+              exit 1
+          fi
+
   yamlcheck:
     runs-on: ubuntu-latest
     steps:
@@ -160,6 +184,7 @@ jobs:
       - lint
       - release-dry-run
       - coverage
+      - codegen
       - yamlcheck
       - shellcheck
       - integration-tests
