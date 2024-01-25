@@ -31,6 +31,7 @@ import (
 	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+
 	"github.com/akash-network/node/util/wsutil"
 
 	"github.com/akash-network/provider"
@@ -406,7 +407,6 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 
 			wg.Add(1)
 			go leaseShellWebsocketHandler(localLog, wg, shellWs, stdinPipeOut, terminalSizeUpdate)
-
 		}
 
 		l := &sync.Mutex{}

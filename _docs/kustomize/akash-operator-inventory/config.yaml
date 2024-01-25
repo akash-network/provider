@@ -1,0 +1,8 @@
+---
+version: v1
+cluster_storage:
+  - default
+  - beta2
+exclude:
+  nodes: []
+  node_storage: []

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tpubsub "github.com/troian/pubsub"
 
 	"github.com/boz/go-lifecycle"
 
@@ -18,6 +20,8 @@ import (
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/fromctx"
+	ptypes "github.com/akash-network/provider/types"
 )
 
 var (
@@ -33,6 +37,7 @@ var ErrNotRunning = errors.New("not running")
 // StatusClient interface predefined with Status method
 type StatusClient interface {
 	Status(context.Context) (*Status, error)
+	StatusV1(ctx context.Context) (*provider.BidEngineStatus, error)
 }
 
 var (
@@ -140,6 +145,15 @@ func (s *service) Status(ctx context.Context) (*Status, error) {
 	}
 }
 
+func (s *service) StatusV1(ctx context.Context) (*provider.BidEngineStatus, error) {
+	res, err := s.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &provider.BidEngineStatus{Orders: res.Orders}, nil
+}
+
 func (s *service) updateOrderManagerGauge() {
 	orderManagerGauge.Set(float64(len(s.orders)))
 }
@@ -167,6 +181,20 @@ func (s *service) run(ctx context.Context, existingOrders []mtypes.OrderID) {
 		s.orders[key] = order
 		s.updateOrderManagerGauge()
 	}
+
+	bus := fromctx.PubSubFromCtx(ctx)
+
+	signalch := make(chan struct{}, 1)
+	trySignal := func() {
+		select {
+		case signalch <- struct{}{}:
+		case <-s.lc.ShutdownRequest():
+		default:
+		}
+	}
+
+	trySignal()
+
 loop:
 	for {
 		select {
@@ -196,6 +224,7 @@ loop:
 
 				ordersCounter.WithLabelValues("start").Inc()
 				s.orders[key] = order
+				trySignal()
 			}
 		case ch := <-s.statusch:
 			ch <- &Status{
@@ -206,6 +235,9 @@ loop:
 			key := mquery.OrderPath(order.orderID)
 			delete(s.orders, key)
 			ordersCounter.WithLabelValues("stop").Inc()
+			trySignal()
+		case <-signalch:
+			bus.Pub(provider.BidEngineStatus{Orders: uint32(len(s.orders))}, []string{ptypes.PubSubTopicBidengineStatus}, tpubsub.WithRetain())
 		}
 		s.updateOrderManagerGauge()
 	}

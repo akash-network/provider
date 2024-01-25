@@ -5,8 +5,10 @@ import (
 	"errors"
 	"time"
 
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tpubsub "github.com/troian/pubsub"
 
 	"github.com/boz/go-lifecycle"
 
@@ -19,6 +21,8 @@ import (
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/fromctx"
+	ptypes "github.com/akash-network/provider/types"
 )
 
 // ErrNotRunning is the error when service is not running
@@ -43,6 +47,7 @@ var (
 //go:generate mockery --name StatusClient
 type StatusClient interface {
 	Status(context.Context) (*Status, error)
+	StatusV1(context.Context) (*provider.ManifestStatus, error)
 }
 
 // Client is the interface that wraps HandleManifest method
@@ -71,6 +76,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, ho
 	}
 
 	s := &service{
+		ctx:             ctx,
 		session:         session,
 		bus:             bus,
 		sub:             sub,
@@ -94,6 +100,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, ho
 }
 
 type service struct {
+	ctx     context.Context
 	config  ServiceConfig
 	session session.Session
 	bus     pubsub.Bus
@@ -215,29 +222,46 @@ func (s *service) Status(ctx context.Context) (*Status, error) {
 	}
 }
 
+func (s *service) StatusV1(ctx context.Context) (*provider.ManifestStatus, error) {
+	res, err := s.Status(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &provider.ManifestStatus{Deployments: res.Deployments}, nil
+}
+
 func (s *service) run() {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
 
+	bus := fromctx.PubSubFromCtx(s.ctx)
+
 	s.updateGauges()
+
+	signalch := make(chan struct{}, 1)
+	trySignal := func() {
+		select {
+		case signalch <- struct{}{}:
+		case <-s.lc.ShutdownRequest():
+		default:
+		}
+	}
+
 loop:
 	for {
 		select {
-
 		case err := <-s.lc.ShutdownRequest():
 			s.lc.ShutdownInitiated(err)
 			break loop
-
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) {
-
 			case event.LeaseWon:
 				if ev.LeaseID.GetProvider() != s.session.Provider().Address().String() {
 					continue
 				}
 				s.session.Log().Info("lease won", "lease", ev.LeaseID)
 				s.handleLease(ev, true)
-
 			case dtypes.EventDeploymentUpdated:
 				s.session.Log().Info("update received", "deployment", ev.ID, "version", ev.Version)
 
@@ -246,14 +270,12 @@ loop:
 					s.session.Log().Info("deployment updated", "deployment", ev.ID, "version", ev.Version)
 					manager.handleUpdate(ev.Version)
 				}
-
 			case dtypes.EventDeploymentClosed:
 				key := dquery.DeploymentPath(ev.ID)
 				if manager := s.managers[key]; manager != nil {
 					s.session.Log().Info("deployment closed", "deployment", ev.ID)
 					manager.stop()
 				}
-
 			case mtypes.EventLeaseClosed:
 				if ev.ID.GetProvider() != s.session.Provider().Address().String() {
 					continue
@@ -265,11 +287,9 @@ loop:
 					manager.removeLease(ev.ID)
 				}
 			}
-
 		case check := <-s.activeCheckCh:
 			_, ok := s.managers[dquery.DeploymentPath(check.Deployment)]
 			check.ch <- ok
-
 		case req := <-s.mreqch:
 			// Cancel the watchdog (if it exists), since a manifest has been received
 			s.maybeRemoveWatchdog(req.value.Deployment)
@@ -277,13 +297,13 @@ loop:
 			manager := s.ensureManager(req.value.Deployment)
 			// The manager is responsible for putting a result in req.ch
 			manager.handleManifest(req)
-
+			trySignal()
 		case ch := <-s.statusch:
-
 			ch <- &Status{
 				Deployments: uint32(len(s.managers)),
 			}
-
+		case <-signalch:
+			bus.Pub(provider.ManifestStatus{Deployments: uint32(len(s.managers))}, []string{ptypes.PubSubTopicManifestStatus}, tpubsub.WithRetain())
 		case manager := <-s.managerch:
 			s.session.Log().Info("manager done", "deployment", manager.daddr)
 
@@ -292,6 +312,7 @@ loop:
 			// Cancel the watchdog (if it exists) since the manager has stopped as well
 			s.maybeRemoveWatchdog(manager.daddr)
 
+			trySignal()
 		case leaseID := <-s.watchdogch:
 			s.session.Log().Info("watchdog done", "lease", leaseID)
 			delete(s.watchdogs, leaseID)

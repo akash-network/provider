@@ -1,24 +1,31 @@
 package kube
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
 	"testing"
 
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	v1 "k8s.io/api/core/v1"
-	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	v1 "k8s.io/api/core/v1"
+	storagev1 "k8s.io/api/storage/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/scheme"
+	manualfake "k8s.io/client-go/rest/fake"
 
-	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	akashclientfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
@@ -63,6 +70,8 @@ func (r *testReservation) ClusterParams() interface{} {
 	return r.cparams
 }
 
+type proxyCallback func(req *http.Request) (*http.Response, error)
+
 type inventoryScaffold struct {
 	kmock                   *kubernetesmocks.Interface
 	amock                   *akashclientfake.Clientset
@@ -77,7 +86,7 @@ type inventoryScaffold struct {
 	nsList                  *v1.NamespaceList
 }
 
-func makeInventoryScaffold() *inventoryScaffold {
+func makeInventoryScaffold(proxycb proxyCallback) *inventoryScaffold {
 	s := &inventoryScaffold{
 		kmock:                   &kubernetesmocks.Interface{},
 		amock:                   akashclientfake.NewSimpleClientset(),
@@ -92,12 +101,19 @@ func makeInventoryScaffold() *inventoryScaffold {
 		nsList:                  &v1.NamespaceList{},
 	}
 
+	fakeClient := &manualfake.RESTClient{
+		GroupVersion:         appsv1.SchemeGroupVersion,
+		NegotiatedSerializer: scheme.Codecs,
+		Client:               manualfake.CreateHTTPClient(proxycb),
+	}
+
 	s.kmock.On("CoreV1").Return(s.coreV1Mock)
 
+	s.coreV1Mock.On("RESTClient").Return(fakeClient)
 	s.coreV1Mock.On("Namespaces").Return(s.nsInterface, nil)
 	s.coreV1Mock.On("Nodes").Return(s.nodeInterfaceMock, nil)
 	s.coreV1Mock.On("Pods", "" /* all namespaces */).Return(s.podInterfaceMock, nil)
-	s.coreV1Mock.On("Services", "" /* all namespaces */).Return(s.servicesInterfaceMock, nil)
+	s.coreV1Mock.On("Services", mock.Anything).Return(s.servicesInterfaceMock, nil)
 
 	s.nsInterface.On("List", mock.Anything, mock.Anything).Return(s.nsList, nil)
 
@@ -106,20 +122,48 @@ func makeInventoryScaffold() *inventoryScaffold {
 	s.storageV1Interface.On("StorageClasses").Return(s.storageClassesInterface, nil)
 	s.storageClassesInterface.On("List", mock.Anything, mock.Anything).Return(s.storageClassesList, nil)
 
-	s.servicesInterfaceMock.On("List", mock.Anything, mock.Anything).Return(&v1.ServiceList{}, nil)
+	return s
+}
+
+func (s *inventoryScaffold) withInventoryService(fn func(func(string, ...interface{}) *mock.Call)) *inventoryScaffold {
+	fn(s.servicesInterfaceMock.On)
 
 	return s
 }
 
+func defaultInventoryService(on func(string, ...interface{}) *mock.Call) {
+	svcList := &v1.ServiceList{
+		Items: []v1.Service{
+			{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "operator-inventory",
+					Namespace: "akash-services",
+				},
+				Spec:   v1.ServiceSpec{},
+				Status: v1.ServiceStatus{},
+			},
+		},
+	}
+
+	listOptions := metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=inventory" +
+			",app.kubernetes.io/instance=inventory-service" +
+			",app.kubernetes.io/component=operator" +
+			",app.kubernetes.io/part-of=provider",
+	}
+
+	on("List", mock.Anything, listOptions).Return(svcList, nil)
+}
+
 func TestInventoryZero(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{}
 
-	nodeList := &v1.NodeList{}
-	listOptions := metav1.ListOptions{}
-	s.nodeInterfaceMock.On("List", mock.Anything, listOptions).Return(nodeList, nil)
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{}
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inventory, err := clientInterface.Inventory(context.Background())
@@ -129,51 +173,41 @@ func TestInventoryZero(t *testing.T) {
 	// The inventory was called and the kubernetes client says there are no nodes & no pods. Inventory
 	// should be zero
 	require.Len(t, inventory.Metrics().Nodes, 0)
-
-	podListOptionsInCall := s.podInterfaceMock.Calls[0].Arguments[1].(metav1.ListOptions)
-	require.Equal(t, "status.phase==Running", podListOptionsInCall.FieldSelector)
 }
 
 func TestInventorySingleNodeNoPods(t *testing.T) {
-	s := makeInventoryScaffold()
-
-	nodeList := &v1.NodeList{}
-	nodeList.Items = make([]v1.Node, 1)
-
-	nodeResourceList := make(v1.ResourceList)
 	const expectedCPU = 13
-	cpuQuantity := resource.NewQuantity(expectedCPU, "m")
-	nodeResourceList[v1.ResourceCPU] = *cpuQuantity
-
 	const expectedMemory = 14
-	memoryQuantity := resource.NewQuantity(expectedMemory, "M")
-	nodeResourceList[v1.ResourceMemory] = *memoryQuantity
-
 	const expectedStorage = 15
-	ephemeralStorageQuantity := resource.NewQuantity(expectedStorage, "M")
-	nodeResourceList[v1.ResourceEphemeralStorage] = *ephemeralStorageQuantity
 
-	nodeConditions := make([]v1.NodeCondition, 1)
-	nodeConditions[0] = v1.NodeCondition{
-		Type:   v1.NodeReady,
-		Status: v1.ConditionTrue,
-	}
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: inventoryV1.Nodes{
+				inventoryV1.Node{
+					Name: "test",
+					Resources: inventoryV1.NodeResources{
+						CPU: inventoryV1.CPU{
+							Quantity: inventoryV1.NewResourcePair(expectedCPU, 0, "m"),
+						},
+						Memory: inventoryV1.Memory{
+							Quantity: inventoryV1.NewResourcePair(expectedMemory, 0, "M"),
+						},
+						GPU: inventoryV1.GPU{
+							Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						},
+						EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, 0, "M"),
+						VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					},
+					Capabilities: inventoryV1.NodeCapabilities{},
+				},
+			},
+		}
 
-	nodeList.Items[0] = v1.Node{
-		TypeMeta:   metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{},
-		Spec:       v1.NodeSpec{},
-		Status: v1.NodeStatus{
-			Allocatable: nodeResourceList,
-			Conditions:  nodeConditions,
-		},
-	}
+		data, _ := json.Marshal(inv)
 
-	listOptions := metav1.ListOptions{}
-	s.nodeInterfaceMock.On("List", mock.Anything, listOptions).Return(nodeList, nil)
-
-	podList := &v1.PodList{}
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inventory, err := clientInterface.Inventory(context.Background())
@@ -191,121 +225,43 @@ func TestInventorySingleNodeNoPods(t *testing.T) {
 }
 
 func TestInventorySingleNodeWithPods(t *testing.T) {
-	s := makeInventoryScaffold()
-
-	nodeList := &v1.NodeList{}
-	nodeList.Items = make([]v1.Node, 1)
-
-	nodeResourceList := make(v1.ResourceList)
 	const expectedCPU = 13
-	cpuQuantity := resource.NewQuantity(expectedCPU, "m")
-	nodeResourceList[v1.ResourceCPU] = *cpuQuantity
-
 	const expectedMemory = 2048
-	memoryQuantity := resource.NewQuantity(expectedMemory, "M")
-	nodeResourceList[v1.ResourceMemory] = *memoryQuantity
-
 	const expectedStorage = 4096
-	ephemeralStorageQuantity := resource.NewQuantity(expectedStorage, "M")
-	nodeResourceList[v1.ResourceEphemeralStorage] = *ephemeralStorageQuantity
-
-	nodeConditions := make([]v1.NodeCondition, 1)
-	nodeConditions[0] = v1.NodeCondition{
-		Type:   v1.NodeReady,
-		Status: v1.ConditionTrue,
-	}
-
-	nodeList.Items[0] = v1.Node{
-		TypeMeta:   metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{},
-		Spec:       v1.NodeSpec{},
-		Status: v1.NodeStatus{
-			Allocatable: nodeResourceList,
-			Conditions:  nodeConditions,
-		},
-	}
-
-	listOptions := metav1.ListOptions{}
-	s.nodeInterfaceMock.On("List", mock.Anything, listOptions).Return(nodeList, nil)
 
 	const cpuPerContainer = 1
 	const memoryPerContainer = 3
 	const storagePerContainer = 17
-	// Define two pods
-	pods := make([]v1.Pod, 2)
-	// First pod has 1 container
-	podContainers := make([]v1.Container, 1)
-	containerRequests := make(v1.ResourceList)
-	cpuQuantity.SetMilli(cpuPerContainer)
-	containerRequests[v1.ResourceCPU] = *cpuQuantity
+	const totalContainers = 3
 
-	memoryQuantity = resource.NewQuantity(memoryPerContainer, "M")
-	containerRequests[v1.ResourceMemory] = *memoryQuantity
-
-	ephemeralStorageQuantity = resource.NewQuantity(storagePerContainer, "M")
-	containerRequests[v1.ResourceEphemeralStorage] = *ephemeralStorageQuantity
-
-	podContainers[0] = v1.Container{
-		Resources: v1.ResourceRequirements{
-			Limits:   nil,
-			Requests: containerRequests,
-		},
-	}
-	pods[0] = v1.Pod{
-		TypeMeta:   metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{},
-		Spec: v1.PodSpec{
-			Containers: podContainers,
-		},
-		Status: v1.PodStatus{},
-	}
-
-	// Define 2nd pod with multiple containers
-	podContainers = make([]v1.Container, 2)
-	for i := range podContainers {
-		containerRequests := make(v1.ResourceList)
-		cpuQuantity.SetMilli(cpuPerContainer)
-		containerRequests[v1.ResourceCPU] = *cpuQuantity
-
-		memoryQuantity = resource.NewQuantity(memoryPerContainer, "M")
-		containerRequests[v1.ResourceMemory] = *memoryQuantity
-
-		ephemeralStorageQuantity = resource.NewQuantity(storagePerContainer, "M")
-		containerRequests[v1.ResourceEphemeralStorage] = *ephemeralStorageQuantity
-
-		// Container limits are enforced by kubernetes as absolute limits, but not
-		// used when considering inventory since overcommit is possible in a kubernetes cluster
-		// Set limits to any value larger than requests in this test since it should not change
-		// the value returned  by the code
-		containerLimits := make(v1.ResourceList)
-
-		for k, v := range containerRequests {
-			replacementV := resource.NewQuantity(0, "")
-			replacementV.Set(v.Value() * int64(testutil.RandRangeInt(2, 100)))
-			containerLimits[k] = *replacementV
-		}
-
-		podContainers[i] = v1.Container{
-			Resources: v1.ResourceRequirements{
-				Limits:   containerLimits,
-				Requests: containerRequests,
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: inventoryV1.Nodes{
+				inventoryV1.Node{
+					Name: "test",
+					Resources: inventoryV1.NodeResources{
+						CPU: inventoryV1.CPU{
+							Quantity: inventoryV1.NewResourcePair(expectedCPU, cpuPerContainer*totalContainers, "m"),
+						},
+						Memory: inventoryV1.Memory{
+							Quantity: inventoryV1.NewResourcePair(expectedMemory, memoryPerContainer*totalContainers, "M"),
+						},
+						GPU: inventoryV1.GPU{
+							Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						},
+						EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, storagePerContainer*totalContainers, "M"),
+						VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					},
+					Capabilities: inventoryV1.NodeCapabilities{},
+				},
 			},
 		}
-	}
-	pods[1] = v1.Pod{
-		TypeMeta:   metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{},
-		Spec: v1.PodSpec{
-			Containers: podContainers,
-		},
-		Status: v1.PodStatus{},
-	}
 
-	podList := &v1.PodList{
-		Items: pods,
-	}
+		data, _ := json.Marshal(inv)
 
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inventory, err := clientInterface.Inventory(context.Background())
@@ -317,52 +273,48 @@ func TestInventorySingleNodeWithPods(t *testing.T) {
 	node := inventory.Metrics().Nodes[0]
 	availableResources := node.Available
 	// Multiply expected value by 1000 since millicpu is used
-	require.Equal(t, uint64(expectedCPU*1000)-3*cpuPerContainer, availableResources.CPU)
-	require.Equal(t, uint64(expectedMemory)-3*memoryPerContainer, availableResources.Memory)
-	require.Equal(t, uint64(expectedStorage)-3*storagePerContainer, availableResources.StorageEphemeral)
+	assert.Equal(t, (uint64(expectedCPU)-(totalContainers*cpuPerContainer))*1000, availableResources.CPU)
+	assert.Equal(t, uint64(expectedMemory)-totalContainers*memoryPerContainer, availableResources.Memory)
+	assert.Equal(t, uint64(expectedStorage)-totalContainers*storagePerContainer, availableResources.StorageEphemeral)
 }
 
-var errForTest = errors.New("error in test")
-
 func TestInventoryWithNodeError(t *testing.T) {
-	s := makeInventoryScaffold()
-
-	listOptions := metav1.ListOptions{}
-	s.nodeInterfaceMock.On("List", mock.Anything, listOptions).Return(nil, errForTest)
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(&bytes.Buffer{})}, nil
+	}).withInventoryService(func(on func(string, ...interface{}) *mock.Call) {
+		on("List", mock.Anything, mock.Anything).Return(&v1.ServiceList{}, kerrors.NewNotFound(schema.GroupResource{}, "test-name"))
+	})
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inventory, err := clientInterface.Inventory(context.Background())
 	require.Error(t, err)
-	require.True(t, errors.Is(err, errForTest))
+	require.True(t, kerrors.IsNotFound(err))
 	require.Nil(t, inventory)
 }
 
 func TestInventoryWithPodsError(t *testing.T) {
-	s := makeInventoryScaffold()
-
-	listOptions := metav1.ListOptions{}
-	nodeList := &v1.NodeList{}
-	s.nodeInterfaceMock.On("List", mock.Anything, listOptions).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nil, errForTest)
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusServiceUnavailable, Body: io.NopCloser(&bytes.Buffer{})}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inventory, err := clientInterface.Inventory(context.Background())
+
 	require.Error(t, err)
-	require.True(t, errors.Is(err, errForTest))
-	require.Nil(t, inventory)
+	require.True(t, kerrors.IsServiceUnavailable(err))
+	assert.Nil(t, inventory)
 }
 
 func TestInventoryMultipleReplicasFulFilled1(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -387,16 +339,15 @@ func TestInventoryMultipleReplicasFulFilled1(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasFulFilled2(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -409,16 +360,15 @@ func TestInventoryMultipleReplicasFulFilled2(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasFulFilled3(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -431,16 +381,15 @@ func TestInventoryMultipleReplicasFulFilled3(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasFulFilled4(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -453,16 +402,15 @@ func TestInventoryMultipleReplicasFulFilled4(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasFulFilled5(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -475,16 +423,15 @@ func TestInventoryMultipleReplicasFulFilled5(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasFulFilled6(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -497,16 +444,15 @@ func TestInventoryMultipleReplicasFulFilled6(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasFulFilled7(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -519,16 +465,15 @@ func TestInventoryMultipleReplicasFulFilled7(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasOutOfCapacity1(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -542,16 +487,15 @@ func TestInventoryMultipleReplicasOutOfCapacity1(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasOutOfCapacity2(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -565,16 +509,15 @@ func TestInventoryMultipleReplicasOutOfCapacity2(t *testing.T) {
 }
 
 func TestInventoryMultipleReplicasOutOfCapacity4(t *testing.T) {
-	s := makeInventoryScaffold()
+	s := makeInventoryScaffold(func(req *http.Request) (*http.Response, error) {
+		inv := inventoryV1.Cluster{
+			Nodes: multipleReplicasGenNodes(),
+		}
 
-	nodeList := &v1.NodeList{
-		Items: multipleReplicasGenNodes(),
-	}
+		data, _ := json.Marshal(inv)
 
-	podList := &v1.PodList{Items: []v1.Pod{}}
-
-	s.nodeInterfaceMock.On("List", mock.Anything, mock.Anything).Return(nodeList, nil)
-	s.podInterfaceMock.On("List", mock.Anything, mock.Anything).Return(podList, nil)
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewBuffer(data))}, nil
+	}).withInventoryService(defaultInventoryService)
 
 	clientInterface := clientForTest(t, s.kmock, s.amock)
 	inv, err := clientInterface.Inventory(context.Background())
@@ -587,117 +530,98 @@ func TestInventoryMultipleReplicasOutOfCapacity4(t *testing.T) {
 	require.EqualError(t, ctypes.ErrInsufficientCapacity, err.Error())
 }
 
-func TestParseCapabilities(t *testing.T) {
-	type testCase struct {
-		labels          map[string]string
-		expCapabilities *crd.NodeInfoCapabilities
-	}
-
-	tests := []testCase{
-		{
-			labels: map[string]string{
-				"akash.network/capabilities.gpu.vendor.nvidia.model.a100": "true",
-			},
-			expCapabilities: &crd.NodeInfoCapabilities{
-				GPU: crd.GPUCapabilities{
-					Vendor: "nvidia",
-					Model:  "a100",
-				},
-			},
-		},
-	}
-
-	for _, test := range tests {
-		caps := parseNodeCapabilities(test.labels, nil)
-		require.Equal(t, test.expCapabilities, caps)
-	}
-}
-
 // multipleReplicasGenNodes generates four nodes with following CPUs available
 //
 //	node1: 68780
 //	node2: 68800
 //	node3: 119525
 //	node4: 119495
-func multipleReplicasGenNodes() []v1.Node {
-	nodeCapacity := make(v1.ResourceList)
-	nodeCapacity[v1.ResourceCPU] = *(resource.NewMilliQuantity(119800, resource.DecimalSI))
-	nodeCapacity[v1.ResourceMemory] = *(resource.NewQuantity(474813259776, resource.DecimalSI))
-	nodeCapacity[v1.ResourceEphemeralStorage] = *(resource.NewQuantity(7760751097705, resource.DecimalSI))
-
-	nodeConditions := make([]v1.NodeCondition, 1)
-	nodeConditions[0] = v1.NodeCondition{
-		Type:   v1.NodeReady,
-		Status: v1.ConditionTrue,
-	}
-
-	return []v1.Node{
+func multipleReplicasGenNodes() inventoryV1.Nodes {
+	return inventoryV1.Nodes{
 		{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node1",
-			},
-			Spec: v1.NodeSpec{},
-			Status: v1.NodeStatus{
-				Allocatable: v1.ResourceList{
-					v1.ResourceCPU:              *(resource.NewMilliQuantity(68780, resource.DecimalSI)),
-					v1.ResourceMemory:           *(resource.NewQuantity(457317732352, resource.DecimalSI)),
-					v1.ResourceEphemeralStorage: *(resource.NewQuantity(7752161163113, resource.DecimalSI)),
+			Name: "node1",
+			Resources: inventoryV1.NodeResources{
+				CPU: inventoryV1.CPU{
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 51020, resource.DecimalSI),
 				},
-				Capacity:   nodeCapacity,
-				Conditions: nodeConditions,
+				Memory: inventoryV1.Memory{
+					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+				},
+				GPU: inventoryV1.GPU{
+					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				},
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 8589934592, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
 			},
 		},
 		{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node2",
-				Labels: map[string]string{
-					"akash.network/capabilities.gpu.vendor.nvidia.model.a100": "true",
+			Name: "node2",
+			Resources: inventoryV1.NodeResources{
+				CPU: inventoryV1.CPU{
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 51000, resource.DecimalSI),
 				},
-			},
-			Spec: v1.NodeSpec{},
-			Status: v1.NodeStatus{
-				Allocatable: v1.ResourceList{
-					v1.ResourceCPU:              *(resource.NewMilliQuantity(68800, resource.DecimalSI)),
-					builder.ResourceGPUNvidia:   *(resource.NewQuantity(2, resource.DecimalSI)),
-					v1.ResourceMemory:           *(resource.NewQuantity(457328218112, resource.DecimalSI)),
-					v1.ResourceEphemeralStorage: *(resource.NewQuantity(7752161163113, resource.DecimalSI)),
+				Memory: inventoryV1.Memory{
+					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
 				},
-				Capacity:   nodeCapacity,
-				Conditions: nodeConditions,
+				GPU: inventoryV1.GPU{
+					Quantity: inventoryV1.NewResourcePair(2, 0, resource.DecimalSI),
+					Info: inventoryV1.GPUInfoS{
+						{
+							Vendor:     "nvidia",
+							VendorID:   "10de",
+							Name:       "a100",
+							ModelID:    "20b5",
+							Interface:  "pcie",
+							MemorySize: "80Gi",
+						},
+						{
+							Vendor:     "nvidia",
+							VendorID:   "10de",
+							Name:       "a100",
+							ModelID:    "20b5",
+							Interface:  "pcie",
+							MemorySize: "80Gi",
+						},
+					},
+				},
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 8589934592, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
 			},
 		},
 		{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node3",
-			},
-			Spec: v1.NodeSpec{},
-			Status: v1.NodeStatus{
-				Allocatable: v1.ResourceList{
-					v1.ResourceCPU:              *(resource.NewMilliQuantity(119525, resource.DecimalSI)),
-					v1.ResourceMemory:           *(resource.NewQuantity(474817923072, resource.DecimalSI)),
-					v1.ResourceEphemeralStorage: *(resource.NewQuantity(7760751097705, resource.DecimalSI)),
+			Name: "node3",
+			Resources: inventoryV1.NodeResources{
+				CPU: inventoryV1.CPU{
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 275, resource.DecimalSI),
 				},
-				Capacity:   nodeCapacity,
-				Conditions: nodeConditions,
+				Memory: inventoryV1.Memory{
+					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+				},
+				GPU: inventoryV1.GPU{
+					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				},
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 0, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
 			},
 		},
 		{
-			TypeMeta: metav1.TypeMeta{},
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "node4",
-			},
-			Spec: v1.NodeSpec{},
-			Status: v1.NodeStatus{
-				Allocatable: v1.ResourceList{
-					v1.ResourceCPU:              *(resource.NewMilliQuantity(119495, resource.DecimalSI)),
-					v1.ResourceMemory:           *(resource.NewQuantity(474753923072, resource.DecimalSI)),
-					v1.ResourceEphemeralStorage: *(resource.NewQuantity(7760751097705, resource.DecimalSI)),
+			Name: "node4",
+			Resources: inventoryV1.NodeResources{
+				CPU: inventoryV1.CPU{
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 305, resource.DecimalSI),
 				},
-				Capacity:   nodeCapacity,
-				Conditions: nodeConditions,
+				Memory: inventoryV1.Memory{
+					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+				},
+				GPU: inventoryV1.GPU{
+					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				},
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 0, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
 			},
 		},
 	}

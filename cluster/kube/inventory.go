@@ -3,17 +3,15 @@ package kube
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
 	"time"
 
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/tools/pager"
 
 	"github.com/tendermint/tendermint/libs/log"
 
@@ -25,24 +23,28 @@ import (
 )
 
 const (
-	inventoryOperatorQueryTimeout = 5 * time.Second
+	inventoryOperatorQueryTimeout = 10 * time.Second
 )
 
-type clusterNodes map[string]*node
+const (
+	runtimeClassNvidia = "nvidia"
+)
+
+var (
+	ErrInventoryNotAvailable = errors.New("kube: inventory service not available")
+)
 
 type inventory struct {
-	storageClasses clusterStorage
-	nodes          clusterNodes
-	log            log.Logger
+	inventoryV1.Cluster
+	log log.Logger
 }
 
 var _ ctypes.Inventory = (*inventory)(nil)
 
-func newInventory(log log.Logger, storage clusterStorage, nodes map[string]*node) *inventory {
+func newInventory(log log.Logger, clState inventoryV1.Cluster) *inventory {
 	inv := &inventory{
-		storageClasses: storage,
-		nodes:          nodes,
-		log:            log,
+		Cluster: clState,
+		log:     log,
 	}
 
 	return inv
@@ -50,9 +52,8 @@ func newInventory(log log.Logger, storage clusterStorage, nodes map[string]*node
 
 func (inv *inventory) dup() inventory {
 	dup := inventory{
-		storageClasses: inv.storageClasses.dup(),
-		nodes:          inv.nodes.dup(),
-		log:            inv.log,
+		Cluster: *inv.Cluster.Dup(),
+		log:     inv.log,
 	}
 
 	return dup
@@ -61,23 +62,23 @@ func (inv *inventory) dup() inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node string, res *types.Resources) (*crd.SchedulerParams, bool, bool) {
-	nd := inv.nodes[node].dup()
+func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerParams, bool, bool) {
+	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
-	if !nd.tryAdjustCPU(res.CPU) {
+	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU) {
 		return nil, false, true
 	}
 
-	if !nd.tryAdjustGPU(res.GPU, sparams) {
+	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
 		return nil, false, true
 	}
 
-	if !nd.tryAdjustMemory(res.Memory) {
+	if !tryAdjustMemory(&nd.Resources.Memory.Quantity, res.Memory) {
 		return nil, false, true
 	}
 
-	storageClasses := inv.storageClasses.dup()
+	storageClasses := inv.Storage.Dup()
 
 	for i, storage := range res.Storage {
 		attrs, err := ctypes.ParseStorageAttributes(storage.Attributes)
@@ -86,38 +87,148 @@ func (inv *inventory) tryAdjust(node string, res *types.Resources) (*crd.Schedul
 		}
 
 		if !attrs.Persistent {
-			if !nd.tryAdjustEphemeralStorage(&res.Storage[i]) {
+			if !tryAdjustEphemeralStorage(&nd.Resources.EphemeralStorage, &res.Storage[i]) {
 				return nil, false, true
 			}
 			continue
 		}
 
-		if !nd.capabilities.Storage.HasClass(attrs.Class) {
+		if !nd.IsStorageClassSupported(attrs.Class) {
 			return nil, false, true
 		}
 
 		// if !nd.tryAdjustVolumesAttached(types.NewResourceValue(1)) {
 		// 	return nil, false, true
+
 		// }
 
-		// no need to check if storageClass map has class present as it has been validated
-		// for particular node during inventory fetch
-		if !storageClasses[attrs.Class].subNLZ(storage.Quantity) {
-			// cluster storage does not have enough space thus break to error
+		storageAdjusted := false
+
+		for idx := range storageClasses {
+			if storageClasses[idx].Info.Class == attrs.Class {
+				if !storageClasses[idx].Quantity.SubNLZ(storage.Quantity) {
+					// cluster storage does not have enough space thus break to error
+					return nil, false, false
+				}
+				storageAdjusted = true
+				break
+			}
+		}
+
+		// requested storage class is not present in the cluster
+		// there is no point to adjust inventory further
+		if !storageAdjusted {
 			return nil, false, false
 		}
 	}
 
 	// all requirements for current group have been satisfied
 	// commit and move on
-	inv.nodes[node] = nd
-	inv.storageClasses = storageClasses
+	inv.Nodes[node] = nd
+	inv.Storage = storageClasses
 
 	if reflect.DeepEqual(sparams, &crd.SchedulerParams{}) {
 		return nil, true, true
 	}
 
 	return sparams, true, true
+}
+
+func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *types.CPU) bool {
+	return rp.SubMilliNLZ(res.Units)
+}
+
+func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerParams) bool {
+	reqCnt := res.Units.Value()
+
+	if reqCnt == 0 {
+		return true
+	}
+
+	if rp.Quantity.Available().Value() == 0 {
+		return false
+	}
+
+	attrs, err := ctypes.ParseGPUAttributes(res.Attributes)
+	if err != nil {
+		return false
+	}
+
+	for _, info := range rp.Info {
+		models, exists := attrs[info.Vendor]
+		if !exists {
+			continue
+		}
+
+		attr, exists := models.ExistsOrWildcard(info.Name)
+		if !exists {
+			continue
+		}
+
+		if attr != nil {
+			if attr.RAM != "" && attr.RAM != info.MemorySize {
+				continue
+			}
+
+			if attr.Interface != "" && attr.RAM != info.Interface {
+				continue
+			}
+		}
+
+		reqCnt--
+		if reqCnt == 0 {
+			vendor := strings.ToLower(info.Vendor)
+
+			if !rp.Quantity.SubNLZ(res.Units) {
+				return false
+			}
+
+			sParamsEnsureGPU(sparams)
+			sparams.Resources.GPU.Vendor = vendor
+			sparams.Resources.GPU.Model = info.Name
+
+			switch vendor {
+			case builder.GPUVendorNvidia:
+				sparams.RuntimeClass = runtimeClassNvidia
+			default:
+			}
+
+			key := fmt.Sprintf("vendor/%s/model/%s", vendor, info.Name)
+			if attr != nil {
+				if attr.RAM != "" {
+					key = fmt.Sprintf("%s/ram/%s", key, attr.RAM)
+				}
+
+				if attr.Interface != "" {
+					key = fmt.Sprintf("%s/interface/%s", key, attr.Interface)
+				}
+			}
+
+			res.Attributes = types.Attributes{
+				{
+					Key:   key,
+					Value: "true",
+				},
+			}
+
+			return true
+		}
+	}
+
+	return false
+}
+
+func tryAdjustMemory(rp *inventoryV1.ResourcePair, res *types.Memory) bool {
+	return rp.SubNLZ(res.Quantity)
+}
+
+func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *types.Storage) bool {
+	return rp.SubNLZ(res.Quantity)
+}
+
+// nolint: unused
+func tryAdjustVolumesAttached(rp *inventoryV1.ResourcePair, res types.ResourceValue) bool {
+	return rp.SubNLZ(res)
 }
 
 func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes.InventoryOption) error {
@@ -149,7 +260,7 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 	var err error
 
 nodes:
-	for nodeName := range currInventory.nodes {
+	for nodeIdx := range currInventory.Nodes {
 		for i := len(resources) - 1; i >= 0; i-- {
 			adjustedGroup := false
 
@@ -163,7 +274,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeName, adjusted)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes
@@ -234,6 +345,10 @@ nodes:
 	return ctypes.ErrInsufficientCapacity
 }
 
+func (inv *inventory) Snapshot() inventoryV1.Cluster {
+	return *inv.Cluster.Dup()
+}
+
 func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 	cpuTotal := uint64(0)
 	gpuTotal := uint64(0)
@@ -248,50 +363,50 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 	storageAvailable := make(map[string]int64)
 
 	ret := ctypes.InventoryMetrics{
-		Nodes: make([]ctypes.InventoryNode, 0, len(inv.nodes)),
+		Nodes: make([]ctypes.InventoryNode, 0, len(inv.Nodes)),
 	}
 
-	for nodeName, nd := range inv.nodes {
+	for _, nd := range inv.Nodes {
 		invNode := ctypes.InventoryNode{
-			Name: nodeName,
+			Name: nd.Name,
 			Allocatable: ctypes.InventoryNodeMetric{
-				CPU:              uint64(nd.cpu.allocatable.MilliValue()),
-				GPU:              uint64(nd.gpu.allocatable.Value()),
-				Memory:           uint64(nd.memory.allocatable.Value()),
-				StorageEphemeral: uint64(nd.ephemeralStorage.allocatable.Value()),
+				CPU:              uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue()),
+				GPU:              uint64(nd.Resources.GPU.Quantity.Allocatable.Value()),
+				Memory:           uint64(nd.Resources.Memory.Quantity.Allocatable.Value()),
+				StorageEphemeral: uint64(nd.Resources.EphemeralStorage.Allocatable.Value()),
 			},
 		}
 
-		cpuTotal += uint64(nd.cpu.allocatable.MilliValue())
-		gpuTotal += uint64(nd.gpu.allocatable.Value())
-		memoryTotal += uint64(nd.memory.allocatable.Value())
-		storageEphemeralTotal += uint64(nd.ephemeralStorage.allocatable.Value())
+		cpuTotal += uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue())
+		gpuTotal += uint64(nd.Resources.GPU.Quantity.Allocatable.Value())
+		memoryTotal += uint64(nd.Resources.Memory.Quantity.Allocatable.Value())
+		storageEphemeralTotal += uint64(nd.Resources.EphemeralStorage.Allocatable.Value())
 
-		avail := nd.cpu.available()
+		avail := nd.Resources.CPU.Quantity.Available()
 		invNode.Available.CPU = uint64(avail.MilliValue())
 		cpuAvailable += invNode.Available.CPU
 
-		avail = nd.gpu.available()
+		avail = nd.Resources.GPU.Quantity.Available()
 		invNode.Available.GPU = uint64(avail.Value())
 		gpuAvailable += invNode.Available.GPU
 
-		avail = nd.memory.available()
+		avail = nd.Resources.Memory.Quantity.Available()
 		invNode.Available.Memory = uint64(avail.Value())
 		memoryAvailable += invNode.Available.Memory
 
-		avail = nd.ephemeralStorage.available()
+		avail = nd.Resources.EphemeralStorage.Available()
 		invNode.Available.StorageEphemeral = uint64(avail.Value())
 		storageEphemeralAvailable += invNode.Available.StorageEphemeral
 
 		ret.Nodes = append(ret.Nodes, invNode)
 	}
 
-	for class, storage := range inv.storageClasses {
-		tmp := storage.allocatable.DeepCopy()
-		storageTotal[class] = tmp.Value()
+	for _, class := range inv.Storage {
+		tmp := class.Quantity.Allocatable.DeepCopy()
+		storageTotal[class.Info.Class] = tmp.Value()
 
-		tmp = storage.available()
-		storageAvailable[class] = tmp.Value()
+		tmp = *class.Quantity.Available()
+		storageAvailable[class.Info.Class] = tmp.Value()
 	}
 
 	ret.TotalAllocatable = ctypes.InventoryMetricTotal{
@@ -314,41 +429,23 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 }
 
 func (c *client) Inventory(ctx context.Context) (ctypes.Inventory, error) {
-	cstorage, err := c.fetchStorage(ctx)
-	if err != nil {
-		// log inventory operator error but keep going to fetch nodes
-		// as provider still may make bids on orders without persistent storage
-		c.log.Error("checking storage inventory", "error", err.Error())
-	}
-
-	knodes, err := c.fetchActiveNodes(ctx, cstorage)
-	if err != nil {
-		return nil, err
-	}
-
-	return newInventory(c.log.With("kube", "inventory"), cstorage, knodes), nil
-}
-
-func (c *client) fetchStorage(ctx context.Context) (clusterStorage, error) {
 	ctx, cancel := context.WithTimeout(ctx, inventoryOperatorQueryTimeout)
 	defer cancel()
 
-	cstorage := make(clusterStorage)
-
 	// discover inventory operator
 	// empty namespace mean search through all namespaces
-	svcResult, err := c.kc.CoreV1().Services(corev1.NamespaceAll).List(ctx, metav1.ListOptions{
-		LabelSelector: builder.AkashManagedLabelName + "=true" +
-			",app.kubernetes.io/name=akash" +
-			",app.kubernetes.io/instance=inventory" +
-			",app.kubernetes.io/component=operator",
+	svcResult, err := c.kc.CoreV1().Services("akash-services").List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=inventory" +
+			",app.kubernetes.io/instance=inventory-service" +
+			",app.kubernetes.io/component=operator" +
+			",app.kubernetes.io/part-of=provider",
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	if len(svcResult.Items) == 0 {
-		return nil, nil
+		return nil, ErrInventoryNotAvailable
 	}
 
 	result := c.kc.CoreV1().RESTClient().Get().
@@ -356,203 +453,100 @@ func (c *client) fetchStorage(ctx context.Context) (clusterStorage, error) {
 		Resource("services").
 		Name(svcResult.Items[0].Name + ":api").
 		SubResource("proxy").
-		Suffix("inventory").
+		Suffix("v1/inventory").
 		Do(ctx)
 
 	if err := result.Error(); err != nil {
 		return nil, err
 	}
 
-	inv := &crd.Inventory{}
-
-	if err := result.Into(inv); err != nil {
-		return nil, err
-	}
-
-	statusPairs := make([]interface{}, 0, len(inv.Status.Messages))
-	for idx, msg := range inv.Status.Messages {
-		statusPairs = append(statusPairs, fmt.Sprintf("msg%d", idx))
-		statusPairs = append(statusPairs, msg)
-	}
-
-	if len(statusPairs) > 0 {
-		c.log.Info("inventory request performed with warnings", statusPairs...)
-	}
-
-	for _, storage := range inv.Spec.Storage {
-		if !isSupportedStorageClass(storage.Class) {
-			continue
-		}
-
-		cstorage[storage.Class] = rpNewFromAkash(storage.ResourcePair)
-	}
-
-	return cstorage, nil
-}
-
-// todo write unmarshaler
-func parseNodeCapabilities(labels map[string]string, cStorage clusterStorage) *crd.NodeInfoCapabilities {
-	capabilities := &crd.NodeInfoCapabilities{}
-
-	for k := range labels {
-		tokens := strings.Split(k, "/")
-		if len(tokens) != 2 && tokens[0] != builder.AkashManagedLabelName {
-			continue
-		}
-
-		tokens = strings.Split(tokens[1], ".")
-		if len(tokens) < 2 || tokens[0] != "capabilities" {
-			continue
-		}
-
-		tokens = tokens[1:]
-		switch tokens[0] {
-		case "gpu":
-			if len(tokens) < 2 {
-				continue
-			}
-
-			tokens = tokens[1:]
-			if tokens[0] == "vendor" {
-				capabilities.GPU.Vendor = tokens[1]
-				if tokens[2] == "model" {
-					capabilities.GPU.Model = tokens[3]
-				}
-			}
-		case "storage":
-			if len(tokens) < 2 {
-				continue
-			}
-
-			switch tokens[1] {
-			case "class":
-				capabilities.Storage.Classes = append(capabilities.Storage.Classes, tokens[2])
-			default:
-			}
-		}
-	}
-
-	// parse storage classes with legacy mode if new mode is not detected
-	if len(capabilities.Storage.Classes) == 0 {
-		if value, defined := labels[builder.AkashNetworkStorageClasses]; defined {
-			for _, class := range strings.Split(value, ".") {
-				if _, avail := cStorage[class]; avail {
-					capabilities.Storage.Classes = append(capabilities.Storage.Classes, class)
-				}
-			}
-		}
-	}
-
-	return capabilities
-}
-
-func (c *client) fetchActiveNodes(ctx context.Context, cstorage clusterStorage) (map[string]*node, error) {
-	// todo filter nodes by akash.network label
-	knodes, err := wrapKubeCall("nodes-list", func() (*corev1.NodeList, error) {
-		return c.kc.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	})
+	data, err := result.Raw()
 	if err != nil {
 		return nil, err
 	}
 
-	podListOptions := metav1.ListOptions{
-		FieldSelector: "status.phase==Running",
-	}
-	podsClient := c.kc.CoreV1().Pods(metav1.NamespaceAll)
-	podsPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return podsClient.List(ctx, opts)
-	})
-
-	retnodes := make(map[string]*node)
-	for _, knode := range knodes.Items {
-		if !c.nodeIsActive(knode) {
-			continue
-		}
-
-		capabilities := parseNodeCapabilities(knode.Labels, cstorage)
-
-		retnodes[knode.Name] = newNode(&knode.Status, capabilities)
-	}
-
-	// Go over each pod and sum the resources for it into the value for the pod it lives on
-	err = podsPager.EachListItem(ctx, podListOptions, func(obj runtime.Object) error {
-		pod := obj.(*corev1.Pod)
-		nodeName := pod.Spec.NodeName
-
-		entry, validNode := retnodes[nodeName]
-		if !validNode {
-			return nil
-		}
-
-		for _, container := range pod.Spec.Containers {
-			entry.addAllocatedResources(container.Resources.Requests)
-		}
-
-		// Add overhead for running a pod to the sum of requests
-		// https://kubernetes.io/docs/concepts/scheduling-eviction/pod-overhead/
-		entry.addAllocatedResources(pod.Spec.Overhead)
-
-		retnodes[nodeName] = entry // Map is by value, so store the copy back into the map
-
-		return nil
-	})
-
-	if err != nil {
+	inv := inventoryV1.Cluster{}
+	if err = json.Unmarshal(data, &inv); err != nil {
 		return nil, err
 	}
 
-	return retnodes, nil
+	res := newInventory(c.log.With("kube", "inventory"), inv)
+
+	return res, nil
 }
 
-func (c *client) nodeIsActive(node corev1.Node) bool {
-	ready := false
-	issues := 0
+// func (c *client) inventoryRun() error {
+// 	log := c.log.With("inventory")
+//
+// 	// Establish the gRPC connection
+// 	conn, err := grpc.Dial(fmt.Sprintf("%s:%d", nd.address, nd.port), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+// 	if err != nil {
+// 		log.Error("couldn't dial endpoint", err, err)
+// 		return err
+// 	}
+//
+// 	defer func() {
+// 		_ = conn.Close()
+// 	}()
+//
+// 	c.log.Info(fmt.Sprintf("(connected to inventory operator at %s:%d", nd.address, nd.port))
+//
+// 	client := inventoryV1.NewClusterRPCClient(conn)
+//
+// 	var stream inventoryV1.ClusterRPC_StreamClusterClient
+//
+// 	for stream == nil {
+// 		conn.Connect()
+//
+// 		if state := conn.GetState(); state != connectivity.Ready {
+// 			if !conn.WaitForStateChange(c.ctx, connectivity.Ready) {
+// 				return c.ctx.Err()
+// 			}
+// 		}
+//
+// 		// do not replace empty argument with nil. stream will panic
+// 		stream, err = client.StreamCluster(c.ctx, &emptypb.Empty{})
+// 		if err != nil {
+// 			if errors.Is(err, context.Canceled) {
+// 				return err
+// 			}
+//
+// 			log.Error("couldn't establish stream", "err", err)
+//
+// 			tctx, tcancel := context.WithTimeout(c.ctx, 2*time.Second)
+// 			<-tctx.Done()
+// 			tcancel()
+//
+// 			if !errors.Is(tctx.Err(), context.DeadlineExceeded) {
+// 				return tctx.Err()
+// 			}
+// 		}
+//
+// 		cluster, err := stream.Recv()
+// 		if err != nil {
+// 			stream = nil
+//
+// 			if errors.Is(err, context.Canceled) {
+// 				return err
+// 			}
+//
+// 			conn.ResetConnectBackoff()
+// 		}
+// 	}
+//
+// 	return errors.New("inventory finished")
+// }
 
-	for _, cond := range node.Status.Conditions {
-		switch cond.Type {
-		case corev1.NodeReady:
-			if cond.Status == corev1.ConditionTrue {
-				ready = true
-			}
-		case corev1.NodeMemoryPressure:
-			fallthrough
-		case corev1.NodeDiskPressure:
-			fallthrough
-		case corev1.NodePIDPressure:
-			fallthrough
-		case corev1.NodeNetworkUnavailable:
-			if cond.Status != corev1.ConditionFalse {
-				c.log.Error("node in poor condition",
-					"node", node.Name,
-					"condition", cond.Type,
-					"status", cond.Status)
+func sParamsEnsureGPU(sparams *crd.SchedulerParams) {
+	sParamsEnsureResources(sparams)
 
-				issues++
-			}
-		}
+	if sparams.Resources.GPU == nil {
+		sparams.Resources.GPU = &crd.SchedulerResourceGPU{}
 	}
-
-	// If the node has been tainted, don't consider it active.
-	for _, taint := range node.Spec.Taints {
-		if taint.Effect == corev1.TaintEffectNoSchedule || taint.Effect == corev1.TaintEffectNoExecute {
-			issues++
-		}
-	}
-
-	return ready && issues == 0
 }
 
-func isSupportedStorageClass(name string) bool {
-	switch name {
-	case "default":
-		fallthrough
-	case "beta1":
-		fallthrough
-	case "beta2":
-		fallthrough
-	case "beta3":
-		return true
-	default:
-		return false
+func sParamsEnsureResources(sparams *crd.SchedulerParams) {
+	if sparams.Resources == nil {
+		sparams.Resources = &crd.SchedulerResources{}
 	}
 }

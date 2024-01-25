@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	tpubsub "github.com/troian/pubsub"
+
 	"github.com/akash-network/provider/operator/waiter"
+	"github.com/akash-network/provider/tools/fromctx"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -181,7 +184,9 @@ func makeOrderForTest(
 	cfg.Deposit = mtypes.DefaultBidMinDeposit
 	cfg.MaxGroupVolumes = constants.DefaultMaxGroupVolumes
 
-	myService, err := NewService(context.Background(), mySession, scaffold.cluster, scaffold.testBus, waiter.NewNullWaiter(), cfg)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	myService, err := NewService(ctx, mySession, scaffold.cluster, scaffold.testBus, waiter.NewNullWaiter(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, myService)
 

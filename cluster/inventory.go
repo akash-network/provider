@@ -8,9 +8,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tpubsub "github.com/troian/pubsub"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
@@ -28,6 +30,8 @@ import (
 	"github.com/akash-network/provider/event"
 	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
 	"github.com/akash-network/provider/operator/waiter"
+	"github.com/akash-network/provider/tools/fromctx"
+	ptypes "github.com/akash-network/provider/types"
 )
 
 var (
@@ -62,12 +66,29 @@ var (
 	}, []string{"quantity"})
 )
 
+type invSnapshotResp struct {
+	res *provider.Inventory
+	err error
+}
+
+type inventoryRequest struct {
+	order     mtypes.OrderID
+	resources dtypes.ResourceGroup
+	ch        chan<- inventoryResponse
+}
+
+type inventoryResponse struct {
+	value ctypes.Reservation
+	err   error
+}
+
 type inventoryService struct {
 	config Config
 	client Client
 	sub    pubsub.Subscriber
 
 	statusch         chan chan<- ctypes.InventoryStatus
+	statusV1ch       chan chan<- invSnapshotResp
 	lookupch         chan inventoryRequest
 	reservech        chan inventoryRequest
 	unreservech      chan inventoryRequest
@@ -86,16 +107,15 @@ type inventoryService struct {
 }
 
 func newInventoryService(
+	ctx context.Context,
 	config Config,
 	log log.Logger,
-	donech <-chan struct{},
 	sub pubsub.Subscriber,
 	client Client,
 	ipOperatorClient operatorclients.IPOperatorClient,
 	waiter waiter.OperatorWaiter,
 	deployments []ctypes.IDeployment,
 ) (*inventoryService, error) {
-
 	sub, err := sub.Clone()
 	if err != nil {
 		return nil, err
@@ -106,6 +126,7 @@ func newInventoryService(
 		client:                 client,
 		sub:                    sub,
 		statusch:               make(chan chan<- ctypes.InventoryStatus),
+		statusV1ch:             make(chan chan<- invSnapshotResp),
 		lookupch:               make(chan inventoryRequest),
 		reservech:              make(chan inventoryRequest),
 		unreservech:            make(chan inventoryRequest),
@@ -122,9 +143,7 @@ func newInventoryService(
 		reservations = append(reservations, newReservation(d.LeaseID().OrderID(), d.ManifestGroup()))
 	}
 
-	ctx, _ := TieContextToChannel(context.Background(), donech)
-
-	go is.lc.WatchChannel(donech)
+	go is.lc.WatchChannel(ctx.Done())
 	go is.run(ctx, reservations)
 
 	return is, nil
@@ -229,15 +248,25 @@ func (is *inventoryService) status(ctx context.Context) (ctypes.InventoryStatus,
 	}
 }
 
-type inventoryRequest struct {
-	order     mtypes.OrderID
-	resources dtypes.ResourceGroup
-	ch        chan<- inventoryResponse
-}
+func (is *inventoryService) statusV1(ctx context.Context) (*provider.Inventory, error) {
+	ch := make(chan invSnapshotResp, 1)
 
-type inventoryResponse struct {
-	value ctypes.Reservation
-	err   error
+	select {
+	case <-is.lc.Done():
+		return nil, ErrNotRunning
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case is.statusV1ch <- ch:
+	}
+
+	select {
+	case <-is.lc.Done():
+		return nil, ErrNotRunning
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case result := <-ch:
+		return result.res, result.err
+	}
 }
 
 func (is *inventoryService) resourcesToCommit(rgroup dtypes.ResourceGroup) dtypes.ResourceGroup {
@@ -391,7 +420,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 
 	{
 		jReservation, _ := json.Marshal(req.resources.GetResourceUnits())
-		is.log.Debug("reservation requested", "order", req.order, fmt.Sprintf("resources=%s", jReservation))
+		is.log.Debug(fmt.Sprintf("reservation requested. order=%s, resources=%s", req.order, jReservation))
 	}
 
 	if reservation.endpointQuantity != 0 {
@@ -468,13 +497,23 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		}
 	}
 
+	bus := fromctx.PubSubFromCtx(ctx)
+
+	signalch := make(chan struct{}, 1)
+	trySignal := func() {
+		select {
+		case signalch <- struct{}{}:
+		case <-is.lc.ShutdownRequest():
+		default:
+		}
+	}
+
 loop:
 	for {
 		select {
 		case err := <-is.lc.ShutdownRequest():
 			is.lc.ShutdownInitiated(err)
 			break loop
-
 		case ev := <-is.sub.Events():
 			switch ev := ev.(type) { // nolint: gocritic
 			case event.ClusterDeployment:
@@ -508,10 +547,8 @@ loop:
 					break
 				}
 			}
-
 		case req := <-reserveChLocal:
 			is.handleRequest(req, state)
-
 		case req := <-is.lookupch:
 			// lookup registration
 			for _, res := range state.reservations {
@@ -528,7 +565,6 @@ loop:
 
 			inventoryRequestsCounter.WithLabelValues("lookup", "not-found").Inc()
 			req.ch <- inventoryResponse{err: errReservationNotFound}
-
 		case req := <-is.unreservech:
 			is.log.Debug("unreserving capacity", "order", req.order)
 			// remove reservation
@@ -556,18 +592,22 @@ loop:
 
 			inventoryRequestsCounter.WithLabelValues("unreserve", "not-found").Inc()
 			req.ch <- inventoryResponse{err: errReservationNotFound}
-
 		case responseCh := <-is.statusch:
 			responseCh <- is.getStatus(state)
 			inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
-
+		case responseCh := <-is.statusV1ch:
+			resp, err := is.getStatusV1(state)
+			responseCh <- invSnapshotResp{
+				res: resp,
+				err: err,
+			}
+			inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
 		case <-t.C:
 			// run cluster inventory check
 
 			t.Stop()
 			// Run an inventory check
 			updateInventory()
-
 		case res := <-runch:
 			// inventory check returned
 			runch = nil
@@ -632,6 +672,10 @@ loop:
 			}
 
 			resumeProcessingReservations()
+
+			trySignal()
+		case <-signalch:
+			bus.Pub(state.inventory.Snapshot(), []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
 		}
 
 		updateReservationMetrics(state.reservations)
@@ -718,6 +762,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 
 func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.InventoryStatus {
 	status := ctypes.InventoryStatus{}
+
 	if state.inventory == nil {
 		status.Error = errInventoryNotAvailableYet
 		return status
@@ -746,7 +791,41 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.Inven
 	for class, size := range state.inventory.Metrics().TotalAvailable.Storage {
 		status.Available.Storage = append(status.Available.Storage, ctypes.InventoryStorageStatus{Class: class, Size: size})
 	}
+
 	return status
+}
+
+func (is *inventoryService) getStatusV1(state *inventoryServiceState) (*provider.Inventory, error) {
+	if state.inventory == nil {
+		return nil, errInventoryNotAvailableYet
+	}
+
+	status := &provider.Inventory{
+		Cluster: state.inventory.Snapshot(),
+		Reservations: provider.Reservations{
+			Pending: provider.ReservationsMetric{
+				Count:     0,
+				Resources: provider.NewResourcesMetric(),
+			},
+			Active: provider.ReservationsMetric{
+				Count:     0,
+				Resources: provider.NewResourcesMetric(),
+			},
+		},
+	}
+
+	for _, reservation := range state.reservations {
+		runits := reservation.Resources().GetResourceUnits()
+		if reservation.allocated {
+			status.Reservations.Active.Resources.AddResourceUnits(runits)
+			status.Reservations.Active.Count++
+		} else {
+			status.Reservations.Pending.Resources.AddResourceUnits(runits)
+			status.Reservations.Pending.Count++
+		}
+	}
+
+	return status, nil
 }
 
 func reservationCountEndpoints(reservation *reservation) uint {

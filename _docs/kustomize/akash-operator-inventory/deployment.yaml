@@ -1,38 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inventory-operator
+  name: operator-inventory
   namespace: akash-services
   labels:
     akash.network: "true"
-    app.kubernetes.io/name: akash
-    app.kubernetes.io/instance: inventory
+    app.kubernetes.io/name: inventory
+    app.kubernetes.io/instance: inventory-service
     app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: akash
-      app.kubernetes.io/instance: inventory
+      app.kubernetes.io/name: inventory
+      app.kubernetes.io/instance: inventory-service
       app.kubernetes.io/component: operator
+      app.kubernetes.io/part-of: provider
   replicas: 1
   revisionHistoryLimit: 1
   template:
     metadata:
       labels:
-        app: inventory-operator
-        app.kubernetes.io/name: akash
-        app.kubernetes.io/instance: inventory
+        app.kubernetes.io/name: inventory
+        app.kubernetes.io/instance: inventory-service
         app.kubernetes.io/component: operator
+        app.kubernetes.io/part-of: provider
     spec:
-      serviceAccountName: inventory-operator
+      serviceAccountName: operator-inventory
       containers:
-        - name: inventory-operator
+        - name: operator-inventory
           image: ghcr.io/akash-network/provider
           args:
             - "provider-services"
             - "operator"
             - "inventory"
           imagePullPolicy: IfNotPresent
+          env:
+            - name: AP_CONFIG
+              value: /akash/config.yaml
           resources:
             limits:
               cpu: 500m
@@ -40,7 +45,31 @@ spec:
             requests:
               cpu: 100m
               memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /metrics/health
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /metrics/ready
+              port: api
+              scheme: HTTP
+            initialDelaySeconds: 5
+            periodSeconds: 5
           ports:
             - containerPort: 8080
               name: api
               protocol: TCP
+            - containerPort: 8081
+              name: grpc
+              protocol: TCP
+          volumeMounts:
+            - name: config
+              mountPath: /akash
+      volumes:
+        - name: config
+          configMap:
+            name: operator-inventory

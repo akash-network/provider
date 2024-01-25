@@ -2,8 +2,9 @@ package inventory
 
 import (
 	"context"
+	"errors"
 
-	"github.com/cskr/pubsub"
+	"github.com/troian/pubsub"
 
 	rookexec "github.com/rook/rook/pkg/util/exec"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,52 +14,90 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
-	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	inventory "github.com/akash-network/akash-api/go/inventory/v1"
+
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 const (
 	FlagAPITimeout   = "api-timeout"
 	FlagQueryTimeout = "query-timeout"
-	FlagAPIPort      = "api-port"
+	FlagRESTPort     = "rest-port"
+	FlagGRPCPort     = "grpc-port"
+	FlagPodName      = "pod-name"
+	FlagNodeName     = "node-name"
+	FlagConfig       = "config"
 )
 
-type ContextKey string
-
-const (
-	CtxKeyKubeConfig       = ContextKey(providerflags.FlagKubeConfig)
-	CtxKeyKubeClientSet    = ContextKey("kube-clientset")
-	CtxKeyRookClientSet    = ContextKey("rook-clientset")
-	CtxKeyAkashClientSet   = ContextKey("akash-clientset")
-	CtxKeyPubSub           = ContextKey("pubsub")
-	CtxKeyLifecycle        = ContextKey("lifecycle")
-	CtxKeyErrGroup         = ContextKey("errgroup")
-	CtxKeyStorage          = ContextKey("storage")
-	CtxKeyInformersFactory = ContextKey("informers-factory")
+var (
+	ErrMetricsUnsupportedRequest = errors.New("unsupported request method")
 )
 
-type resp struct {
-	res []akashv2beta1.InventoryClusterStorage
+type storageSignal struct {
+	driver  string
+	storage inventory.ClusterStorage
+}
+
+type respNodes struct {
+	res inventory.Nodes
 	err error
 }
 
-type req struct {
-	respCh chan resp
+type respCluster struct {
+	res inventory.Cluster
+	err error
 }
 
-type querier struct {
-	reqch chan req
+type reqCluster struct {
+	respCh chan respCluster
 }
 
-func newQuerier() querier {
-	return querier{
-		reqch: make(chan req, 100),
+type reqNodes struct {
+	respCh chan respNodes
+}
+
+type querierNodes struct {
+	reqch chan reqNodes
+}
+
+type querierCluster struct {
+	reqch chan reqCluster
+}
+
+func newQuerierCluster() querierCluster {
+	return querierCluster{
+		reqch: make(chan reqCluster, 100),
 	}
 }
 
-func (c *querier) Query(ctx context.Context) ([]akashv2beta1.InventoryClusterStorage, error) {
-	r := req{
-		respCh: make(chan resp, 1),
+func newQuerierNodes() querierNodes {
+	return querierNodes{
+		reqch: make(chan reqNodes, 100),
+	}
+}
+
+func (c *querierCluster) Query(ctx context.Context) (inventory.Cluster, error) {
+	r := reqCluster{
+		respCh: make(chan respCluster, 1),
+	}
+
+	select {
+	case c.reqch <- r:
+	case <-ctx.Done():
+		return inventory.Cluster{}, ctx.Err()
+	}
+
+	select {
+	case rsp := <-r.respCh:
+		return rsp.res, rsp.err
+	case <-ctx.Done():
+		return inventory.Cluster{}, ctx.Err()
+	}
+}
+
+func (c *querierNodes) Query(ctx context.Context) (inventory.Nodes, error) {
+	r := reqNodes{
+		respCh: make(chan respNodes, 1),
 	}
 
 	select {
@@ -75,8 +114,14 @@ func (c *querier) Query(ctx context.Context) ([]akashv2beta1.InventoryClusterSto
 	}
 }
 
-type Storage interface {
-	Query(ctx context.Context) ([]akashv2beta1.InventoryClusterStorage, error)
+type QuerierStorage interface{}
+
+type QuerierCluster interface {
+	Query(ctx context.Context) (inventory.Cluster, error)
+}
+
+type QuerierNodes interface {
+	Query(ctx context.Context) (inventory.Nodes, error)
 }
 
 type Watcher interface {
@@ -97,35 +142,36 @@ func NewRemotePodCommandExecutor(restcfg *rest.Config, clientset *kubernetes.Cli
 	}
 }
 
-func InformKubeObjects(ctx context.Context, pubsub *pubsub.PubSub, informer cache.SharedIndexInformer, topic string) {
-	ErrGroupFromCtx(ctx).Go(func() error {
+func InformKubeObjects(ctx context.Context, pub pubsub.Publisher, informer cache.SharedIndexInformer, topic string) {
+	fromctx.ErrGroupFromCtx(ctx).Go(func() error {
 		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
-				pubsub.Pub(watch.Event{
+				pub.Pub(watch.Event{
 					Type:   watch.Added,
 					Object: obj.(runtime.Object),
-				}, topic)
+				}, []string{topic})
 			},
 			UpdateFunc: func(oldObj, newObj interface{}) {
-				pubsub.Pub(watch.Event{
+				pub.Pub(watch.Event{
 					Type:   watch.Modified,
 					Object: newObj.(runtime.Object),
-				}, topic)
+				}, []string{topic})
 			},
 			DeleteFunc: func(obj interface{}) {
-				pubsub.Pub(watch.Event{
+				pub.Pub(watch.Event{
 					Type:   watch.Deleted,
 					Object: obj.(runtime.Object),
-				}, topic)
+				}, []string{topic})
 			},
 		})
 
 		if err != nil {
-			LogFromCtx(ctx).Error(err, "couldn't register event handlers")
+			fromctx.LogrFromCtx(ctx).Error(err, "couldn't register event handlers")
 			return nil
 		}
 
 		informer.Run(ctx.Done())
+
 		return nil
 	})
 }

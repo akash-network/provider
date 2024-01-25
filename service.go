@@ -5,12 +5,15 @@ import (
 
 	"github.com/boz/go-lifecycle"
 	"github.com/pkg/errors"
+	tpubsub "github.com/troian/pubsub"
 
 	"github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
+
 	"github.com/akash-network/node/pubsub"
 
 	"github.com/akash-network/provider/bidengine"
@@ -21,6 +24,8 @@ import (
 	"github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/fromctx"
+	ptypes "github.com/akash-network/provider/types"
 )
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
@@ -33,6 +38,7 @@ type ValidateClient interface {
 //go:generate mockery --name StatusClient
 type StatusClient interface {
 	Status(context.Context) (*Status, error)
+	StatusV1(ctx context.Context) (*provider.Status, error)
 }
 
 //go:generate mockery --name Client
@@ -150,6 +156,7 @@ func NewService(ctx context.Context,
 
 	go svc.lc.WatchContext(ctx)
 	go svc.run()
+	go svc.statusRun()
 
 	return svc, nil
 }
@@ -216,6 +223,29 @@ func (s *service) Status(ctx context.Context) (*Status, error) {
 	}, nil
 }
 
+func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
+	cluster, err := s.cluster.StatusV1(ctx)
+	if err != nil {
+		return nil, err
+	}
+	bidengine, err := s.bidengine.StatusV1(ctx)
+	if err != nil {
+		return nil, err
+	}
+	manifest, err := s.manifest.StatusV1(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &provider.Status{
+		Cluster:   cluster,
+		BidEngine: bidengine,
+		Manifest:  manifest,
+		PublicHostnames: []string{
+			s.config.ClusterPublicHostname,
+		},
+	}, nil
+}
+
 func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.GroupSpec) (ValidateGroupSpecResult, error) {
 	// FUTURE - pass owner here
 	req := bidengine.Request{
@@ -269,6 +299,45 @@ func (s *service) run() {
 	<-s.bc.lc.Done()
 
 	s.session.Log().Info("shutdown complete")
+}
+
+func (s *service) statusRun() {
+	bus := fromctx.PubSubFromCtx(s.ctx)
+
+	events := bus.Sub(
+		ptypes.PubSubTopicClusterStatus,
+		ptypes.PubSubTopicBidengineStatus,
+		ptypes.PubSubTopicManifestStatus,
+	)
+
+	defer bus.Unsub(events)
+
+	status := provider.Status{
+		PublicHostnames: []string{
+			s.config.ClusterPublicHostname,
+		},
+	}
+
+loop:
+	for {
+		select {
+		case <-s.lc.ShutdownRequest():
+			return
+		case evt := <-events:
+			switch obj := evt.(type) {
+			case provider.ClusterStatus:
+				status.Cluster = &obj
+			case provider.BidEngineStatus:
+				status.BidEngine = &obj
+			case provider.ManifestStatus:
+				status.Manifest = &obj
+			default:
+				continue loop
+			}
+
+			bus.Pub(status, []string{ptypes.PubSubTopicProviderStatus}, tpubsub.WithRetain())
+		}
+	}
 }
 
 type reservation struct {

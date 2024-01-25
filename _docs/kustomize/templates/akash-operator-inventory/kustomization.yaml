@@ -9,5 +9,11 @@ patches:
     target:
       kind: Deployment
       group: apps
-      name: inventory-operator
+      name: operator-inventory
+      version: v1
+  - path: docker-image.yaml
+    target:
+      kind: DaemonSet
+      group: apps
+      name: operator-inventory-node
       version: v1

@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -179,8 +180,9 @@ loop:
 	// Check to see if the process ran & returned an exit code
 	// If this is true, don't return an error. Something ran in the
 	// container which is what this code was trying to do
-	if err, ok := err.(executil.CodeExitError); ok {
-		return execResult{exitCode: err.Code}, nil
+	terr := executil.CodeExitError{}
+	if errors.As(err, &terr) {
+		return execResult{exitCode: terr.Code}, nil
 	}
 
 	// Some errors are untyped, use string matching to give better answers

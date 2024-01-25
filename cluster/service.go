@@ -4,8 +4,10 @@ import (
 	"context"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
+	tpubsub "github.com/troian/pubsub"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -22,12 +24,15 @@ import (
 	"github.com/akash-network/provider/operator/waiter"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/fromctx"
+	ptypes "github.com/akash-network/provider/types"
 )
 
 // ErrNotRunning is the error when service is not running
 var (
 	ErrNotRunning      = errors.New("not running")
 	ErrInvalidResource = errors.New("invalid resource")
+	errNoManifestGroup = errors.New("no manifest group could be found")
 )
 
 var (
@@ -38,6 +43,38 @@ var (
 		ConstLabels: nil,
 	})
 )
+
+type service struct {
+	session session.Session
+	client  Client
+	bus     pubsub.Bus
+	sub     pubsub.Subscriber
+
+	inventory *inventoryService
+	hostnames *hostnameService
+
+	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
+	statusch                       chan chan<- *ctypes.Status
+	statusV1ch                     chan chan<- uint32
+	managers                       map[mtypes.LeaseID]*deploymentManager
+
+	managerch chan *deploymentManager
+
+	log log.Logger
+	lc  lifecycle.Lifecycle
+
+	waiter waiter.OperatorWaiter
+
+	config Config
+}
+
+type checkDeploymentExistsRequest struct {
+	owner sdktypes.Address
+	dseq  uint64
+	gseq  uint32
+
+	responseCh chan<- mtypes.LeaseID
+}
 
 // Cluster is the interface that wraps Reserve and Unreserve methods
 //
@@ -50,6 +87,7 @@ type Cluster interface {
 // StatusClient is the interface which includes status of service
 type StatusClient interface {
 	Status(context.Context) (*ctypes.Status, error)
+	StatusV1(context.Context) (*provider.ClusterStatus, error)
 	FindActiveLease(ctx context.Context, owner sdktypes.Address, dseq uint64, gseq uint32) (bool, mtypes.LeaseID, crd.ManifestGroup, error)
 }
 
@@ -83,7 +121,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 		return nil, err
 	}
 
-	inventory, err := newInventoryService(cfg, log, lc.ShuttingDown(), sub, client, ipOperatorClient, waiter, deployments)
+	inventory, err := newInventoryService(ctx, cfg, log, sub, client, ipOperatorClient, waiter, deployments)
 	if err != nil {
 		sub.Close()
 		return nil, err
@@ -115,6 +153,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 		sub:                            sub,
 		inventory:                      inventory,
 		statusch:                       make(chan chan<- *ctypes.Status),
+		statusV1ch:                     make(chan chan<- uint32),
 		managers:                       make(map[mtypes.LeaseID]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
 		checkDeploymentExistsRequestCh: make(chan checkDeploymentExistsRequest),
@@ -130,39 +169,6 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 
 	return s, nil
 }
-
-type service struct {
-	session session.Session
-	client  Client
-	bus     pubsub.Bus
-	sub     pubsub.Subscriber
-
-	inventory *inventoryService
-	hostnames *hostnameService
-
-	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
-	statusch                       chan chan<- *ctypes.Status
-	managers                       map[mtypes.LeaseID]*deploymentManager
-
-	managerch chan *deploymentManager
-
-	log log.Logger
-	lc  lifecycle.Lifecycle
-
-	waiter waiter.OperatorWaiter
-
-	config Config
-}
-
-type checkDeploymentExistsRequest struct {
-	owner sdktypes.Address
-	dseq  uint64
-	gseq  uint32
-
-	responseCh chan<- mtypes.LeaseID
-}
-
-var errNoManifestGroup = errors.New("no manifest group could be found")
 
 func (s *service) FindActiveLease(ctx context.Context, owner sdktypes.Address, dseq uint64, gseq uint32) (bool, mtypes.LeaseID, crd.ManifestGroup, error) {
 	response := make(chan mtypes.LeaseID, 1)
@@ -258,6 +264,39 @@ func (s *service) Status(ctx context.Context) (*ctypes.Status, error) {
 	}
 }
 
+func (s *service) StatusV1(ctx context.Context) (*provider.ClusterStatus, error) {
+	istatus, err := s.inventory.statusV1(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan uint32, 1)
+
+	select {
+	case <-s.lc.Done():
+		return nil, ErrNotRunning
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case s.statusV1ch <- ch:
+	}
+
+	select {
+	case <-s.lc.Done():
+		return nil, ErrNotRunning
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case result := <-ch:
+		res := &provider.ClusterStatus{
+			Leases: provider.Leases{
+				Active: result,
+			},
+			Inventory: *istatus,
+		}
+
+		return res, nil
+	}
+}
+
 func (s *service) updateDeploymentManagerGauge() {
 	deploymentManagerGauge.Set(float64(len(s.managers)))
 }
@@ -275,10 +314,28 @@ func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 		return
 	}
 
+	bus := fromctx.PubSubFromCtx(ctx)
+
+	inventorych := bus.Sub(ptypes.PubSubTopicInventoryStatus)
+
 	for _, deployment := range deployments {
 		s.managers[deployment.LeaseID()] = newDeploymentManager(s, deployment, false)
 		s.updateDeploymentManagerGauge()
 	}
+
+	signalch := make(chan struct{}, 1)
+
+	trySignal := func() {
+		select {
+		case signalch <- struct{}{}:
+		case <-ctx.Done():
+		default:
+		}
+	}
+
+	// var inv provider.Inventory
+
+	trySignal()
 
 loop:
 	for {
@@ -319,6 +376,8 @@ loop:
 				}
 
 				s.managers[key] = newDeploymentManager(s, deployment, true)
+
+				trySignal()
 			case mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
@@ -327,6 +386,22 @@ loop:
 			ch <- &ctypes.Status{
 				Leases: uint32(len(s.managers)),
 			}
+		case ch := <-s.statusV1ch:
+			ch <- uint32(len(s.managers))
+		case <-signalch:
+			istatus, _ := s.inventory.statusV1(ctx)
+
+			if istatus == nil {
+				continue
+			}
+
+			msg := provider.ClusterStatus{
+				Leases:    provider.Leases{Active: uint32(len(s.managers))},
+				Inventory: *istatus,
+			}
+			bus.Pub(msg, []string{ptypes.PubSubTopicClusterStatus}, tpubsub.WithRetain())
+		case <-inventorych:
+			trySignal()
 		case dm := <-s.managerch:
 			s.log.Info("manager done", "lease", dm.deployment.LeaseID())
 
@@ -338,6 +413,7 @@ loop:
 			}
 
 			delete(s.managers, dm.deployment.LeaseID())
+			trySignal()
 		case req := <-s.checkDeploymentExistsRequestCh:
 			s.doCheckDeploymentExists(req)
 		}

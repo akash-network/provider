@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
+	"os/signal"
 
 	"github.com/cosmos/cosmos-sdk/server"
 
@@ -10,16 +13,22 @@ import (
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 )
 
-// In main we call the rootCmd
-func main() {
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
 	rootCmd := pcmd.NewRootCmd()
 
-	if err := acmd.Execute(rootCmd, "AP"); err != nil {
-		switch e := err.(type) {
-		case server.ErrorCode:
-			os.Exit(e.Code)
-		default:
-			os.Exit(1)
+	return acmd.ExecuteWithCtx(ctx, rootCmd, "AP")
+}
+
+func main() {
+	err := run()
+	if err != nil {
+		if errors.As(err, &server.ErrorCode{}) {
+			os.Exit(err.(server.ErrorCode).Code)
 		}
+
+		os.Exit(1)
 	}
 }

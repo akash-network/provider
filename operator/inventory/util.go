@@ -3,41 +3,21 @@ package inventory
 import (
 	"context"
 
-	"github.com/boz/go-lifecycle"
-	"github.com/cskr/pubsub"
-	"github.com/go-logr/logr"
-	"golang.org/x/sync/errgroup"
-	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
+	"k8s.io/client-go/informers"
 
-	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
-func LogFromCtx(ctx context.Context) logr.Logger {
-	lg, _ := logr.FromContext(ctx)
-	return lg
-}
-
-func KubeConfigFromCtx(ctx context.Context) *rest.Config {
-	val := ctx.Value(CtxKeyKubeConfig)
-	if val == nil {
-		panic("context does not have kubeconfig set")
-	}
-
-	return val.(*rest.Config)
-}
-
-func KubeClientFromCtx(ctx context.Context) *kubernetes.Clientset {
-	val := ctx.Value(CtxKeyKubeClientSet)
-	if val == nil {
-		panic("context does not have kube client set")
-	}
-
-	return val.(*kubernetes.Clientset)
-}
+const (
+	CtxKeyRookClientSet    = fromctx.Key("rook-clientset")
+	CtxKeyStorage          = fromctx.Key("storage")
+	CtxKeyFeatureDiscovery = fromctx.Key("feature-discovery")
+	CtxKeyInformersFactory = fromctx.Key("informers-factory")
+	CtxKeyHwInfo           = fromctx.Key("hardware-info")
+	CtxKeyClusterState     = fromctx.Key("cluster-state")
+	CtxKeyConfig           = fromctx.Key("config")
+)
 
 func InformersFactoryFromCtx(ctx context.Context) informers.SharedInformerFactory {
 	val := ctx.Value(CtxKeyInformersFactory)
@@ -57,47 +37,47 @@ func RookClientFromCtx(ctx context.Context) *rookclientset.Clientset {
 	return val.(*rookclientset.Clientset)
 }
 
-func AkashClientFromCtx(ctx context.Context) *akashclientset.Clientset {
-	val := ctx.Value(CtxKeyAkashClientSet)
-	if val == nil {
-		panic("context does not have akash client set")
-	}
-
-	return val.(*akashclientset.Clientset)
-}
-
-func PubSubFromCtx(ctx context.Context) *pubsub.PubSub {
-	val := ctx.Value(CtxKeyPubSub)
-	if val == nil {
-		panic("context does not have pubsub set")
-	}
-
-	return val.(*pubsub.PubSub)
-}
-
-func LifecycleFromCtx(ctx context.Context) lifecycle.Lifecycle {
-	val := ctx.Value(CtxKeyLifecycle)
-	if val == nil {
-		panic("context does not have lifecycle set")
-	}
-
-	return val.(lifecycle.Lifecycle)
-}
-
-func ErrGroupFromCtx(ctx context.Context) *errgroup.Group {
-	val := ctx.Value(CtxKeyErrGroup)
-	if val == nil {
-		panic("context does not have errgroup set")
-	}
-
-	return val.(*errgroup.Group)
-}
-
-func StorageFromCtx(ctx context.Context) []Storage {
+func StorageFromCtx(ctx context.Context) []QuerierStorage {
 	val := ctx.Value(CtxKeyStorage)
 	if val == nil {
 		panic("context does not have storage set")
 	}
 
-	return val.([]Storage)
+	return val.([]QuerierStorage)
+}
+
+func FeatureDiscoveryFromCtx(ctx context.Context) QuerierNodes {
+	val := ctx.Value(CtxKeyFeatureDiscovery)
+	if val == nil {
+		panic("context does not have storage set")
+	}
+
+	return val.(QuerierNodes)
+}
+
+func HWInfoFromCtx(ctx context.Context) hwInfo {
+	val := ctx.Value(CtxKeyHwInfo)
+	if val == nil {
+		panic("context does not have file reader set")
+	}
+
+	return val.(hwInfo)
+}
+
+func ClusterStateFromCtx(ctx context.Context) QuerierCluster {
+	val := ctx.Value(CtxKeyClusterState)
+	if val == nil {
+		panic("context does not have cluster state set")
+	}
+
+	return val.(QuerierCluster)
+}
+
+func ConfigFromCtx(ctx context.Context) Config {
+	val := ctx.Value(CtxKeyConfig)
+	if val == nil {
+		panic("context does not have config set")
+	}
+
+	return val.(Config)
 }

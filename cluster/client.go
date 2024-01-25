@@ -9,9 +9,11 @@ import (
 	"sync"
 	"time"
 
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
@@ -344,6 +346,45 @@ func (inv *inventory) Metrics() ctypes.InventoryMetrics {
 	}
 
 	return ret
+}
+
+func (inv *inventory) Snapshot() inventoryV1.Cluster {
+	res := inventoryV1.Cluster{
+		Nodes:   make(inventoryV1.Nodes, 0, len(inv.nodes)),
+		Storage: make(inventoryV1.ClusterStorage, 0, len(inv.storage)),
+	}
+
+	for _, nd := range inv.nodes {
+		res.Nodes = append(res.Nodes, inventoryV1.Node{
+			Name: nd.id,
+			Resources: inventoryV1.NodeResources{
+				CPU: inventoryV1.CPU{
+					Quantity: inventoryV1.NewResourcePair(nd.cpu.allocatable.Int64(), nd.cpu.allocated.Int64(), "m"),
+				},
+				Memory: inventoryV1.Memory{
+					Quantity: inventoryV1.NewResourcePair(nd.memory.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
+				},
+				GPU: inventoryV1.GPU{
+					Quantity: inventoryV1.NewResourcePair(nd.gpu.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
+				},
+				EphemeralStorage: inventoryV1.NewResourcePair(nd.ephemeralStorage.allocatable.Int64(), nd.ephemeralStorage.allocated.Int64(), resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+			},
+			Capabilities: inventoryV1.NodeCapabilities{},
+		})
+	}
+
+	for class, storage := range inv.storage {
+		res.Storage = append(res.Storage, inventoryV1.Storage{
+			Quantity: inventoryV1.NewResourcePair(storage.allocatable.Int64(), storage.allocated.Int64(), resource.DecimalSI),
+			Info: inventoryV1.StorageInfo{
+				Class: class,
+			},
+		})
+	}
+
+	return res
 }
 
 func (inv *inventory) dup() *inventory {

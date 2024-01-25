@@ -8,6 +8,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	tpubsub "github.com/troian/pubsub"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
@@ -23,6 +24,7 @@ import (
 	"github.com/akash-network/provider/event"
 	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
 	"github.com/akash-network/provider/operator/waiter"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 func newInventory(nodes ...string) ctypes.Inventory {
@@ -125,7 +127,6 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 		InventoryExternalPortQuantity:   1000,
 	}
 	myLog := testutil.Logger(t)
-	donech := make(chan struct{})
 	bus := pubsub.NewBus()
 	subscriber, err := bus.Subscribe()
 	require.NoError(t, err)
@@ -138,10 +139,13 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 
 	clusterClient.On("Inventory", mock.Anything).Return(clusterInv, nil)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
 	inv, err := newInventoryService(
+		ctx,
 		config,
 		myLog,
-		donech,
 		subscriber,
 		clusterClient,
 		operatorclients.NullIPOperatorClient(), // This client is not used in this test
@@ -150,7 +154,7 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
-	close(donech)
+	cancel()
 	<-inv.lc.Done()
 
 	// No ports used yet
@@ -165,7 +169,6 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		InventoryExternalPortQuantity:   1000,
 	}
 	myLog := testutil.Logger(t)
-	donech := make(chan struct{})
 	bus := pubsub.NewBus()
 	subscriber, err := bus.Subscribe()
 	require.NoError(t, err)
@@ -227,10 +230,13 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		inventoryCalled <- 0 // Value does not matter
 	}).Return(clusterInv, nil)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
 	inv, err := newInventoryService(
+		ctx,
 		config,
 		myLog,
-		donech,
 		subscriber,
 		clusterClient,
 		nil,                    // No IP operator client
@@ -289,7 +295,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	require.Equal(t, uint(1000), inv.availableExternalPorts)
 
 	// Shut everything down
-	close(donech)
+	cancel()
 	<-inv.lc.Done()
 }
 
@@ -445,10 +451,14 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 
 	subscriber, err := scaffold.bus.Subscribe()
 	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
 	inv, err := newInventoryService(
+		ctx,
 		config,
 		myLog,
-		scaffold.donech,
 		subscriber,
 		scaffold.clusterClient,
 		nil,                    // No IP operator client
@@ -463,6 +473,7 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 	require.Nil(t, reservation)
 
 	// Shut everything down
+	cancel()
 	close(scaffold.donech)
 	<-inv.lc.Done()
 }
@@ -490,10 +501,13 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 	}, nil)
 	mockIP.On("Stop")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
 	inv, err := newInventoryService(
+		ctx,
 		config,
 		myLog,
-		scaffold.donech,
 		subscriber,
 		scaffold.clusterClient,
 		mockIP,
@@ -508,6 +522,7 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 	require.Nil(t, reservation)
 
 	// Shut everything down
+	cancel()
 	close(scaffold.donech)
 	<-inv.lc.Done()
 }
@@ -553,10 +568,13 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 
 	mockIP.On("Stop")
 
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
 	inv, err := newInventoryService(
+		ctx,
 		config,
 		myLog,
-		scaffold.donech,
 		subscriber,
 		scaffold.clusterClient,
 		mockIP,
@@ -592,6 +610,7 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 	require.NotNil(t, reservation)
 
 	// Shut everything down
+	cancel()
 	close(scaffold.donech)
 	<-inv.lc.Done()
 
@@ -657,10 +676,13 @@ func TestInventory_OverReservations(t *testing.T) {
 		InventoryExternalPortQuantity:   1000,
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
 	inv, err := newInventoryService(
+		ctx,
 		config,
 		myLog,
-		scaffold.donech,
 		subscriber,
 		scaffold.clusterClient,
 		nil,                    // No IP operator client
@@ -703,7 +725,8 @@ func TestInventory_OverReservations(t *testing.T) {
 	// Wait for second call to inventory
 	testutil.ChannelWaitForValueUpTo(t, scaffold.inventoryCalled, 30*time.Second)
 
-	// // Shut everything down
+	// Shut everything down
+	cancel()
 	close(scaffold.donech)
 	<-inv.lc.Done()
 

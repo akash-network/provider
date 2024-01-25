@@ -156,10 +156,17 @@ kube-setup-ingress-default:
 kube-status-ingress-%:
 	kubectl rollout status -n akash-services ingress $* --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 
+.PHONY: kube-deployment-rollout-operator-inventory
+kube-deployment-rollout-operator-inventory:
+	kubectl -n akash-services rollout status daemonset operator-inventory-node --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services wait pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-node --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services rollout status deployment operator-inventory --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services wait pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-service --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+
 .PHONY: kube-deployment-rollout-%
 kube-deployment-rollout-%:
 	kubectl -n akash-services rollout status deployment $* --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
-	kubectl -n akash-services wait pods -l akash.network/component=$* --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services wait pods -l akash.network/component=operator -l akash.network/name=$(patsubst %, operator-%,$*) --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 
 .PHONY: akash-node-ready
 akash-node-ready: SHELL=$(BASH_PATH)
