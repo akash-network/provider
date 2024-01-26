@@ -32,6 +32,7 @@ func cmdPsutil() *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(cmdPsutilList())
 	cmd.AddCommand(cmdPsutilServe())
 
 	return cmd
@@ -67,6 +68,44 @@ func cmdPsutilServe() *cobra.Command {
 	cmd.Flags().Uint16(flagAPIPort, 8081, "api port")
 	if err := viper.BindPFlag(flagAPIPort, cmd.Flags().Lookup(flagAPIPort)); err != nil {
 		panic(err)
+	}
+
+	return cmd
+}
+
+func cmdPsutilList() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "list",
+		Short:        "dump node hardware spec into stdout",
+		Args:         cobra.ExactArgs(1),
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var res interface{}
+			var err error
+			switch args[0] {
+			case "cpu":
+				res, err = cpu.New()
+			case "gpu":
+				res, err = gpu.New()
+			case "memory":
+				res, err = memory.New()
+			default:
+				return fmt.Errorf("invalid command \"%s\"", args[0]) // nolint: goerr113
+			}
+
+			if err != nil {
+				return err
+			}
+
+			data, err := json.MarshalIndent(res, "", "  ")
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("%s\n", string(data))
+
+			return nil
+		},
 	}
 
 	return cmd
