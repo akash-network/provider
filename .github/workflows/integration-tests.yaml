@@ -60,13 +60,10 @@ jobs:
           cd ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
           cat "$GITHUB_ENV" > "$GITHUB_WORKSPACE/env.backup"
           direnv export gha >> "$GITHUB_ENV"
-      - name: Add akash-api to go.work
+      - name: Run modvendor on akash-api
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
         run: |
           make modvendor
-          printf "use (\n\t.\n)\n" > ../provider/go.work
-          printf "\ngo ${{ env.GOVERSION }}\n" >> ../provider/go.work
-          printf "\nreplace (\n\tgithub.com/akash-network/akash-api => ../akash-api\n)\n" >> ../provider/go.work
           cat "$GITHUB_WORKSPACE/env.backup" > "$GITHUB_ENV"
       - name: Setup direnv for provider
         run: direnv export gha >> "$GITHUB_ENV"
@@ -121,8 +118,12 @@ jobs:
           __pod=$(kubectl -n akash-services get pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-node --no-headers -o custom-columns=":metadata.name")
           kubectl -n akash-services port-forward --address 0.0.0.0 pod/$__pod 8444:grpc &
           kubectl -n akash-services port-forward --address 0.0.0.0 service/operator-inventory 8445:grpc &
-          ./script/inventory-grpc-probe.sh --host=localhost:8444 --mode=plaintext akash.inventory.v1.NodeRPC/QueryNode
-          ./script/inventory-grpc-probe.sh --host=localhost:8445 --mode=plaintext akash.inventory.v1.ClusterRPC/QueryCluster
+
+          timeout 10 bash -c -- 'while ! nc -vz localhost 8445 > /dev/null 2>&1 ; do sleep 0.1; done'
+          timeout 10 bash -c -- 'while ! nc -vz localhost 8444 > /dev/null 2>&1 ; do sleep 0.1; done'
+
+          ${{ env.GOPATH }}/src/github.com/akash-network/akash-api/script/grpc-probe.sh --host=localhost:8444 --mode=plaintext akash.inventory.v1.NodeRPC/QueryNode
+          ${{ env.GOPATH }}/src/github.com/akash-network/akash-api/script/grpc-probe.sh --host=localhost:8445 --mode=plaintext akash.inventory.v1.ClusterRPC/QueryCluster
           kubectl -n akash-services logs service/operator-inventory
       - name: Run E2E Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
