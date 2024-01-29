@@ -5,8 +5,8 @@ metadata:
   name: default-deny-ingress
   namespace: default
 spec:
-  podSelector: 
+  podSelector:
     matchLabels: {}
   policyTypes:
-  - Ingress
-  - Egress
+    - Ingress
+    - Egress

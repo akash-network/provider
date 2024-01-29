@@ -179,6 +179,8 @@ func (fd *featureDiscovery) run() error {
 			res = append(res, nd.Dup())
 		}
 
+		sort.Sort(res)
+
 		return res
 	}
 

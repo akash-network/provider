@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +18,7 @@ spec:
         - name: akash-node
           image: ghcr.io/akash-network/node:stable
           imagePullPolicy: IfNotPresent
-          command: [ "/bin/sh" , "/boot/run.sh" ]
+          command: ["/bin/sh", "/boot/run.sh"]
           env:
 
             ##

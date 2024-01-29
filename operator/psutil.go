@@ -12,6 +12,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
+	"github.com/jaypipes/ghw/pkg/pci"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -49,6 +50,7 @@ func cmdPsutilServe() *cobra.Command {
 			router.HandleFunc("/cpu", cpuInfoHandler).Methods(http.MethodGet)
 			router.HandleFunc("/gpu", gpuHandler).Methods(http.MethodGet)
 			router.HandleFunc("/memory", memoryHandler).Methods(http.MethodGet)
+			router.HandleFunc("/pci", pciHandler).Methods(http.MethodGet)
 
 			port := viper.GetUint16(flagAPIPort)
 
@@ -89,6 +91,8 @@ func cmdPsutilList() *cobra.Command {
 				res, err = gpu.New()
 			case "memory":
 				res, err = memory.New()
+			case "pci":
+				res, err = pci.New()
 			default:
 				return fmt.Errorf("invalid command \"%s\"", args[0]) // nolint: goerr113
 			}
@@ -111,7 +115,7 @@ func cmdPsutilList() *cobra.Command {
 	return cmd
 }
 
-func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
+func cpuInfoHandler(w http.ResponseWriter, _ *http.Request) {
 	res, err := cpu.New()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -121,7 +125,7 @@ func cpuInfoHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, res)
 }
 
-func gpuHandler(w http.ResponseWriter, r *http.Request) {
+func gpuHandler(w http.ResponseWriter, _ *http.Request) {
 	res, err := gpu.New()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -131,8 +135,18 @@ func gpuHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, res)
 }
 
-func memoryHandler(w http.ResponseWriter, r *http.Request) {
+func memoryHandler(w http.ResponseWriter, _ *http.Request) {
 	res, err := memory.New()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, res)
+}
+
+func pciHandler(w http.ResponseWriter, _ *http.Request) {
+	res, err := pci.New()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

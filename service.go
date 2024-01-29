@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"time"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/pkg/errors"
@@ -326,10 +327,13 @@ loop:
 		case evt := <-events:
 			switch obj := evt.(type) {
 			case provider.ClusterStatus:
+				status.Timestamp = time.Now().UTC()
 				status.Cluster = &obj
 			case provider.BidEngineStatus:
+				status.Timestamp = time.Now().UTC()
 				status.BidEngine = &obj
 			case provider.ManifestStatus:
+				status.Timestamp = time.Now().UTC()
 				status.Manifest = &obj
 			default:
 				continue loop

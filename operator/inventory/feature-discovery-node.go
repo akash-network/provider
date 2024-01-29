@@ -1,7 +1,9 @@
 package inventory
 
 import (
-	"embed"
+	"bytes"
+	"crypto/sha256"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -48,22 +51,8 @@ const (
 	topicStorage            = "storage"
 	topicConfig             = "config"
 	topicClusterState       = "cluster-state"
+	topicGPUIDs             = "gpu-ids"
 )
-
-type gpuDevice struct {
-	Name       string `json:"name"`
-	Interface  string `json:"interface"`
-	MemorySize string `json:"memory_size"`
-}
-
-type gpuDevices map[string]gpuDevice
-
-type gpuVendor struct {
-	Name    string     `json:"name"`
-	Devices gpuDevices `json:"devices"`
-}
-
-type gpuVendors map[string]gpuVendor
 
 type dpReqType int
 
@@ -106,34 +95,6 @@ type fdNodeServer struct {
 	reqch    <-chan chan<- v1.Node
 	pub      pubsub.Publisher
 	nodeName string
-}
-
-var (
-	supportedGPUs = gpuVendors{}
-
-	//go:embed gpu-info.json
-	gpuDevs embed.FS
-)
-
-func init() {
-	f, err := gpuDevs.Open("gpu-info.json")
-	if err != nil {
-		panic(err)
-	}
-	// close pci.ids file when done
-	defer func() {
-		_ = f.Close()
-	}()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		panic(err)
-	}
-
-	err = json.Unmarshal(data, &supportedGPUs)
-	if err != nil {
-		panic(err)
-	}
 }
 
 func cmdFeatureDiscoveryNode() *cobra.Command {
@@ -289,6 +250,10 @@ func cmdFeatureDiscoveryNode() *cobra.Command {
 				nodeName: nodeName,
 			}
 
+			group.Go(func() error {
+				return registryLoader(ctx)
+			})
+
 			startch := make(chan struct{}, 1)
 			group.Go(func() error {
 				defer func() {
@@ -356,6 +321,16 @@ func cmdFeatureDiscoveryNode() *cobra.Command {
 
 	cmd.Flags().String(FlagNodeName, "", "node name")
 	if err := viper.BindPFlag(FlagNodeName, cmd.Flags().Lookup(FlagNodeName)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String(FlagProviderConfigsURL, defaultProviderConfigsURL, "provider configs server")
+	if err := viper.BindPFlag(FlagProviderConfigsURL, cmd.Flags().Lookup(FlagProviderConfigsURL)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String(FlagPciDbURL, "https://pci-ids.ucw.cz/v2.2/pci.ids", "query period for registry changes")
+	if err := viper.BindPFlag(FlagPciDbURL, cmd.Flags().Lookup(FlagPciDbURL)); err != nil {
 		panic(err)
 	}
 
@@ -437,13 +412,17 @@ func (rt *nodeRouter) readyHandler(w http.ResponseWriter, req *http.Request) {
 
 func (nd *fdNodeServer) run(startch chan<- struct{}) error {
 	kc := fromctx.KubeClientFromCtx(nd.ctx)
+	bus := fromctx.PubSubFromCtx(nd.ctx)
+
+	subEvents := bus.Sub(topicGPUIDs)
+	defer bus.Unsub(subEvents)
 
 	nodeWatch, err := kc.CoreV1().Nodes().Watch(nd.ctx, metav1.ListOptions{
 		LabelSelector: builder.AkashManagedLabelName + "=true",
 		FieldSelector: fields.OneTermEqualSelector(metav1.ObjectNameField, nd.nodeName).String(),
 	})
 	if err != nil {
-		nd.log.Error(err, fmt.Sprintf("unable to start node watcher for \"%s\"", nd.nodeName))
+		nd.log.Error(err, fmt.Sprintf("unable to watch node \"%s\"", nd.nodeName))
 		return err
 	}
 
@@ -453,13 +432,21 @@ func (nd *fdNodeServer) run(startch chan<- struct{}) error {
 		FieldSelector: fields.OneTermEqualSelector("spec.nodeName", nd.nodeName).String(),
 	})
 	if err != nil {
-		nd.log.Error(err, "unable to fetch pods")
+		nd.log.Error(err, "unable to watch start pods")
 		return err
 	}
 
 	defer podsWatch.Stop()
 
-	node, initPods, err := initNodeInfo(nd.ctx, nd.nodeName)
+	gpusIDs := make(RegistryGPUVendors)
+
+	select {
+	case evt := <-subEvents:
+		gpusIDs = evt.(RegistryGPUVendors)
+	default:
+	}
+
+	node, initPods, err := initNodeInfo(nd.ctx, nd.nodeName, gpusIDs)
 	if err != nil {
 		nd.log.Error(err, "unable to init node info")
 		return err
@@ -491,6 +478,9 @@ func (nd *fdNodeServer) run(startch chan<- struct{}) error {
 			nd.pub.Pub(node.Dup(), []string{topicNode}, pubsub.WithRetain())
 		case req := <-nd.reqch:
 			req <- node.Dup()
+		case evt := <-subEvents:
+			gpusIDs = evt.(RegistryGPUVendors)
+			node.Resources.GPU.Info, _ = parseGPUInfo(nd.ctx, gpusIDs)
 		case res := <-nodeWatch.ResultChan():
 			obj := res.Object.(*corev1.Node)
 			switch res.Type {
@@ -563,7 +553,12 @@ func subAllocatedResources(node *v1.Node, rl corev1.ResourceList) {
 	}
 }
 
-func initNodeInfo(ctx context.Context, name string) (v1.Node, map[string]corev1.Pod, error) {
+func initNodeInfo(ctx context.Context, name string, gpusIds RegistryGPUVendors) (v1.Node, map[string]corev1.Pod, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fromctx.LogrFromCtx(ctx).Info(fmt.Sprintf("recovered from panic: %s", r))
+		}
+	}()
 	kc := fromctx.KubeClientFromCtx(ctx)
 
 	cpuInfo, err := parseCPUInfo(ctx)
@@ -571,11 +566,9 @@ func initNodeInfo(ctx context.Context, name string) (v1.Node, map[string]corev1.
 		return v1.Node{}, nil, err
 	}
 
-	gpuInfo, err := parseGPUInfo(ctx)
+	gpuInfo, err := parseGPUInfo(ctx, gpusIds)
 	if err != nil {
-		log := fromctx.LogrFromCtx(ctx)
-		log.Error(err, "couldn't pull GPU info")
-		// return v1.Node{}, nil, err
+		return v1.Node{}, nil, err
 	}
 
 	knode, err := kc.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
@@ -624,6 +617,7 @@ func initNodeInfo(ctx context.Context, name string) (v1.Node, map[string]corev1.
 		case corev1.ResourceEphemeralStorage:
 			res.Resources.EphemeralStorage.Allocatable.Set(r.Value())
 		case builder.ResourceGPUNvidia:
+			fallthrough
 		case builder.ResourceGPUAMD:
 			res.Resources.GPU.Quantity.Allocatable.Set(r.Value())
 		}
@@ -638,9 +632,17 @@ func initNodeInfo(ctx context.Context, name string) (v1.Node, map[string]corev1.
 		return res, nil, err
 	}
 
+	if podsList == nil {
+		return res, initPods, nil
+	}
+
 	for _, pod := range podsList.Items {
 		for _, container := range pod.Spec.Containers {
-			addAllocatedResources(&res, container.Resources.Requests)
+			if container.Resources.Requests != nil {
+				addAllocatedResources(&res, container.Resources.Requests)
+			} else if container.Resources.Limits != nil {
+				addAllocatedResources(&res, container.Resources.Limits)
+			}
 		}
 		initPods[pod.Name] = pod
 	}
@@ -740,7 +742,13 @@ func parseCPUInfo(ctx context.Context) (v1.CPUInfoS, error) {
 	return res, nil
 }
 
-func parseGPUInfo(ctx context.Context) (v1.GPUInfoS, error) {
+func parseGPUInfo(ctx context.Context, info RegistryGPUVendors) (v1.GPUInfoS, error) {
+	defer func() {
+		if r := recover(); r != nil {
+			fromctx.LogrFromCtx(ctx).Info(fmt.Sprintf("recovered from panic: %s", r))
+		}
+	}()
+
 	res := make(v1.GPUInfoS, 0)
 
 	if err := ctx.Err(); err != nil {
@@ -769,7 +777,7 @@ func parseGPUInfo(ctx context.Context) (v1.GPUInfoS, error) {
 			continue
 		}
 
-		vendor, exists := supportedGPUs[vinfo.ID]
+		vendor, exists := info[vinfo.ID]
 		if !exists {
 			continue
 		}
@@ -780,9 +788,9 @@ func parseGPUInfo(ctx context.Context) (v1.GPUInfoS, error) {
 		}
 
 		res = append(res, v1.GPUInfo{
-			Vendor:     dev.DeviceInfo.Vendor.Name,
+			Vendor:     vendor.Name,
 			VendorID:   dev.DeviceInfo.Vendor.ID,
-			Name:       dev.DeviceInfo.Product.Name,
+			Name:       model.Name,
 			ModelID:    dev.DeviceInfo.Product.ID,
 			Interface:  model.Interface,
 			MemorySize: model.MemorySize,
@@ -1007,6 +1015,129 @@ initloop:
 			}
 
 			readreq.resp <- resp
+		}
+	}
+}
+
+// this function is piece of sh*t. refactor it!
+func registryLoader(ctx context.Context) error {
+	log := fromctx.LogrFromCtx(ctx).WithName("registry-loader")
+	bus := fromctx.PubSubFromCtx(ctx)
+
+	tlsConfig := http.DefaultTransport.(*http.Transport).TLSClientConfig
+
+	cl := &http.Client{
+		Transport: &http.Transport{
+			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return tls.Dial(network, addr, tlsConfig)
+			},
+		},
+	}
+
+	urlGPU := fmt.Sprintf("%s/devices/gpus", strings.TrimSuffix(viper.GetString(FlagProviderConfigsURL), "/"))
+	urlPcieDB := viper.GetString(FlagPciDbURL)
+
+	var gpuCurrHash []byte
+	var pcidbHash []byte
+
+	gpuIDs := make(RegistryGPUVendors)
+
+	queryGPUs := func() bool {
+		res, err := cl.Get(urlGPU)
+		if err != nil {
+			log.Error(err, "couldn't query inventory registry")
+			return false
+		}
+
+		defer func() {
+			_ = res.Body.Close()
+		}()
+
+		if res.StatusCode != http.StatusOK {
+			return false
+		}
+
+		gpus, err := io.ReadAll(res.Body)
+		if err != nil {
+			return false
+		}
+
+		upstreamHash := sha256.New()
+		_, _ = upstreamHash.Write(gpus)
+		newHash := upstreamHash.Sum(nil)
+
+		if bytes.Equal(gpuCurrHash, newHash) {
+			return false
+		}
+
+		_ = json.Unmarshal(gpus, &gpuIDs)
+
+		gpuCurrHash = newHash
+
+		return true
+	}
+
+	queryPCI := func() bool {
+		res, err := cl.Get(urlPcieDB)
+		if err != nil {
+			log.Error(err, "couldn't query pci.ids")
+			return false
+		}
+
+		defer func() {
+			_ = res.Body.Close()
+		}()
+
+		if res.StatusCode != http.StatusOK {
+			return false
+		}
+
+		pcie, err := io.ReadAll(res.Body)
+		if err != nil {
+			return false
+		}
+
+		upstreamHash := sha256.New()
+		_, _ = upstreamHash.Write(pcie)
+		newHash := upstreamHash.Sum(nil)
+
+		if bytes.Equal(pcidbHash, newHash) {
+			return false
+		}
+
+		pcidbHash = newHash
+
+		return true
+	}
+
+	queryGPUs()
+	bus.Pub(gpuIDs, []string{topicGPUIDs})
+
+	queryPeriod := viper.GetDuration(FlagRegistryQueryPeriod)
+	tmGPU := time.NewTimer(queryPeriod)
+	tmPCIe := time.NewTimer(24 * time.Hour)
+
+	for {
+		select {
+		case <-ctx.Done():
+			if !tmGPU.Stop() {
+				<-tmGPU.C
+			}
+
+			if !tmPCIe.Stop() {
+				<-tmPCIe.C
+			}
+
+			return ctx.Err()
+		case <-tmGPU.C:
+			if queryGPUs() {
+				bus.Pub(gpuIDs, []string{topicGPUIDs})
+			}
+			tmGPU.Reset(queryPeriod)
+		case <-tmPCIe.C:
+			queryPCI()
+
+			tmGPU.Reset(24 * time.Hour)
 		}
 	}
 }

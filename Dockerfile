@@ -7,6 +7,7 @@ RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
     tini \
+    ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 # default port for provider API

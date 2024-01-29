@@ -65,6 +65,8 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
           env:
+            - name: PCIDB_ENABLE_NETWORK_FETCH
+              value: "1"
             - name: AP_POD_NAME
               valueFrom:
                 fieldRef:
