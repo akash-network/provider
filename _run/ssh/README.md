@@ -1,4 +1,4 @@
-# Dev Environment: "Kube" configuration
+# Dev Environment: "SSH" configuration
 
 The _Kube_ dev environment builds:
 
@@ -61,7 +61,7 @@ make init
 
 Start and initialize kind.
 
-Kubernetes ingress objects present some difficulties for creating development
+Kubernetes' ingress objects present some difficulties for creating development
 environments.  Two options are offered below - the first (random port) is less error-prone
 and can have multiple instances run concurrently, while the second option arguably
 has a better payoff.

@@ -20,13 +20,17 @@ import (
 )
 
 const (
-	FlagAPITimeout   = "api-timeout"
-	FlagQueryTimeout = "query-timeout"
-	FlagRESTPort     = "rest-port"
-	FlagGRPCPort     = "grpc-port"
-	FlagPodName      = "pod-name"
-	FlagNodeName     = "node-name"
-	FlagConfig       = "config"
+	FlagAPITimeout            = "api-timeout"
+	FlagQueryTimeout          = "query-timeout"
+	FlagRESTPort              = "rest-port"
+	FlagGRPCPort              = "grpc-port"
+	FlagPodName               = "pod-name"
+	FlagNodeName              = "node-name"
+	FlagConfig                = "config"
+	FlagProviderConfigsURL    = "provider-configs-url"
+	FlagPciDbURL              = "provider-pcidb-url"
+	FlagRegistryQueryPeriod   = "registry-query-period"
+	defaultProviderConfigsURL = "https://provider-configs.akash.network"
 )
 
 var (

@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,46 +19,46 @@ spec:
     spec:
       serviceAccountName: akash-operator
       containers:
-      - name: akash-hostname-operator
-        image: ghcr.io/akash-network/provider:stable
-        imagePullPolicy: IfNotPresent
-        args: ["provider-services", "hostname-operator"]
-        ports:
-          - name: status
-            containerPort: 8085
-        env:
-          - name: AP_K8S_MANIFEST_NS
-            valueFrom:
-              configMapKeyRef:
-                name: akash-provider-config
-                key: k8s-manifest-ns
-          - name: AP_PRUNE_INTERVAL
-            valueFrom:
-              configMapKeyRef:
-                name: akash-hostname-operator-config
-                key: prune-interval
-          - name: AP_IGNORE_LIST_ENTRY_LIMIT
-            valueFrom:
-              configMapKeyRef:
-                name: akash-hostname-operator-config
-                key: ignore-list-entry-limit
-          - name: AP_WEB_REFRESH_INTERVAL
-            valueFrom:
-              configMapKeyRef:
-                name: akash-hostname-operator-config
-                key: web-refresh-interval
-          - name: AP_RETRY_DELAY
-            valueFrom:
-              configMapKeyRef:
-                name: akash-hostname-operator-config
-                key: retry-delay
-          - name: AP_IGNORE_LIST_AGE_LIMIT
-            valueFrom:
-              configMapKeyRef:
-                name: akash-hostname-operator-config
-                key: ignore-list-age-limit
-          - name: AP_EVENT_FAILURE_LIMIT
-            valueFrom:
-              configMapKeyRef:
-                name: akash-hostname-operator-config
-                key: event-failure-limit
+        - name: akash-hostname-operator
+          image: ghcr.io/akash-network/provider:stable
+          imagePullPolicy: IfNotPresent
+          args: ["provider-services", "hostname-operator"]
+          ports:
+            - name: status
+              containerPort: 8085
+          env:
+            - name: AP_K8S_MANIFEST_NS
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-provider-config
+                  key: k8s-manifest-ns
+            - name: AP_PRUNE_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-hostname-operator-config
+                  key: prune-interval
+            - name: AP_IGNORE_LIST_ENTRY_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-hostname-operator-config
+                  key: ignore-list-entry-limit
+            - name: AP_WEB_REFRESH_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-hostname-operator-config
+                  key: web-refresh-interval
+            - name: AP_RETRY_DELAY
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-hostname-operator-config
+                  key: retry-delay
+            - name: AP_IGNORE_LIST_AGE_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-hostname-operator-config
+                  key: ignore-list-age-limit
+            - name: AP_EVENT_FAILURE_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: akash-hostname-operator-config
+                  key: event-failure-limit

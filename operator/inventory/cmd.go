@@ -75,12 +75,18 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
+			ac, err := akashclientset.NewForConfig(kubecfg)
+			if err != nil {
+				return err
+			}
+
 			startupch := make(chan struct{}, 1)
 			pctx, pcancel := context.WithCancel(context.Background())
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeConfig, kubecfg)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, pubsub.New(pctx, 1000))
 
@@ -106,13 +112,7 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			ac, err := akashclientset.NewForConfig(kubecfg)
-			if err != nil {
-				return err
-			}
-
 			fromctx.CmdSetContextValue(cmd, CtxKeyRookClientSet, rc)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
 
 			return nil
 		},
@@ -279,6 +279,11 @@ func Cmd() *cobra.Command {
 		panic(err)
 	}
 
+	cmd.Flags().Duration(FlagRegistryQueryPeriod, 5*time.Minute, "query period for registry changes")
+	if err = viper.BindPFlag(FlagRegistryQueryPeriod, cmd.Flags().Lookup(FlagRegistryQueryPeriod)); err != nil {
+		panic(err)
+	}
+
 	cmd.AddCommand(cmdFeatureDiscoveryNode())
 
 	return cmd
@@ -295,6 +300,55 @@ func loadKubeConfig(c *cobra.Command) error {
 	fromctx.CmdSetContextValue(c, fromctx.CtxKeyKubeConfig, config)
 
 	return nil
+}
+
+func configWatcher(ctx context.Context, file string) error {
+	config, err := loadConfig(file, false)
+	if err != nil {
+		return err
+	}
+
+	var watcher *fsnotify.Watcher
+	var evtch chan fsnotify.Event
+
+	if strings.HasSuffix(file, "yaml") {
+		watcher, err = fsnotify.NewWatcher()
+		if err != nil {
+			return err
+		}
+	}
+
+	defer func() {
+		if watcher != nil {
+			_ = watcher.Close()
+		}
+	}()
+
+	if watcher != nil {
+		if err = watcher.Add(file); err != nil {
+			return err
+		}
+
+		evtch = watcher.Events
+	}
+
+	bus := fromctx.PubSubFromCtx(ctx)
+
+	bus.Pub(config, []string{"config"}, pubsub.WithRetain())
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case evt := <-evtch:
+			if evt.Has(fsnotify.Create) || evt.Has(fsnotify.Write) {
+				config, _ = loadConfig(evt.Name, true)
+			} else if evt.Has(fsnotify.Remove) {
+				config, _ = loadConfig("", true)
+			}
+			bus.Pub(config, []string{"config"}, pubsub.WithRetain())
+		}
+	}
 }
 
 func newServiceRouter(apiTimeout, queryTimeout time.Duration) *serviceRouter {
@@ -443,55 +497,6 @@ loop:
 			if err := stream.Send(&val); err != nil {
 				return err
 			}
-		}
-	}
-}
-
-func configWatcher(ctx context.Context, file string) error {
-	config, err := loadConfig(file, false)
-	if err != nil {
-		return err
-	}
-
-	var watcher *fsnotify.Watcher
-	var evtch chan fsnotify.Event
-
-	if strings.HasSuffix(file, "yaml") {
-		watcher, err = fsnotify.NewWatcher()
-		if err != nil {
-			return err
-		}
-	}
-
-	defer func() {
-		if watcher != nil {
-			_ = watcher.Close()
-		}
-	}()
-
-	if watcher != nil {
-		if err = watcher.Add(file); err != nil {
-			return err
-		}
-
-		evtch = watcher.Events
-	}
-
-	bus := fromctx.PubSubFromCtx(ctx)
-
-	bus.Pub(config, []string{"config"}, pubsub.WithRetain())
-
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case evt := <-evtch:
-			if evt.Has(fsnotify.Create) || evt.Has(fsnotify.Write) {
-				config, _ = loadConfig(evt.Name, true)
-			} else if evt.Has(fsnotify.Remove) {
-				config, _ = loadConfig("", true)
-			}
-			bus.Pub(config, []string{"config"}, pubsub.WithRetain())
 		}
 	}
 }

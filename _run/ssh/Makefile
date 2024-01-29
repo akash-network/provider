@@ -2,13 +2,12 @@ KUBE_SETUP_PREREQUISITES ?= \
 
 KUBE_UPLOAD_AKASH_IMAGE ?= true
 
+KUBE_DOCKER_IMAGE_ARCH := amd64
+
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \
 	akash-operator-inventory \
 	akash-operator-ip
-
-export AKASH_NODE=http://localhost:26657
-export AP_NODE=http://localhost:26657
 
 SDL_PATH ?= gpu.yaml
 

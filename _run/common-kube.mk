@@ -5,7 +5,6 @@ include ../common-kustomize.mk
 include ../common-kind.mk
 include ../common-helm.mk
 
-KUBE_SSH_NODE_NAME         ?= akash-gpu
 KUBE_UPLOAD_AKASH_IMAGE    ?= false
 KUBE_CLUSTER_CREATE_TARGET ?= default
 KUBE_ROLLOUT_TIMEOUT       ?= 180
@@ -13,6 +12,10 @@ KUBE_ROLLOUT_TIMEOUT       ?= 180
 INGRESS_CONFIG_PATH        ?= ../ingress-nginx.yaml
 CALICO_MANIFEST            ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
 CRD_FILE                   ?= $(AP_ROOT)/pkg/apis/akash.network/crd.yaml
+
+ifeq ($(KUBE_SSH_NODE_NAME),)
+$(error "KUBE_SSH_NODE_NAME is not set")
+endif
 
 # when image is built locally, for example on M1 (arm64) and kubernetes cluster is running on amd64
 # we need to specify what arch to deploy as docker manifests can't be transferred locally
@@ -75,11 +78,11 @@ kube-upload-images: kube-upload-images-$(KUBE_CLUSTER_CREATE_TARGET)
 
 .PHONY: kube-upload-images-kind
 kube-upload-images-kind: $(KIND)
-	$(AP_ROOT)/script/load_docker2kind.sh "$(DOCKER_LOAD_IMAGES)" $(KIND_NAME)
+	$(AP_ROOT)/script/setup-kube.sh load-images docker2kind "$(KIND_NAME)" "$(DOCKER_LOAD_IMAGES)"
 
 .PHONY: kube-upload-images-default
 kube-upload-images-default:
-	$(AP_ROOT)/script/load_docker2ctr.sh "$(DOCKER_LOAD_IMAGES)" $(KUBE_SSH_NODE_NAME)
+	$(AP_ROOT)/script/setup-kube.sh load-images docker2ctr "$(KUBE_SSH_NODE_NAME)" "$(DOCKER_LOAD_IMAGES)"
 
 .PHONY: kube-upload-crd
 kube-upload-crd:
@@ -187,3 +190,15 @@ akash-node-ready:
 		done; \
 		exit 1 \
 	)
+
+
+.PHONY: kube-operator-inventory-logs
+kube-operator-inventory-logs:
+	kubectl -n akash-services logs -f \
+		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-service,app.kubernetes.io/name=inventory
+
+.PHONY: kube-operator-inventory-node-logs
+kube-operator-inventory-node-logs:
+	kubectl -n akash-services logs -f \
+		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-node,app.kubernetes.io/name=inventory
+

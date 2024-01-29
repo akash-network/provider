@@ -166,6 +166,42 @@ config_file() {
 
 command_ssh() {
     case "$1" in
+    init)
+        shift
+
+        while read -r node; do
+            if ! ssh -n "$node" "test -e /etc/systemd/system/user@.service.d/delegate.conf"; then
+                ssh -n "$node" 'sudo mkdir -p /etc/systemd/system/user@.service.d'
+                ssh -n "$node" 'cat <<EOF | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
+[Service]
+Delegate=cpu cpuset io memory pids
+EOF'
+                ssh -n "$node" 'sudo systemctl daemon-reload'
+            fi
+
+            local packages
+
+            if ! ssh -n "$node" 'dpkg-query -W uidmap >/dev/null 2>&1'; then
+                packages="$packages uidmap"
+            fi
+
+            if ! ssh -n "$node" 'dpkg-query -W slirp4netns >/dev/null 2>&1'; then
+                packages="$packages slirp4netns"
+            fi
+
+            if [[ $packages != "" ]]; then
+                ssh -n "$node" 'sudo apt-get install -y uidmap slirp4netns'
+            fi
+            ssh -n "$node" 'curl -sSL https://github.com/containerd/nerdctl/releases/download/v1.7.2/nerdctl-1.7.2-linux-$(uname -m | sed "s/x86_64/amd64/g").tar.gz | sudo tar Cxzv /usr/local/bin/'
+            ssh -n "$node" 'curl -sSL https://github.com/rootless-containers/rootlesskit/releases/download/v2.0.0/rootlesskit-$(uname -m).tar.gz | sudo tar Cxzv /usr/local/bin/'
+            ssh -n "$node" 'containerd-rootless-setuptool.sh install'
+        done <<< "$1"
+
+        ;;
+    *)
+        echo "invalid command \"$1\""
+        usage "$@"
+        ;;
     esac
 }
 
@@ -194,6 +230,65 @@ command_kustomize() {
     esac
 }
 
+command_load_images() {
+    case "$1" in
+    docker2ctr)
+        shift
+
+        remotes=("$1")
+        images=("$2")
+
+        # shellcheck disable=SC2048
+        for remote in ${remotes[*]}; do
+            if ! ssh "$remote" "which nerdctl" >/dev/null 2>&1; then
+                echo "nerdctl is not installed on \"$remote\" node. run \"setup-kube.sh ssh init\" first"
+                exit 1
+            fi
+        done
+
+        # shellcheck disable=SC2048
+        for image in ${images[*]}; do
+            if ! docker image inspect "$image" >/dev/null 2>&1; then
+                echo "image \"$image\" is not present locally"
+                exit 1
+            fi
+        done
+
+        # shellcheck disable=SC2048
+        for remote in ${remotes[*]}; do
+            for image in ${images[*]}; do
+                docker save "$image" | tqdm --bytes --total "$(docker image inspect "$image" --format='{{.Size}}')" | ssh "$remote" "sudo nerdctl image load"
+            done
+        done
+
+        ;;
+    docker2kind)
+        shift
+
+        kind_name=$1
+        images=("$2")
+
+        # shellcheck disable=SC2048
+        for image in ${images[*]}; do
+            if ! docker image inspect "$image" >/dev/null 2>&1; then
+                echo "image \"$image\" is not present locally"
+                exit 1
+            fi
+        done
+
+        # shellcheck disable=SC2048
+        for image in ${images[*]}; do
+            kind --name "${kind_name}" load docker-image "${image}"
+        done
+
+        ;;
+    *)
+        echo "invalid command \"$1\""
+        usage "$@"
+        ;;
+    esac
+}
+
 case "${1}" in
 ssh)
     shift
@@ -206,6 +301,10 @@ kind)
 kustomize)
     shift
     command_kustomize "$@"
+    ;;
+load-images)
+    shift
+    command_load_images "$@"
     ;;
 *)
     echo "invalid cluster type"
