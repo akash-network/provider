@@ -9,3 +9,5 @@ spec:
   ports:
     - name: gateway
       port: 8443
+    - name: gateway
+      port: 8444
