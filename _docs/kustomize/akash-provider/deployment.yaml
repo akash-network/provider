@@ -358,6 +358,8 @@ spec:
           ports:
             - name: gateway
               containerPort: 8443
+            - name: grpc
+              containerPort: 8444
           volumeMounts:
             - name: home
               mountPath: /home

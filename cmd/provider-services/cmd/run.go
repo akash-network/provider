@@ -57,6 +57,7 @@ const (
 
 	// FlagGatewayListenAddress determines listening address for Manifests
 	FlagGatewayListenAddress             = "gateway-listen-address"
+	FlagGatewayGRPCListenAddress         = "gateway-grpc-listen-address"
 	FlagBidPricingStrategy               = "bid-price-strategy"
 	FlagBidPriceCPUScale                 = "bid-price-cpu-scale"
 	FlagBidPriceMemoryScale              = "bid-price-memory-scale"
@@ -177,6 +178,11 @@ func RunCmd() *cobra.Command {
 
 	cmd.Flags().String(FlagGatewayListenAddress, "0.0.0.0:8443", "Gateway listen address")
 	if err := viper.BindPFlag(FlagGatewayListenAddress, cmd.Flags().Lookup(FlagGatewayListenAddress)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8444", "Gateway listen address")
+	if err := viper.BindPFlag(FlagGatewayGRPCListenAddress, cmd.Flags().Lookup(FlagGatewayGRPCListenAddress)); err != nil {
 		panic(err)
 	}
 
@@ -523,6 +529,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
+	grpcaddr := viper.GetString(FlagGatewayGRPCListenAddress)
 
 	var certFromFlag io.Reader
 	if val := cmd.Flag(FlagAuthPem).Value.String(); val != "" {
@@ -704,14 +711,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	err = gwgrpc.NewServer(ctx, ":8081", []tls.Certificate{tlsCert}, service)
+	err = gwgrpc.NewServer(ctx, grpcaddr, []tls.Certificate{tlsCert}, service)
 	if err != nil {
 		return err
 	}
-
-	// clGroup.Go(func() error {
-	// 	return group.Wait()
-	// })
 
 	group.Go(func() error {
 		return events.Publish(ctx, cctx.Client, "provider-cli", bus)
