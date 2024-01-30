@@ -244,6 +244,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 		PublicHostnames: []string{
 			s.config.ClusterPublicHostname,
 		},
+		Timestamp: time.Now().UTC(),
 	}, nil
 }
 
