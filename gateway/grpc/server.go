@@ -8,15 +8,16 @@ import (
 	"net"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 
@@ -33,10 +34,11 @@ const (
 )
 
 type grpcProviderV1 struct {
-	providerv1.ProviderRPCServer
 	ctx    context.Context
 	client provider.StatusClient
 }
+
+var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
 
 func QueryClientFromCtx(ctx context.Context) ctypes.QueryClient {
 	val := ctx.Value(ContextKeyQueryClient)
@@ -78,12 +80,13 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 		PermitWithoutStream: false,
 	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
 
-	providerv1.RegisterProviderRPCServer(grpcSrv, &grpcProviderV1{
+	pRPC := &grpcProviderV1{
 		ctx:    ctx,
 		client: client,
-	})
+	}
 
-	reflection.Register(grpcSrv)
+	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
+	gogoreflection.Register(grpcSrv)
 
 	group.Go(func() error {
 		grpcLis, err := net.Listen("tcp", endpoint)
