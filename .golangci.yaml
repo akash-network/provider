@@ -1,3 +1,4 @@
+---
 issues:
   exclude:
     - comment on exported (method|function|type|const|var)
@@ -12,5 +13,25 @@ run:
 
   # Skip vendor/ etc
   skip-dirs-use-default: true
-
+linters:
+  disable-all: true
+  enable:
+    - unused
+    - misspell
+    - goerr113
+    - gofmt
+    - gocritic
+    - goconst
+    - govet
+    - ineffassign
+    - unparam
+    - staticcheck
+    - revive
+    - gosec
+    - exportloopref
+    - prealloc
 linters-settings:
+  gocritic:
+    disabled-checks:
+      - ifElseChain
+      - singleCaseSwitch
