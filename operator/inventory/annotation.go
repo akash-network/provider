@@ -1,20 +1,25 @@
 package inventory
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	"github.com/blang/semver/v4"
 	"gopkg.in/yaml.v3"
 )
 
 const (
-	sdlVersionField = "version"
+	annotationVersionField = "version"
 
-	AnnotationKeyCapabilities = "akash.network/capabilities"
+	AnnotationKeyCapabilitiesSHA256 = "akash.network/capabilities.sha256"
+	AnnotationKeyCapabilities       = "akash.network/capabilities"
+	AnnotationNodeSelfCapabilities  = "akash.network/node.self.capabilities"
 )
 
 var (
@@ -25,15 +30,28 @@ var (
 	errCapabilitiesUnsupportedVersion = fmt.Errorf("%w: unsupported version", errCapabilitiesInvalid)
 )
 
+type CapabilitiesV1GPU struct {
+	Vendor     string `json:"vendor"`
+	VendorID   string `json:"vendor_id"`
+	Model      string `json:"model"`
+	ModelID    string `json:"model_id"`
+	MemorySize string `json:"memory_size"`
+	Interface  string `json:"interface"`
+}
+
+// type CapabilitiesV1GPUs []CapabilitiesV1GPU
+
 type CapabilitiesV1 struct {
-	StorageClasses []string `json:"storage_classes"`
+	StorageClasses []string             `json:"storage_classes"`
+	GPUs           inventoryV1.GPUInfoS `json:"gpus"`
 }
 
 type Capabilities interface{}
 
 type AnnotationCapabilities struct {
-	Version      semver.Version `json:"version" yaml:"version"`
-	Capabilities `yaml:",inline"`
+	Version           semver.Version `json:"version" yaml:"version"`
+	LastAppliedSHA256 string         `json:"last_applied_sha256" yaml:"last_applied_sha256"`
+	Capabilities      `yaml:",inline"`
 }
 
 var (
@@ -59,6 +77,22 @@ func NewAnnotationCapabilities(sc []string) *AnnotationCapabilities {
 
 	return res
 }
+
+func NewAnnotationNodeSelfCapabilities(sc []string) *AnnotationCapabilities {
+	caps := &CapabilitiesV1{
+		StorageClasses: make([]string, len(sc)),
+	}
+
+	copy(caps.StorageClasses, sc)
+
+	res := &AnnotationCapabilities{
+		Version:      semver.Version{Major: 1},
+		Capabilities: caps,
+	}
+
+	return res
+}
+
 func (s *CapabilitiesV1) RemoveClass(name string) bool {
 	for i, c := range s.StorageClasses {
 		if c == name {
@@ -71,12 +105,12 @@ func (s *CapabilitiesV1) RemoveClass(name string) bool {
 	return false
 }
 
-func parseNodeCapabilities(annotations map[string]string) (*AnnotationCapabilities, error) {
+func parseNodeCapabilities(annotations map[string]string) (*AnnotationCapabilities, []byte, error) {
 	res := &AnnotationCapabilities{}
 
 	val, exists := annotations[AnnotationKeyCapabilities]
 	if !exists {
-		return res, nil
+		return res, []byte{}, nil
 	}
 
 	var err error
@@ -87,10 +121,20 @@ func parseNodeCapabilities(annotations map[string]string) (*AnnotationCapabiliti
 	}
 
 	if err != nil {
-		return nil, err
+		return nil, []byte{}, err
 	}
 
-	return res, nil
+	val, exists = annotations[AnnotationKeyCapabilitiesSHA256]
+	if !exists {
+		return res, []byte{}, nil
+	}
+
+	checksum, err := hex.DecodeString(val)
+	if err != nil && len(checksum) != sha256.Size {
+		return res, []byte{}, nil
+	}
+
+	return res, checksum, nil
 }
 
 func (s *AnnotationCapabilities) UnmarshalYAML(node *yaml.Node) error {
@@ -98,7 +142,7 @@ func (s *AnnotationCapabilities) UnmarshalYAML(node *yaml.Node) error {
 
 	foundVersion := false
 	for idx := range node.Content {
-		if node.Content[idx].Value == sdlVersionField {
+		if node.Content[idx].Value == annotationVersionField {
 			var err error
 			if result.Version, err = semver.ParseTolerant(node.Content[idx+1].Value); err != nil {
 				return fmt.Errorf("%w: %w", errCapabilitiesInvalidVersion, err)
@@ -140,13 +184,9 @@ func (s *AnnotationCapabilities) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("%w: %w", errCapabilitiesInvalidContent, err)
 	}
 
-	if _, exists := core[sdlVersionField]; !exists {
-		return errCapabilitiesInvalidNoVersion
-	}
-
 	result := AnnotationCapabilities{}
 
-	if val, valid := core[sdlVersionField].(string); valid {
+	if val, valid := core[annotationVersionField].(string); valid {
 		if result.Version, err = semver.ParseTolerant(val); err != nil {
 			return fmt.Errorf("%w: %w", errCapabilitiesInvalidVersion, err)
 		}
@@ -183,12 +223,24 @@ func (s *AnnotationCapabilities) MarshalJSON() ([]byte, error) {
 	// nolint: gocritic
 	switch caps := s.Capabilities.(type) {
 	case *CapabilitiesV1:
+		data, err := json.Marshal(caps)
+		if err != nil {
+			return nil, err
+		}
+
+		enc := sha256.New()
+		if _, err = enc.Write(data); err != nil {
+			return nil, err
+		}
+
 		obj = struct {
-			Version semver.Version `json:"version"`
+			Version           semver.Version `json:"version"`
+			LastAppliedSHA256 string         `json:"last_applied_sha256"`
 			CapabilitiesV1
 		}{
-			Version:        s.Version,
-			CapabilitiesV1: *caps,
+			Version:           s.Version,
+			LastAppliedSHA256: hex.EncodeToString(enc.Sum(nil)),
+			CapabilitiesV1:    *caps,
 		}
 	}
 

@@ -21,6 +21,14 @@ const (
 	flagAPIPort = "api-port"
 )
 
+type hwInfo struct {
+	Errors []string     `json:"errors"`
+	CPU    *cpu.Info    `json:"cpu,omitempty"`
+	Memory *memory.Info `json:"memory,omitempty"`
+	GPU    *gpu.Info    `json:"gpu,omitempty"`
+	PCI    *pci.Info    `json:"pci,omitempty"`
+}
+
 func cmdPsutil() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "psutil",
@@ -47,6 +55,8 @@ func cmdPsutilServe() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			router := mux.NewRouter()
+			router.Methods(http.MethodGet).HandlerFunc(infoHandler)
+
 			router.HandleFunc("/cpu", cpuInfoHandler).Methods(http.MethodGet)
 			router.HandleFunc("/gpu", gpuHandler).Methods(http.MethodGet)
 			router.HandleFunc("/memory", memoryHandler).Methods(http.MethodGet)
@@ -113,6 +123,33 @@ func cmdPsutilList() *cobra.Command {
 	}
 
 	return cmd
+}
+
+func infoHandler(w http.ResponseWriter, _ *http.Request) {
+	res := &hwInfo{}
+	var err error
+
+	res.CPU, err = cpu.New()
+	if err != nil {
+		res.Errors = append(res.Errors, err.Error())
+	}
+
+	res.GPU, err = gpu.New()
+	if err != nil {
+		res.Errors = append(res.Errors, err.Error())
+	}
+
+	res.Memory, err = memory.New()
+	if err != nil {
+		res.Errors = append(res.Errors, err.Error())
+	}
+
+	res.PCI, err = pci.New()
+	if err != nil {
+		res.Errors = append(res.Errors, err.Error())
+	}
+
+	writeJSON(w, res)
 }
 
 func cpuInfoHandler(w http.ResponseWriter, _ *http.Request) {

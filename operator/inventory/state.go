@@ -23,7 +23,7 @@ func (s *clusterState) run() error {
 	state := inventory.Cluster{}
 	signalch := make(chan struct{}, 1)
 
-	datach := bus.Sub(topicNodes, topicStorage, topicConfig)
+	datach := bus.Sub(topicInventoryNodes, topicInventoryStorage, topicInventoryConfig)
 
 	defer bus.Unsub(datach)
 
@@ -76,7 +76,7 @@ func (s *clusterState) run() error {
 				err: nil,
 			}
 		case <-signalch:
-			bus.Pub(*state.Dup(), []string{topicClusterState}, pubsub.WithRetain())
+			bus.Pub(*state.Dup(), []string{topicInventoryCluster}, pubsub.WithRetain())
 		}
 	}
 }

@@ -164,9 +164,7 @@ func (c *ceph) crdInstalled(log logr.Logger, rc *rookclientset.Clientset) bool {
 func (c *ceph) run(startch chan<- struct{}) error {
 	bus := fromctx.PubSubFromCtx(c.ctx)
 
-	cephClustersTopic := "cephclusters"
-
-	events := bus.Sub("ns", "sc", "pv", cephClustersTopic)
+	events := bus.Sub(topicKubeNS, topicKubeSC, topicKubePV, topicKubeCephClusters)
 
 	defer bus.Unsub(events)
 
@@ -209,7 +207,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 				InformKubeObjects(c.ctx,
 					bus,
 					informer,
-					cephClustersTopic)
+					topicKubeCephClusters)
 			} else {
 				crdDiscoverTick.Reset(crdDiscoverPeriod)
 			}
@@ -293,7 +291,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 				bus.Pub(storageSignal{
 					driver:  "ceph",
 					storage: res.storage,
-				}, []string{topicStorage})
+				}, []string{topicInventoryStorage})
 			}
 
 			scrapech = c.scrapech

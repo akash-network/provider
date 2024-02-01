@@ -55,15 +55,6 @@ func FeatureDiscoveryFromCtx(ctx context.Context) QuerierNodes {
 	return val.(QuerierNodes)
 }
 
-func HWInfoFromCtx(ctx context.Context) hwInfo {
-	val := ctx.Value(CtxKeyHwInfo)
-	if val == nil {
-		panic("context does not have file reader set")
-	}
-
-	return val.(hwInfo)
-}
-
 func ClusterStateFromCtx(ctx context.Context) QuerierCluster {
 	val := ctx.Value(CtxKeyClusterState)
 	if val == nil {
