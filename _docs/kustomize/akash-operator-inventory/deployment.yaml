@@ -39,6 +39,14 @@ spec:
           env:
             - name: AP_CONFIG
               value: /akash/config.yaml
+            - name: AP_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: AP_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
           resources:
             limits:
               cpu: 500m

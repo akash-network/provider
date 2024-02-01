@@ -82,7 +82,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 		}
 	}()
 
-	events := bus.Sub("ns", "sc", "nodes")
+	events := bus.Sub(topicKubeNS, topicKubeSC, topicKubeNodes)
 
 	log := fromctx.LogrFromCtx(c.ctx).WithName("rancher")
 
@@ -247,7 +247,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 				bus.Pub(storageSignal{
 					driver:  "rancher",
 					storage: res,
-				}, []string{topicStorage}, pubsub.WithRetain())
+				}, []string{topicInventoryStorage}, pubsub.WithRetain())
 			}
 
 			scrapech = scrapeCh

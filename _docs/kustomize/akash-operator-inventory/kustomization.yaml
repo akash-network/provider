@@ -7,7 +7,6 @@ resources:
   - cluster-roles.yaml
   - role-bindings.yaml
   - service.yaml
-  - daemonset.yaml
   - deployment.yaml
 configMapGenerator:
   - name: operator-inventory

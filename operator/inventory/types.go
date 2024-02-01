@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/troian/pubsub"
-
 	rookexec "github.com/rook/rook/pkg/util/exec"
+	"github.com/troian/pubsub"
+	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -20,22 +20,58 @@ import (
 )
 
 const (
-	FlagAPITimeout            = "api-timeout"
-	FlagQueryTimeout          = "query-timeout"
-	FlagRESTPort              = "rest-port"
-	FlagGRPCPort              = "grpc-port"
-	FlagPodName               = "pod-name"
-	FlagNodeName              = "node-name"
-	FlagConfig                = "config"
-	FlagProviderConfigsURL    = "provider-configs-url"
-	FlagPciDbURL              = "provider-pcidb-url"
-	FlagRegistryQueryPeriod   = "registry-query-period"
+	FlagAPITimeout          = "api-timeout"
+	FlagQueryTimeout        = "query-timeout"
+	FlagRESTPort            = "rest-port"
+	FlagGRPCPort            = "grpc-port"
+	FlagPodName             = "pod-name"
+	FlagPodNamespace        = "pod-namespace"
+	FlagConfig              = "config"
+	FlagProviderConfigsURL  = "provider-configs-url"
+	FlagPciDbURL            = "provider-pcidb-url"
+	FlagRegistryQueryPeriod = "registry-query-period"
+	FlagDiscoveryImage      = "discovery-image"
+
 	defaultProviderConfigsURL = "https://provider-configs.akash.network"
 )
+
+const (
+	topicInventoryNode    = "inventory-node"
+	topicInventoryNodes   = "inventory-nodes"
+	topicInventoryStorage = "inventory-storage"
+	topicInventoryConfig  = "inventory-config"
+	topicInventoryCluster = "inventory-cluster"
+	topicGPUIDs           = "gpu-ids"
+	topicStorageClasses   = "storage-classes"
+	topicKubeSC           = "kube-sc"
+	topicKubeNS           = "kube-ns"
+	topicKubeNodes        = "kube-nodes"
+	topicKubeCephClusters = "kube-ceph-clusters"
+	topicKubePV           = "kube-pv"
+)
+
+type dpReqType int
+
+const (
+	dpReqCPU dpReqType = iota
+	dpReqGPU
+	dpReqMem
+)
+
+type dpReadResp struct {
+	data interface{}
+	err  error
+}
+type dpReadReq struct {
+	op   dpReqType
+	resp chan<- dpReadResp
+}
 
 var (
 	ErrMetricsUnsupportedRequest = errors.New("unsupported request method")
 )
+
+type storageClasses map[string]*storagev1.StorageClass
 
 type storageSignal struct {
 	driver  string
@@ -178,4 +214,14 @@ func InformKubeObjects(ctx context.Context, pub pubsub.Publisher, informer cache
 
 		return nil
 	})
+}
+
+func (s storageClasses) copy() storageClasses {
+	res := make(storageClasses)
+
+	for name, sc := range s {
+		res[name] = sc.DeepCopy()
+	}
+
+	return res
 }

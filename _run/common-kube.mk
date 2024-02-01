@@ -147,7 +147,6 @@ kube-setup-ingress-calico:
 
 .PHONY: kube-setup-ingress-default
 kube-setup-ingress-default:
-	kubectl label nodes $(KIND_NAME)-control-plane akash.network/role=ingress
 	kubectl apply -f "$(INGRESS_CONFIG_PATH)"
 	kubectl rollout status deployment -n ingress-nginx ingress-nginx-controller --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 	kubectl apply -f "$(METALLB_CONFIG_PATH)"
@@ -161,8 +160,6 @@ kube-status-ingress-%:
 
 .PHONY: kube-deployment-rollout-operator-inventory
 kube-deployment-rollout-operator-inventory:
-	kubectl -n akash-services rollout status daemonset operator-inventory-node --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
-	kubectl -n akash-services wait pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-node --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 	kubectl -n akash-services rollout status deployment operator-inventory --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 	kubectl -n akash-services wait pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-service --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 
@@ -192,13 +189,12 @@ akash-node-ready:
 	)
 
 
-.PHONY: kube-operator-inventory-logs
-kube-operator-inventory-logs:
+.PHONY: kube-logs-operator-inventory
+kube-logs-operator-inventory:
 	kubectl -n akash-services logs -f \
 		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-service,app.kubernetes.io/name=inventory
 
-.PHONY: kube-operator-inventory-node-logs
-kube-operator-inventory-node-logs:
-	kubectl -n akash-services logs -f \
-		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-node,app.kubernetes.io/name=inventory
-
+#.PHONY: kube-operator-inventory-node-logs
+#kube-operator-inventory-node-logs:
+#	kubectl -n akash-services logs -f \
+#		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-node,app.kubernetes.io/name=inventory

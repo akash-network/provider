@@ -80,8 +80,10 @@ type ManifestServiceParams struct {
 }
 
 type SchedulerResourceGPU struct {
-	Vendor string `json:"vendor"`
-	Model  string `json:"model"`
+	Vendor     string `json:"vendor"`
+	Model      string `json:"model"`
+	MemorySize string `json:"memory_size"`
+	Interface  string `json:"interface"`
 }
 
 type SchedulerResources struct {

@@ -218,17 +218,41 @@ func (b *Workload) replicas() *int32 {
 }
 
 func (b *Workload) affinity() *corev1.Affinity {
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 	svc := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
 
-	if svc == nil || svc.Resources == nil {
-		return nil
+	selectors := []corev1.NodeSelectorRequirement{
+		{
+			Key:      AkashManagedLabelName,
+			Operator: corev1.NodeSelectorOpIn,
+			Values: []string{
+				"true",
+			},
+		},
 	}
 
-	selectors := nodeSelectorsFromResources(svc.Resources)
-	if len(selectors) == 0 {
-		return nil
+	if svc != nil && svc.Resources != nil {
+		selectors = append(selectors, nodeSelectorsFromResources(svc.Resources)...)
 	}
 
+	for _, storage := range service.Resources.Storage {
+		attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
+		if persistent, valid := attr.AsBool(); !valid || !persistent {
+			continue
+		}
+
+		attr = storage.Attributes.Find(sdl.StorageAttributeClass)
+		if class, valid := attr.AsString(); valid {
+			selectors = append(selectors, corev1.NodeSelectorRequirement{
+				Key:      fmt.Sprintf("%s.class.%s", AkashServiceCapabilityStorage, class),
+				Operator: corev1.NodeSelectorOpGt,
+				Values: []string{
+					"0",
+				},
+			})
+		}
+
+	}
 	affinity := &corev1.Affinity{
 		NodeAffinity: &corev1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
@@ -252,13 +276,35 @@ func nodeSelectorsFromResources(res *crd.SchedulerResources) []corev1.NodeSelect
 	var selectors []corev1.NodeSelectorRequirement
 
 	if gpu := res.GPU; gpu != nil {
+		key := fmt.Sprintf("%s.vendor.%s.model.%s", AkashServiceCapabilityGPU, gpu.Vendor, gpu.Model)
+
 		selectors = append(selectors, corev1.NodeSelectorRequirement{
-			Key:      fmt.Sprintf("%s.vendor.%s.model.%s", AkashServiceCapabilityGPU, gpu.Vendor, gpu.Model),
-			Operator: "In",
+			Key:      key,
+			Operator: corev1.NodeSelectorOpGt,
 			Values: []string{
-				"true",
+				"0",
 			},
 		})
+
+		if gpu.MemorySize != "" {
+			selectors = append(selectors, corev1.NodeSelectorRequirement{
+				Key:      fmt.Sprintf("%s.ram.%s", key, gpu.MemorySize),
+				Operator: corev1.NodeSelectorOpGt,
+				Values: []string{
+					"0",
+				},
+			})
+		}
+
+		if gpu.Interface != "" {
+			selectors = append(selectors, corev1.NodeSelectorRequirement{
+				Key:      fmt.Sprintf("%s.interface.%s", key, gpu.MemorySize),
+				Operator: corev1.NodeSelectorOpGt,
+				Values: []string{
+					"0",
+				},
+			})
+		}
 	}
 
 	return selectors
