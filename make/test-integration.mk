@@ -70,7 +70,3 @@ test-full:
 .PHONY: test-coverage
 test-coverage: $(AP_DEVCACHE)
 	./script/codecov.sh "$(AP_DEVCACHE_TESTS)" $(BUILD_TAGS_ALL)
-
-.PHONY: test-vet
-test-vet:
-	$(GO_VET) ./...
