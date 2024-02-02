@@ -13,6 +13,7 @@ set -e
 rootdir="$(dirname "$0")/.."
 
 CRD_FILE=$rootdir/pkg/apis/akash.network/crd.yaml
+timeout=10
 
 usage() {
     cat <<EOF
@@ -40,7 +41,7 @@ EOF
 }
 
 short_opts=h
-long_opts=help/crd:   # those who take an arg END with :
+long_opts=help/crd:/timeout:   # those who take an arg END with :
 
 while getopts ":$short_opts-:" o; do
     case $o in
@@ -96,6 +97,8 @@ while getopts ":$short_opts-:" o; do
         crd)
             CRD_FILE=$OPTARG
             ;;
+        timeout)
+            timeout=$OPTARG
     esac
 done
 shift "$((OPTIND - 1))"
@@ -289,6 +292,47 @@ command_load_images() {
     esac
 }
 
+wait_inventory_available() {
+    set -x
+
+    local pid
+
+    kubectl -n akash-services port-forward --address 0.0.0.0 service/operator-inventory 8455:grpc &
+    pid=$!
+
+    if ! kill -0 $pid ; then
+        exit 1
+    fi
+
+    # shellcheck disable=SC2064
+    trap "kill -SIGINT ${pid}" EXIT
+
+    timeout 10 bash -c -- 'while ! nc -vz localhost 8455 > /dev/null 2>&1 ; do sleep 0.1; done'
+
+    local retries=0
+
+    while ! grpcurl -plaintext localhost:8455 akash.inventory.v1.ClusterRPC.QueryCluster | jq '(.nodes | length > 0) and (.storage | length > 0)' --exit-status > /dev/null 2>&1; do
+        retries=$((retries+1))
+        if [ ${retries} -eq "${timeout}" ]; then
+            exit 1
+        fi
+        sleep 1
+    done
+}
+
+wait() {
+    case "${1}" in
+    inventory-available)
+        shift
+        wait_inventory_available
+        ;;
+    *)
+        echo "invalid wait command"
+        usage "$@"
+        ;;
+    esac
+}
+
 case "${1}" in
 ssh)
     shift
@@ -306,39 +350,13 @@ load-images)
     shift
     command_load_images "$@"
     ;;
+"wait")
+    shift
+    wait "$@"
+    ;;
 *)
     echo "invalid cluster type"
     usage "$@"
     ;;
 esac
 
-#case "${1:-metrics}" in
-#    crd)
-#        install_crd
-#        ;;
-#    ns)
-#        install_ns
-#        ;;
-#    metrics)
-#        install_crd
-#        install_ns
-#        install_metrics
-#        ;;
-#    calico-metrics)
-#        install_crd
-#        install_ns
-#        install_metrics
-#        install_network_policies
-#        ;;
-#    networking)
-#        install_ns
-#        install_network_policies
-#        ;;
-#    config-file)
-#        shift
-#        config_file "$@"
-#        ;;
-#    *)
-#        usage "$@"
-#        ;;
-#esac
