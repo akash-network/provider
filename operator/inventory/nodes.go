@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/troian/pubsub"
@@ -21,11 +20,6 @@ import (
 )
 
 type nodeStateEnum int
-
-const (
-	daemonSetNamespace = "akash-services"
-	reconnectTimeout   = 5 * time.Second
-)
 
 const (
 	nodeStateUpdated nodeStateEnum = iota

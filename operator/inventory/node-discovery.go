@@ -3,11 +3,13 @@ package inventory
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
@@ -135,7 +137,9 @@ func (dp *nodeDiscovery) apiConnector() error {
 		dp.sig <- dp.name
 	}()
 
-	log := fromctx.LogrFromCtx(dp.ctx).WithName("node.discovery")
+	ctx := dp.ctx
+
+	log := fromctx.LogrFromCtx(ctx).WithName("node.discovery")
 
 	log.Info("starting hardware discovery pod", "node", dp.name)
 
@@ -188,12 +192,35 @@ func (dp *nodeDiscovery) apiConnector() error {
 		},
 	}
 
-	kc := fromctx.KubeClientFromCtx(dp.ctx)
+	kc := fromctx.KubeClientFromCtx(ctx)
 
-	pod, err := kc.CoreV1().Pods(dp.namespace).Create(dp.ctx, req, metav1.CreateOptions{})
-	if err != nil && !kerrors.IsAlreadyExists(err) {
-		log.Error(err, fmt.Sprintf("unable to start discovery pod on node \"%s\"", dp.name))
-		return err
+	var pod *corev1.Pod
+	var err error
+
+	for {
+		pod, err = kc.CoreV1().Pods(dp.namespace).Create(ctx, req, metav1.CreateOptions{})
+		if err == nil {
+			break
+		}
+
+		if errors.Is(err, context.Canceled) {
+			return err
+		}
+
+		if !kerrors.IsAlreadyExists(err) {
+			log.Error(err, fmt.Sprintf("unable to start discovery pod on node \"%s\"", dp.name))
+		}
+
+		tctx, tcancel := context.WithTimeout(ctx, time.Second)
+
+		select {
+		case <-tctx.Done():
+		}
+
+		tcancel()
+		if !errors.Is(tctx.Err(), context.DeadlineExceeded) {
+			return tctx.Err()
+		}
 	}
 
 	defer func() {
@@ -213,7 +240,6 @@ func (dp *nodeDiscovery) apiConnector() error {
 			",app.kubernetes.io/component=operator" +
 			",app.kubernetes.io/part-of=provider",
 	})
-
 	if err != nil {
 		log.Error(err, fmt.Sprintf("unable to start pod watcher on node \"%s\"", dp.name))
 		return err
@@ -409,7 +435,7 @@ func (dp *nodeDiscovery) monitor() error {
 			signalLabels()
 		case evt := <-idsch:
 			gpusIDs = evt.(RegistryGPUVendors)
-			node.Resources.GPU.Info, _ = dp.parseGPUInfo(ctx, gpusIDs)
+			node.Resources.GPU.Info = dp.parseGPUInfo(ctx, gpusIDs)
 			signalLabels()
 		case rEvt := <-nodesch:
 			evt := rEvt.(watch.Event)
@@ -498,15 +524,8 @@ func (dp *nodeDiscovery) monitor() error {
 func (dp *nodeDiscovery) initNodeInfo(gpusIds RegistryGPUVendors) (v1.Node, map[string]corev1.Pod, error) {
 	kc := fromctx.KubeClientFromCtx(dp.ctx)
 
-	cpuInfo, err := dp.parseCPUInfo(dp.ctx)
-	if err != nil {
-		return v1.Node{}, nil, err
-	}
-
-	gpuInfo, err := dp.parseGPUInfo(dp.ctx, gpusIds)
-	if err != nil {
-		return v1.Node{}, nil, err
-	}
+	cpuInfo := dp.parseCPUInfo(dp.ctx)
+	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIds)
 
 	knode, err := kc.CoreV1().Nodes().Get(dp.ctx, dp.name, metav1.GetOptions{})
 	if err != nil {
@@ -714,10 +733,10 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 	return res, node
 }
 
-func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) (v1.CPUInfoS, error) {
+func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 	cpus, err := dp.queryCPU(ctx)
 	if err != nil {
-		return v1.CPUInfoS{}, nil
+		return v1.CPUInfoS{}
 	}
 
 	res := make(v1.CPUInfoS, 0, len(cpus.Processors))
@@ -731,19 +750,19 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) (v1.CPUInfoS, error) 
 		})
 	}
 
-	return res, nil
+	return res
 }
 
-func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) (v1.GPUInfoS, error) {
+func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
-		return res, nil
+		return res
 	}
 
 	if gpus == nil {
-		return res, nil
+		return res
 	}
 
 	for _, dev := range gpus.GraphicsCards {
@@ -780,5 +799,5 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 
 	sort.Sort(res)
 
-	return res, nil
+	return res
 }
