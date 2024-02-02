@@ -65,7 +65,7 @@ test-nocache:
 
 .PHONY: test-full
 test-full:
-	$(GO_TEST) -tags=$(BUILD_TAGS) -race $(TEST_MODULES)
+	$(GO_TEST) -tags=$(BUILD_TAGS) -race -count=1 $(TEST_MODULES)
 
 .PHONY: test-coverage
 test-coverage: $(AP_DEVCACHE)

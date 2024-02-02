@@ -165,7 +165,7 @@ func Cmd() *cobra.Command {
 				}
 			}
 
-			fd := newClusterNodes(ctx, discoveryImage, namespace)
+			clNodes := newClusterNodes(ctx, discoveryImage, namespace)
 
 			storage = append(storage, st)
 
@@ -175,7 +175,7 @@ func Cmd() *cobra.Command {
 			}
 
 			fromctx.CmdSetContextValue(cmd, CtxKeyStorage, storage)
-			fromctx.CmdSetContextValue(cmd, CtxKeyFeatureDiscovery, fd)
+			fromctx.CmdSetContextValue(cmd, CtxKeyFeatureDiscovery, clNodes)
 			fromctx.CmdSetContextValue(cmd, CtxKeyClusterState, QuerierCluster(clState))
 
 			ctx = cmd.Context()
@@ -211,7 +211,7 @@ func Cmd() *cobra.Command {
 			gogoreflection.Register(grpcSrv)
 
 			group.Go(func() error {
-				return registryLoader(ctx)
+				return configWatcher(ctx, viper.GetString(FlagConfig))
 			})
 
 			group.Go(func() error {
@@ -219,11 +219,12 @@ func Cmd() *cobra.Command {
 			})
 
 			group.Go(func() error {
-				return configWatcher(ctx, viper.GetString(FlagConfig))
+				return registryLoader(ctx)
 			})
 
 			group.Go(clState.run)
-			group.Go(fd.Wait)
+			group.Go(clNodes.Wait)
+
 			group.Go(func() error {
 				log.Info(fmt.Sprintf("rest listening on \"%s\"", restEndpoint))
 
@@ -355,6 +356,12 @@ func loadKubeConfig(c *cobra.Command) error {
 }
 
 func configWatcher(ctx context.Context, file string) error {
+	log := fromctx.LogrFromCtx(ctx).WithName("watcher.config")
+
+	defer func() {
+		log.Info("stopped")
+	}()
+
 	config, err := loadConfig(file, false)
 	if err != nil {
 		return err
@@ -387,6 +394,8 @@ func configWatcher(ctx context.Context, file string) error {
 	bus := fromctx.PubSubFromCtx(ctx)
 
 	bus.Pub(config, []string{topicInventoryConfig}, pubsub.WithRetain())
+
+	log.Info("started")
 
 	for {
 		select {
@@ -527,11 +536,21 @@ func registryLoader(ctx context.Context) error {
 }
 
 func scWatcher(ctx context.Context) error {
+	log := fromctx.LogrFromCtx(ctx).WithName("watcher.storageclasses")
+
+	defer func() {
+		log.Info("stopped")
+	}()
+
 	bus := fromctx.PubSubFromCtx(ctx)
 
 	scch := bus.Sub(topicKubeSC)
 
 	sc := make(storageClasses)
+
+	bus.Pub(sc.copy(), []string{topicStorageClasses}, pubsub.WithRetain())
+
+	log.Info("started")
 
 	for {
 		select {

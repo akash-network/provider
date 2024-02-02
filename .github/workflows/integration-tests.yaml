@@ -4,7 +4,7 @@ on:
   workflow_call:
 
 env:
-  KUBE_SSH_NODE_NAME: kind
+  KUBE_SSH_NODES: kind
 
 defaults:
   run:
@@ -112,11 +112,20 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make -s -C _run/kube kube-deployment-rollout-operator-inventory
-          make -s -C _run/kube kube-wait-inventory-available
       - name: Run E2E Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make test-e2e-integration
+      - name: Print operator inventory logs
+        if: always()
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          kubectl -n akash-services logs -l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-service,app.kubernetes.io/name=inventory
+      - name: Print operator inventory discovery logs
+        if: always()
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          kubectl -n akash-services logs -l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-hardware-discovery,app.kubernetes.io/name=inventory
       - name: Run K8s Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |

@@ -14,6 +14,8 @@ rootdir="$(dirname "$0")/.."
 
 CRD_FILE=$rootdir/pkg/apis/akash.network/crd.yaml
 timeout=10
+retries=10
+retrywait=1
 
 usage() {
     cat <<EOF
@@ -40,8 +42,10 @@ EOF
     exit 1
 }
 
+isuint() { [[ $1 =~ ^[0-9]+$ ]] ;}
+
 short_opts=h
-long_opts=help/crd:/timeout:   # those who take an arg END with :
+long_opts=help/crd:/retries:/retry-wait:/timeout:   # those who take an arg END with :
 
 while getopts ":$short_opts-:" o; do
     case $o in
@@ -99,6 +103,26 @@ while getopts ":$short_opts-:" o; do
             ;;
         timeout)
             timeout=$OPTARG
+            if ! isuint "$timeout" ; then
+                echo >&2 "timeout option must be positive integer"
+                exit 1
+            fi
+            ;;
+        retries)
+            retries=$OPTARG
+
+            if ! isuint "$retries" ; then
+                echo >&2 "retries option must be positive integer"
+                exit 1
+            fi
+            ;;
+        retry-wait)
+            retrywait=$OPTARG
+            if ! isuint "$retrywait" ; then
+                echo >&2 "retry-wait option must be positive integer"
+                exit 1
+            fi
+            ;;
     esac
 done
 shift "$((OPTIND - 1))"
@@ -172,7 +196,10 @@ command_ssh() {
     init)
         shift
 
-        while read -r node; do
+        local nodes=("$1")
+
+        # shellcheck disable=SC2048
+        for node in ${nodes[*]}; do
             if ! ssh -n "$node" "test -e /etc/systemd/system/user@.service.d/delegate.conf"; then
                 ssh -n "$node" 'sudo mkdir -p /etc/systemd/system/user@.service.d'
                 ssh -n "$node" 'cat <<EOF | sudo tee /etc/systemd/system/user@.service.d/delegate.conf
@@ -198,8 +225,10 @@ EOF'
             ssh -n "$node" 'curl -sSL https://github.com/containerd/nerdctl/releases/download/v1.7.2/nerdctl-1.7.2-linux-$(uname -m | sed "s/x86_64/amd64/g").tar.gz | sudo tar Cxzv /usr/local/bin/'
             ssh -n "$node" 'curl -sSL https://github.com/rootless-containers/rootlesskit/releases/download/v2.0.0/rootlesskit-$(uname -m).tar.gz | sudo tar Cxzv /usr/local/bin/'
             ssh -n "$node" 'containerd-rootless-setuptool.sh install'
-        done <<< "$1"
+        done
 
+        install_ns
+        install_crd
         ;;
     *)
         echo "invalid command \"$1\""
@@ -238,8 +267,8 @@ command_load_images() {
     docker2ctr)
         shift
 
-        remotes=("$1")
-        images=("$2")
+        local remotes=("$1")
+        local images=("$2")
 
         # shellcheck disable=SC2048
         for remote in ${remotes[*]}; do
@@ -268,8 +297,8 @@ command_load_images() {
     docker2kind)
         shift
 
-        kind_name=$1
-        images=("$2")
+        local kind_name=$1
+        local images=("$2")
 
         # shellcheck disable=SC2048
         for image in ${images[*]}; do
@@ -286,9 +315,26 @@ command_load_images() {
 
         ;;
     *)
-        echo "invalid command \"$1\""
+        echo "invalid load images command \"$1\""
         usage "$@"
         ;;
+    esac
+}
+
+command_upload() {
+    case "$1" in
+    crd)
+        shift
+        install_ns
+        install_crd
+        ;;
+    images)
+        shift
+        command_load_images "$@"
+        ;;
+    *)
+        echo "invalid upload command \"$1\""
+        usage "$@"
     esac
 }
 
@@ -300,23 +346,21 @@ wait_inventory_available() {
     kubectl -n akash-services port-forward --address 0.0.0.0 service/operator-inventory 8455:grpc &
     pid=$!
 
-    if ! kill -0 $pid ; then
-        exit 1
-    fi
-
     # shellcheck disable=SC2064
     trap "kill -SIGINT ${pid}" EXIT
 
     timeout 10 bash -c -- 'while ! nc -vz localhost 8455 > /dev/null 2>&1 ; do sleep 0.1; done'
 
-    local retries=0
+    local r=0
 
     while ! grpcurl -plaintext localhost:8455 akash.inventory.v1.ClusterRPC.QueryCluster | jq '(.nodes | length > 0) and (.storage | length > 0)' --exit-status > /dev/null 2>&1; do
-        retries=$((retries+1))
-        if [ ${retries} -eq "${timeout}" ]; then
-            exit 1
+        r=$((r+1))
+        if [ ${r} -eq "${retries}" ]; then
+            exit 0
         fi
-        sleep 1
+
+        # shellcheck disable=SC2086
+        sleep $retrywait
     done
 }
 
@@ -346,9 +390,9 @@ kustomize)
     shift
     command_kustomize "$@"
     ;;
-load-images)
+upload)
     shift
-    command_load_images "$@"
+    command_upload "$@"
     ;;
 "wait")
     shift

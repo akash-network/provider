@@ -59,14 +59,14 @@ spec:
               path: /metrics/health
               port: api
               scheme: HTTP
-            initialDelaySeconds: 5
-            periodSeconds: 5
+            initialDelaySeconds: 15
+            periodSeconds: 15
           readinessProbe:
             httpGet:
               path: /metrics/ready
               port: api
               scheme: HTTP
-            initialDelaySeconds: 5
+            initialDelaySeconds: 15
             periodSeconds: 5
           ports:
             - containerPort: 8080

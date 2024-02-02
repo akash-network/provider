@@ -76,12 +76,12 @@ func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes
 	return fd
 }
 
-func (fd *clusterNodes) Wait() error {
-	return fd.group.Wait()
+func (cl *clusterNodes) Wait() error {
+	return cl.group.Wait()
 }
 
-func (fd *clusterNodes) connector() error {
-	ctx := fd.ctx
+func (cl *clusterNodes) connector() error {
+	ctx := cl.ctx
 	bus := fromctx.PubSubFromCtx(ctx)
 	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
 
@@ -102,7 +102,7 @@ func (fd *clusterNodes) connector() error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case name := <-fd.signaldone:
+		case name := <-cl.signaldone:
 			if node, exists := nodes[name]; exists {
 				delete(nodes, node.name)
 
@@ -111,7 +111,7 @@ func (fd *clusterNodes) connector() error {
 					log.Error(err, fmt.Sprintf("\"%s\" exited with error. attempting restart", name))
 				}
 			}
-			nodes[name] = newNodeDiscovery(nctx, name, fd.namespace, fd.image, fd.signaldone)
+			nodes[name] = newNodeDiscovery(nctx, name, cl.namespace, cl.image, cl.signaldone)
 		case rEvt := <-events:
 			switch evt := rEvt.(type) {
 			case watch.Event:
@@ -119,7 +119,7 @@ func (fd *clusterNodes) connector() error {
 				case *corev1.Node:
 					switch evt.Type {
 					case watch.Added:
-						nodes[obj.Name] = newNodeDiscovery(nctx, obj.Name, fd.namespace, fd.image, fd.signaldone)
+						nodes[obj.Name] = newNodeDiscovery(nctx, obj.Name, cl.namespace, cl.image, cl.signaldone)
 					case watch.Deleted:
 						if node, exists := nodes[obj.Name]; exists {
 							_ = node.shutdown()
@@ -132,7 +132,7 @@ func (fd *clusterNodes) connector() error {
 	}
 }
 
-func (fd *clusterNodes) run() error {
+func (cl *clusterNodes) run() error {
 	nodes := make(map[string]inventoryV1.Node)
 
 	snapshot := func() inventoryV1.Nodes {
@@ -147,14 +147,14 @@ func (fd *clusterNodes) run() error {
 		return res
 	}
 
-	bus := fromctx.PubSubFromCtx(fd.ctx)
+	bus := fromctx.PubSubFromCtx(cl.ctx)
 
 	events := bus.Sub(topicInventoryNode)
 	defer bus.Unsub(events)
 	for {
 		select {
-		case <-fd.ctx.Done():
-			return fd.ctx.Err()
+		case <-cl.ctx.Done():
+			return cl.ctx.Err()
 		case revt := <-events:
 			switch evt := revt.(type) {
 			case nodeState:
@@ -168,7 +168,7 @@ func (fd *clusterNodes) run() error {
 				bus.Pub(snapshot(), []string{topicInventoryNodes}, pubsub.WithRetain())
 			default:
 			}
-		case req := <-fd.reqch:
+		case req := <-cl.reqch:
 			resp := respNodes{
 				res: snapshot(),
 			}
