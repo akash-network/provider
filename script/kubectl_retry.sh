@@ -13,8 +13,7 @@ kubectl_retry() {
 
 	trap 'rm -f "${stdout}" "${stderr}"' RETURN
 
-	while ! kubectl "${action}" "${@}" 2>"${stderr}" 1>"${stdout}"
-	do
+	while ! kubectl "${action}" "${@}" 2>"${stderr}" 1>"${stdout}"; do
 		# in case of a failure when running "create", ignore errors with "AlreadyExists"
 		if [ "${action}" == 'create' ]
 		then
@@ -35,14 +34,14 @@ kubectl_retry() {
 		fi
 
 	# log stderr and empty the tmpfile
-	cat "${stderr}" > /dev/stderr
-	true > "${stderr}"
-	echo "kubectl_retry ${*} failed, will retry in ${KUBECTL_RETRY_DELAY} seconds"
+		cat "${stderr}" > /dev/stderr
+		true > "${stderr}"
+		echo "kubectl_retry ${*} failed, will retry in ${KUBECTL_RETRY_DELAY} seconds"
 
-	sleep "${KUBECTL_RETRY_DELAY}"
+		sleep "${KUBECTL_RETRY_DELAY}"
 
-	# reset ret so that a next working kubectl does not cause a non-zero
-	# return of the function
+		# reset ret so that a next working kubectl does not cause a non-zero
+		# return of the function
 		ret=0
 	done
 

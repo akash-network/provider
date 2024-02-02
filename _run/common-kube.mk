@@ -188,13 +188,11 @@ akash-node-ready:
 		exit 1 \
 	)
 
-
 .PHONY: kube-logs-operator-inventory
 kube-logs-operator-inventory:
 	kubectl -n akash-services logs -f \
 		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-service,app.kubernetes.io/name=inventory
 
-#.PHONY: kube-operator-inventory-node-logs
-#kube-operator-inventory-node-logs:
-#	kubectl -n akash-services logs -f \
-#		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-node,app.kubernetes.io/name=inventory
+.PHONY: kube-wait-inventory-available
+kube-wait-inventory-available:
+	$(SETUP_KUBE) wait inventory-available

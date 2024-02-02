@@ -112,15 +112,7 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make -s -C _run/kube kube-deployment-rollout-operator-inventory
-      - name: K8S test operator inventory GRPC ports
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
-        run: |
-          kubectl -n akash-services port-forward --address 0.0.0.0 service/operator-inventory 8455:grpc &
-
-          timeout 10 bash -c -- 'while ! nc -vz localhost 8455 > /dev/null 2>&1 ; do sleep 0.1; done'
-
-          grpcurl -plaintext localhost:8455 akash.inventory.v1.ClusterRPC/QueryCluster
-          kubectl -n akash-services logs service/operator-inventory
+          make -s -C _run/kube kube-wait-inventory-available
       - name: Run E2E Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
