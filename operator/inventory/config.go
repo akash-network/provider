@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -11,6 +12,10 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
+)
+
+var (
+	errConfigInvalidVersion = errors.New("invalid version")
 )
 
 type ExcludeRules []*regexp.Regexp
@@ -182,7 +187,7 @@ loop:
 		switch node.Content[i].Value {
 		case "version":
 			if res.Version, err = semver.ParseTolerant(node.Content[i+1].Value); err != nil {
-				return fmt.Errorf("%w: %w", errCapabilitiesInvalidVersion, err)
+				return fmt.Errorf("%w: %w", errConfigInvalidVersion, err)
 			}
 			continue loop
 		case "cluster_storage":

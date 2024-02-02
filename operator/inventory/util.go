@@ -72,3 +72,7 @@ func ConfigFromCtx(ctx context.Context) Config {
 
 	return val.(Config)
 }
+
+func remove[T any](slice []T, s int) []T {
+	return append(slice[:s], slice[s+1:]...)
+}
