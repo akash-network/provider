@@ -72,9 +72,9 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: echo "KIND_VERSION=$(go list -mod=readonly -m -f '{{ .Version }}' sigs.k8s.io/kind)" >> $GITHUB_ENV
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+        uses: docker/setup-buildx-action@v3
       - name: Go mod tidy
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: go mod tidy
