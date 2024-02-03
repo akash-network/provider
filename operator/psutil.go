@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/pci"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -55,8 +57,8 @@ func cmdPsutilServe() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			router := mux.NewRouter()
-			router.Methods(http.MethodGet).HandlerFunc(infoHandler)
 
+			router.HandleFunc("/", infoHandler).Methods(http.MethodGet)
 			router.HandleFunc("/cpu", cpuInfoHandler).Methods(http.MethodGet)
 			router.HandleFunc("/gpu", gpuHandler).Methods(http.MethodGet)
 			router.HandleFunc("/memory", memoryHandler).Methods(http.MethodGet)
@@ -64,16 +66,40 @@ func cmdPsutilServe() *cobra.Command {
 
 			port := viper.GetUint16(flagAPIPort)
 
+			group, ctx := errgroup.WithContext(cmd.Context())
+
+			endpoint := fmt.Sprintf(":%d", port)
+
 			srv := &http.Server{
-				Addr:    fmt.Sprintf(":%d", port),
+				Addr:    endpoint,
 				Handler: router,
 				BaseContext: func(_ net.Listener) context.Context {
-					return cmd.Context()
+					return ctx
 				},
 				ReadHeaderTimeout: 5 * time.Second,
 			}
 
-			return srv.ListenAndServe()
+			group.Go(func() error {
+				fmt.Printf("listening on %s\n", endpoint)
+
+				return srv.ListenAndServe()
+			})
+
+			group.Go(func() error {
+				<-ctx.Done()
+
+				fmt.Printf("received shutdown signal\n")
+
+				_ = srv.Shutdown(context.Background())
+				return ctx.Err()
+			})
+
+			err := group.Wait()
+			if !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
+				return err
+			}
+
+			return nil
 		},
 	}
 

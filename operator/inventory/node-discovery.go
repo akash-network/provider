@@ -81,12 +81,18 @@ func (dp *nodeDiscovery) shutdown() error {
 func (dp *nodeDiscovery) queryCPU(ctx context.Context) (*cpu.Info, error) {
 	respch := make(chan dpReadResp, 1)
 
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-dp.ctx.Done():
 		return nil, dp.ctx.Err()
+	case <-rctx.Done():
+		return nil, rctx.Err()
 	case dp.readch <- dpReadReq{
+		ctx:  rctx,
 		op:   dpReqCPU,
 		resp: respch,
 	}:
@@ -108,12 +114,18 @@ func (dp *nodeDiscovery) queryCPU(ctx context.Context) (*cpu.Info, error) {
 func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 	respch := make(chan dpReadResp, 1)
 
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-dp.ctx.Done():
 		return nil, dp.ctx.Err()
+	case <-rctx.Done():
+		return nil, rctx.Err()
 	case dp.readch <- dpReadReq{
+		ctx:  rctx,
 		op:   dpReqGPU,
 		resp: respch,
 	}:
@@ -256,7 +268,7 @@ initloop:
 			return dp.ctx.Err()
 		case evt := <-watcher.ResultChan():
 			resp := evt.Object.(*corev1.Pod)
-			if resp.Status.Phase != corev1.PodPending {
+			if resp.Status.Phase == corev1.PodRunning {
 				watcher.Stop()
 				break initloop
 			}
@@ -290,7 +302,7 @@ initloop:
 				Name(fmt.Sprintf("%s:%d", pod.Name, apiPort)).
 				SubResource("proxy").
 				Suffix(res).
-				Do(dp.ctx)
+				Do(readreq.ctx)
 
 			resp.err = result.Error()
 
@@ -322,10 +334,10 @@ initloop:
 
 func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
 	bus := fromctx.PubSubFromCtx(ctx)
 	kc := fromctx.KubeClientFromCtx(ctx)
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
 	log.Info("starting", "node", dp.name)
 
@@ -734,10 +746,16 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 }
 
 func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+
+	log.Info("query cpu started")
 	cpus, err := dp.queryCPU(ctx)
 	if err != nil {
+		log.Error(err, "unable to query cpu")
 		return v1.CPUInfoS{}
 	}
+
+	log.Info("query cpu done")
 
 	res := make(v1.CPUInfoS, 0, len(cpus.Processors))
 
@@ -756,10 +774,16 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+
+	log.Info("query gpu started")
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
+		log.Error(err, "unable to query gpu")
 		return res
 	}
+
+	log.Info("query gpu done")
 
 	if gpus == nil {
 		return res

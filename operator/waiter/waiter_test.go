@@ -2,11 +2,12 @@ package waiter
 
 import (
 	"context"
-	"github.com/akash-network/node/testutil"
-	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
 	"time"
+
+	"github.com/akash-network/node/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestWaiterNoInput(t *testing.T) {

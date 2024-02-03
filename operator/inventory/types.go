@@ -63,6 +63,7 @@ type dpReadResp struct {
 	err  error
 }
 type dpReadReq struct {
+	ctx  context.Context
 	op   dpReqType
 	resp chan<- dpReadResp
 }

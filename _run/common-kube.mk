@@ -6,15 +6,17 @@ include ../common-kind.mk
 include ../common-helm.mk
 
 KUBE_UPLOAD_AKASH_IMAGE    ?= false
-KUBE_CLUSTER_CREATE_TARGET ?= default
 KUBE_ROLLOUT_TIMEOUT       ?= 180
-
 INGRESS_CONFIG_PATH        ?= ../ingress-nginx.yaml
 CALICO_MANIFEST            ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
 CRD_FILE                   ?= $(AP_ROOT)/pkg/apis/akash.network/crd.yaml
 
-ifeq ($(KUBE_SSH_NODE_NAME),)
-$(error "KUBE_SSH_NODE_NAME is not set")
+ifeq ($(KUBE_SSH_NODES),)
+$(error "KUBE_SSH_NODES is not set")
+endif
+
+ifeq ($(KUBE_CLUSTER_CREATE_TYPE),)
+$(error "KUBE_CLUSTER_CREATE_TYPE is not set")
 endif
 
 # when image is built locally, for example on M1 (arm64) and kubernetes cluster is running on amd64
@@ -74,26 +76,26 @@ endif
 endif
 
 .PHONY: kube-upload-images
-kube-upload-images: kube-upload-images-$(KUBE_CLUSTER_CREATE_TARGET)
+kube-upload-images: kube-upload-images-$(KUBE_CLUSTER_CREATE_TYPE)
 
 .PHONY: kube-upload-images-kind
 kube-upload-images-kind: $(KIND)
-	$(AP_ROOT)/script/setup-kube.sh load-images docker2kind "$(KIND_NAME)" "$(DOCKER_LOAD_IMAGES)"
+	$(AP_ROOT)/script/setup-kube.sh upload images docker2kind "$(KIND_NAME)" "$(DOCKER_LOAD_IMAGES)"
 
-.PHONY: kube-upload-images-default
-kube-upload-images-default:
-	$(AP_ROOT)/script/setup-kube.sh load-images docker2ctr "$(KUBE_SSH_NODE_NAME)" "$(DOCKER_LOAD_IMAGES)"
+.PHONY: kube-upload-images-ssh
+kube-upload-images-ssh:
+	$(AP_ROOT)/script/setup-kube.sh upload images docker2ctr "$(KUBE_SSH_NODES)" "$(DOCKER_LOAD_IMAGES)"
 
 .PHONY: kube-upload-crd
 kube-upload-crd:
-	$(SETUP_KUBE) --crd=$(CRD_FILE) $(KUBE_SSH_NODE_NAME) init
+	$(SETUP_KUBE) --crd=$(CRD_FILE) upload crd
 
-$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TARGET)
-	$(SETUP_KUBE) --crd=$(CRD_FILE) $(KUBE_SSH_NODE_NAME) init
+$(KUBE_CREATE): $(AP_RUN_DIR) kube-cluster-create-$(KUBE_CLUSTER_CREATE_TYPE)
+	$(SETUP_KUBE) --crd=$(CRD_FILE) $(KUBE_CLUSTER_CREATE_TYPE) init "$(KUBE_SSH_NODES)"
 	touch $@
 
-.INTERMEDIATE: kube-cluster-create-default
-kube-cluster-create-default: $(KUBE_CREATE)
+.INTERMEDIATE: kube-cluster-create-ssh
+kube-cluster-create-ssh:
 
 .PHONY: kube-cluster-check-alive
 kube-cluster-check-info:
@@ -129,7 +131,7 @@ kube-cluster-setup-e2e-ci: \
 	kube-install-helm-charts
 
 .PHONY: kube-cluster-delete
-kube-cluster-delete: kube-cluster-delete-$(KUBE_SSH_NODE_NAME)
+kube-cluster-delete: kube-cluster-delete-$(KUBE_SSH_NODES)
 
 .PHONY: kube-setup-ingress
 kube-setup-ingress: kube-setup-ingress-$(KIND_CONFIG)
@@ -161,12 +163,19 @@ kube-status-ingress-%:
 .PHONY: kube-deployment-rollout-operator-inventory
 kube-deployment-rollout-operator-inventory:
 	kubectl -n akash-services rollout status deployment operator-inventory --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
-	kubectl -n akash-services wait pods -l app.kubernetes.io/part-of=provider -l app.kubernetes.io/component=operator -l app.kubernetes.io/instance=inventory-service --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services wait pods \
+		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-service \
+		--for condition=Ready \
+		--timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services wait pods \
+		-l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-hardware-discovery,app.kubernetes.io/name=inventory \
+		--for=condition=ready \
+		--timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 
 .PHONY: kube-deployment-rollout-%
 kube-deployment-rollout-%:
 	kubectl -n akash-services rollout status deployment $* --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
-	kubectl -n akash-services wait pods -l akash.network/component=operator -l akash.network/name=$(patsubst %, operator-%,$*) --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	kubectl -n akash-services wait pods -l akash.network/component=operator,akash.network/name=$(patsubst %, operator-%,$*) --for condition=Ready --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 
 .PHONY: akash-node-ready
 akash-node-ready: SHELL=$(BASH_PATH)
@@ -195,4 +204,4 @@ kube-logs-operator-inventory:
 
 .PHONY: kube-wait-inventory-available
 kube-wait-inventory-available:
-	$(SETUP_KUBE) wait inventory-available
+	$(SETUP_KUBE) --retries=60 wait inventory-available
