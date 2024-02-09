@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/viper"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/client-go/kubernetes"
 
 	"github.com/tendermint/tendermint/libs/log"
 
@@ -41,12 +42,17 @@ import (
 	"github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
-	"github.com/akash-network/provider/cluster/operatorclients"
+	kubehostname "github.com/akash-network/provider/cluster/kube/operators/clients/hostname"
+	kubeinventory "github.com/akash-network/provider/cluster/kube/operators/clients/inventory"
+	kubeip "github.com/akash-network/provider/cluster/kube/operators/clients/ip"
+	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
+	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
 	gwgrpc "github.com/akash-network/provider/gateway/grpc"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 	"github.com/akash-network/provider/operator/waiter"
+	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
 )
@@ -127,11 +133,29 @@ func RunCmd() *cobra.Command {
 			group, ctx := errgroup.WithContext(cmd.Context())
 			cmd.SetContext(ctx)
 
+			if err := clientcommon.SetKubeConfigToCmd(cmd); err != nil {
+				return err
+			}
+
+			kubecfg := fromctx.MustKubeConfigFromCtx(cmd.Context())
+
+			kc, err := kubernetes.NewForConfig(kubecfg)
+			if err != nil {
+				return err
+			}
+
+			ac, err := akashclientset.NewForConfig(kubecfg)
+			if err != nil {
+				return err
+			}
+
 			startupch := make(chan struct{}, 1)
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, cmdutil.OpenLogger().With("cmp", "provider"))
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
 
 			pctx, pcancel := context.WithCancel(context.Background())
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, tpubsub.New(pctx, 1000))
@@ -489,7 +513,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	overcommitPercentGPU := 1.0
 	overcommitPercentMemory := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentMemory)/100.0)
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
-	kubeConfigPath := viper.GetString(providerflags.FlagKubeConfig)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
@@ -506,17 +529,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	logger := fromctx.LogcFromCtx(cmd.Context())
 
-	kubeConfig, err := clientcommon.OpenKubeConfig(kubeConfigPath, logger)
-	if err != nil {
-		return err
-	}
-
 	var metricsRouter http.Handler
 	if len(metricsListener) != 0 {
 		metricsRouter = makeMetricsRouter()
 	}
 
-	group := fromctx.ErrGroupFromCtx(ctx)
+	group := fromctx.MustErrGroupFromCtx(ctx)
 
 	cctx, err := sdkclient.GetClientTxContext(cmd)
 	if err != nil {
@@ -594,7 +612,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		builder.SettingsKey: kubeSettings,
 	}
 
-	cclient, err := createClusterClient(cmd.Context(), logger, cmd, kubeConfigPath)
+	cclient, err := createClusterClient(cmd.Context(), logger, cmd)
 	if err != nil {
 		return err
 	}
@@ -659,13 +677,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.CachedResultMaxAge = cachedResultMaxAge
 
 	// This value can be nil, the operator is not mandatory
-	var ipOperatorClient operatorclients.IPOperatorClient
+	var ipOperatorClient cip.Client
 	if enableIPOperator {
 		endpoint, err := providerflags.GetServiceEndpointFlagValue(logger, serviceIPOperator)
 		if err != nil {
 			return err
 		}
-		ipOperatorClient, err = operatorclients.NewIPOperatorClient(logger, kubeConfig, endpoint)
+		ipOperatorClient, err = kubeip.NewClient(ctx, logger, endpoint)
 		if err != nil {
 			return err
 		}
@@ -675,21 +693,31 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	hostnameOperatorClient, err := operatorclients.NewHostnameOperatorClient(logger, kubeConfig, endpoint)
+	hostnameOperatorClient, err := kubehostname.NewClient(ctx, logger, endpoint)
 	if err != nil {
 		return err
 	}
+
+	ctx = context.WithValue(ctx, clfromctx.CtxKeyClientInventory, hostnameOperatorClient)
+
+	inventory, err := kubeinventory.NewClient(ctx)
+	if err != nil {
+		return err
+	}
+
+	ctx = context.WithValue(ctx, clfromctx.CtxKeyClientInventory, inventory)
 
 	waitClients := make([]waiter.Waitable, 0)
 	waitClients = append(waitClients, hostnameOperatorClient)
 
 	if ipOperatorClient != nil {
 		waitClients = append(waitClients, ipOperatorClient)
+		ctx = context.WithValue(ctx, clfromctx.CtxKeyClientIP, ipOperatorClient)
 	}
 
 	operatorWaiter := waiter.NewOperatorWaiter(cmd.Context(), logger, waitClients...)
 
-	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, session, bus, cclient, ipOperatorClient, operatorWaiter, config)
+	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, session, bus, cclient, operatorWaiter, config)
 	if err != nil {
 		return err
 	}
@@ -701,7 +729,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		logger,
 		service,
 		cl.Query(),
-		ipOperatorClient,
 		gwaddr,
 		cctx.FromAddress,
 		[]tls.Certificate{tlsCert},
@@ -752,7 +779,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		})
 	}
 
-	fromctx.StartupChFromCtx(ctx) <- struct{}{}
+	fromctx.MustStartupChFromCtx(ctx) <- struct{}{}
 
 	err = group.Wait()
 
@@ -768,7 +795,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command, configPath string) (cluster.Client, error) {
+func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command) (cluster.Client, error) {
 	if !viper.GetBool(FlagClusterK8s) {
 		// Condition that there is no Kubernetes API to work with.
 		return cluster.NullClient(), nil
@@ -777,7 +804,8 @@ func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command, 
 	if ns == "" {
 		return nil, fmt.Errorf("%w: --%s required", errInvalidConfig, providerflags.FlagK8sManifestNS)
 	}
-	return kube.NewClient(ctx, log, ns, configPath)
+
+	return kube.NewClient(ctx, log, ns)
 }
 
 func showErrorToUser(err error) error {

@@ -9,5 +9,5 @@ patches:
     target:
       kind: Deployment
       group: apps
-      name: akash-hostname-operator
+      name: operator-hostname
       version: v1

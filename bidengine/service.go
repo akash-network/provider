@@ -182,7 +182,7 @@ func (s *service) run(ctx context.Context, existingOrders []mtypes.OrderID) {
 		s.updateOrderManagerGauge()
 	}
 
-	bus := fromctx.PubSubFromCtx(ctx)
+	bus := fromctx.MustPubSubFromCtx(ctx)
 
 	signalch := make(chan struct{}, 1)
 	trySignal := func() {

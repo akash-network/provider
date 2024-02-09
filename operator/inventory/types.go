@@ -176,7 +176,7 @@ type RemotePodCommandExecutor interface {
 	ExecCommandInContainerWithFullOutputWithTimeout(ctx context.Context, appLabel, containerName, namespace string, cmd ...string) (string, string, error)
 }
 
-func NewRemotePodCommandExecutor(restcfg *rest.Config, clientset *kubernetes.Clientset) RemotePodCommandExecutor {
+func NewRemotePodCommandExecutor(restcfg *rest.Config, clientset kubernetes.Interface) RemotePodCommandExecutor {
 	return &rookexec.RemotePodCommandExecutor{
 		ClientSet:  clientset,
 		RestClient: restcfg,
@@ -184,7 +184,7 @@ func NewRemotePodCommandExecutor(restcfg *rest.Config, clientset *kubernetes.Cli
 }
 
 func InformKubeObjects(ctx context.Context, pub pubsub.Publisher, informer cache.SharedIndexInformer, topic string) {
-	fromctx.ErrGroupFromCtx(ctx).Go(func() error {
+	fromctx.MustErrGroupFromCtx(ctx).Go(func() error {
 		_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 			AddFunc: func(obj interface{}) {
 				pub.Pub(watch.Event{

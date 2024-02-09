@@ -20,13 +20,14 @@ import (
 	"github.com/stretchr/testify/suite"
 	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/client-go/util/homedir"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
-	"github.com/cosmos/cosmos-sdk/server"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bankcli "github.com/cosmos/cosmos-sdk/x/bank/client/testutil"
 
@@ -42,8 +43,11 @@ import (
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
 	"github.com/akash-network/node/x/provider/client/cli"
 
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 // IntegrationTestSuite wraps testing components
@@ -173,32 +177,35 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(s.network.WaitForNextBlock())
 	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
 
+	numPorts := 3
+	if s.ipMarketplace {
+		numPorts++
+	}
+
+	ports, err := network.GetFreePorts(numPorts)
+	s.Require().NoError(err)
+
 	// address for provider to listen on
-	_, port, err := server.FreeTCPAddr()
-	require.NoError(s.T(), err)
-	provHost := fmt.Sprintf("localhost:%s", port)
+	provHost := fmt.Sprintf("localhost:%d", ports[0])
 	provURL := url.URL{
 		Host:   provHost,
 		Scheme: "https",
 	}
 	// address for JWT server to listen on
-	_, port, err = server.FreeTCPAddr()
-	require.NoError(s.T(), err)
-	jwtHost := fmt.Sprintf("localhost:%s", port)
+	jwtHost := fmt.Sprintf("localhost:%d", ports[1])
 	jwtURL := url.URL{
 		Host:   jwtHost,
 		Scheme: "https",
 	}
 
-	_, port, err = server.FreeTCPAddr()
-	require.NoError(s.T(), err)
-	hostnameOperatorHost := fmt.Sprintf("localhost:%s", port)
+	hostnameOperatorPort := ports[2]
+	hostnameOperatorHost := fmt.Sprintf("localhost:%d", hostnameOperatorPort)
 
 	var ipOperatorHost string
+	var ipOperatorPort int
 	if s.ipMarketplace {
-		_, port, err = server.FreeTCPAddr()
-		require.NoError(s.T(), err)
-		ipOperatorHost = fmt.Sprintf("localhost:%s", port)
+		ipOperatorPort = ports[3]
+		ipOperatorHost = fmt.Sprintf("localhost:%d", ipOperatorPort)
 	}
 
 	provFileStr := fmt.Sprintf(providerTemplate, provURL.String(), jwtURL.String())
@@ -320,7 +327,29 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.ctxCancel = cancel
 
-	s.group, s.ctx = errgroup.WithContext(ctx)
+	group, ctx := errgroup.WithContext(ctx)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
+
+	kubecfg, err := clientcommon.OpenKubeConfig(providerflags.KubeConfigDefaultPath, testutil.Logger(s.T()))
+	require.NoError(s.T(), err)
+	require.NotNil(s.T(), kubecfg)
+
+	kubecfg.RateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
+
+	kc, err := kubernetes.NewForConfig(kubecfg)
+	require.NoError(s.T(), err)
+
+	ac, err := akashclient.NewForConfig(kubecfg)
+	require.NoError(s.T(), err)
+
+	startupch := make(chan struct{}, 10)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kubecfg)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kc)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, ac)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
+
+	s.ctx = ctx
+	s.group = group
 
 	// all command use viper which is meant for use by a single goroutine only
 	// so wait for the provider to start before running the hostname operator
@@ -357,7 +386,6 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	}
 
 	// Wait for the provider gateway to be up and running
-
 	s.T().Log("waiting for provider gateway")
 	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
 
@@ -378,8 +406,8 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 	// --- Start hostname operator
 	s.group.Go(func() error {
-		s.T().Logf("starting hostname operator for test on %v", hostnameOperatorHost)
-		_, err := ptestutil.RunLocalHostnameOperator(s.ctx, cctx, hostnameOperatorHost)
+		s.T().Logf("starting hostname operator for test on %s", hostnameOperatorHost)
+		_, err := ptestutil.RunLocalHostnameOperator(s.ctx, cctx, hostnameOperatorPort)
 		s.Assert().NoError(err)
 		return err
 	})
@@ -390,7 +418,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	if s.ipMarketplace {
 		s.group.Go(func() error {
 			s.T().Logf("starting ip operator for test on %v", ipOperatorHost)
-			_, err := ptestutil.RunLocalIPOperator(s.ctx, cctx, ipOperatorHost, s.keyProvider.GetAddress())
+			_, err := ptestutil.RunLocalIPOperator(s.ctx, cctx, ipOperatorPort, s.keyProvider.GetAddress())
 			s.Assert().NoError(err)
 			return err
 		})

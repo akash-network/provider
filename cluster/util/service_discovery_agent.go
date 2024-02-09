@@ -8,13 +8,16 @@ import (
 	"net"
 	"time"
 
-	"github.com/akash-network/node/util/runner"
 	"github.com/boz/go-lifecycle"
 	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+
+	"github.com/akash-network/node/util/runner"
+
+	kutil "github.com/akash-network/provider/cluster/kube/util"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 var (
@@ -23,18 +26,14 @@ var (
 	errServiceClient    = errors.New("service client failure")
 )
 
-func NewServiceDiscoveryAgent(logger log.Logger, kubeConfig *rest.Config, portName, serviceName, namespace string, endpoint *net.SRV) (ServiceDiscoveryAgent, error) {
+func NewServiceDiscoveryAgent(ctx context.Context, logger log.Logger, portName, serviceName, namespace string, endpoint *net.SRV) (ServiceDiscoveryAgent, error) {
 	// short circuit if a value is passed in, this is a convenience function for using manually specified values
 	if endpoint != nil {
 		return staticServiceDiscoveryAgent(*endpoint), nil
 	}
 
-	kc, err := kubernetes.NewForConfig(kubeConfig)
-	if err != nil {
-		return nil, err
-	}
-
 	sda := &serviceDiscoveryAgent{
+		ctx:             ctx,
 		serviceName:     serviceName,
 		namespace:       namespace,
 		portName:        portName,
@@ -44,8 +43,6 @@ func NewServiceDiscoveryAgent(logger log.Logger, kubeConfig *rest.Config, portNa
 		pendingRequests: nil,
 		result:          nil,
 		log:             logger.With("cmp", "service-discovery-agent"),
-		kube:            kc,
-		kubeConfig:      kubeConfig,
 	}
 	go sda.run()
 
@@ -163,12 +160,7 @@ func (sda *serviceDiscoveryAgent) GetClient(ctx context.Context, isHTTPS, secure
 }
 
 func (sda *serviceDiscoveryAgent) discover() (clientFactory, error) {
-	insideKubernetes, err := IsInsideKubernetes()
-	if err != nil {
-		return nil, err
-	}
-
-	if insideKubernetes {
+	if kutil.IsInsideKubernetes() {
 		return sda.discoverDNS()
 	}
 
@@ -180,8 +172,11 @@ func (sda *serviceDiscoveryAgent) discoverKube() (clientFactory, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
+	kubecfg := fromctx.MustKubeConfigFromCtx(sda.ctx)
+	kc := fromctx.MustKubeClientFromCtx(sda.ctx)
+
 	// Ask Kubernetes to confirm that the requested resource exists
-	service, err := sda.kube.CoreV1().Services(sda.namespace).Get(ctx, sda.serviceName, v1.GetOptions{})
+	service, err := kc.CoreV1().Services(sda.namespace).Get(ctx, sda.serviceName, v1.GetOptions{})
 
 	if err != nil {
 		sda.log.Error("kube discovery failed")
@@ -204,10 +199,10 @@ func (sda *serviceDiscoveryAgent) discoverKube() (clientFactory, error) {
 	port := ports[selectedPort]
 
 	// Get the host for the kube cluster
-	kubeHost := sda.kubeConfig.Host
+	kubeHost := kubecfg.Host
 	// The kube config object has a builtin system for getting an HTTP transport that does all the auth
 	// related things the cluster wants
-	httpTransport, err := rest.TransportFor(sda.kubeConfig)
+	httpTransport, err := rest.TransportFor(kubecfg)
 	if err != nil {
 		return nil, err
 	}

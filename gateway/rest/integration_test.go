@@ -6,24 +6,21 @@ import (
 	"crypto/tls"
 	"testing"
 
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
 	akashmanifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	qmock "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	providertypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-
 	"github.com/akash-network/node/testutil"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 
 	"github.com/akash-network/provider"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
-	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	pmmock "github.com/akash-network/provider/manifest/mocks"
 	pmock "github.com/akash-network/provider/mocks"
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -37,7 +34,7 @@ func Test_router_Status(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pclient.On("Status", mock.Anything).Return(expected, nil)
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			client, err := NewClient(mocks.qclient, addr, nil)
 			assert.NoError(t, err)
 			result, err := client.Status(context.Background())
@@ -51,7 +48,7 @@ func Test_router_Status(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
 		mocks.pclient.On("Status", mock.Anything).Return(nil, errors.New("oops"))
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			client, err := NewClient(mocks.qclient, addr, nil)
 			assert.NoError(t, err)
 			_, err = client.Status(context.Background())
@@ -69,7 +66,7 @@ func Test_router_Validate(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
 		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(expected, nil)
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, testutil.AccAddress(t), testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, addr, cert.Cert)
 			assert.NoError(t, err)
@@ -84,7 +81,7 @@ func Test_router_Validate(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
 		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(provider.ValidateGroupSpecResult{}, errors.New("oops"))
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, testutil.AccAddress(t), testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, addr, cert.Cert)
 			assert.NoError(t, err)
@@ -106,7 +103,7 @@ func Test_router_Manifest(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pmclient.On("Submit", mock.Anything, did, akashmanifest.Manifest(nil)).Return(nil)
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -125,7 +122,7 @@ func Test_router_Manifest(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pmclient.On("Submit", mock.Anything, did, akashmanifest.Manifest(nil)).Return(errors.New("ded"))
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -209,7 +206,7 @@ func Test_router_LeaseStatus(t *testing.T) {
 
 		mockManifestGroups(mocks, id)
 
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -247,7 +244,7 @@ func Test_router_LeaseStatus(t *testing.T) {
 		mocks.pcclient.On("LeaseStatus", mock.Anything, id).Return(nil, errors.New("ded"))
 		mockManifestGroups(mocks, id)
 
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -272,7 +269,7 @@ func Test_router_ServiceStatus(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pcclient.On("ServiceStatus", mock.Anything, id, service).Return(expected, nil)
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -294,7 +291,7 @@ func Test_router_ServiceStatus(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pcclient.On("ServiceStatus", mock.Anything, id, service).Return(nil, errors.New("ded"))
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, operatorclients.NullIPOperatorClient(), func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -311,7 +308,7 @@ type integrationMocks struct {
 	pcclient       *pcmock.Client
 	pclient        *pmock.Client
 	qclient        *qmock.QueryClient
-	hostnameClient *pcmock.HostnameServiceClient
+	hostnameClient *clmocks.HostnameServiceClient
 	clusterService *pcmock.Service
 }
 
@@ -321,7 +318,7 @@ func createMocks() integrationMocks {
 		pcclient       = &pcmock.Client{}
 		pclient        = &pmock.Client{}
 		qclient        = &qmock.QueryClient{}
-		hostnameClient = &pcmock.HostnameServiceClient{}
+		hostnameClient = &clmocks.HostnameServiceClient{}
 		clusterService = &pcmock.Service{}
 	)
 
@@ -348,11 +345,23 @@ func withServer(
 	pclient provider.Client,
 	qclient *qmock.QueryClient,
 	certs []tls.Certificate,
-	ipoc operatorclients.IPOperatorClient,
 	fn func(string),
 ) {
 	t.Helper()
-	router := newRouter(testutil.Logger(t), addr, pclient, ipoc, map[interface{}]interface{}{})
+
+	// ctx := context.Background()
+	// kcfg := kfake.NewSimpleClientset()
+	//
+	// kc := kubernetes.New(kcfg.Discovery().RESTClient())
+	// require.NotNil(t, kc)
+	//
+	// ac := akashclient.New(kcfg.Discovery().RESTClient())
+	// require.NotNil(t, ac)
+	//
+	// ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	// ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, akashclient.Interface(ac))
+	//
+	router := newRouter(testutil.Logger(t), addr, pclient, map[interface{}]interface{}{})
 
 	if len(certs) == 0 {
 		crt := testutil.Certificate(

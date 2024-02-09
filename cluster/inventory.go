@@ -8,8 +8,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
+	"github.com/desertbit/timer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
@@ -25,10 +27,11 @@ import (
 	sdlutil "github.com/akash-network/node/sdl/util"
 	"github.com/akash-network/node/util/runner"
 
-	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
+	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
+	cfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	"github.com/akash-network/provider/event"
-	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
@@ -83,27 +86,25 @@ type inventoryResponse struct {
 }
 
 type inventoryService struct {
-	config Config
-	client Client
-	sub    pubsub.Subscriber
-
-	statusch         chan chan<- ctypes.InventoryStatus
-	statusV1ch       chan chan<- invSnapshotResp
-	lookupch         chan inventoryRequest
-	reservech        chan inventoryRequest
-	unreservech      chan inventoryRequest
-	reservationCount int64
-
-	readych chan struct{}
-
-	log log.Logger
-	lc  lifecycle.Lifecycle
-
+	config                 Config
+	client                 Client
+	sub                    pubsub.Subscriber
+	statusch               chan chan<- inventoryV1.InventoryMetrics
+	statusV1ch             chan chan<- invSnapshotResp
+	lookupch               chan inventoryRequest
+	reservech              chan inventoryRequest
+	unreservech            chan inventoryRequest
+	reservationCount       int64
+	readych                chan struct{}
+	log                    log.Logger
+	lc                     lifecycle.Lifecycle
+	waiter                 waiter.OperatorWaiter
 	availableExternalPorts uint
 
-	ipOperator operatorclients.IPOperatorClient
-
-	waiter waiter.OperatorWaiter
+	clients struct {
+		ip        cip.Client
+		inventory cinventory.Client
+	}
 }
 
 func newInventoryService(
@@ -112,7 +113,6 @@ func newInventoryService(
 	log log.Logger,
 	sub pubsub.Subscriber,
 	client Client,
-	ipOperatorClient operatorclients.IPOperatorClient,
 	waiter waiter.OperatorWaiter,
 	deployments []ctypes.IDeployment,
 ) (*inventoryService, error) {
@@ -125,7 +125,7 @@ func newInventoryService(
 		config:                 config,
 		client:                 client,
 		sub:                    sub,
-		statusch:               make(chan chan<- ctypes.InventoryStatus),
+		statusch:               make(chan chan<- inventoryV1.InventoryMetrics),
 		statusV1ch:             make(chan chan<- invSnapshotResp),
 		lookupch:               make(chan inventoryRequest),
 		reservech:              make(chan inventoryRequest),
@@ -134,9 +134,11 @@ func newInventoryService(
 		log:                    log.With("cmp", "inventory-service"),
 		lc:                     lifecycle.New(),
 		availableExternalPorts: config.InventoryExternalPortQuantity,
-		ipOperator:             ipOperatorClient,
 		waiter:                 waiter,
 	}
+
+	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
+	is.clients.ip = cfromctx.ClientIPFromContext(ctx)
 
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
@@ -227,22 +229,22 @@ func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint:go
 	}
 }
 
-func (is *inventoryService) status(ctx context.Context) (ctypes.InventoryStatus, error) {
-	ch := make(chan ctypes.InventoryStatus, 1)
+func (is *inventoryService) status(ctx context.Context) (inventoryV1.InventoryMetrics, error) {
+	ch := make(chan inventoryV1.InventoryMetrics, 1)
 
 	select {
 	case <-is.lc.Done():
-		return ctypes.InventoryStatus{}, ErrNotRunning
+		return inventoryV1.InventoryMetrics{}, ErrNotRunning
 	case <-ctx.Done():
-		return ctypes.InventoryStatus{}, ctx.Err()
+		return inventoryV1.InventoryMetrics{}, ctx.Err()
 	case is.statusch <- ch:
 	}
 
 	select {
 	case <-is.lc.Done():
-		return ctypes.InventoryStatus{}, ErrNotRunning
+		return inventoryV1.InventoryMetrics{}, ErrNotRunning
 	case <-ctx.Done():
-		return ctypes.InventoryStatus{}, ctx.Err()
+		return inventoryV1.InventoryMetrics{}, ctx.Err()
 	case result := <-ch:
 		return result, nil
 	}
@@ -320,9 +322,8 @@ func (is *inventoryService) resourcesToCommit(rgroup dtypes.ResourceGroup) dtype
 	return result
 }
 
-func (is *inventoryService) updateInventoryMetrics(metrics ctypes.InventoryMetrics) {
+func (is *inventoryService) updateInventoryMetrics(metrics inventoryV1.Metrics) {
 	clusterInventoryAllocatable.WithLabelValues("nodes").Set(float64(len(metrics.Nodes)))
-
 	clusterInventoryAllocatable.WithLabelValues("cpu").Set(float64(metrics.TotalAllocatable.CPU) / 1000)
 	clusterInventoryAllocatable.WithLabelValues("gpu").Set(float64(metrics.TotalAllocatable.GPU) / 1000)
 	clusterInventoryAllocatable.WithLabelValues("memory").Set(float64(metrics.TotalAllocatable.Memory))
@@ -397,8 +398,8 @@ func updateReservationMetrics(reservations []*reservation) {
 
 type inventoryServiceState struct {
 	inventory    ctypes.Inventory
+	ipAddrUsage  cip.AddressUsage
 	reservations []*reservation
-	ipAddrUsage  ipoptypes.IPAddressUsage
 }
 
 func countPendingIPs(state *inventoryServiceState) uint {
@@ -424,7 +425,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	}
 
 	if reservation.endpointQuantity != 0 {
-		if is.ipOperator == nil {
+		if is.clients.ip == nil {
 			req.ch <- inventoryResponse{err: errNoLeasedIPsAvailable}
 			return
 		}
@@ -460,6 +461,9 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	defer is.lc.ShutdownCompleted()
 	defer is.sub.Close()
 
+	rctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	state := &inventoryServiceState{
 		inventory:    nil,
 		reservations: reservationsArg,
@@ -473,31 +477,29 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		return
 	}
 
-	// Create a timer to trigger periodic inventory checks
-	// Stop the timer immediately
-	t := time.NewTimer(time.Hour)
-	t.Stop()
-	defer t.Stop()
-
-	// Run an inventory check immediately.
-	runch := is.runCheck(ctx, state)
-
-	var fetchCount uint
-
+	var runch <-chan runner.Result
+	invch := is.clients.inventory.ResultChan()
 	var reserveChLocal <-chan inventoryRequest
 
 	resumeProcessingReservations := func() {
 		reserveChLocal = is.reservech
 	}
 
-	updateInventory := func() {
-		reserveChLocal = nil
-		if runch == nil {
-			runch = is.runCheck(ctx, state)
+	t := timer.NewStoppedTimer()
+
+	updateIPs := func() {
+		if is.clients.ip != nil {
+			reserveChLocal = nil
+			if runch == nil {
+				t.Stop()
+				runch = is.runCheck(rctx, state)
+			}
+		} else if reserveChLocal == nil {
+			reserveChLocal = is.reservech
 		}
 	}
 
-	bus := fromctx.PubSubFromCtx(ctx)
+	bus := fromctx.MustPubSubFromCtx(ctx)
 
 	signalch := make(chan struct{}, 1)
 	trySignal := func() {
@@ -528,7 +530,6 @@ loop:
 
 					allocatedPrev := res.allocated
 					res.allocated = ev.Status == event.ClusterDeploymentDeployed
-					updateInventory()
 
 					if res.allocated != allocatedPrev {
 						externalPortCount := reservationCountEndpoints(res)
@@ -546,7 +547,11 @@ loop:
 
 					break
 				}
+
+				updateIPs()
 			}
+		case <-t.C:
+			updateIPs()
 		case req := <-reserveChLocal:
 			is.handleRequest(req, state)
 		case req := <-is.lookupch:
@@ -602,65 +607,43 @@ loop:
 				err: err,
 			}
 			inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
-		case <-t.C:
-			// run cluster inventory check
-
-			t.Stop()
-			// Run an inventory check
-			updateInventory()
-		case res := <-runch:
-			// inventory check returned
-			runch = nil
-
-			// Reset the inventory check timer, so this runs periodically
-			t.Reset(is.config.InventoryResourcePollPeriod)
-
-			if err := res.Error(); err != nil {
-				is.log.Error("checking inventory", "err", err)
-				break
+		case inv, open := <-invch:
+			if !open {
+				continue
 			}
 
-			select {
-			case <-is.readych:
-				break
-			default:
-				is.log.Debug("inventory ready")
-				close(is.readych)
-			}
+			state.inventory = inv
+			updateIPs()
 
-			runResult := res.Value().(runCheckResult)
-
-			state.inventory = runResult.inventoryResult
 			metrics := state.inventory.Metrics()
 
 			is.updateInventoryMetrics(metrics)
 
-			if fetchCount%is.config.InventoryResourceDebugFrequency == 0 {
-				data, err := json.Marshal(&metrics)
-				if err == nil {
-					is.log.Debug(fmt.Sprintf("cluster resources dump=%s", string(data)))
-				} else {
-					is.log.Error("unable to dump cluster inventory", "error", err.Error())
-				}
+			data, err := json.Marshal(&metrics)
+			if err == nil {
+				is.log.Debug(fmt.Sprintf("cluster resources dump=%s", string(data)))
+			} else {
+				is.log.Error("unable to dump cluster inventory", "error", err.Error())
 			}
-			fetchCount++
 
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
-					// FIXME check if call for Adjust actually needed to be here
+					// FIXME check is call for Adjust actually needed to be here
 					if err := state.inventory.Adjust(r); err != nil {
 						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
 					}
 				}
 			}
-
-			if is.ipOperator != nil {
-				// Save IP address data
-				state.ipAddrUsage = runResult.ipResult
+		case run := <-runch:
+			runch = nil
+			t.Reset(5 * time.Second)
+			if err := run.Error(); err == nil {
+				res := run.Value().(runCheckResult)
+				state.ipAddrUsage = res.ipResult
 
 				// Process confirmed IP addresses usage
-				for _, confirmedOrderID := range runResult.confirmedResult {
+				for _, confirmedOrderID := range res.confirmedResult {
 					for i, entry := range state.reservations {
 						if entry.order.Equals(confirmedOrderID) {
 							state.reservations[i].ipsConfirmed = true
@@ -669,6 +652,8 @@ loop:
 						}
 					}
 				}
+			} else {
+				is.log.Error("checking IP addresses", "err", err)
 			}
 
 			resumeProcessingReservations()
@@ -685,8 +670,8 @@ loop:
 		<-runch
 	}
 
-	if is.ipOperator != nil {
-		is.ipOperator.Stop()
+	if is.clients.ip != nil {
+		is.clients.ip.Stop()
 	}
 }
 
@@ -696,53 +681,41 @@ type confirmationItem struct {
 }
 
 type runCheckResult struct {
-	inventoryResult ctypes.Inventory
-	ipResult        ipoptypes.IPAddressUsage
+	ipResult        cip.AddressUsage
 	confirmedResult []mtypes.OrderID
 }
 
 func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServiceState) <-chan runner.Result {
-	// Look for unconfirmed IPs, these are IPs that have an deployment created
+	// Look for unconfirmed IPs, these are IPs that have a deployment created
 	// event and are marked allocated. But until the IP address operator has reported
 	// that it has actually created the associated resources, we need to consider the total number of end
 	// points as pending
 
-	var confirm []confirmationItem
+	confirm := make([]confirmationItem, 0, len(state.reservations))
 
-	if is.ipOperator != nil {
-		for _, entry := range state.reservations {
-			// Skip anything already confirmed or not allocated
-			if entry.ipsConfirmed || !entry.allocated {
-				continue
-			}
-
-			confirm = append(confirm, confirmationItem{
-				orderID:          entry.OrderID(),
-				expectedQuantity: entry.endpointQuantity,
-			})
+	for _, entry := range state.reservations {
+		// Skip anything already confirmed or not allocated
+		if entry.ipsConfirmed || !entry.allocated {
+			continue
 		}
-	}
 
-	state = nil // Don't access state past here, it isn't safe
+		confirm = append(confirm, confirmationItem{
+			orderID:          entry.OrderID(),
+			expectedQuantity: entry.endpointQuantity,
+		})
+	}
 
 	return runner.Do(func() runner.Result {
 		retval := runCheckResult{}
 		var err error
-		retval.inventoryResult, err = is.client.Inventory(ctx)
 
+		retval.ipResult, err = is.clients.ip.GetIPAddressUsage(ctx)
 		if err != nil {
 			return runner.NewResult(nil, err)
 		}
 
-		if is.ipOperator != nil {
-			retval.ipResult, err = is.ipOperator.GetIPAddressUsage(ctx)
-			if err != nil {
-				return runner.NewResult(nil, err)
-			}
-		}
-
 		for _, confirmItem := range confirm {
-			status, err := is.ipOperator.GetIPAddressStatus(ctx, confirmItem.orderID)
+			status, err := is.clients.ip.GetIPAddressStatus(ctx, confirmItem.orderID)
 			if err != nil {
 				// This error is not really fatal, so don't bail on this entirely. The other results
 				// retrieved in this code are still valid
@@ -760,8 +733,8 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 	})
 }
 
-func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.InventoryStatus {
-	status := ctypes.InventoryStatus{}
+func (is *inventoryService) getStatus(state *inventoryServiceState) inventoryV1.InventoryMetrics {
+	status := inventoryV1.InventoryMetrics{}
 
 	if state.inventory == nil {
 		status.Error = errInventoryNotAvailableYet
@@ -769,7 +742,7 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.Inven
 	}
 
 	for _, reservation := range state.reservations {
-		total := ctypes.InventoryMetricTotal{
+		total := inventoryV1.MetricTotal{
 			Storage: make(map[string]int64),
 		}
 
@@ -785,11 +758,11 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) ctypes.Inven
 	}
 
 	for _, nd := range state.inventory.Metrics().Nodes {
-		status.Available.Nodes = append(status.Available.Nodes, nd.Available)
+		status.Available.Nodes = append(status.Available.Nodes, nd)
 	}
 
 	for class, size := range state.inventory.Metrics().TotalAvailable.Storage {
-		status.Available.Storage = append(status.Available.Storage, ctypes.InventoryStorageStatus{Class: class, Size: size})
+		status.Available.Storage = append(status.Available.Storage, inventoryV1.StorageStatus{Class: class, Size: size})
 	}
 
 	return status

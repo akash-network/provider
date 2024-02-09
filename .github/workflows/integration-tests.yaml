@@ -107,11 +107,13 @@ jobs:
       - name: K8S dump running pods
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
-          kubectl get pods,ingress,svc -A
+          kubectl get deployments,pods,ingress,svc -A
       - name: K8S wait for operator inventory
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make -s -C _run/kube kube-deployment-rollout-operator-inventory
+        env:
+          KUBE_ROLLOUT_TIMEOUT: 360
       - name: Run E2E Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |

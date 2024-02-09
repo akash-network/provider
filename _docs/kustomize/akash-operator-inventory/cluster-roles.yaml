@@ -2,7 +2,7 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-inventory
+  name: akash-operator-inventory
   labels:
     akash.network: "true"
     app.kubernetes.io/name: inventory
@@ -94,7 +94,7 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: operator-inventory-hardware-discovery
+  name: akash-operator-inventory-hardware-discovery
   labels:
     akash.network: "true"
     app.kubernetes.io/name: inventory

@@ -17,6 +17,7 @@ import (
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
@@ -129,7 +130,7 @@ func (ev hostnameResourceEvent) GetExternalPort() uint32 {
 	return ev.externalPort
 }
 
-func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.HostnameResourceEvent, error) {
+func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error) {
 	var lastResourceVersion string
 	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		resources, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).List(ctx, opts)
@@ -194,7 +195,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.Hostna
 
 	data = nil
 
-	output := make(chan ctypes.HostnameResourceEvent)
+	output := make(chan chostname.ResourceEvent)
 
 	go func() {
 		defer close(output)
@@ -250,7 +251,6 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.Hostna
 				}
 
 				output <- ev
-
 			case <-ctx.Done():
 				return
 			}
@@ -260,7 +260,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan ctypes.Hostna
 	return output, nil
 }
 
-func (c *client) AllHostnames(ctx context.Context) ([]ctypes.ActiveHostname, error) {
+func (c *client) AllHostnames(ctx context.Context) ([]chostname.ActiveHostname, error) {
 	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return c.ac.AkashV2beta2().ProviderHosts(c.ns).List(ctx, opts)
 	})
@@ -269,7 +269,7 @@ func (c *client) AllHostnames(ctx context.Context) ([]ctypes.ActiveHostname, err
 		LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName),
 	}
 
-	result := make([]ctypes.ActiveHostname, 0)
+	result := make([]chostname.ActiveHostname, 0)
 
 	err := ingressPager.EachListItem(ctx, listOptions, func(obj runtime.Object) error {
 		ph := obj.(*crd.ProviderHost)
@@ -297,7 +297,7 @@ func (c *client) AllHostnames(ctx context.Context) ([]ctypes.ActiveHostname, err
 			Provider: provider,
 		}
 
-		result = append(result, ctypes.ActiveHostname{
+		result = append(result, chostname.ActiveHostname{
 			ID:       leaseID,
 			Hostname: hostname,
 		})

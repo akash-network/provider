@@ -127,14 +127,14 @@ loop:
 	myParameterCodec := runtime.NewParameterCodec(myScheme)
 	myScheme.AddKnownTypes(groupVersion, &corev1.PodExecOptions{})
 
-	kubeConfig := *c.kubeContentConfig // Make a local copy of the configuration
+	kubeConfig := restclient.CopyConfig(c.kubeContentConfig) // Make a local copy of the configuration
 	kubeConfig.GroupVersion = &groupVersion
 
 	codecFactory := serializer.NewCodecFactory(myScheme)
 	negotiatedSerializer := runtime.NegotiatedSerializer(codecFactory)
 	kubeConfig.NegotiatedSerializer = negotiatedSerializer
 
-	kubeRestClient, err := restclient.RESTClientFor(&kubeConfig)
+	kubeRestClient, err := restclient.RESTClientFor(kubeConfig)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed getting REST client", err)
 	}
@@ -158,7 +158,7 @@ loop:
 	}, myParameterCodec)
 
 	// Make the request with SPDY
-	exec, err := remotecommand.NewSPDYExecutor(&kubeConfig, "POST", req.URL())
+	exec, err := remotecommand.NewSPDYExecutor(kubeConfig, "POST", req.URL())
 	if err != nil {
 		return nil, fmt.Errorf("%w: execution via SPDY failed", err)
 	}

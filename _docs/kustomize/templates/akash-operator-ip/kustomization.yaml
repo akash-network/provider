@@ -9,11 +9,11 @@ patches:
     target:
       kind: Deployment
       group: apps
-      name: akash-ip-operator
+      name: operator-ip
       version: v1
 
 configMapGenerator:
-  - name: akash-ip-operator-config
+  - name: operator-ip
     behavior: merge
     envs:
       - configmap.yaml

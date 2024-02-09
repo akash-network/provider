@@ -20,11 +20,11 @@ import (
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
-	"github.com/akash-network/provider/cluster/util"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 const (
@@ -373,7 +373,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	}
 
 	// Don't use a context tied to the lifecycle, as we don't want to cancel Kubernetes operations
-	deployCtx := util.ApplyToContext(context.Background(), dm.config.ClusterSettings)
+	deployCtx := fromctx.ApplyToContext(context.Background(), dm.config.ClusterSettings)
 
 	err = dm.client.Deploy(deployCtx, dm.deployment)
 	label := "success"

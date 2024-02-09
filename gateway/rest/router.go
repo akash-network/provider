@@ -38,12 +38,12 @@ import (
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	"github.com/akash-network/provider/cluster/operatorclients"
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
-	"github.com/akash-network/provider/cluster/util"
+	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
+	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	"github.com/akash-network/provider/gateway/utils"
 	pmanifest "github.com/akash-network/provider/manifest"
-	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 type CtxAuthKey string
@@ -78,7 +78,7 @@ type wsStreamConfig struct {
 	client    cluster.ReadClient
 }
 
-func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ipopclient operatorclients.IPOperatorClient, ctxConfig map[interface{}]interface{}) *mux.Router {
+func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, middlewares ...mux.MiddlewareFunc) *mux.Router {
 	router := mux.NewRouter()
 
 	// store provider address in context as lease endpoints below need it
@@ -89,6 +89,8 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ipopcl
 			next.ServeHTTP(w, r)
 		})
 	})
+
+	router.Use(middlewares...)
 
 	// GET /version
 	// provider version endpoint does not require authentication
@@ -152,7 +154,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ipopcl
 
 	// GET /lease/<lease-id>/status
 	lrouter.HandleFunc("/status",
-		leaseStatusHandler(log, pclient.Cluster(), ipopclient, ctxConfig)).
+		leaseStatusHandler(log, pclient.Cluster(), ctxConfig)).
 		Methods(http.MethodGet)
 
 	// GET /lease/<lease-id>/kubeevents
@@ -610,9 +612,9 @@ func leaseKubeEventsHandler(log log.Logger, cclient cluster.ReadClient) http.Han
 	}
 }
 
-func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, ipopclient operatorclients.IPOperatorClient, clusterSettings map[interface{}]interface{}) http.HandlerFunc {
+func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSettings map[interface{}]interface{}) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		ctx := util.ApplyToContext(req.Context(), clusterSettings)
+		ctx := fromctx.ApplyToContext(req.Context(), clusterSettings)
 
 		leaseID := requestLeaseID(req)
 		result := LeaseStatus{}
@@ -628,8 +630,11 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, ipopclient o
 			return
 		}
 
-		hasLeasedIPs := false
-		if ipopclient != nil {
+		var ipLeaseStatus []cip.LeaseIPStatus
+
+		if clIP := clfromctx.ClientIPFromContext(ctx); clIP != nil {
+			hasLeasedIPs := false
+
 		ipManifestGroupSearchLoop:
 			for _, service := range manifestGroup.Services {
 				for _, expose := range service.Expose {
@@ -639,32 +644,31 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, ipopclient o
 					}
 				}
 			}
-		}
 
-		var ipLeaseStatus []ipoptypes.LeaseIPStatus
-		if hasLeasedIPs {
-			log.Debug("querying for IP address status", "lease-id", leaseID)
-			ipLeaseStatus, err = ipopclient.GetIPAddressStatus(req.Context(), leaseID.OrderID())
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			result.IPs = make(map[string][]LeasedIPStatus)
-
-			for _, ipLease := range ipLeaseStatus {
-				entries := result.IPs[ipLease.ServiceName]
-				if entries == nil {
-					entries = make([]LeasedIPStatus, 0)
+			if hasLeasedIPs {
+				log.Debug("querying for IP address status", "lease-id", leaseID)
+				ipLeaseStatus, err = clIP.GetIPAddressStatus(req.Context(), leaseID.OrderID())
+				if err != nil {
+					http.Error(w, err.Error(), http.StatusInternalServerError)
+					return
 				}
+				result.IPs = make(map[string][]LeasedIPStatus)
 
-				entries = append(entries, LeasedIPStatus{
-					Port:         ipLease.Port,
-					ExternalPort: ipLease.ExternalPort,
-					Protocol:     ipLease.Protocol,
-					IP:           ipLease.IP,
-				})
+				for _, ipLease := range ipLeaseStatus {
+					entries := result.IPs[ipLease.ServiceName]
+					if entries == nil {
+						entries = make([]LeasedIPStatus, 0)
+					}
 
-				result.IPs[ipLease.ServiceName] = entries
+					entries = append(entries, LeasedIPStatus{
+						Port:         ipLease.Port,
+						ExternalPort: ipLease.ExternalPort,
+						Protocol:     ipLease.Protocol,
+						IP:           ipLease.IP,
+					})
+
+					result.IPs[ipLease.ServiceName] = entries
+				}
 			}
 		}
 

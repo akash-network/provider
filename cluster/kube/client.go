@@ -20,22 +20,21 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
-	"k8s.io/client-go/util/flowcontrol"
-	metricsclient "k8s.io/metrics/pkg/client/clientset/versioned"
 
 	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+
 	"github.com/akash-network/node/sdl"
 	metricsutils "github.com/akash-network/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
-	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 var (
@@ -51,16 +50,10 @@ type Client interface {
 
 var _ Client = (*client)(nil)
 
-// type invResp struct {
-// 	inv ctypes.Inventory
-// 	err error
-// }
-
 type client struct {
 	ctx               context.Context
 	kc                kubernetes.Interface
 	ac                akashclient.Interface
-	metc              metricsclient.Interface
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
@@ -84,16 +77,20 @@ func wrapKubeCall[T any](label string, fn func() (T, error)) (T, error) {
 
 // NewClient returns new Kubernetes Client instance with provided logger, host and ns. Returns error in-case of failure
 // configPath may be the empty string
-func NewClient(ctx context.Context, log log.Logger, ns string, configPath string) (Client, error) {
-	config, err := clientcommon.OpenKubeConfig(configPath, log)
+func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
+	kubecfg, err := fromctx.KubeConfigFromCtx(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("kube: error building config flags: %w", err)
+		return nil, err
 	}
-	config.RateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
 
-	kc, err := kubernetes.NewForConfig(config)
+	kc, err := fromctx.KubeClientFromCtx(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("kube: error creating kubernetes client: %w", err)
+		return nil, err
+	}
+
+	ac, err := fromctx.AkashClientFromCtx(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	_, err = kc.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
@@ -101,28 +98,14 @@ func NewClient(ctx context.Context, log log.Logger, ns string, configPath string
 		return nil, fmt.Errorf("kube: unable to fetch leases namespace: %w", err)
 	}
 
-	mc, err := akashclient.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("kube: error creating manifest client: %w", err)
-	}
-
-	metc, err := metricsclient.NewForConfig(config)
-	if err != nil {
-		return nil, fmt.Errorf("kube: error creating metrics client: %w", err)
-	}
-
 	cl := &client{
 		ctx:               ctx,
 		kc:                kc,
-		ac:                mc,
-		metc:              metc,
+		ac:                ac,
 		ns:                ns,
 		log:               log.With("client", "kube"),
-		kubeContentConfig: config,
+		kubeContentConfig: kubecfg,
 	}
-
-	// group := fromctx.ErrGroupFromCtx(ctx)
-	// group.Go(cl.inventoryRun)
 
 	return cl, nil
 }
@@ -716,7 +699,6 @@ exposeCheckLoop:
 		if service.Name == name {
 			found = true
 			for _, expose := range service.Expose {
-
 				proto, err := mapi.ParseServiceProtocol(expose.Proto)
 				if err != nil {
 					return nil, err

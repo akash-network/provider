@@ -2,69 +2,85 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: akash-ip-operator
+  name: operator-ip
   namespace: akash-services
   labels:
-    akash.network/component: akash-ip-operator
+    app.kubernetes.io/name: ip
+    app.kubernetes.io/instance: ip-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
 spec:
   selector:
     matchLabels:
-      app: akash-ip-operator
+      app.kubernetes.io/name: ip
+      app.kubernetes.io/instance: ip-service
+      app.kubernetes.io/component: operator
+      app.kubernetes.io/part-of: provider
   replicas: 1
   revisionHistoryLimit: 1
   template:
     metadata:
       labels:
-        app: akash-ip-operator
-        akash.network/component: akash-ip-operator
+        app.kubernetes.io/name: ip
+        app.kubernetes.io/instance: ip-service
+        app.kubernetes.io/component: operator
+        app.kubernetes.io/part-of: provider
     spec:
-      serviceAccountName: akash-ip-operator
+      serviceAccountName: operator-ip
       containers:
-        - name: akash-ip-operator
+        - name: operator-ip
           image: ghcr.io/akash-network/provider:stable
           imagePullPolicy: IfNotPresent
-          args: ["provider-services", "ip-operator"]
+          args: ["provider-services", "operator", "ip"]
           ports:
-            - name: api
-              containerPort: 8086
+            - name: rest
+              containerPort: 8080
           env:
             - name: AP_K8S_MANIFEST_NS
               valueFrom:
                 configMapKeyRef:
-                  name: akash-provider-config
+                  name: operator-ip
                   key: k8s-manifest-ns
             - name: AP_PRUNE_INTERVAL
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: prune-interval
             - name: AP_IGNORE_LIST_ENTRY_LIMIT
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: ignore-list-entry-limit
             - name: AP_WEB_REFRESH_INTERVAL
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: web-refresh-interval
             - name: AP_RETRY_DELAY
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: retry-delay
             - name: AP_IGNORE_LIST_AGE_LIMIT
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: ignore-list-age-limit
             - name: AP_EVENT_FAILURE_LIMIT
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: event-failure-limit
             - name: AP_PROVIDER
               valueFrom:
                 configMapKeyRef:
-                  name: akash-ip-operator-config
+                  name: operator-ip
                   key: provider-address
+            - name: AP_POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: AP_POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace

@@ -2,22 +2,26 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: akash-ip-operator
+  name: operator-ip
   namespace: akash-services
   annotations:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-
+  labels:
+    app.kubernetes.io/name: ip
+    app.kubernetes.io/instance: ip-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
 spec:
   ingressClassName: "akash-ingress-class"
   rules:
-    - host: akash-ip-operator.localhost
+    - host: akash-operator-ip.localhost
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: akash-ip-operator
+                name: operator-ip
                 port:
-                  name: status
+                  name: rest

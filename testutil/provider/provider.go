@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	testutilcli "github.com/akash-network/node/testutil/cli"
 	"github.com/cosmos/cosmos-sdk/client"
 	cosmosclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -12,13 +14,9 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	testutilcli "github.com/akash-network/node/testutil/cli"
-
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
-	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	"github.com/akash-network/provider/operator/hostnameoperator"
-	"github.com/akash-network/provider/operator/ipoperator"
+	"github.com/akash-network/provider/operator"
+	operatorcommon "github.com/akash-network/provider/operator/common"
 )
 
 const (
@@ -149,24 +147,26 @@ func RunProviderJWTServer(ctx context.Context, clientCtx cosmosclient.Context, f
 	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)
 }
 
-func RunLocalHostnameOperator(ctx context.Context, clientCtx cosmosclient.Context, listenAddress string) (sdktest.BufferWriter, error) {
+func RunLocalHostnameOperator(ctx context.Context, clientCtx cosmosclient.Context, listenPort int) (sdktest.BufferWriter, error) {
 	takeCmdLock()
-	cmd := hostnameoperator.Cmd()
+	cmd := operator.OperatorsCmd()
 	releaseCmdLock()
 	args := []string{
-		fmt.Sprintf("--%s=%s", providerflags.FlagListenAddress, listenAddress),
+		"hostname",
+		fmt.Sprintf("--%s=%d", operatorcommon.FlagRESTPort, listenPort),
 	}
 
 	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)
 }
 
-func RunLocalIPOperator(ctx context.Context, clientCtx cosmosclient.Context, listenAddress string, providerAddress sdk.AccAddress) (sdktest.BufferWriter, error) {
+func RunLocalIPOperator(ctx context.Context, clientCtx cosmosclient.Context, listenPort int, providerAddress sdk.AccAddress) (sdktest.BufferWriter, error) {
 	takeCmdLock()
-	cmd := ipoperator.Cmd()
+	cmd := operator.OperatorsCmd()
 	releaseCmdLock()
 
 	args := []string{
-		fmt.Sprintf("--%s=%s", providerflags.FlagListenAddress, listenAddress),
+		"ip",
+		fmt.Sprintf("--%s=%d", operatorcommon.FlagRESTPort, listenPort),
 		fmt.Sprintf("--provider=%s", providerAddress.String()),
 	}
 

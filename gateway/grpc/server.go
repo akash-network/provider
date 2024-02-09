@@ -72,7 +72,11 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 		MinVersion:         tls.VersionTLS13,
 	}
 
-	group := fromctx.ErrGroupFromCtx(ctx)
+	group, err := fromctx.ErrGroupFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
 	log := fromctx.LogcFromCtx(ctx)
 
 	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
@@ -188,7 +192,10 @@ func (gm *grpcProviderV1) GetStatus(ctx context.Context, _ *emptypb.Empty) (*pro
 }
 
 func (gm *grpcProviderV1) StreamStatus(_ *emptypb.Empty, stream providerv1.ProviderRPC_StreamStatusServer) error {
-	bus := fromctx.PubSubFromCtx(gm.ctx)
+	bus, err := fromctx.PubSubFromCtx(gm.ctx)
+	if err != nil {
+		return err
+	}
 
 	events := bus.Sub(ptypes.PubSubTopicProviderStatus)
 

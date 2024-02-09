@@ -11,11 +11,10 @@ import (
 
 	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta1"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta2"
-	mtypesv1beta4 "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta2"
 
+	ktypes "github.com/akash-network/provider/cluster/kube/types/v1beta0"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta2"
-	clusterutil "github.com/akash-network/provider/cluster/util"
 )
 
 // +genclient
@@ -82,7 +81,7 @@ func NewManifest(ns string, lid mtypes.LeaseID, mgroup *ctypes.Group) (*Manifest
 			APIVersion: "akash.network/v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterutil.LeaseIDToNamespace(mtypesv1beta4.LeaseID(lid)),
+			Name:      ktypes.LeaseIDToNamespace(lid),
 			Namespace: ns,
 		},
 		Spec: ManifestSpec{

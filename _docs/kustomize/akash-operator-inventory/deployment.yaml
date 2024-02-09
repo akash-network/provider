@@ -54,20 +54,20 @@ spec:
             requests:
               cpu: 100m
               memory: 128Mi
-          livenessProbe:
-            httpGet:
-              path: /metrics/health
-              port: api
-              scheme: HTTP
-            initialDelaySeconds: 15
-            periodSeconds: 15
-          readinessProbe:
-            httpGet:
-              path: /metrics/ready
-              port: api
-              scheme: HTTP
-            initialDelaySeconds: 15
-            periodSeconds: 5
+#          livenessProbe:
+#            httpGet:
+#              path: /metrics/health
+#              port: api
+#              scheme: HTTP
+#            initialDelaySeconds: 15
+#            periodSeconds: 15
+#          readinessProbe:
+#            httpGet:
+#              path: /metrics/ready
+#              port: api
+#              scheme: HTTP
+#            initialDelaySeconds: 15
+#            periodSeconds: 5
           ports:
             - containerPort: 8080
               name: api

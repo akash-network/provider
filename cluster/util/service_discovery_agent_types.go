@@ -7,8 +7,6 @@ import (
 
 	"github.com/boz/go-lifecycle"
 	"github.com/tendermint/tendermint/libs/log"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 type ServiceDiscoveryAgent interface {
@@ -23,6 +21,7 @@ type ServiceClient interface {
 }
 
 type serviceDiscoveryAgent struct {
+	ctx         context.Context
 	serviceName string
 	namespace   string
 	portName    string
@@ -34,9 +33,6 @@ type serviceDiscoveryAgent struct {
 	pendingRequests []serviceDiscoveryRequest
 	result          clientFactory
 	log             log.Logger
-
-	kube       kubernetes.Interface
-	kubeConfig *rest.Config
 }
 
 type serviceDiscoveryRequest struct {

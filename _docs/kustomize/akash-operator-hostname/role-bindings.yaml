@@ -1,0 +1,18 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akash-operator-hostname
+  labels:
+    app.kubernetes.io/name: hostname
+    app.kubernetes.io/instance: hostname-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
+subjects:
+  - kind: ServiceAccount
+    name: operator-hostname
+    namespace: akash-services
+roleRef:
+  kind: ClusterRole
+  name: akash-operator-hostname
+  apiGroup: rbac.authorization.k8s.io

@@ -19,14 +19,14 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
 const (
 	akashIngressClassName = "akash-ingress-class"
 )
 
-func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDirective) map[string]string {
+func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string {
 	// For kubernetes/ingress-nginx
 	// https://github.com/kubernetes/ingress-nginx
 	const root = "nginx.ingress.kubernetes.io"
@@ -70,7 +70,7 @@ func kubeNginxIngressAnnotations(directive ctypes.ConnectHostnameToDeploymentDir
 	return result
 }
 
-func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective) error {
+func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
 	ingressName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)
@@ -184,12 +184,12 @@ func (lh leaseIDHostnameConnection) GetServiceName() string {
 	return lh.serviceName
 }
 
-func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]ctypes.LeaseIDHostnameConnection, error) {
+func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
 	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return c.kc.NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, opts)
 	})
 
-	results := make([]ctypes.LeaseIDHostnameConnection, 0)
+	results := make([]chostname.LeaseIDConnection, 0)
 	err := ingressPager.EachListItem(ctx,
 		metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName)},
 		func(obj runtime.Object) error {

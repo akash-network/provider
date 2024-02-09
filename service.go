@@ -20,7 +20,6 @@ import (
 	"github.com/akash-network/provider/bidengine"
 	aclient "github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
-	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/operator/waiter"
@@ -69,7 +68,6 @@ func NewService(ctx context.Context,
 	session session.Session,
 	bus pubsub.Bus,
 	cclient cluster.Client,
-	ipOperatorClient operatorclients.IPOperatorClient,
 	waiter waiter.OperatorWaiter,
 	cfg Config) (Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -101,7 +99,7 @@ func NewService(ctx context.Context,
 		return nil, err
 	}
 
-	cluster, err := cluster.NewService(ctx, session, bus, cclient, ipOperatorClient, waiter, clusterConfig)
+	cluster, err := cluster.NewService(ctx, session, bus, cclient, waiter, clusterConfig)
 	if err != nil {
 		cancel()
 		<-bc.lc.Done()
@@ -255,19 +253,19 @@ func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.
 		GSpec: &gspec,
 	}
 
-	inv, err := s.cclient.Inventory(ctx)
-	if err != nil {
-		return ValidateGroupSpecResult{}, err
-	}
-
-	res := &reservation{
-		resources:     nil,
-		clusterParams: nil,
-	}
-
-	if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-		return ValidateGroupSpecResult{}, err
-	}
+	// inv, err := s.cclient.Inventory(ctx)
+	// if err != nil {
+	// 	return ValidateGroupSpecResult{}, err
+	// }
+	//
+	// res := &reservation{
+	// 	resources:     nil,
+	// 	clusterParams: nil,
+	// }
+	//
+	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
+	// 	return ValidateGroupSpecResult{}, err
+	// }
 
 	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
 	if err != nil {
@@ -304,7 +302,7 @@ func (s *service) run() {
 }
 
 func (s *service) statusRun() {
-	bus := fromctx.PubSubFromCtx(s.ctx)
+	bus := fromctx.MustPubSubFromCtx(s.ctx)
 
 	events := bus.Sub(
 		ptypes.PubSubTopicClusterStatus,

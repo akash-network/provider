@@ -15,17 +15,13 @@ import (
 	"time"
 
 	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
+	inventory "github.com/akash-network/akash-api/go/inventory/v1"
 	"github.com/fsnotify/fsnotify"
-	"github.com/go-logr/logr"
-	"github.com/go-logr/zapr"
 	"github.com/gorilla/mux"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/troian/pubsub"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -33,14 +29,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
-	"k8s.io/client-go/kubernetes"
 
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
-
-	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	kutil "github.com/akash-network/provider/cluster/kube/util"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
-	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/operator/common"
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
@@ -59,60 +51,8 @@ func Cmd() *cobra.Command {
 		Use:          "inventory",
 		Short:        "kubernetes operator interfacing inventory",
 		SilenceUsage: true,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			zconf := zap.NewDevelopmentConfig()
-			zconf.DisableCaller = true
-			zconf.DisableStacktrace = true
-			zconf.EncoderConfig.EncodeTime = func(time.Time, zapcore.PrimitiveArrayEncoder) {}
-
-			zapLog, _ := zconf.Build()
-
-			group, ctx := errgroup.WithContext(cmd.Context())
-
-			cmd.SetContext(logr.NewContext(ctx, zapr.NewLogger(zapLog)))
-
-			if err := loadKubeConfig(cmd); err != nil {
-				return err
-			}
-
-			kubecfg := fromctx.KubeConfigFromCtx(cmd.Context())
-
-			kc, err := kubernetes.NewForConfig(kubecfg)
-			if err != nil {
-				return err
-			}
-
-			ac, err := akashclientset.NewForConfig(kubecfg)
-			if err != nil {
-				return err
-			}
-
-			startupch := make(chan struct{}, 1)
-			pctx, pcancel := context.WithCancel(context.Background())
-
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeConfig, kubecfg)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, pubsub.New(pctx, 1000))
-
-			go func() {
-				defer pcancel()
-
-				select {
-				case <-ctx.Done():
-					return
-				case <-startupch:
-				}
-
-				_ = group.Wait()
-			}()
-
-			return nil
-		},
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			kubecfg := fromctx.KubeConfigFromCtx(cmd.Context())
+			kubecfg := fromctx.MustKubeConfigFromCtx(cmd.Context())
 
 			rc, err := rookclientset.NewForConfig(kubecfg)
 			if err != nil {
@@ -127,8 +67,8 @@ func Cmd() *cobra.Command {
 			ctx := cmd.Context()
 
 			log := fromctx.LogrFromCtx(cmd.Context())
-			bus := fromctx.PubSubFromCtx(ctx)
-			group := fromctx.ErrGroupFromCtx(ctx)
+			bus := fromctx.MustPubSubFromCtx(ctx)
+			group := fromctx.MustErrGroupFromCtx(ctx)
 
 			var storage []QuerierStorage
 			st, err := NewCeph(ctx)
@@ -141,16 +81,24 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			kubecfg := fromctx.KubeConfigFromCtx(ctx)
-
 			discoveryImage := viper.GetString(FlagDiscoveryImage)
 			namespace := viper.GetString(FlagPodNamespace)
 
-			if kubecfg.BearerTokenFile != "/var/run/secrets/kubernetes.io/serviceaccount/token" {
+			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-inventory", "rest")
+			if err != nil {
+				return err
+			}
+
+			grpcPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagGRPCPort, "operator-inventory", "grpc")
+			if err != nil {
+				return err
+			}
+
+			if !kutil.IsInsideKubernetes() {
 				log.Info("service is not running as kubernetes pod. detecting discovery image name from flags")
 			} else {
 				name := viper.GetString(FlagPodName)
-				kc := fromctx.KubeClientFromCtx(ctx)
+				kc := fromctx.MustKubeClientFromCtx(ctx)
 
 				pod, err := kc.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 				if err != nil {
@@ -179,9 +127,6 @@ func Cmd() *cobra.Command {
 			fromctx.CmdSetContextValue(cmd, CtxKeyClusterState, QuerierCluster(clState))
 
 			ctx = cmd.Context()
-
-			restPort := viper.GetUint16(FlagRESTPort)
-			grpcPort := viper.GetUint16(FlagGRPCPort)
 
 			apiTimeout := viper.GetDuration(FlagAPITimeout)
 			queryTimeout := viper.GetDuration(FlagQueryTimeout)
@@ -255,7 +200,7 @@ func Cmd() *cobra.Command {
 				return err
 			})
 
-			kc := fromctx.KubeClientFromCtx(ctx)
+			kc := fromctx.MustKubeClientFromCtx(ctx)
 			factory := informers.NewSharedInformerFactory(kc, 0)
 
 			InformKubeObjects(ctx,
@@ -278,7 +223,7 @@ func Cmd() *cobra.Command {
 				factory.Core().V1().Nodes().Informer(),
 				topicKubeNodes)
 
-			fromctx.StartupChFromCtx(ctx) <- struct{}{}
+			fromctx.MustStartupChFromCtx(ctx) <- struct{}{}
 			err = group.Wait()
 
 			if !errors.Is(err, context.Canceled) {
@@ -304,13 +249,13 @@ func Cmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.Flags().Uint16(FlagRESTPort, 8080, "port to REST api")
-	if err = viper.BindPFlag(FlagRESTPort, cmd.Flags().Lookup(FlagRESTPort)); err != nil {
+	cmd.Flags().Uint16(common.FlagRESTPort, 8080, "port to REST api")
+	if err = viper.BindPFlag(common.FlagRESTPort, cmd.Flags().Lookup(common.FlagRESTPort)); err != nil {
 		panic(err)
 	}
 
-	cmd.Flags().Uint16(FlagGRPCPort, 8081, "port to GRPC api")
-	if err = viper.BindPFlag(FlagGRPCPort, cmd.Flags().Lookup(FlagGRPCPort)); err != nil {
+	cmd.Flags().Uint16(common.FlagGRPCPort, 8081, "port to GRPC api")
+	if err = viper.BindPFlag(common.FlagGRPCPort, cmd.Flags().Lookup(common.FlagGRPCPort)); err != nil {
 		panic(err)
 	}
 
@@ -342,25 +287,17 @@ func Cmd() *cobra.Command {
 	return cmd
 }
 
-func loadKubeConfig(c *cobra.Command) error {
-	configPath, _ := c.Flags().GetString(providerflags.FlagKubeConfig)
-
-	config, err := clientcommon.OpenKubeConfig(configPath, cmdutil.OpenLogger().With("cmp", "provider"))
-	if err != nil {
-		return err
-	}
-
-	fromctx.CmdSetContextValue(c, fromctx.CtxKeyKubeConfig, config)
-
-	return nil
-}
-
 func configWatcher(ctx context.Context, file string) error {
 	log := fromctx.LogrFromCtx(ctx).WithName("watcher.config")
 
 	defer func() {
 		log.Info("stopped")
 	}()
+
+	bus, err := fromctx.PubSubFromCtx(ctx)
+	if err != nil {
+		return err
+	}
 
 	config, err := loadConfig(file, false)
 	if err != nil {
@@ -391,8 +328,6 @@ func configWatcher(ctx context.Context, file string) error {
 		evtch = watcher.Events
 	}
 
-	bus := fromctx.PubSubFromCtx(ctx)
-
 	bus.Pub(config, []string{topicInventoryConfig}, pubsub.WithRetain())
 
 	log.Info("started")
@@ -415,7 +350,10 @@ func configWatcher(ctx context.Context, file string) error {
 // this function is piece of sh*t. refactor it!
 func registryLoader(ctx context.Context) error {
 	log := fromctx.LogrFromCtx(ctx).WithName("watcher.registry")
-	bus := fromctx.PubSubFromCtx(ctx)
+	bus, err := fromctx.PubSubFromCtx(ctx)
+	if err != nil {
+		return err
+	}
 
 	tlsConfig := http.DefaultTransport.(*http.Transport).TLSClientConfig
 
@@ -542,7 +480,10 @@ func scWatcher(ctx context.Context) error {
 		log.Info("stopped")
 	}()
 
-	bus := fromctx.PubSubFromCtx(ctx)
+	bus, err := fromctx.PubSubFromCtx(ctx)
+	if err != nil {
+		return err
+	}
 
 	scch := bus.Sub(topicKubeSC)
 
@@ -700,7 +641,10 @@ func (gm *grpcServiceServer) QueryCluster(ctx context.Context, _ *emptypb.Empty)
 }
 
 func (gm *grpcServiceServer) StreamCluster(_ *emptypb.Empty, stream inventory.ClusterRPC_StreamClusterServer) error {
-	bus := fromctx.PubSubFromCtx(gm.ctx)
+	bus, err := fromctx.PubSubFromCtx(gm.ctx)
+	if err != nil {
+		return err
+	}
 
 	subch := bus.Sub(topicInventoryCluster)
 
