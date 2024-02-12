@@ -1,0 +1,45 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: akash-operator-hostname
+  labels:
+    app.kubernetes.io/name: hostname
+    app.kubernetes.io/instance: hostname-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
+rules:
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - deletecollection
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - services
+    verbs:
+      - get
+  - apiGroups:
+      - akash.network
+    resources:
+      - providerhosts
+      - manifests
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get

@@ -7,7 +7,7 @@ import (
 
 // IDeployment interface defined with LeaseID and ManifestGroup methods
 //
-//go:generate mockery --name IDeployment --output ../../mocks
+//go:generate mockery --name IDeployment --output ./mocks
 type IDeployment interface {
 	LeaseID() mtypes.LeaseID
 	ManifestGroup() *maniv2beta2.Group

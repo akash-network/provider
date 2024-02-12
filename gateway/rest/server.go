@@ -9,13 +9,15 @@ import (
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	gcontext "github.com/gorilla/context"
 	"github.com/tendermint/tendermint/libs/log"
 
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 
 	"github.com/akash-network/provider"
-	"github.com/akash-network/provider/cluster/operatorclients"
+	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	gwutils "github.com/akash-network/provider/gateway/utils"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 func NewServer(
@@ -23,17 +25,33 @@ func NewServer(
 	log log.Logger,
 	pclient provider.Client,
 	cquery ctypes.QueryClient,
-	ipopclient operatorclients.IPOperatorClient,
 	address string,
 	pid sdk.Address,
 	certs []tls.Certificate,
 	clusterConfig map[interface{}]interface{}) (*http.Server, error) {
 
+	restMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gcontext.Set(r, fromctx.CtxKeyKubeConfig, fromctx.MustKubeConfigFromCtx(ctx))
+			gcontext.Set(r, fromctx.CtxKeyKubeClientSet, fromctx.MustKubeClientFromCtx(ctx))
+			gcontext.Set(r, fromctx.CtxKeyAkashClientSet, fromctx.MustAkashClientFromCtx(ctx))
+
+			gcontext.Set(r, clfromctx.CtxKeyClientInventory, clfromctx.ClientInventoryFromContext(ctx))
+			gcontext.Set(r, clfromctx.CtxKeyClientHostname, clfromctx.ClientHostnameFromContext(ctx))
+
+			if ip := clfromctx.ClientIPFromContext(ctx); ip != nil {
+				gcontext.Set(r, clfromctx.CtxKeyClientIP, ip)
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	// fixme ovrclk/engineering#609
 	// nolint: gosec
 	srv := &http.Server{
 		Addr:    address,
-		Handler: newRouter(log, pid, pclient, ipopclient, clusterConfig),
+		Handler: newRouter(log, pid, pclient, clusterConfig, restMiddleware),
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},

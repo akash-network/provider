@@ -19,6 +19,7 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	akashtypes "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
@@ -132,7 +133,7 @@ func (c *client) PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
 	return result
 }
 
-func (c *client) ObserveIPState(ctx context.Context) (<-chan ctypes.IPResourceEvent, error) {
+func (c *client) ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, error) {
 	var lastResourceVersion string
 	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		resources, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).List(ctx, opts)
@@ -208,7 +209,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan ctypes.IPResourceEv
 
 	data = nil
 
-	output := make(chan ctypes.IPResourceEvent)
+	output := make(chan cip.ResourceEvent)
 
 	go func() {
 		defer close(output)

@@ -23,7 +23,9 @@ import (
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	mtestutil "github.com/akash-network/provider/testutil/manifest/v2beta2"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 func TestNewClientNSNotFound(t *testing.T) {
@@ -38,11 +40,26 @@ func TestNewClientNSNotFound(t *testing.T) {
 		DeploymentIngressExposeLBHosts: false,
 	}
 
-	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
+	kcfg, err := clientcommon.OpenKubeConfig(providerflags.KubeConfigDefaultPath, atestutil.Logger(t))
+	require.NoError(t, err)
+	require.NotNil(t, kcfg)
 
-	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
+	kc, err := kubernetes.NewForConfig(kcfg)
+	require.NoError(t, err)
+	require.NotNil(t, kc)
+
+	ac, err := akashclientset.NewForConfig(kcfg)
+	require.NoError(t, err)
+	require.NotNil(t, ac)
+
+	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kcfg)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, akashclientset.Interface(ac))
+
+	cl, err := NewClient(ctx, atestutil.Logger(t), ns)
 	require.True(t, kubeErrors.IsNotFound(err))
-	require.Nil(t, ac)
+	require.Nil(t, cl)
 }
 
 func TestNewClient(t *testing.T) {
@@ -59,17 +76,24 @@ func TestNewClient(t *testing.T) {
 		DeploymentIngressExposeLBHosts: false,
 	}
 
-	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
-
-	config, err := clientcommon.OpenKubeConfig(providerflags.KubeConfigDefaultPath, atestutil.Logger(t))
+	kcfg, err := clientcommon.OpenKubeConfig(providerflags.KubeConfigDefaultPath, atestutil.Logger(t))
 	require.NoError(t, err)
-	require.NotNil(t, config)
+	require.NotNil(t, kcfg)
 
-	config.RateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
-
-	kc, err := kubernetes.NewForConfig(config)
+	kc, err := kubernetes.NewForConfig(kcfg)
 	require.NoError(t, err)
 	require.NotNil(t, kc)
+
+	ac, err := akashclientset.NewForConfig(kcfg)
+	require.NoError(t, err)
+	require.NotNil(t, ac)
+
+	ctx := context.WithValue(context.Background(), builder.SettingsKey, settings)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kcfg)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, akashclientset.Interface(ac))
+
+	kcfg.RateLimiter = flowcontrol.NewFakeAlwaysRateLimiter()
 
 	_, err = kc.CoreV1().Namespaces().Create(ctx, &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -78,30 +102,16 @@ func TestNewClient(t *testing.T) {
 	}, metav1.CreateOptions{})
 	require.NoError(t, err)
 
-	ac, err := NewClient(ctx, atestutil.Logger(t), ns, providerflags.KubeConfigDefaultPath)
+	cl, err := NewClient(ctx, atestutil.Logger(t), ns)
 
 	require.NoError(t, err)
 
-	cc, ok := ac.(*client)
+	cc, ok := cl.(*client)
 	require.True(t, ok)
 	require.NotNil(t, cc)
 
-	// check inventory
-	inventory, err := ac.Inventory(ctx)
-	require.NoError(t, err)
-	require.NotNil(t, inventory)
-
-	metrics := inventory.Metrics()
-	require.Len(t, metrics.Nodes, 1)
-
-	// ensure available nodes
-	for _, node := range inventory.Metrics().Nodes {
-		require.NotZero(t, node.Available.CPU)
-		require.NotZero(t, node.Available.Memory)
-	}
-
 	// ensure no deployments
-	deployments, err := ac.Deployments(ctx)
+	deployments, err := cl.Deployments(ctx)
 	assert.NoError(t, err)
 	require.Empty(t, deployments)
 
@@ -118,11 +128,11 @@ func TestNewClient(t *testing.T) {
 	}
 
 	// deploy lease
-	err = ac.Deploy(ctx, cdep)
+	err = cl.Deploy(ctx, cdep)
 	assert.NoError(t, err)
 
 	// query deployments, ensure lease present
-	deployments, err = ac.Deployments(ctx)
+	deployments, err = cl.Deployments(ctx)
 	require.NoError(t, err)
 	require.Len(t, deployments, 1)
 	deployment := deployments[0]
@@ -134,12 +144,12 @@ func TestNewClient(t *testing.T) {
 	// There is some sort of race here, work around it
 	time.Sleep(time.Second * 10)
 
-	lstat, err := ac.LeaseStatus(ctx, lid)
+	lstat, err := cl.LeaseStatus(ctx, lid)
 	assert.NoError(t, err)
 	assert.Len(t, lstat, 1)
 	assert.Equal(t, svcname, lstat[svcname].Name)
 
-	sstat, err := ac.ServiceStatus(ctx, lid, svcname)
+	sstat, err := cl.ServiceStatus(ctx, lid, svcname)
 	require.NoError(t, err)
 
 	const (
@@ -154,13 +164,13 @@ func TestNewClient(t *testing.T) {
 			break
 		}
 		time.Sleep(delay)
-		sstat, err = ac.ServiceStatus(ctx, lid, svcname)
+		sstat, err = cl.ServiceStatus(ctx, lid, svcname)
 	}
 
 	assert.NoError(t, err)
 	assert.NotEqual(t, maxtries, tries)
 
-	logs, err := ac.LeaseLogs(ctx, lid, svcname, true, nil)
+	logs, err := cl.LeaseLogs(ctx, lid, svcname, true, nil)
 	require.NoError(t, err)
 	require.Equal(t, int(sstat.AvailableReplicas), len(logs))
 
@@ -190,6 +200,6 @@ func TestNewClient(t *testing.T) {
 	assert.Equal(t, len(npList.Items), 0)
 
 	// teardown lease
-	err = ac.TeardownLease(ctx, lid)
+	err = cl.TeardownLease(ctx, lid)
 	assert.NoError(t, err)
 }

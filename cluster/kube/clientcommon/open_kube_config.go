@@ -4,10 +4,15 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/flowcontrol"
+
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
@@ -40,4 +45,17 @@ func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
 	// cfg.Timeout
 
 	return cfg, err
+}
+
+func SetKubeConfigToCmd(c *cobra.Command) error {
+	configPath, _ := c.Flags().GetString(providerflags.FlagKubeConfig)
+
+	config, err := OpenKubeConfig(configPath, cmdutil.OpenLogger().With("cmp", "provider"))
+	if err != nil {
+		return err
+	}
+
+	fromctx.CmdSetContextValue(c, fromctx.CtxKeyKubeConfig, config)
+
+	return nil
 }

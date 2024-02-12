@@ -31,9 +31,9 @@ import (
 	"github.com/akash-network/provider"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
-	"github.com/akash-network/provider/cluster/operatorclients"
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	"github.com/akash-network/provider/gateway/utils"
 	pmmock "github.com/akash-network/provider/manifest/mocks"
 	pmock "github.com/akash-network/provider/mocks"
@@ -67,7 +67,7 @@ type routerTest struct {
 	pclient        *pmock.Client
 	qclient        *qmock.QueryClient
 	clusterService *pcmock.Service
-	hostnameClient *pcmock.HostnameServiceClient
+	hostnameClient *clmocks.HostnameServiceClient
 	gwclient       *client
 	ccert          testutil.TestCertificate
 	pcert          testutil.TestCertificate
@@ -104,7 +104,7 @@ func runRouterTest(t *testing.T, authClient bool, fn func(*routerTest)) {
 		certs = mf.ccert.Cert
 	}
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, operatorclients.NullIPOperatorClient(), func(host string) {
+	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
@@ -173,7 +173,7 @@ func TestRouteNotActiveClientCert(t *testing.T) {
 	)
 	mf.pcert = testutil.Certificate(t, mf.paddr, testutil.CertificateOptionMocks(mocks.qclient))
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, operatorclients.NullIPOperatorClient(), func(host string) {
+	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
@@ -209,7 +209,7 @@ func TestRouteExpiredClientCert(t *testing.T) {
 	)
 	mf.pcert = testutil.Certificate(t, mf.paddr, testutil.CertificateOptionMocks(mocks.qclient))
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, operatorclients.NullIPOperatorClient(), func(host string) {
+	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestRouteNotActiveServerCert(t *testing.T) {
 		testutil.CertificateOptionNotBefore(time.Now().Add(time.Hour*24)),
 	)
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, operatorclients.NullIPOperatorClient(), func(host string) {
+	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
@@ -288,7 +288,7 @@ func TestRouteExpiredServerCert(t *testing.T) {
 		testutil.CertificateOptionNotAfter(time.Now().Add(time.Hour*(-24))),
 	)
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, operatorclients.NullIPOperatorClient(), func(host string) {
+	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)

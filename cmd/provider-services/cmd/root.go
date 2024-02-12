@@ -19,8 +19,8 @@ import (
 	ecmd "github.com/akash-network/node/events/cmd"
 
 	"github.com/akash-network/provider/operator"
-	"github.com/akash-network/provider/operator/hostnameoperator"
-	"github.com/akash-network/provider/operator/ipoperator"
+	"github.com/akash-network/provider/operator/hostname"
+	"github.com/akash-network/provider/operator/ip"
 	"github.com/akash-network/provider/version"
 )
 
@@ -47,8 +47,8 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(serviceStatusCmd())
 	cmd.AddCommand(RunCmd())
 	cmd.AddCommand(LeaseShellCmd())
-	cmd.AddCommand(hostnameoperator.Cmd())
-	cmd.AddCommand(ipoperator.Cmd())
+	cmd.AddCommand(hostname.Cmd())
+	cmd.AddCommand(ip.Cmd())
 	cmd.AddCommand(AuthServerCmd())
 	cmd.AddCommand(clusterNSCmd())
 	cmd.AddCommand(migrate())
@@ -57,7 +57,9 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(MigrateHostnamesCmd())
 	cmd.AddCommand(MigrateEndpointsCmd())
 
-	cmd.AddCommand(operator.Cmd())
+	cmd.AddCommand(operator.OperatorsCmd())
+	cmd.AddCommand(operator.ToolsCmd())
+
 	cmd.AddCommand(version.NewVersionCommand())
 
 	cmd.AddCommand(acmd.QueryCmd())

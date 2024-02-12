@@ -40,7 +40,7 @@ type nodeDiscovery struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	group     *errgroup.Group
-	kc        *kubernetes.Clientset
+	kc        kubernetes.Interface
 	readch    chan dpReadReq
 	readych   chan struct{}
 	sig       chan<- string
@@ -57,7 +57,7 @@ func newNodeDiscovery(ctx context.Context, name, namespace string, image string,
 		ctx:       ctx,
 		cancel:    cancel,
 		group:     group,
-		kc:        fromctx.KubeClientFromCtx(ctx),
+		kc:        fromctx.MustKubeClientFromCtx(ctx),
 		readch:    make(chan dpReadReq, 1),
 		readych:   make(chan struct{}),
 		sig:       sig,
@@ -145,13 +145,14 @@ func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 }
 
 func (dp *nodeDiscovery) apiConnector() error {
-	defer func() {
-		dp.sig <- dp.name
-	}()
-
 	ctx := dp.ctx
 
 	log := fromctx.LogrFromCtx(ctx).WithName("node.discovery")
+
+	defer func() {
+		log.Info("shutting down hardware discovery pod", "node", dp.name)
+		dp.sig <- dp.name
+	}()
 
 	log.Info("starting hardware discovery pod", "node", dp.name)
 
@@ -182,7 +183,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 					Image: dp.image,
 					Command: []string{
 						"provider-services",
-						"operator",
+						"tools",
 						"psutil",
 						"serve",
 						fmt.Sprintf("--api-port=%d", apiPort),
@@ -204,7 +205,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 		},
 	}
 
-	kc := fromctx.KubeClientFromCtx(ctx)
+	kc := fromctx.MustKubeClientFromCtx(ctx)
 
 	var pod *corev1.Pod
 	var err error
@@ -237,7 +238,6 @@ func (dp *nodeDiscovery) apiConnector() error {
 
 	defer func() {
 		// using default context here to delete pod as main might have been canceled
-		log.Info("shutting down hardware discovery pod", "node", dp.name)
 		_ = kc.CoreV1().Pods(dp.namespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{})
 	}()
 
@@ -336,8 +336,8 @@ func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
-	bus := fromctx.PubSubFromCtx(ctx)
-	kc := fromctx.KubeClientFromCtx(ctx)
+	bus := fromctx.MustPubSubFromCtx(ctx)
+	kc := fromctx.MustKubeClientFromCtx(ctx)
 
 	log.Info("starting", "node", dp.name)
 
@@ -347,6 +347,8 @@ func (dp *nodeDiscovery) monitor() error {
 	scch := bus.Sub(topicStorageClasses)
 
 	defer func() {
+		log.Info("shutting down monitor", "node", dp.name)
+
 		bus.Unsub(nodesch)
 		bus.Unsub(idsch)
 		bus.Unsub(cfgch)
@@ -534,7 +536,7 @@ func (dp *nodeDiscovery) monitor() error {
 }
 
 func (dp *nodeDiscovery) initNodeInfo(gpusIds RegistryGPUVendors) (v1.Node, map[string]corev1.Pod, error) {
-	kc := fromctx.KubeClientFromCtx(dp.ctx)
+	kc := fromctx.MustKubeClientFromCtx(dp.ctx)
 
 	cpuInfo := dp.parseCPUInfo(dp.ctx)
 	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIds)

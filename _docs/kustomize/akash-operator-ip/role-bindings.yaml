@@ -1,0 +1,18 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: akash-operator-ip
+  labels:
+    app.kubernetes.io/name: ip
+    app.kubernetes.io/instance: ip-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
+subjects:
+  - kind: ServiceAccount
+    name: operator-ip
+    namespace: akash-services
+roleRef:
+  kind: ClusterRole
+  name: akash-operator-ip
+  apiGroup: rbac.authorization.k8s.io

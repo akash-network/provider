@@ -37,13 +37,15 @@ type clusterNodes struct {
 	ctx        context.Context
 	group      *errgroup.Group
 	log        logr.Logger
-	kc         *kubernetes.Clientset
+	kc         kubernetes.Interface
 	signaldone chan string
 	image      string
 	namespace  string
 }
 
 func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes {
+	kc := fromctx.MustKubeClientFromCtx(ctx)
+
 	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
 
 	group, ctx := errgroup.WithContext(ctx)
@@ -53,7 +55,7 @@ func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes
 		log:          log,
 		ctx:          logr.NewContext(ctx, log),
 		group:        group,
-		kc:           fromctx.KubeClientFromCtx(ctx),
+		kc:           kc,
 		signaldone:   make(chan string, 1),
 		image:        image,
 		namespace:    namespace,
@@ -82,7 +84,7 @@ func (cl *clusterNodes) Wait() error {
 
 func (cl *clusterNodes) connector() error {
 	ctx := cl.ctx
-	bus := fromctx.PubSubFromCtx(ctx)
+	bus := fromctx.MustPubSubFromCtx(ctx)
 	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
 
 	events := bus.Sub(topicKubeNodes)
@@ -147,7 +149,7 @@ func (cl *clusterNodes) run() error {
 		return res
 	}
 
-	bus := fromctx.PubSubFromCtx(cl.ctx)
+	bus := fromctx.MustPubSubFromCtx(cl.ctx)
 
 	events := bus.Sub(topicInventoryNode)
 	defer bus.Unsub(events)

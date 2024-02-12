@@ -12,7 +12,7 @@ import (
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 // hostnameID type exists to identify the target of a reservation. The lease ID type is not used directly because
@@ -47,7 +47,7 @@ type SimpleHostnames struct {
 	lock      sync.Mutex
 } /* Used in test code */
 
-func NewSimpleHostnames() clustertypes.HostnameServiceClient {
+func NewSimpleHostnames() ctypes.HostnameServiceClient {
 	return &SimpleHostnames{
 		Hostnames: make(map[string]hostnameID),
 	}

@@ -2,11 +2,19 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: akash-ip-operator
+  name: operator-ip
   namespace: akash-services
+  labels:
+    app.kubernetes.io/name: ip
+    app.kubernetes.io/instance: ip-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
 spec:
   selector:
-    akash.network/component: akash-ip-operator
+    app.kubernetes.io/name: ip
+    app.kubernetes.io/instance: ip-service
+    app.kubernetes.io/component: operator
+    app.kubernetes.io/part-of: provider
   ports:
-    - name: api
-      port: 8086
+    - name: rest
+      port: 8080

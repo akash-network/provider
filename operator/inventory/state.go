@@ -16,7 +16,10 @@ type clusterState struct {
 }
 
 func (s *clusterState) run() error {
-	bus := fromctx.PubSubFromCtx(s.ctx)
+	bus, err := fromctx.PubSubFromCtx(s.ctx)
+	if err != nil {
+		return err
+	}
 
 	storage := make(map[string]inventory.ClusterStorage)
 

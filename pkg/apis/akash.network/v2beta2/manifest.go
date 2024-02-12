@@ -3,13 +3,14 @@ package v2beta2
 import (
 	"fmt"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	ktypes "github.com/akash-network/provider/cluster/kube/types/v1beta2"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
-	clusterutil "github.com/akash-network/provider/cluster/util"
 )
 
 // Manifest store metadata, specifications and status of the Lease
@@ -144,7 +145,7 @@ func NewManifest(ns string, lid mtypes.LeaseID, mgroup *mani.Group, settings Clu
 			APIVersion: "akash.network/v2beta2",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      clusterutil.LeaseIDToNamespace(lid),
+			Name:      ktypes.LeaseIDToNamespace(lid),
 			Namespace: ns,
 		},
 		Spec: ManifestSpec{

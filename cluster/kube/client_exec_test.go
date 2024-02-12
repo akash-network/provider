@@ -24,7 +24,7 @@ import (
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	akashclient_fake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
+	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 )
 
 const (
@@ -74,7 +74,7 @@ type execScaffold struct {
 	deploymentSDL sdl.SDL
 	crdManifest   *crd.Manifest
 
-	akashFake *akashclient_fake.Clientset
+	akashFake *akashclient.Clientset
 	kubeFake  *kubefake.Clientset
 
 	client Client
@@ -115,7 +115,7 @@ func withExecTestScaffold(t *testing.T, changePod func(pod *corev1.Pod) error, t
 	require.NoError(t, err)
 	require.NotNil(t, s.crdManifest)
 
-	s.akashFake = akashclient_fake.NewSimpleClientset(s.crdManifest)
+	s.akashFake = akashclient.NewSimpleClientset(s.crdManifest)
 	s.kubeFake = kubefake.NewSimpleClientset()
 
 	pod := &corev1.Pod{

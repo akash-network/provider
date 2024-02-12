@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/troian/pubsub"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -36,17 +35,30 @@ type rancherStorage struct {
 type rancherStorageClasses map[string]*rancherStorage
 
 func NewRancher(ctx context.Context) (QuerierStorage, error) {
-	ctx, cancel := context.WithCancel(ctx)
+	kcfg, err := fromctx.KubeConfigFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
 
+	kc, err := fromctx.KubeClientFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	group, err := fromctx.ErrGroupFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
 	r := &rancher{
-		exe:    NewRemotePodCommandExecutor(fromctx.KubeConfigFromCtx(ctx), fromctx.KubeClientFromCtx(ctx)),
+		exe:    NewRemotePodCommandExecutor(kcfg, kc),
 		ctx:    ctx,
 		cancel: cancel,
 	}
 
 	startch := make(chan struct{}, 1)
 
-	group := fromctx.ErrGroupFromCtx(ctx)
 	group.Go(func() error {
 		return r.run(startch)
 	})
@@ -65,7 +77,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 		c.cancel()
 	}()
 
-	bus := fromctx.PubSubFromCtx(c.ctx)
+	bus := fromctx.MustPubSubFromCtx(c.ctx)
 
 	var unsubChs []<-chan interface{}
 
@@ -85,6 +97,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 	events := bus.Sub(topicKubeNS, topicKubeSC, topicKubeNodes)
 
 	log := fromctx.LogrFromCtx(c.ctx).WithName("rancher")
+	kc := fromctx.MustKubeClientFromCtx(c.ctx)
 
 	scs := make(rancherStorageClasses)
 
@@ -123,7 +136,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 
 					params, exists := scs[obj.Spec.StorageClassName]
 					if !exists {
-						scItem, _ := fromctx.KubeClientFromCtx(c.ctx).StorageV1().StorageClasses().Get(c.ctx, obj.Spec.StorageClassName, metav1.GetOptions{})
+						scItem, _ := kc.StorageV1().StorageClasses().Get(c.ctx, obj.Spec.StorageClassName, metav1.GetOptions{})
 
 						lblVal := scItem.Labels[builder.AkashManagedLabelName]
 						if lblVal == "" {
@@ -189,16 +202,16 @@ func (c *rancher) run(startch chan<- struct{}) error {
 						sc.isAkashManaged, _ = strconv.ParseBool(lblVal)
 						scs[obj.Name] = sc
 
-						scList, _ := fromctx.KubeClientFromCtx(c.ctx).StorageV1().StorageClasses().List(c.ctx, metav1.ListOptions{})
+						scList, _ := kc.StorageV1().StorageClasses().List(c.ctx, metav1.ListOptions{})
 						if len(scList.Items) == len(scs) && pvWatcher == nil {
 							var err error
-							pvWatcher, err = fromctx.KubeClientFromCtx(c.ctx).CoreV1().PersistentVolumes().Watch(c.ctx, metav1.ListOptions{})
+							pvWatcher, err = kc.CoreV1().PersistentVolumes().Watch(c.ctx, metav1.ListOptions{})
 							if err != nil {
 								log.Error(err, "couldn't start watcher on persistent volumes")
 							}
 							pvEvents = pvWatcher.ResultChan()
 
-							pvList, err := fromctx.KubeClientFromCtx(c.ctx).CoreV1().PersistentVolumes().List(c.ctx, metav1.ListOptions{})
+							pvList, err := kc.CoreV1().PersistentVolumes().List(c.ctx, metav1.ListOptions{})
 							if err != nil {
 								log.Error(err, "couldn't list persistent volumes")
 							}
@@ -247,7 +260,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 				bus.Pub(storageSignal{
 					driver:  "rancher",
 					storage: res,
-				}, []string{topicInventoryStorage}, pubsub.WithRetain())
+				}, []string{topicInventoryStorage})
 			}
 
 			scrapech = scrapeCh

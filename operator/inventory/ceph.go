@@ -122,7 +122,7 @@ func NewCeph(ctx context.Context) (QuerierStorage, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	c := &ceph{
-		exe:      NewRemotePodCommandExecutor(fromctx.KubeConfigFromCtx(ctx), fromctx.KubeClientFromCtx(ctx)),
+		exe:      NewRemotePodCommandExecutor(fromctx.MustKubeConfigFromCtx(ctx), fromctx.MustKubeClientFromCtx(ctx)),
 		ctx:      ctx,
 		cancel:   cancel,
 		scrapech: make(chan scrapeReq, 1),
@@ -130,7 +130,7 @@ func NewCeph(ctx context.Context) (QuerierStorage, error) {
 
 	startch := make(chan struct{}, 1)
 
-	group := fromctx.ErrGroupFromCtx(ctx)
+	group := fromctx.MustErrGroupFromCtx(ctx)
 	group.Go(func() error {
 		return c.run(startch)
 	})
@@ -162,7 +162,7 @@ func (c *ceph) crdInstalled(log logr.Logger, rc *rookclientset.Clientset) bool {
 }
 
 func (c *ceph) run(startch chan<- struct{}) error {
-	bus := fromctx.PubSubFromCtx(c.ctx)
+	bus := fromctx.MustPubSubFromCtx(c.ctx)
 
 	events := bus.Sub(topicKubeNS, topicKubeSC, topicKubePV, topicKubeCephClusters)
 
@@ -178,14 +178,14 @@ func (c *ceph) run(startch chan<- struct{}) error {
 	factory := rookifactory.NewSharedInformerFactory(rc, 0)
 	informer := factory.Ceph().V1().CephClusters().Informer()
 
-	crdDiscoverTick := time.NewTicker(1 * time.Second)
+	crdDiscoverTick := time.NewTimer(1 * time.Second)
 
 	scrapeRespch := make(chan scrapeResp, 1)
 	scrapech := c.scrapech
 
 	startch <- struct{}{}
 
-	tryScrape := func() {
+	signalScrape := func() {
 		select {
 		case scrapech <- scrapeReq{
 			scs:      scs,
@@ -215,7 +215,6 @@ func (c *ceph) run(startch chan<- struct{}) error {
 			switch evt := rawEvt.(type) {
 			case watch.Event:
 				if evt.Object == nil {
-					log.Info("received nil event object", "event", evt.Type)
 					break
 				}
 
@@ -267,7 +266,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 					}
 
 					log.Info(msg, "name", obj.Name)
-					tryScrape()
+					signalScrape()
 				case *rookv1.CephCluster:
 					switch evt.Type {
 					case watch.Added:
@@ -282,8 +281,9 @@ func (c *ceph) run(startch chan<- struct{}) error {
 						log.Info(msg, "ns", obj.Namespace, "name", obj.Name)
 						delete(clusters, obj.Name)
 					}
+					signalScrape()
 				case *corev1.PersistentVolume:
-					tryScrape()
+					signalScrape()
 				}
 			}
 		case res := <-scrapeRespch:

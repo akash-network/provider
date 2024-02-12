@@ -12,7 +12,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: operator-inventory
+  name: akash-operator-inventory
 subjects:
   - kind: ServiceAccount
     name: operator-inventory
@@ -31,47 +31,8 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: operator-inventory-hardware-discovery
+  name: akash-operator-inventory-hardware-discovery
 subjects:
   - kind: ServiceAccount
     name: operator-inventory-hardware-discovery
     namespace: akash-services
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: akash-ip-operator-manage-service
-subjects:
-  - kind: ServiceAccount
-    name: akash-ip-operator
-    namespace: akash-services
-roleRef:
-  kind: ClusterRole
-  name: akash-ip-op-manage-service
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: akash-ip-operator-watch-providerleasedip
-subjects:
-  - kind: ServiceAccount
-    name: akash-ip-operator
-    namespace: akash-services
-roleRef:
-  kind: ClusterRole
-  name: akash-ip-op-watch-providerleasedip
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: akash-ip-operator-watch-configmaps
-subjects:
-  - kind: ServiceAccount
-    name: akash-ip-operator
-    namespace: akash-services
-roleRef:
-  kind: ClusterRole
-  name: akash-ip-op-watch-configmaps
-  apiGroup: rbac.authorization.k8s.io

@@ -5,68 +5,34 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	tpubsub "github.com/troian/pubsub"
+	"k8s.io/client-go/kubernetes"
+	kfake "k8s.io/client-go/kubernetes/fake"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/akash-api/go/node/types/unit"
 	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider/cluster/mocks"
-	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
+	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
+	cipmocks "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip/mocks"
+	cfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
+	cmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	"github.com/akash-network/provider/event"
-	ipoptypes "github.com/akash-network/provider/operator/ipoperator/types"
 	"github.com/akash-network/provider/operator/waiter"
+	aclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	afake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 	"github.com/akash-network/provider/tools/fromctx"
 )
-
-func newInventory(nodes ...string) ctypes.Inventory {
-	inv := &inventory{
-		nodes: make([]*node, 0, len(nodes)),
-		storage: map[string]*storageClassState{
-			"beta2": {
-				resourcePair: resourcePair{
-					allocatable: sdk.NewInt(nullClientStorage),
-					allocated:   sdk.NewInt(10 * unit.Gi),
-				},
-				isDefault: true,
-			},
-		},
-	}
-
-	for _, ndName := range nodes {
-		nd := &node{
-			id: ndName,
-			cpu: resourcePair{
-				allocatable: sdk.NewInt(nullClientCPU),
-				allocated:   sdk.NewInt(100),
-			},
-			gpu: resourcePair{
-				allocatable: sdk.NewInt(nullClientGPU),
-				allocated:   sdk.NewInt(1),
-			},
-			memory: resourcePair{
-				allocatable: sdk.NewInt(nullClientMemory),
-				allocated:   sdk.NewInt(1 * unit.Gi),
-			},
-			ephemeralStorage: resourcePair{
-				allocatable: sdk.NewInt(nullClientStorage),
-				allocated:   sdk.NewInt(10 * unit.Gi),
-			},
-		}
-
-		inv.nodes = append(inv.nodes, nd)
-	}
-
-	return inv
-}
 
 func TestInventory_reservationAllocatable(t *testing.T) {
 	mkrg := func(cpu uint64, gpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dtypes.ResourceUnit {
@@ -101,7 +67,7 @@ func TestInventory_reservationAllocatable(t *testing.T) {
 		}
 	}
 
-	inv := newInventory("a", "b")
+	inv := <-cinventory.NewNull("a", "b").ResultChan()
 
 	reservations := []*reservation{
 		mkres(true, mkrg(750, 0, 3*unit.Gi, 1*unit.Gi, 0, 1)),
@@ -135,12 +101,15 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 
 	clusterClient := &mocks.Client{}
 
-	clusterInv := newInventory("nodeA")
-
-	clusterClient.On("Inventory", mock.Anything).Return(clusterInv, nil)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+
+	kc := kfake.NewSimpleClientset()
+	ac := afake.NewSimpleClientset()
+
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -148,8 +117,7 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 		myLog,
 		subscriber,
 		clusterClient,
-		operatorclients.NullIPOperatorClient(), // This client is not used in this test
-		waiter.NewNullWaiter(),                 // Do not need to wait in test
+		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
@@ -174,7 +142,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	require.NoError(t, err)
 
 	deployments := make([]ctypes.IDeployment, 1)
-	deployment := &mocks.IDeployment{}
+	deployment := &cmocks.IDeployment{}
 	deployment.On("LeaseID").Return(lid)
 
 	groupServices := make(manifest.Services, 1)
@@ -223,15 +191,21 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 
 	clusterClient := &mocks.Client{}
 
-	clusterInv := newInventory("nodeA")
+	// clusterInv := newInventory("nodeA")
+	//
+	// inventoryCalled := make(chan int, 1)
+	// clusterClient.On("Inventory", mock.Anything).Run(func(args mock.Arguments) {
+	// 	inventoryCalled <- 0 // Value does not matter
+	// }).Return(clusterInv, nil)
 
-	inventoryCalled := make(chan int, 1)
-	clusterClient.On("Inventory", mock.Anything).Run(func(args mock.Arguments) {
-		inventoryCalled <- 0 // Value does not matter
-	}).Return(clusterInv, nil)
+	kc := kfake.NewSimpleClientset()
+	ac := afake.NewSimpleClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -239,14 +213,13 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		myLog,
 		subscriber,
 		clusterClient,
-		nil,                    // No IP operator client
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
 	require.NotNil(t, inv)
 
 	// Wait for first call to inventory
-	<-inventoryCalled
+	// <-inventoryCalled
 
 	// Send the event immediately, twice
 	// Second version does nothing
@@ -271,7 +244,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for second call to inventory
-	<-inventoryCalled
+	// <-inventoryCalled
 
 	// wait for cluster deployment to be active
 	// needed to avoid data race in reading availableExternalPorts
@@ -300,20 +273,16 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 }
 
 type inventoryScaffold struct {
-	leaseIDs        []mtypes.LeaseID
-	donech          chan struct{}
-	inventoryCalled chan struct{}
-	bus             pubsub.Bus
-	clusterClient   *mocks.Client
+	leaseIDs []mtypes.LeaseID
+	donech   chan struct{}
+	// inventoryCalled chan struct{}
+	bus           pubsub.Bus
+	clusterClient *mocks.Client
 }
 
-func makeInventoryScaffold(t *testing.T, leaseQty uint, inventoryCall bool, nodes ...string) *inventoryScaffold {
+func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 	scaffold := &inventoryScaffold{
 		donech: make(chan struct{}),
-	}
-
-	if inventoryCall {
-		scaffold.inventoryCalled = make(chan struct{}, 1)
 	}
 
 	for i := uint(0); i != leaseQty; i++ {
@@ -362,15 +331,6 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint, inventoryCall bool, node
 	}
 
 	cclient := &mocks.Client{}
-
-	// Create an inventory set that has enough resources for the deployment
-	clusterInv := newInventory(nodes...)
-
-	cclient.On("Inventory", mock.Anything).Run(func(args mock.Arguments) {
-		if scaffold.inventoryCalled != nil {
-			scaffold.inventoryCalled <- struct{}{}
-		}
-	}).Return(clusterInv, nil)
 
 	scaffold.clusterClient = cclient
 
@@ -444,7 +404,7 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 		InventoryResourceDebugFrequency: 1,
 		InventoryExternalPortQuantity:   1000,
 	}
-	scaffold := makeInventoryScaffold(t, 10, false, "nodeA")
+	scaffold := makeInventoryScaffold(t, 10)
 	defer scaffold.bus.Close()
 
 	myLog := testutil.Logger(t)
@@ -452,8 +412,14 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 	subscriber, err := scaffold.bus.Subscribe()
 	require.NoError(t, err)
 
+	kc := kfake.NewSimpleClientset()
+	ac := afake.NewSimpleClientset()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -461,7 +427,6 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 		myLog,
 		subscriber,
 		scaffold.clusterClient,
-		nil,                    // No IP operator client
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
@@ -484,7 +449,7 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 		InventoryResourceDebugFrequency: 1,
 		InventoryExternalPortQuantity:   1000,
 	}
-	scaffold := makeInventoryScaffold(t, 10, false, "nodeA")
+	scaffold := makeInventoryScaffold(t, 10)
 	defer scaffold.bus.Close()
 
 	myLog := testutil.Logger(t)
@@ -492,17 +457,24 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 	subscriber, err := scaffold.bus.Subscribe()
 	require.NoError(t, err)
 
-	mockIP := &mocks.IPOperatorClient{}
+	mockIP := &cipmocks.Client{}
 
 	ipQty := testutil.RandRangeInt(1, 100)
-	mockIP.On("GetIPAddressUsage", mock.Anything).Return(ipoptypes.IPAddressUsage{
+	mockIP.On("GetIPAddressUsage", mock.Anything).Return(cip.AddressUsage{
 		Available: uint(ipQty),
 		InUse:     uint(ipQty),
 	}, nil)
 	mockIP.On("Stop")
 
+	kc := kfake.NewSimpleClientset()
+	ac := afake.NewSimpleClientset()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, cip.Client(mockIP))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -510,7 +482,6 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 		myLog,
 		subscriber,
 		scaffold.clusterClient,
-		mockIP,
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
@@ -533,7 +504,8 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 		InventoryResourceDebugFrequency: 1,
 		InventoryExternalPortQuantity:   1000,
 	}
-	scaffold := makeInventoryScaffold(t, 2, false, "nodeA", "nodeB")
+
+	scaffold := makeInventoryScaffold(t, 2)
 	defer scaffold.bus.Close()
 
 	myLog := testutil.Logger(t)
@@ -541,22 +513,23 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 	subscriber, err := scaffold.bus.Subscribe()
 	require.NoError(t, err)
 
-	mockIP := &mocks.IPOperatorClient{}
+	mockIP := &cipmocks.Client{}
 
 	ipQty := testutil.RandRangeInt(5, 10)
-	mockIP.On("GetIPAddressUsage", mock.Anything).Return(ipoptypes.IPAddressUsage{
+	mockIP.On("GetIPAddressUsage", mock.Anything).Return(cip.AddressUsage{
 		Available: uint(ipQty),
 		InUse:     uint(ipQty - 1), // not all in use
 	}, nil)
-	ipAddrStatusCalled := make(chan struct{}, 1)
+
+	ipAddrStatusCalled := make(chan struct{}, 2)
 	// First call indicates no data
 	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(args mock.Arguments) {
 		ipAddrStatusCalled <- struct{}{}
-	}).Return([]ipoptypes.LeaseIPStatus{}, nil).Once()
+	}).Return([]cip.LeaseIPStatus{}, nil).Once()
 	// Second call indicates the IP is there and can be confirmed
 	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(args mock.Arguments) {
 		ipAddrStatusCalled <- struct{}{}
-	}).Return([]ipoptypes.LeaseIPStatus{
+	}).Return([]cip.LeaseIPStatus{
 		{
 			Port:         1234,
 			ExternalPort: 1234,
@@ -568,8 +541,15 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 
 	mockIP.On("Stop")
 
+	kc := kfake.NewSimpleClientset()
+	ac := afake.NewSimpleClientset()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA", "nodeB"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, cip.Client(mockIP))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -577,7 +557,6 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 		myLog,
 		subscriber,
 		scaffold.clusterClient,
-		mockIP,
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
@@ -618,7 +597,7 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 }
 
 func TestInventory_OverReservations(t *testing.T) {
-	scaffold := makeInventoryScaffold(t, 10, true, "nodeA")
+	scaffold := makeInventoryScaffold(t, 10)
 	defer scaffold.bus.Close()
 	lid0 := scaffold.leaseIDs[0]
 	lid1 := scaffold.leaseIDs[1]
@@ -676,8 +655,14 @@ func TestInventory_OverReservations(t *testing.T) {
 		InventoryExternalPortQuantity:   1000,
 	}
 
+	kc := kfake.NewSimpleClientset()
+	ac := afake.NewSimpleClientset()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -685,14 +670,10 @@ func TestInventory_OverReservations(t *testing.T) {
 		myLog,
 		subscriber,
 		scaffold.clusterClient,
-		nil,                    // No IP operator client
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		make([]ctypes.IDeployment, 0))
 	require.NoError(t, err)
 	require.NotNil(t, inv)
-
-	// Wait for first call to inventory
-	testutil.ChannelWaitForValueUpTo(t, scaffold.inventoryCalled, 30*time.Second)
 
 	// Get the reservation
 	reservation, err := inv.reserve(lid0.OrderID(), group)
@@ -721,9 +702,6 @@ func TestInventory_OverReservations(t *testing.T) {
 	// Confirm the second reservation still is too much
 	_, err = inv.reserve(lid1.OrderID(), group)
 	require.ErrorIs(t, err, ctypes.ErrInsufficientCapacity)
-
-	// Wait for second call to inventory
-	testutil.ChannelWaitForValueUpTo(t, scaffold.inventoryCalled, 30*time.Second)
 
 	// Shut everything down
 	cancel()

@@ -2,6 +2,8 @@ package fromctx
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/go-logr/logr"
@@ -20,14 +22,21 @@ import (
 type Key string
 
 const (
-	CtxKeyKubeConfig     = Key(providerflags.FlagKubeConfig)
-	CtxKeyKubeClientSet  = Key("kube-clientset")
-	CtxKeyAkashClientSet = Key("akash-clientset")
-	CtxKeyPubSub         = Key("pubsub")
-	CtxKeyLifecycle      = Key("lifecycle")
-	CtxKeyErrGroup       = Key("errgroup")
-	CtxKeyLogc           = Key("logc")
-	CtxKeyStartupCh      = Key("startup-ch")
+	CtxKeyKubeConfig         = Key(providerflags.FlagKubeConfig)
+	CtxKeyKubeRESTClient     = Key("kube-restclient")
+	CtxKeyKubeClientSet      = Key("kube-clientset")
+	CtxKeyAkashClientSet     = Key("akash-clientset")
+	CtxKeyPubSub             = Key("pubsub")
+	CtxKeyLifecycle          = Key("lifecycle")
+	CtxKeyErrGroup           = Key("errgroup")
+	CtxKeyLogc               = Key("logc")
+	CtxKeyStartupCh          = Key("startup-ch")
+	CtxKeyInventoryUnderTest = Key("inventory-under-test")
+)
+
+var (
+	ErrNotFound         = errors.New("fromctx: not found")
+	ErrValueInvalidType = errors.New("fromctx: invalid type")
 )
 
 type options struct {
@@ -78,66 +87,201 @@ func LogrFromCtx(ctx context.Context) logr.Logger {
 	return lg
 }
 
-func StartupChFromCtx(ctx context.Context) chan<- struct{} {
+func StartupChFromCtx(ctx context.Context) (chan<- struct{}, error) {
 	val := ctx.Value(CtxKeyStartupCh)
 	if val == nil {
-		panic("context does not have startup channel set")
+		return nil, fmt.Errorf("%w: context does not have startup channel set", ErrNotFound)
 	}
 
-	return val.(chan<- struct{})
+	res, valid := val.(chan<- struct{})
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
 
-func KubeConfigFromCtx(ctx context.Context) *rest.Config {
+func MustStartupChFromCtx(ctx context.Context) chan<- struct{} {
+	val, err := StartupChFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func KubeRESTClientFromCtx(ctx context.Context) (*rest.RESTClient, error) {
+	val := ctx.Value(CtxKeyKubeRESTClient)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have kube rest client set", ErrNotFound)
+	}
+
+	res, valid := val.(*rest.RESTClient)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func MustKubeRESTClientFromCtx(ctx context.Context) *rest.RESTClient {
+	val, err := KubeRESTClientFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func KubeConfigFromCtx(ctx context.Context) (*rest.Config, error) {
 	val := ctx.Value(CtxKeyKubeConfig)
 	if val == nil {
-		panic("context does not have kubeconfig set")
+		return nil, fmt.Errorf("%w: context does not have kubeconfig set", ErrNotFound)
 	}
 
-	return val.(*rest.Config)
+	res, valid := val.(*rest.Config)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
 
-func KubeClientFromCtx(ctx context.Context) *kubernetes.Clientset {
+func MustKubeConfigFromCtx(ctx context.Context) *rest.Config {
+	val, err := KubeConfigFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func KubeClientFromCtx(ctx context.Context) (kubernetes.Interface, error) {
 	val := ctx.Value(CtxKeyKubeClientSet)
 	if val == nil {
-		panic("context does not have kube client set")
+		return nil, fmt.Errorf("%w: context does not have kube client set", ErrNotFound)
 	}
 
-	return val.(*kubernetes.Clientset)
+	res, valid := val.(kubernetes.Interface)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
-func AkashClientFromCtx(ctx context.Context) *akashclientset.Clientset {
+
+func MustKubeClientFromCtx(ctx context.Context) kubernetes.Interface {
+	val, err := KubeClientFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func AkashClientFromCtx(ctx context.Context) (akashclientset.Interface, error) {
 	val := ctx.Value(CtxKeyAkashClientSet)
 	if val == nil {
-		panic("context does not have akash client set")
+		return nil, fmt.Errorf("%w: context does not have akash client set", ErrNotFound)
 	}
 
-	return val.(*akashclientset.Clientset)
+	res, valid := val.(akashclientset.Interface)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
 
-func LifecycleFromCtx(ctx context.Context) lifecycle.Lifecycle {
+func MustAkashClientFromCtx(ctx context.Context) akashclientset.Interface {
+	val, err := AkashClientFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func LifecycleFromCtx(ctx context.Context) (lifecycle.Lifecycle, error) {
 	val := ctx.Value(CtxKeyLifecycle)
 	if val == nil {
-		panic("context does not have lifecycle set")
+		return nil, fmt.Errorf("%w: context does not have lifecycle set", ErrNotFound)
 	}
 
-	return val.(lifecycle.Lifecycle)
+	res, valid := val.(lifecycle.Lifecycle)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
 
-func ErrGroupFromCtx(ctx context.Context) *errgroup.Group {
+func MustLifecycleFromCtx(ctx context.Context) lifecycle.Lifecycle {
+	val, err := LifecycleFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func ErrGroupFromCtx(ctx context.Context) (*errgroup.Group, error) {
 	val := ctx.Value(CtxKeyErrGroup)
 	if val == nil {
-		panic("context does not have errgroup set")
+		return nil, fmt.Errorf("%w: context does not have errgroup set", ErrNotFound)
 	}
 
-	return val.(*errgroup.Group)
+	res, valid := val.(*errgroup.Group)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
 
-func PubSubFromCtx(ctx context.Context) pubsub.PubSub {
-	val := ctx.Value(CtxKeyPubSub)
-	if val == nil {
-		panic("context does not have pubsub set")
+func MustErrGroupFromCtx(ctx context.Context) *errgroup.Group {
+	val, err := ErrGroupFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
 	}
 
-	return val.(pubsub.PubSub)
+	return val
+}
+
+func PubSubFromCtx(ctx context.Context) (pubsub.PubSub, error) {
+	val := ctx.Value(CtxKeyPubSub)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+	}
+
+	res, valid := val.(pubsub.PubSub)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func MustPubSubFromCtx(ctx context.Context) pubsub.PubSub {
+	val, err := PubSubFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
+	val := ctx.Value(CtxKeyInventoryUnderTest)
+	if val == nil {
+		return false
+	}
+
+	if v, valid := val.(bool); valid {
+		return v
+	}
+
+	return false
 }
 
 func applyOptions(opts ...LogcOption) (options, error) {
@@ -153,4 +297,12 @@ func applyOptions(opts ...LogcOption) (options, error) {
 	}
 
 	return *obj, nil
+}
+
+func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {
+	for k, v := range config {
+		ctx = context.WithValue(ctx, k, v)
+	}
+
+	return ctx
 }

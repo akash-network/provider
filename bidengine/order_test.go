@@ -31,6 +31,7 @@ import (
 	"github.com/akash-network/node/testutil"
 
 	clustermocks "github.com/akash-network/provider/cluster/mocks"
+	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	"github.com/akash-network/provider/session"
 )
 
@@ -114,7 +115,7 @@ func makeMocks(s *orderTestScaffold) {
 	s.queryClient = queryClientMock
 	s.txClient = txMocks
 
-	mockReservation := &clustermocks.Reservation{}
+	mockReservation := &clmocks.Reservation{}
 	mockReservation.On("OrderID").Return(s.orderID)
 	mockReservation.On("Resources").Return(groupResult.Group)
 	mockReservation.On("GetAllocatedResources").Return(groupResult.Group.GroupSpec.Resources)

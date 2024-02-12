@@ -3,8 +3,6 @@ package cluster
 import (
 	"context"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	tpubsub "github.com/troian/pubsub"
@@ -15,10 +13,12 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
+
 	"github.com/akash-network/node/pubsub"
 
-	"github.com/akash-network/provider/cluster/operatorclients"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/operator/waiter"
@@ -38,7 +38,7 @@ var (
 var (
 	deploymentManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
 		// fixme provider_deployment_manager
-		Name:        "provider_deploymetn_manager",
+		Name:        "provider_deployment_manager",
 		Help:        "",
 		ConstLabels: nil,
 	})
@@ -105,7 +105,7 @@ type Service interface {
 }
 
 // NewService returns new Service instance
-func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, client Client, ipOperatorClient operatorclients.IPOperatorClient, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
+func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, client Client, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
 	log := session.Log().With("module", "provider-cluster", "cmp", "service")
 
 	lc := lifecycle.New()
@@ -121,7 +121,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 		return nil, err
 	}
 
-	inventory, err := newInventoryService(ctx, cfg, log, sub, client, ipOperatorClient, waiter, deployments)
+	inventory, err := newInventoryService(ctx, cfg, log, sub, client, waiter, deployments)
 	if err != nil {
 		sub.Close()
 		return nil, err
@@ -157,11 +157,10 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 		managers:                       make(map[mtypes.LeaseID]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
 		checkDeploymentExistsRequestCh: make(chan checkDeploymentExistsRequest),
-
-		log:    log,
-		lc:     lc,
-		config: cfg,
-		waiter: waiter,
+		log:                            log,
+		lc:                             lc,
+		config:                         cfg,
+		waiter:                         waiter,
 	}
 
 	go s.lc.WatchContext(ctx)
@@ -314,7 +313,7 @@ func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 		return
 	}
 
-	bus := fromctx.PubSubFromCtx(ctx)
+	bus := fromctx.MustPubSubFromCtx(ctx)
 
 	inventorych := bus.Sub(ptypes.PubSubTopicInventoryStatus)
 

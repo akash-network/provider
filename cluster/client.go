@@ -9,11 +9,8 @@ import (
 	"sync"
 	"time"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
@@ -21,12 +18,11 @@ import (
 	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/sdl"
 	mquery "github.com/akash-network/node/x/market/query"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
+	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
@@ -53,13 +49,13 @@ type ReadClient interface {
 	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
 	ServiceStatus(context.Context, mtypes.LeaseID, string) (*ctypes.ServiceStatus, error)
 
-	AllHostnames(context.Context) ([]ctypes.ActiveHostname, error)
+	AllHostnames(context.Context) ([]chostname.ActiveHostname, error)
 	GetManifestGroup(context.Context, mtypes.LeaseID) (bool, crd.ManifestGroup, error)
 
-	ObserveHostnameState(ctx context.Context) (<-chan ctypes.HostnameResourceEvent, error)
-	GetHostnameDeploymentConnections(ctx context.Context) ([]ctypes.LeaseIDHostnameConnection, error)
+	ObserveHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error)
+	GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error)
 
-	ObserveIPState(ctx context.Context) (<-chan ctypes.IPResourceEvent, error)
+	ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, error)
 	GetDeclaredIPs(ctx context.Context, leaseID mtypes.LeaseID) ([]crd.ProviderLeasedIPSpec, error)
 }
 
@@ -71,7 +67,6 @@ type Client interface {
 	Deploy(ctx context.Context, deployment ctypes.IDeployment) error
 	TeardownLease(context.Context, mtypes.LeaseID) error
 	Deployments(context.Context) ([]ctypes.IDeployment, error)
-	Inventory(context.Context) (ctypes.Inventory, error)
 	Exec(ctx context.Context,
 		lID mtypes.LeaseID,
 		service string,
@@ -84,7 +79,7 @@ type Client interface {
 		tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error)
 
 	// ConnectHostnameToDeployment Connect a given hostname to a deployment
-	ConnectHostnameToDeployment(ctx context.Context, directive ctypes.ConnectHostnameToDeploymentDirective) error
+	ConnectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error
 	// RemoveHostnameFromDeployment Remove a given hostname from a deployment
 	RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error
 
@@ -106,312 +101,6 @@ type Client interface {
 func ErrorIsOkToSendToClient(err error) bool {
 	return errors.Is(err, ErrExec)
 }
-
-type resourcePair struct {
-	allocatable sdk.Int
-	allocated   sdk.Int
-}
-
-type storageClassState struct {
-	resourcePair
-	isDefault bool
-}
-
-func (rp *resourcePair) dup() resourcePair {
-	return resourcePair{
-		allocatable: rp.allocatable.AddRaw(0),
-		allocated:   rp.allocated.AddRaw(0),
-	}
-}
-
-func (rp *resourcePair) subNLZ(val types.ResourceValue) bool {
-	avail := rp.available()
-
-	res := avail.Sub(val.Val)
-	if res.IsNegative() {
-		return false
-	}
-
-	*rp = resourcePair{
-		allocatable: rp.allocatable.AddRaw(0),
-		allocated:   rp.allocated.Add(val.Val),
-	}
-
-	return true
-}
-
-func (rp *resourcePair) available() sdk.Int {
-	return rp.allocatable.Sub(rp.allocated)
-}
-
-type node struct {
-	id               string
-	cpu              resourcePair
-	gpu              resourcePair
-	memory           resourcePair
-	ephemeralStorage resourcePair
-}
-
-type clusterStorage map[string]*storageClassState
-
-func (cs clusterStorage) dup() clusterStorage {
-	res := make(clusterStorage)
-	for k, v := range cs {
-		res[k] = &storageClassState{
-			resourcePair: v.resourcePair.dup(),
-			isDefault:    v.isDefault,
-		}
-	}
-
-	return res
-}
-
-type inventory struct {
-	storage clusterStorage
-	nodes   []*node
-}
-
-var _ ctypes.Inventory = (*inventory)(nil)
-
-func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, _ ...ctypes.InventoryOption) error {
-	resources := make(dtypes.ResourceUnits, len(reservation.Resources().GetResourceUnits()))
-	copy(resources, reservation.Resources().GetResourceUnits())
-
-	currInventory := inv.dup()
-
-nodes:
-	for nodeName, nd := range currInventory.nodes {
-		// with persistent storage go through iff there is capacity available
-		// there is no point to go through any other node without available storage
-		currResources := resources[:0]
-
-		for _, res := range resources {
-			for ; res.Count > 0; res.Count-- {
-				var adjusted bool
-
-				cpu := nd.cpu.dup()
-				if adjusted = cpu.subNLZ(res.Resources.CPU.Units); !adjusted {
-					continue nodes
-				}
-
-				gpu := nd.gpu.dup()
-				if res.Resources.GPU != nil {
-					if adjusted = gpu.subNLZ(res.Resources.GPU.Units); !adjusted {
-						continue nodes
-					}
-				}
-
-				memory := nd.memory.dup()
-				if adjusted = memory.subNLZ(res.Resources.Memory.Quantity); !adjusted {
-					continue nodes
-				}
-
-				ephemeralStorage := nd.ephemeralStorage.dup()
-				storageClasses := currInventory.storage.dup()
-
-				for idx, storage := range res.Resources.Storage {
-					attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
-
-					if persistent, _ := attr.AsBool(); !persistent {
-						if adjusted = ephemeralStorage.subNLZ(storage.Quantity); !adjusted {
-							continue nodes
-						}
-						continue
-					}
-
-					attr = storage.Attributes.Find(sdl.StorageAttributeClass)
-					class, _ := attr.AsString()
-
-					if class == sdl.StorageClassDefault {
-						for name, params := range storageClasses {
-							if params.isDefault {
-								class = name
-
-								for i := range storage.Attributes {
-									if storage.Attributes[i].Key == sdl.StorageAttributeClass {
-										res.Resources.Storage[idx].Attributes[i].Value = class
-										break
-									}
-								}
-								break
-							}
-						}
-					}
-
-					cstorage, activeStorageClass := storageClasses[class]
-					if !activeStorageClass {
-						continue nodes
-					}
-
-					if adjusted = cstorage.subNLZ(storage.Quantity); !adjusted {
-						// cluster storage does not have enough space thus break to error
-						break nodes
-					}
-				}
-
-				// all requirements for current group have been satisfied
-				// commit and move on
-				currInventory.nodes[nodeName] = &node{
-					id:               nd.id,
-					cpu:              cpu,
-					gpu:              gpu,
-					memory:           memory,
-					ephemeralStorage: ephemeralStorage,
-				}
-			}
-
-			if res.Count > 0 {
-				currResources = append(currResources, res)
-			}
-		}
-
-		resources = currResources
-	}
-
-	if len(resources) == 0 {
-		*inv = *currInventory
-
-		return nil
-	}
-
-	return ctypes.ErrInsufficientCapacity
-}
-
-func (inv *inventory) Metrics() ctypes.InventoryMetrics {
-	cpuTotal := uint64(0)
-	gpuTotal := uint64(0)
-	memoryTotal := uint64(0)
-	storageEphemeralTotal := uint64(0)
-	storageTotal := make(map[string]int64)
-
-	cpuAvailable := uint64(0)
-	gpuAvailable := uint64(0)
-	memoryAvailable := uint64(0)
-	storageEphemeralAvailable := uint64(0)
-	storageAvailable := make(map[string]int64)
-
-	ret := ctypes.InventoryMetrics{
-		Nodes: make([]ctypes.InventoryNode, 0, len(inv.nodes)),
-	}
-
-	for _, nd := range inv.nodes {
-		invNode := ctypes.InventoryNode{
-			Name: nd.id,
-			Allocatable: ctypes.InventoryNodeMetric{
-				CPU:              nd.cpu.allocatable.Uint64(),
-				Memory:           nd.memory.allocatable.Uint64(),
-				StorageEphemeral: nd.ephemeralStorage.allocatable.Uint64(),
-			},
-		}
-
-		cpuTotal += nd.cpu.allocatable.Uint64()
-		gpuTotal += nd.gpu.allocatable.Uint64()
-
-		memoryTotal += nd.memory.allocatable.Uint64()
-		storageEphemeralTotal += nd.ephemeralStorage.allocatable.Uint64()
-
-		tmp := nd.cpu.allocatable.Sub(nd.cpu.allocated)
-		invNode.Available.CPU = tmp.Uint64()
-		cpuAvailable += invNode.Available.CPU
-
-		tmp = nd.gpu.allocatable.Sub(nd.gpu.allocated)
-		invNode.Available.GPU = tmp.Uint64()
-		gpuAvailable += invNode.Available.GPU
-
-		tmp = nd.memory.allocatable.Sub(nd.memory.allocated)
-		invNode.Available.Memory = tmp.Uint64()
-		memoryAvailable += invNode.Available.Memory
-
-		tmp = nd.ephemeralStorage.allocatable.Sub(nd.ephemeralStorage.allocated)
-		invNode.Available.StorageEphemeral = tmp.Uint64()
-		storageEphemeralAvailable += invNode.Available.StorageEphemeral
-
-		ret.Nodes = append(ret.Nodes, invNode)
-	}
-
-	ret.TotalAllocatable = ctypes.InventoryMetricTotal{
-		CPU:              cpuTotal,
-		GPU:              gpuTotal,
-		Memory:           memoryTotal,
-		StorageEphemeral: storageEphemeralTotal,
-		Storage:          storageTotal,
-	}
-
-	ret.TotalAvailable = ctypes.InventoryMetricTotal{
-		CPU:              cpuAvailable,
-		GPU:              gpuAvailable,
-		Memory:           memoryAvailable,
-		StorageEphemeral: storageEphemeralAvailable,
-		Storage:          storageAvailable,
-	}
-
-	return ret
-}
-
-func (inv *inventory) Snapshot() inventoryV1.Cluster {
-	res := inventoryV1.Cluster{
-		Nodes:   make(inventoryV1.Nodes, 0, len(inv.nodes)),
-		Storage: make(inventoryV1.ClusterStorage, 0, len(inv.storage)),
-	}
-
-	for _, nd := range inv.nodes {
-		res.Nodes = append(res.Nodes, inventoryV1.Node{
-			Name: nd.id,
-			Resources: inventoryV1.NodeResources{
-				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePair(nd.cpu.allocatable.Int64(), nd.cpu.allocated.Int64(), "m"),
-				},
-				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(nd.memory.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
-				},
-				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(nd.gpu.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
-				},
-				EphemeralStorage: inventoryV1.NewResourcePair(nd.ephemeralStorage.allocatable.Int64(), nd.ephemeralStorage.allocated.Int64(), resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-			},
-			Capabilities: inventoryV1.NodeCapabilities{},
-		})
-	}
-
-	for class, storage := range inv.storage {
-		res.Storage = append(res.Storage, inventoryV1.Storage{
-			Quantity: inventoryV1.NewResourcePair(storage.allocatable.Int64(), storage.allocated.Int64(), resource.DecimalSI),
-			Info: inventoryV1.StorageInfo{
-				Class: class,
-			},
-		})
-	}
-
-	return res
-}
-
-func (inv *inventory) dup() *inventory {
-	res := &inventory{
-		nodes: make([]*node, 0, len(inv.nodes)),
-	}
-
-	for _, nd := range inv.nodes {
-		res.nodes = append(res.nodes, &node{
-			id:               nd.id,
-			cpu:              nd.cpu.dup(),
-			gpu:              nd.gpu.dup(),
-			memory:           nd.memory.dup(),
-			ephemeralStorage: nd.ephemeralStorage.dup(),
-		})
-	}
-
-	return res
-}
-
-const (
-	// 5 CPUs, 5Gi memory for null client.
-	nullClientCPU     = 5000
-	nullClientGPU     = 2
-	nullClientMemory  = 32 * unit.Gi
-	nullClientStorage = 512 * unit.Gi
-)
 
 type nullLease struct {
 	ctx    context.Context
@@ -445,18 +134,18 @@ func (c *nullClient) RemoveHostnameFromDeployment(_ context.Context, _ string, _
 	return errNotImplemented
 }
 
-func (c *nullClient) ObserveHostnameState(_ context.Context) (<-chan ctypes.HostnameResourceEvent, error) {
+func (c *nullClient) ObserveHostnameState(_ context.Context) (<-chan chostname.ResourceEvent, error) {
 	return nil, errNotImplemented
 }
 func (c *nullClient) GetDeployments(_ context.Context, _ dtypes.DeploymentID) ([]ctypes.IDeployment, error) {
 	return nil, errNotImplemented
 }
 
-func (c *nullClient) GetHostnameDeploymentConnections(_ context.Context) ([]ctypes.LeaseIDHostnameConnection, error) {
+func (c *nullClient) GetHostnameDeploymentConnections(_ context.Context) ([]chostname.LeaseIDConnection, error) {
 	return nil, errNotImplemented
 }
 
-func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ ctypes.ConnectHostnameToDeploymentDirective) error {
+func (c *nullClient) ConnectHostnameToDeployment(_ context.Context, _ chostname.ConnectToDeploymentDirective) error {
 	return errNotImplemented
 }
 
@@ -599,43 +288,6 @@ func (c *nullClient) Deployments(context.Context) ([]ctypes.IDeployment, error) 
 	return nil, nil
 }
 
-func (c *nullClient) Inventory(context.Context) (ctypes.Inventory, error) {
-	inv := &inventory{
-		nodes: []*node{
-			{
-				id: "solo",
-				cpu: resourcePair{
-					allocatable: sdk.NewInt(nullClientCPU),
-					allocated:   sdk.NewInt(nullClientCPU - 100),
-				},
-				gpu: resourcePair{
-					allocatable: sdk.NewInt(nullClientGPU),
-					allocated:   sdk.NewInt(1),
-				},
-				memory: resourcePair{
-					allocatable: sdk.NewInt(nullClientMemory),
-					allocated:   sdk.NewInt(nullClientMemory - unit.Gi),
-				},
-				ephemeralStorage: resourcePair{
-					allocatable: sdk.NewInt(nullClientStorage),
-					allocated:   sdk.NewInt(nullClientStorage - (10 * unit.Gi)),
-				},
-			},
-		},
-		storage: map[string]*storageClassState{
-			"beta2": {
-				resourcePair: resourcePair{
-					allocatable: sdk.NewInt(nullClientStorage),
-					allocated:   sdk.NewInt(nullClientStorage - (10 * unit.Gi)),
-				},
-				isDefault: true,
-			},
-		},
-	}
-
-	return inv, nil
-}
-
 func (c *nullClient) Exec(context.Context, mtypes.LeaseID, string, uint, []string, io.Reader, io.Writer, io.Writer, bool, remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error) {
 	return nil, errNotImplemented
 }
@@ -644,7 +296,7 @@ func (c *nullClient) GetManifestGroup(context.Context, mtypes.LeaseID) (bool, cr
 	return false, crd.ManifestGroup{}, nil
 }
 
-func (c *nullClient) AllHostnames(context.Context) ([]ctypes.ActiveHostname, error) {
+func (c *nullClient) AllHostnames(context.Context) ([]chostname.ActiveHostname, error) {
 	return nil, nil
 }
 
@@ -660,15 +312,15 @@ func (c *nullClient) PurgeDeclaredIPs(_ context.Context, _ mtypes.LeaseID) error
 	return errNotImplemented
 }
 
-func (c *nullClient) ObserveIPState(_ context.Context) (<-chan ctypes.IPResourceEvent, error) {
+func (c *nullClient) ObserveIPState(_ context.Context) (<-chan cip.ResourceEvent, error) {
 	return nil, errNotImplemented
 }
 
-func (c *nullClient) CreateIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ ctypes.ClusterIPPassthroughDirective) error {
+func (c *nullClient) CreateIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ cip.ClusterIPPassthroughDirective) error {
 	return errNotImplemented
 }
 
-func (c *nullClient) PurgeIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ ctypes.ClusterIPPassthroughDirective) error {
+func (c *nullClient) PurgeIPPassthrough(_ context.Context, _ mtypes.LeaseID, _ cip.ClusterIPPassthroughDirective) error {
 	return errNotImplemented
 }
 

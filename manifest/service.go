@@ -235,7 +235,7 @@ func (s *service) run() {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
 
-	bus := fromctx.PubSubFromCtx(s.ctx)
+	bus := fromctx.MustPubSubFromCtx(s.ctx)
 
 	s.updateGauges()
 
