@@ -13,9 +13,9 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - name: api
+    - name: rest
       port: 8080
-      targetPort: api
+      targetPort: rest
       appProtocol: http
     - name: grpc
       port: 8081

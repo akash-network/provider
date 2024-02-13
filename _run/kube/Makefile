@@ -6,7 +6,9 @@ KUBE_SSH_NODES           := kind
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \
 	akash-operator-inventory \
-	akash-operator-ip
+	akash-operator-ip \
+	akash-node \
+	akash-provider
 
 include ../common.mk
 include ../common-commands.mk

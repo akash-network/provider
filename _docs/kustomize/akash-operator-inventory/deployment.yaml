@@ -57,20 +57,20 @@ spec:
 #          livenessProbe:
 #            httpGet:
 #              path: /metrics/health
-#              port: api
+#              port: rest
 #              scheme: HTTP
 #            initialDelaySeconds: 15
 #            periodSeconds: 15
 #          readinessProbe:
 #            httpGet:
 #              path: /metrics/ready
-#              port: api
+#              port: rest
 #              scheme: HTTP
 #            initialDelaySeconds: 15
 #            periodSeconds: 5
           ports:
             - containerPort: 8080
-              name: api
+              name: rest
               protocol: TCP
             - containerPort: 8081
               name: grpc
