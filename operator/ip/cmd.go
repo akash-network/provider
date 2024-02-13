@@ -55,7 +55,7 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-ip", "api")
+			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-ip", "rest")
 			if err != nil {
 				return err
 			}
