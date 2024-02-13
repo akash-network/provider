@@ -29,7 +29,7 @@ func Cmd() *cobra.Command {
 
 			logger := common.OpenLogger().With("op", "hostname")
 
-			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "api")
+			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {
 				return err
 			}
