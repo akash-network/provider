@@ -9,59 +9,65 @@ resources:
   - ingress.yaml
   - service_account.yaml
 commonLabels:
-  app: akash-provider
-  akash.network/component: akash-provider
+  app.kubernetes.io/name: provider
+  app.kubernetes.io/instance: provider-service
+  app.kubernetes.io/component: operator
+  app.kubernetes.io/part-of: provider
+generatorOptions:
+  disableNameSuffixHash: true
 configMapGenerator:
-  - name: akash-provider-boot
+  - name: provider-boot
     files:
       - run.sh
 
-  - name: akash-provider-client-config
+  - name: provider-client-config
     literals:
-      - home=/home
-      - from=provider
-      - node=http://akash-node:26657
-      - chain-id=local
-      - keyring-backend=test
+      - AKASH_HOME=/home
+      - AP_HOME=/home
+      - AKASH_FROM=provider
+      - AP_FROM=provider
+      - AKASH_NODE=http://akash-node:26657
+      - AP_NODE=http://akash-node:26657
+      - AKASH_CHAIN_ID=local
+      - AP_CHAIN_ID=local
+      - AKASH_KEYRING_BACKEND=test
+      - AP_KEYRING_BACKEND=test
 
-  - name: akash-provider-config
-    literals: []
-      ##
-      #  override-able defaults
-      ##
-      # - ingress-static-hosts=false
-      # - ingress-domain=
-      # - ingress-expose-lb-hosts=false
-      # - network-policies-enabled=false
-      # - max-unit-cpu=500
-      # - max-unit-memory=1073741824
-      # - max-unit-storage=1073741824
-      # - max-unit-count=10
-      # - max-unit-price=10000
-      # - min-unit-cpu=10
-      # - min-unit-memory=1024
-      # - min-unit-storage=1024
-      # - min-unit-count=1
-      # - min-unit-price=1
-      # - max-group-count=10
-      # - max-group-units=10
-      # - max-group-cpu=1000
-      # - max-group-memory=1073741824
-      # - max-group-storage=5368709120
-      # - mem-price-min=50
-      # - mem-price-max=1048576
-      # - bid-price-strategy
-      # - bid-cpu-scale
-      # - bid-storage-scale
-      # - bid-script-path
-      # - bid-script-process-limit
-      # - bid-script-process-timeout
+  - name: provider-config
+    literals:
+      - AP_CLUSTER_K8S=true
+      # - AP_INGRESS_STATIC_HOSTS=false
+      # - AP_INGRESS_DOMAIN=
+      # - AP_INGRESS_EXPOSE_LB_HOSTS=false
+      # - AP_DEPLOYMENT_NETWORK_POLICIES_ENABLED=false
+      # - AP_MAX_UNIT_CPU=500
+      # - AP_MAX_UNIT_MEMORY=1073741824
+      # - AP_MAX_UNIT_STORAGE=1073741824
+      # - AP_MAX_UNIT_COUNT=10
+      # - ap_max_unit_price=10000
+      # - AP_MIN_UNIT_CPU=10
+      # - AP_MIN_UNIT_MEMORY=1024
+      # - AP_MIN_UNIT_STORAGE=1024
+      # - AP_MIN_UNIT_COUNT=1
+      # - AP_MIN_UNIT_PRICE=1
+      # - AP_MAX_GROUP_COUNT=10
+      # - AP_MAX_GROUP_UNITS=10
+      # - AP_MAX_GROUP_CPU=1000
+      # - AP_MAX_GROUP_MEMORY=1073741824
+      # - AP_MAX_GROUP_STORAGE=5368709120
+      # - AP_MEM_PRICE_MIN=50
+      # - AP_MEM_PRICE_MAX=1048576
+      # - AP_BID_PRICE_STRATEGY
+      # - AP_BID_CPU_SCALE
+      # - AP_BID_STORAGE_SCALE
+      # - AP_BID_SCRIPT_PATH
+      # - AP_BID_SCRIPT_PROCESS-LIMIT
+      # - AP_BID_SCRIPT_PROCESS-TIMEOUT
+      # - AP_IP_OPERATOR=true
 
 secretGenerator:
   ##
   # required values:
   ##
-  - name: akash-provider-keys
+  - name: provider-keys
     files: []
-    # - key.txt
-    # - key-pass.txt
