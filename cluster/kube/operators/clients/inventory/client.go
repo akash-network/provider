@@ -245,7 +245,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 		}
 	}
 
-	endpoint := fmt.Sprintf("%s.%s.svc.cluster.local", svc.Name, svc.Namespace)
+	endpoint := fmt.Sprintf("%s.%s.svc.cluster.local:%d", svc.Name, svc.Namespace, svcPort)
 
 	sigdone := make(chan struct{}, 1)
 
