@@ -41,9 +41,9 @@ import (
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
-	"github.com/akash-network/provider/gateway/utils"
 	pmanifest "github.com/akash-network/provider/manifest"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/version"
 )
 
 type CtxAuthKey string
@@ -489,8 +489,8 @@ func createAddressHandler(log log.Logger, providerAddr sdk.Address) http.Handler
 }
 
 type versionInfo struct {
-	Akash utils.AkashVersionInfo `json:"akash"`
-	Kube  *kubeVersion.Info      `json:"kube"`
+	Akash version.Info      `json:"akash"`
+	Kube  *kubeVersion.Info `json:"kube"`
 }
 
 func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerFunc {
@@ -502,7 +502,7 @@ func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerF
 		}
 
 		writeJSON(log, w, versionInfo{
-			Akash: utils.NewAkashVersionInfo(),
+			Akash: version.NewInfo(),
 			Kube:  kube,
 		})
 	}

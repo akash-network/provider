@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/akash-network/provider/gateway/utils"
+	"github.com/akash-network/provider/version"
 )
 
 type PrepareFlagFn func()
@@ -40,7 +40,7 @@ func NewOperatorHTTP() (OperatorHTTP, error) {
 		_, _ = io.WriteString(rw, "OK")
 	})
 
-	akashVersion := utils.NewAkashVersionInfo()
+	akashVersion := version.NewInfo()
 	buf := &bytes.Buffer{}
 	enc := json.NewEncoder(buf)
 	err := enc.Encode(akashVersion)

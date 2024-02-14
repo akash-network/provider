@@ -23,7 +23,7 @@ export AP_CHAIN_ID              = $(AKASH_CHAIN_ID)
 export AP_YES                   = $(AKASH_YES)
 export AP_GAS_PRICES            = $(AKASH_GAS_PRICES)
 export AP_GAS                   = $(AKASH_GAS)
-export AP_NODE                  = $(AKASH_GAS)
+export AP_NODE                  = $(AKASH_NODE)
 
 AKASH_INIT                     := $(AP_RUN_DIR)/.akash-init
 
