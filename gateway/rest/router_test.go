@@ -17,7 +17,6 @@ import (
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/version"
 
 	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	qmock "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
@@ -34,10 +33,10 @@ import (
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
-	"github.com/akash-network/provider/gateway/utils"
 	pmmock "github.com/akash-network/provider/manifest/mocks"
 	pmock "github.com/akash-network/provider/mocks"
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	"github.com/akash-network/provider/version"
 )
 
 const (
@@ -327,7 +326,7 @@ func TestRouteVersionOK(t *testing.T) {
 		version.BuildTags = "testTags"
 
 		status := versionInfo{
-			Akash: utils.AkashVersionInfo{
+			Akash: version.Info{
 				Version:          "akashTest",
 				GitCommit:        "testCommit",
 				BuildTags:        "testTags",
