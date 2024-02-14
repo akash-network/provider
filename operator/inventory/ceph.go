@@ -240,18 +240,23 @@ func (c *ceph) run(startch chan<- struct{}) error {
 					case watch.Added:
 						fallthrough
 					case watch.Modified:
-						lblVal := obj.Labels["akash.network"]
+						lblVal := obj.Labels[builder.AkashManagedLabelName]
 						if lblVal == "" {
 							lblVal = falseVal
 						}
 
-						sc := &cephStorageClass{
-							isCeph:    strings.HasSuffix(obj.Provisioner, ".csi.ceph.com"),
-							pool:      obj.Parameters["pool"],
-							clusterID: obj.Parameters["clusterID"],
-							allocated: resource.NewQuantity(0, resource.DecimalSI),
+						sc := scs[obj.Name]
+						if sc == nil {
+							sc = &cephStorageClass{
+								allocated: resource.NewQuantity(0, resource.DecimalSI),
+							}
+
+							scs[obj.Name] = sc
 						}
 
+						sc.isCeph = strings.HasSuffix(obj.Provisioner, ".csi.ceph.com")
+						sc.pool = obj.Parameters["pool"]
+						sc.clusterID = obj.Parameters["clusterID"]
 						sc.isAkashManaged, _ = strconv.ParseBool(lblVal)
 
 						if sc.isCeph {
@@ -264,7 +269,6 @@ func (c *ceph) run(startch chan<- struct{}) error {
 							}
 						}
 
-						scs[obj.Name] = sc
 					case watch.Deleted:
 						delete(scs, obj.Name)
 					default:
@@ -293,7 +297,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 					case watch.Added:
 						fallthrough
 					case watch.Modified:
-						res, exists := obj.Spec.Capacity[corev1.ResourceStorage]
+						capacity, exists := obj.Spec.Capacity[corev1.ResourceStorage]
 						if !exists {
 							break
 						}
@@ -316,12 +320,12 @@ func (c *ceph) run(startch chan<- struct{}) error {
 
 							sc.isAkashManaged, _ = strconv.ParseBool(lblVal)
 
-							scs[obj.Spec.StorageClassName] = sc
+							scs[scItem.Name] = sc
 						}
 
 						if _, exists = pvMap[obj.Name]; !exists {
 							pvMap[obj.Name] = *obj
-							sc.allocated.Add(res)
+							sc.allocated.Add(capacity)
 						}
 					case watch.Deleted:
 						res, exists := obj.Spec.Capacity[corev1.ResourceStorage]
@@ -337,6 +341,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 				}
 			}
 		case res := <-scrapeRespch:
+
 			if len(res.clusters) > 0 {
 				var result inventory.ClusterStorage
 
