@@ -234,6 +234,7 @@ func (cl *client) subscriber(in <-chan inventoryV1.Cluster, out chan<- ctypes.In
 }
 
 func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<- inventoryState) (<-chan struct{}, error) {
+	ctx, cancel := context.WithCancel(ctx)
 	group, ctx := errgroup.WithContext(ctx)
 
 	var svcPort int32
@@ -320,6 +321,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 
 			group.Go(func() error {
 				err := pf.ForwardPorts()
+				cancel()
 				errch <- err
 				return err
 			})
@@ -353,6 +355,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 
 	group.Go(func() error {
 		<-ctx.Done()
+		cancel()
 
 		sigdone <- struct{}{}
 
@@ -373,6 +376,14 @@ func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventorySt
 
 	defer func() {
 		_ = conn.Close()
+
+		select {
+		case invch <- inventoryState{
+			evt: inventoryEventDeleted,
+		}:
+		default:
+		}
+
 	}()
 
 	log.Info(fmt.Sprintf("dialing inventory operator at %s", endpoint))
