@@ -494,7 +494,7 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 				t.Stop()
 				runch = is.runCheck(rctx, state)
 			}
-		} else if reserveChLocal == nil {
+		} else if reserveChLocal == nil && state.inventory != nil {
 			reserveChLocal = is.reservech
 		}
 	}
