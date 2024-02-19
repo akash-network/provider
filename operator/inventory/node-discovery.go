@@ -30,6 +30,10 @@ import (
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
+var (
+	errWorkerExit = errors.New("worker finished")
+)
+
 type k8sPatch struct {
 	Op    string      `json:"op"`
 	Path  string      `json:"path"`
@@ -266,7 +270,10 @@ initloop:
 		select {
 		case <-dp.ctx.Done():
 			return dp.ctx.Err()
-		case evt := <-watcher.ResultChan():
+		case evt, isopen := <-watcher.ResultChan():
+			if !isopen {
+				return errWorkerExit
+			}
 			resp := evt.Object.(*corev1.Pod)
 			if resp.Status.Phase == corev1.PodRunning {
 				watcher.Stop()
@@ -460,7 +467,11 @@ func (dp *nodeDiscovery) monitor() error {
 					signalLabels()
 				}
 			}
-		case res := <-podsWatch.ResultChan():
+		case res, isopen := <-podsWatch.ResultChan():
+			if !isopen {
+				return errWorkerExit
+			}
+
 			obj := res.Object.(*corev1.Pod)
 			switch res.Type {
 			case watch.Added:
