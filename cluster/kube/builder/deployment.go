@@ -54,6 +54,7 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 					AutomountServiceAccountToken: &falseValue,
 					Containers:                   []corev1.Container{b.container()},
 					ImagePullSecrets:             b.imagePullSecrets(),
+					Volumes:                      b.volumes(),
 				},
 			},
 		},
