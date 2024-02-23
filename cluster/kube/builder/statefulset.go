@@ -54,6 +54,7 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 					AutomountServiceAccountToken: &falseValue,
 					Containers:                   []corev1.Container{b.container()},
 					ImagePullSecrets:             b.imagePullSecrets(),
+					Volumes:                      b.volumes(),
 				},
 			},
 			VolumeClaimTemplates: b.persistentVolumeClaims(),
