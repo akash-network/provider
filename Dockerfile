@@ -8,6 +8,7 @@ RUN \
  && apt-get install -y --no-install-recommends \
     tini \
     ca-certificates \
+    pci.ids \
  && rm -rf /var/lib/apt/lists/*
 
 # default port for provider API
