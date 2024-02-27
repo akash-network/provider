@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/akash-network/akash-api v0.0.50
-	github.com/akash-network/node v0.30.1-rc4
+	github.com/akash-network/node v0.30.2
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1
