@@ -507,8 +507,16 @@ func (dp *nodeDiscovery) monitor() error {
 			switch obj := evt.Object.(type) {
 			case *corev1.Node:
 				if obj.Name == dp.name {
-					currLabels = copyAkashLabels(obj.Labels)
-					signalLabels()
+					switch evt.Type {
+					case watch.Modified:
+						if obj.Spec.Unschedulable || obj.Status.Phase != corev1.NodeRunning {
+							currLabels = nil
+						} else {
+							currLabels = copyAkashLabels(obj.Labels)
+						}
+
+						signalLabels()
+					}
 				}
 			}
 		case res, isopen := <-podsWatch.ResultChan():
@@ -553,7 +561,6 @@ func (dp *nodeDiscovery) monitor() error {
 			if currPodsInitCount == 0 {
 				signalState()
 			}
-
 		case <-statech:
 			if len(currLabels) > 0 {
 				bus.Pub(nodeState{
@@ -653,30 +660,6 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIds RegistryGPUVendors) (v1.Node, erro
 			res.Resources.GPU.Quantity.Allocatable.Set(r.Value())
 		}
 	}
-
-	// initPods := make(map[string]bool)
-
-	// podsList, err := kc.CoreV1().Pods(corev1.NamespaceAll).List(dp.ctx, metav1.ListOptions{
-	// 	FieldSelector: fields.OneTermEqualSelector("spec.nodeName", dp.name).String(),
-	// })
-	// if err != nil {
-	// 	return res, nil, err
-	// }
-
-	// if podsList == nil {
-	// 	return res, initPods, nil
-	// }
-
-	// for _, pod := range podsList.Items {
-	// 	for _, container := range pod.Spec.Containers {
-	// 		if container.Resources.Requests != nil {
-	// 			addAllocatedResources(&res, container.Resources.Requests)
-	// 		} else if container.Resources.Limits != nil {
-	// 			addAllocatedResources(&res, container.Resources.Limits)
-	// 		}
-	// 	}
-	// 	initPods[pod.Name] = true
-	// }
 
 	return res, nil
 }
