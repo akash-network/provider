@@ -511,20 +511,6 @@ func (dp *nodeDiscovery) monitor() error {
 				if obj.Name == dp.name {
 					switch evt.Type {
 					case watch.Modified:
-						isReady := false
-						for _, condition := range obj.Status.Conditions {
-							if condition.Type == corev1.NodeReady {
-								isReady = true
-								break
-							}
-						}
-
-						if obj.Spec.Unschedulable || !isReady {
-							currLabels = nil
-						} else {
-							currLabels = copyAkashLabels(obj.Labels)
-						}
-
 						signalLabels()
 					}
 				}
