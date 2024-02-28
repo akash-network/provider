@@ -162,6 +162,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 
 	apiPort := 8081
 
+	gracePeriod := int64(1)
 	name := fmt.Sprintf("operator-inventory-hardware-discovery-%s", dp.name)
 	req := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{
@@ -179,8 +180,9 @@ func (dp *nodeDiscovery) apiConnector() error {
 			},
 		},
 		Spec: corev1.PodSpec{
-			NodeName:           dp.name,
-			ServiceAccountName: "operator-inventory-hardware-discovery",
+			TerminationGracePeriodSeconds: &gracePeriod,
+			NodeName:                      dp.name,
+			ServiceAccountName:            "operator-inventory-hardware-discovery",
 			Containers: []corev1.Container{
 				{
 					Name:  "psutil",
