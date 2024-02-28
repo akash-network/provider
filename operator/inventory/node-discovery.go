@@ -509,6 +509,7 @@ func (dp *nodeDiscovery) monitor() error {
 			switch obj := evt.Object.(type) {
 			case *corev1.Node:
 				if obj.Name == dp.name {
+					knode = obj.DeepCopy()
 					switch evt.Type {
 					case watch.Modified:
 						signalLabels()
