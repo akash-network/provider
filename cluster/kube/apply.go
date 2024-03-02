@@ -86,6 +86,29 @@ func applyNetPolicies(ctx context.Context, kc kubernetes.Interface, b builder.Ne
 // 	return err
 // }
 
+func applyServiceCredentials(ctx context.Context, kc kubernetes.Interface, b builder.ServiceCredentials) error {
+	obj, err := kc.CoreV1().Secrets(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "secrets-get", err, errors.IsNotFound)
+
+	switch {
+	case err == nil:
+		obj, err = b.Update(obj)
+		if err == nil {
+			_, err = kc.CoreV1().Secrets(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "secrets-get", err)
+
+		}
+	case errors.IsNotFound(err):
+		obj, err = b.Create()
+		if err == nil {
+			_, err = kc.CoreV1().Secrets(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "secrets-create", err)
+		}
+	}
+	return err
+
+}
+
 func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Deployment) error {
 	obj, err := kc.AppsV1().Deployments(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
 	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "deployments-get", err, errors.IsNotFound)
