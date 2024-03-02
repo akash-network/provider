@@ -26,6 +26,7 @@ const (
 type workloadBase interface {
 	builderBase
 	Name() string
+	NS() string
 }
 
 type Workload struct {
@@ -52,6 +53,10 @@ func NewWorkloadBuilder(
 
 func (b *Workload) Name() string {
 	return b.deployment.ManifestGroup().Services[b.serviceIdx].Name
+}
+
+func (b *Workload) NS() string {
+	return LidNS(b.deployment.LeaseID())
 }
 
 func (b *Workload) container() corev1.Container {
@@ -362,11 +367,19 @@ func (b *Workload) labels() map[string]string {
 }
 
 func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
-	if b.settings.DockerImagePullSecretsName == "" {
+
+	sname := b.settings.DockerImagePullSecretsName
+
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	if service.Credentials != nil {
+		sname = NewServiceCredentials(b.NS(), b.Name(), service.Credentials).Name()
+	}
+
+	if sname == "" {
 		return nil
 	}
 
-	return []corev1.LocalObjectReference{{Name: b.settings.DockerImagePullSecretsName}}
+	return []corev1.LocalObjectReference{{Name: sname}}
 }
 
 func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, env []corev1.EnvVar) []corev1.EnvVar {

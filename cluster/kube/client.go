@@ -190,6 +190,7 @@ type deploymentService struct {
 	statefulSet   builder.StatefulSet
 	localService  builder.Service
 	globalService builder.Service
+	credentials   builder.ServiceCredentials
 }
 
 type deploymentApplies struct {
@@ -268,6 +269,10 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 		svc := &deploymentService{}
 
+		if service.Credentials != nil {
+			svc.credentials = builder.NewServiceCredentials(workload.NS(), workload.Name(), service.Credentials)
+		}
+
 		persistent := false
 		for i := range service.Resources.Storage {
 			attrVal := service.Resources.Storage[i].Attributes.Find(sdl.StorageAttributePersistent)
@@ -291,6 +296,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 		svc.localService = builder.BuildService(workload, false)
 		svc.globalService = builder.BuildService(workload, true)
+
 	}
 
 	if err := applyNS(ctx, c.kc, applies.ns); err != nil {
@@ -319,6 +325,13 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	for svcIdx := range group.Services {
 		applyObjs := applies.services[svcIdx]
 		service := &group.Services[svcIdx]
+
+		if applyObjs.credentials != nil {
+			if err = applyServiceCredentials(ctx, c.kc, applyObjs.credentials); err != nil {
+				c.log.Error("applying credentials", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+		}
 
 		if applyObjs.statefulSet != nil {
 			if err = applyStatefulSet(ctx, c.kc, applyObjs.statefulSet); err != nil {
