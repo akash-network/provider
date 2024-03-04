@@ -541,6 +541,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	cctx = cctx.WithSkipConfirmation(true)
 	cl, err := client.DiscoverClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
