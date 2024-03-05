@@ -62,35 +62,16 @@ func OwnerFromCtx(ctx context.Context) sdk.Address {
 	return val.(sdk.Address)
 }
 
-func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient) error {
-	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
-	// certificate validation and authentication performed later in mtlsHandler
-	tlsConfig := &tls.Config{
-		Certificates:       certs,
-		ClientAuth:         tls.RequestClientCert,
-		InsecureSkipVerify: true, // nolint: gosec
-		MinVersion:         tls.VersionTLS13,
-	}
-
+func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient) error {
 	group, err := fromctx.ErrGroupFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
-	log := fromctx.LogcFromCtx(ctx)
-
-	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-		MinTime:             30 * time.Second,
-		PermitWithoutStream: false,
-	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
-
-	pRPC := &grpcProviderV1{
-		ctx:    ctx,
-		client: client,
-	}
-
-	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
-	gogoreflection.Register(grpcSrv)
+	var (
+		grpcSrv = newServer(ctx, certs, client)
+		log     = fromctx.LogcFromCtx(ctx)
+	)
 
 	group.Go(func() error {
 		grpcLis, err := net.Listen("tcp", endpoint)
@@ -112,6 +93,32 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 	})
 
 	return nil
+}
+
+func newServer(ctx context.Context, certs []tls.Certificate, client provider.StatusClient) *grpc.Server {
+	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
+	// certificate validation and authentication performed later in mtlsHandler
+	tlsConfig := &tls.Config{
+		Certificates:       certs,
+		ClientAuth:         tls.RequestClientCert,
+		InsecureSkipVerify: true, // nolint: gosec
+		MinVersion:         tls.VersionTLS13,
+	}
+
+	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+		MinTime:             30 * time.Second,
+		PermitWithoutStream: false,
+	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
+
+	pRPC := &grpcProviderV1{
+		ctx:    ctx,
+		client: client,
+	}
+
+	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
+	gogoreflection.Register(grpcSrv)
+
+	return grpcSrv
 }
 
 func mtlsInterceptor() grpc.UnaryServerInterceptor {
