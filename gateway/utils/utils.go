@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -22,68 +23,89 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 		InsecureSkipVerify: true, // nolint: gosec
 		MinVersion:         tls.VersionTLS13,
 		VerifyPeerCertificate: func(certificates [][]byte, _ [][]*x509.Certificate) error {
-			if len(certificates) > 0 {
-				if len(certificates) != 1 {
-					return errors.Errorf("tls: invalid certificate chain")
-				}
-
-				cert, err := x509.ParseCertificate(certificates[0])
-				if err != nil {
-					return errors.Wrap(err, "tls: failed to parse certificate")
-				}
-
-				// validation
-				var owner sdk.Address
-				if owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-					return errors.Wrap(err, "tls: invalid certificate's subject common name")
-				}
-
-				// 1. CommonName in issuer and Subject must match and be as Bech32 format
-				if cert.Subject.CommonName != cert.Issuer.CommonName {
-					return errors.Wrap(err, "tls: invalid certificate's issuer common name")
-				}
-
-				// 2. serial number must be in
-				if cert.SerialNumber == nil {
-					return errors.Wrap(err, "tls: invalid certificate serial number")
-				}
-
-				// 3. look up certificate on chain
-				var resp *ctypes.QueryCertificatesResponse
-				resp, err = cquery.Certificates(
-					ctx,
-					&ctypes.QueryCertificatesRequest{
-						Filter: ctypes.CertificateFilter{
-							Owner:  owner.String(),
-							Serial: cert.SerialNumber.String(),
-							State:  "valid",
-						},
-					},
-				)
-				if err != nil {
-					return errors.Wrap(err, "tls: unable to fetch certificate from chain")
-				}
-				if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-					return errors.New("tls: attempt to use non-existing or revoked certificate")
-				}
-
-				clientCertPool := x509.NewCertPool()
-				clientCertPool.AddCert(cert)
-
-				opts := x509.VerifyOptions{
-					Roots:                     clientCertPool,
-					CurrentTime:               time.Now(),
-					KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-					MaxConstraintComparisions: 0,
-				}
-
-				if _, err = cert.Verify(opts); err != nil {
-					return errors.Wrap(err, "tls: unable to verify certificate")
-				}
+			if _, err := VerifyCertChain(ctx, certificates, cquery); err != nil {
+				return fmt.Errorf("verify cert chain: %w", err)
 			}
 			return nil
 		},
 	}
 
 	return cfg, nil
+}
+
+type certChain interface {
+	*x509.Certificate | []byte
+}
+
+func VerifyCertChain[T certChain](ctx context.Context, chain []T, cquery ctypes.QueryClient) (sdk.Address, error) {
+	if len(chain) == 0 {
+		return nil, nil
+	}
+
+	if len(chain) > 1 {
+		return nil, errors.Errorf("tls: invalid certificate chain")
+	}
+
+	var cert *x509.Certificate
+
+	switch t := any(chain).(type) {
+	case []*x509.Certificate:
+		cert = t[0]
+	case [][]byte:
+		var err error
+		if cert, err = x509.ParseCertificate(t[0]); err != nil {
+			return nil, fmt.Errorf("tls: failed to parse certificate: %w", err)
+		}
+	}
+
+	// validation
+	owner, err := sdk.AccAddressFromBech32(cert.Subject.CommonName)
+	if err != nil {
+		return nil, fmt.Errorf("tls: invalid certificate's subject common name: %w", err)
+	}
+
+	// 1. CommonName in issuer and Subject must match and be as Bech32 format
+	if cert.Subject.CommonName != cert.Issuer.CommonName {
+		return nil, fmt.Errorf("tls: invalid certificate's issuer common name: %w", err)
+	}
+
+	// 2. serial number must be in
+	if cert.SerialNumber == nil {
+		return nil, fmt.Errorf("tls: invalid certificate serial number: %w", err)
+	}
+
+	// 3. look up certificate on chain
+	var resp *ctypes.QueryCertificatesResponse
+	resp, err = cquery.Certificates(
+		ctx,
+		&ctypes.QueryCertificatesRequest{
+			Filter: ctypes.CertificateFilter{
+				Owner:  owner.String(),
+				Serial: cert.SerialNumber.String(),
+				State:  "valid",
+			},
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("tls: unable to fetch certificate from chain: %w", err)
+	}
+	if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
+		return nil, fmt.Errorf("tls: attempt to use non-existing or revoked certificate: %w", err)
+	}
+
+	clientCertPool := x509.NewCertPool()
+	clientCertPool.AddCert(cert)
+
+	opts := x509.VerifyOptions{
+		Roots:                     clientCertPool,
+		CurrentTime:               time.Now(),
+		KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		MaxConstraintComparisions: 0,
+	}
+
+	if _, err = cert.Verify(opts); err != nil {
+		return nil, fmt.Errorf("tls: unable to verify certificate: %w", err)
+	}
+
+	return owner, nil
 }
