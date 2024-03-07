@@ -6,7 +6,9 @@ import (
 	"net"
 	"testing"
 
+	qmock "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+	"github.com/akash-network/node/testutil"
 	"github.com/akash-network/provider/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -18,12 +20,15 @@ import (
 
 func TestRPCs(t *testing.T) {
 	var (
-		certsServer = make([]tls.Certificate, 1)
-		err         error
+		qclient qmock.QueryClient
+		com     = testutil.CertificateOptionMocks(&qclient)
+		cod     = testutil.CertificateOptionDomains([]string{"localhost", "127.0.0.1"})
 	)
 
-	certsServer[0], err = tls.LoadX509KeyPair("testdata/localhost_1.crt", "testdata/localhost_1.key")
-	require.NoError(t, err)
+	var (
+		crt1 = testutil.Certificate(t, testutil.AccAddress(t), com, cod)
+		crt2 = testutil.Certificate(t, testutil.AccAddress(t), com, cod)
+	)
 
 	cases := []struct {
 		desc         string
@@ -51,10 +56,12 @@ func TestRPCs(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
+			ctx = context.WithValue(ctx, ContextKeyQueryClient, &qclient)
+
 			statusClient := c.statusClient()
 			statusClient.AssertExpectations(t)
 
-			s := newServer(ctx, certsServer, statusClient)
+			s := newServer(ctx, crt1.Cert, statusClient, &qclient)
 			defer s.Stop()
 
 			l, err := net.Listen("tcp", ":0")
@@ -64,14 +71,12 @@ func TestRPCs(t *testing.T) {
 				require.NoError(t, s.Serve(l))
 			}()
 
-			cert, err := tls.LoadX509KeyPair("testdata/localhost_2.crt", "testdata/localhost_2.key")
-			require.NoError(t, err)
-
 			tlsConfig := tls.Config{
-				Certificates: []tls.Certificate{cert},
+				InsecureSkipVerify: true,
+				Certificates:       crt2.Cert,
 			}
 
-			conn, err := grpc.Dial(l.Addr().String(),
+			conn, err := grpc.DialContext(ctx, l.Addr().String(),
 				grpc.WithTransportCredentials(credentials.NewTLS(&tlsConfig)))
 			require.NoError(t, err)
 

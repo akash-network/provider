@@ -746,7 +746,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	err = gwgrpc.Serve(ctx, grpcaddr, []tls.Certificate{tlsCert}, service)
+	err = gwgrpc.Serve(ctx, grpcaddr, []tls.Certificate{tlsCert}, service, cl.Query())
 	if err != nil {
 		return err
 	}

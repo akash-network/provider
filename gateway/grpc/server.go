@@ -2,8 +2,6 @@ package grpc
 
 import (
 	"crypto/tls"
-	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -22,6 +20,7 @@ import (
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 
 	"github.com/akash-network/provider"
+	"github.com/akash-network/provider/gateway/utils"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
 )
@@ -62,14 +61,14 @@ func OwnerFromCtx(ctx context.Context) sdk.Address {
 	return val.(sdk.Address)
 }
 
-func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient) error {
+func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient, cquery ctypes.QueryClient) error {
 	group, err := fromctx.ErrGroupFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
 	var (
-		grpcSrv = newServer(ctx, certs, client)
+		grpcSrv = newServer(ctx, certs, client, cquery)
 		log     = fromctx.LogcFromCtx(ctx)
 	)
 
@@ -95,7 +94,7 @@ func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, client
 	return nil
 }
 
-func newServer(ctx context.Context, certs []tls.Certificate, client provider.StatusClient) *grpc.Server {
+func newServer(ctx context.Context, certs []tls.Certificate, client provider.StatusClient, cquery ctypes.QueryClient) *grpc.Server {
 	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
 	// certificate validation and authentication performed later in mtlsHandler
 	tlsConfig := &tls.Config{
@@ -105,10 +104,13 @@ func newServer(ctx context.Context, certs []tls.Certificate, client provider.Sta
 		MinVersion:         tls.VersionTLS13,
 	}
 
-	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-		MinTime:             30 * time.Second,
-		PermitWithoutStream: false,
-	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
+	grpcSrv := grpc.NewServer(grpc.Creds(
+		credentials.NewTLS(tlsConfig)),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             30 * time.Second,
+			PermitWithoutStream: false,
+		}),
+		grpc.ChainUnaryInterceptor(mtlsInterceptor(cquery)))
 
 	pRPC := &grpcProviderV1{
 		ctx:    ctx,
@@ -121,70 +123,16 @@ func newServer(ctx context.Context, certs []tls.Certificate, client provider.Sta
 	return grpcSrv
 }
 
-func mtlsInterceptor() grpc.UnaryServerInterceptor {
+func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				certificates := mtls.State.PeerCertificates
+				owner, err := utils.VerifyCertChain(ctx, mtls.State.PeerCertificates, cquery)
+				if err != nil {
+					return nil, fmt.Errorf("verify cert chain: %w", err)
+				}
 
-				if len(certificates) > 0 {
-					if len(certificates) != 1 {
-						return nil, fmt.Errorf("tls: invalid certificate chain") // nolint: goerr113
-					}
-
-					cquery := QueryClientFromCtx(ctx)
-
-					cert := certificates[0]
-
-					// validation
-					var owner sdk.Address
-					if owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-						return nil, fmt.Errorf("tls: invalid certificate's subject common name: %w", err)
-					}
-
-					// 1. CommonName in issuer and Subject must match and be as Bech32 format
-					if cert.Subject.CommonName != cert.Issuer.CommonName {
-						return nil, fmt.Errorf("tls: invalid certificate's issuer common name: %w", err)
-					}
-
-					// 2. serial number must be in
-					if cert.SerialNumber == nil {
-						return nil, fmt.Errorf("tls: invalid certificate serial number: %w", err)
-					}
-
-					// 3. look up certificate on chain
-					var resp *ctypes.QueryCertificatesResponse
-					resp, err = cquery.Certificates(
-						ctx,
-						&ctypes.QueryCertificatesRequest{
-							Filter: ctypes.CertificateFilter{
-								Owner:  owner.String(),
-								Serial: cert.SerialNumber.String(),
-								State:  "valid",
-							},
-						},
-					)
-					if err != nil {
-						return nil, fmt.Errorf("tls: unable to fetch certificate from chain: %w", err)
-					}
-					if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-						return nil, errors.New("tls: attempt to use non-existing or revoked certificate") // nolint: goerr113
-					}
-
-					clientCertPool := x509.NewCertPool()
-					clientCertPool.AddCert(cert)
-
-					opts := x509.VerifyOptions{
-						Roots:                     clientCertPool,
-						CurrentTime:               time.Now(),
-						KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-						MaxConstraintComparisions: 0,
-					}
-
-					if _, err = cert.Verify(opts); err != nil {
-						return nil, fmt.Errorf("tls: unable to verify certificate: %w", err)
-					}
-
+				if owner != nil {
 					ctx = ContextWithOwner(ctx, owner)
 				}
 			}
