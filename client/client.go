@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/spf13/pflag"
 	"golang.org/x/net/context"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
 	aclient "github.com/akash-network/akash-api/go/node/client"
+	cltypes "github.com/akash-network/akash-api/go/node/client/types"
 	"github.com/akash-network/akash-api/go/node/client/v1beta2"
 )
 
@@ -37,9 +37,10 @@ func DiscoverQueryClient(ctx context.Context, cctx sdkclient.Context) (v1beta2.Q
 	return cl, nil
 }
 
-func DiscoverClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) (v1beta2.Client, error) {
+func DiscoverClient(ctx context.Context, cctx sdkclient.Context, opts ...cltypes.ClientOption) (v1beta2.Client, error) {
 	var cl v1beta2.Client
-	err := aclient.DiscoverClient(ctx, cctx, flags, func(i interface{}) error {
+
+	setupFn := func(i interface{}) error {
 		var valid bool
 
 		if cl, valid = i.(v1beta2.Client); !valid {
@@ -47,7 +48,9 @@ func DiscoverClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.Fl
 		}
 
 		return nil
-	})
+	}
+
+	err := aclient.DiscoverClient(ctx, cctx, setupFn, opts...)
 
 	if err != nil {
 		return nil, err

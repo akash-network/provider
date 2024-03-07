@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	cltypes "github.com/akash-network/akash-api/go/node/client/types"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
@@ -542,7 +543,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	cctx = cctx.WithSkipConfirmation(true)
-	cl, err := client.DiscoverClient(ctx, cctx, cmd.Flags())
+
+	opts, err := cltypes.ClientOptionsFromFlags(cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	cl, err := client.DiscoverClient(ctx, cctx, opts...)
 	if err != nil {
 		return err
 	}
