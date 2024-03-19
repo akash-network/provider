@@ -115,6 +115,9 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 }
 
 func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error) {
+	// Test invoke of Go converted bid price script
+	RequestToBidPrice(req)
+
 	buf := &bytes.Buffer{}
 
 	dataForScript := &dataForScript{
