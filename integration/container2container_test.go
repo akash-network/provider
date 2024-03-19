@@ -37,8 +37,7 @@ func (s *E2EContainerToContainer) TestE2EContainerToContainer() {
 		s.validator.ClientCtx,
 		s.keyTenant.GetAddress(),
 		deploymentPath,
-		cliGlobalFlags(deploymentUAktDeposit,
-			fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(7))

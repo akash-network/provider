@@ -64,6 +64,8 @@ type IntegrationTestSuite struct {
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
+	deploymentMinDeposit sdk.DecCoin
+
 	appHost string
 	appPort string
 
@@ -71,15 +73,14 @@ type IntegrationTestSuite struct {
 }
 
 const (
-	defaultGasPrice      = "0.03uakt"
-	defaultGasAdjustment = "1.4"
-	uaktMinDeposit       = "5000000uakt"
-	axlUSDCDenom         = "ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
-	axlUSCDMinDeposit    = "5000000" + axlUSDCDenom
+	defaultGasPrice         = "0.03uakt"
+	defaultGasAdjustment    = "1.4"
+	axlUSDCDenom            = "ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
+	axlUSCDMinDepositAmount = 5000000
 )
 
 var (
-	deploymentUAktDeposit    = fmt.Sprintf("--deposit=%s", uaktMinDeposit)
+	axlUSCDMinDeposit        = fmt.Sprintf("%d%s", axlUSCDMinDepositAmount, axlUSDCDenom)
 	deploymentAxlUSDCDeposit = fmt.Sprintf("--deposit=%s", axlUSCDMinDeposit)
 )
 
@@ -142,7 +143,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// Send coins value
 	sendTokens := sdk.Coins{
 		sdk.NewCoin(s.cfg.BondDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
-		sdk.NewCoin(axlUSDCDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
+		sdk.NewCoin(axlUSDCDenom, sdk.NewInt(axlUSCDMinDepositAmount*4)),
 	}
 
 	// Setup a Provider key
@@ -259,10 +260,8 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		context.Background(),
 		s.validator.ClientCtx,
 		s.keyTenant.GetAddress(),
-		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
-		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastBlock),
-		fmt.Sprintf("--%s=%s", flags.FlagFees, sdk.NewCoins(sdk.NewCoin(s.cfg.BondDenom, sdk.NewInt(10))).String()),
-		fmt.Sprintf("--gas=%d", flags.DefaultGasLimit),
+		cliGlobalFlags(fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
+			fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastBlock))...,
 	)
 	s.Require().NoError(err)
 
@@ -482,7 +481,8 @@ func (s *IntegrationTestSuite) closeDeployments() int {
 		res, err := deploycli.TxCloseDeploymentExec(
 			s.validator.ClientCtx,
 			keyTenant.GetAddress(),
-			cliGlobalFlags(fmt.Sprintf("--owner=%s", createdDep.Groups[0].GroupID.Owner),
+			cliGlobalFlags(
+				fmt.Sprintf("--owner=%s", createdDep.Groups[0].GroupID.Owner),
 				fmt.Sprintf("--dseq=%v", createdDep.Deployment.DeploymentID.DSeq))...,
 		)
 		s.Require().NoError(err)
