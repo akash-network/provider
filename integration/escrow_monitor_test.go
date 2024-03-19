@@ -39,8 +39,7 @@ func (s *E2EEscrowMonitor) TestE2EEscrowMonitor() {
 		s.validator.ClientCtx,
 		s.keyTenant.GetAddress(),
 		deploymentPath,
-		cliGlobalFlags(deploymentUAktDeposit,
-			fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(7))
