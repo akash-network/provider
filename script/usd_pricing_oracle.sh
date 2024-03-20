@@ -50,6 +50,7 @@ STORAGE_USD_SCALE[default]=0.02
 STORAGE_USD_SCALE[beta1]=0.02
 STORAGE_USD_SCALE[beta2]=0.03
 STORAGE_USD_SCALE[beta3]=0.04
+STORAGE_USD_SCALE[ram]=0.02 # ram storage class is for tmp disks like /dev/shm, making assumption for now pricing is same of for regular RAM
 
 # used later for validation
 MAX_INT64=9223372036854775807

@@ -1,0 +1,41 @@
+---
+version: "2.0"
+services:
+  web:
+    image: ghcr.io/akash-network/e2e-test
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+        accept:
+          - webdistest.localhost
+    params:
+      storage:
+        shm:
+          mount: /dev/shm
+profiles:
+  compute:
+    web:
+      resources:
+        cpu:
+          units: "0.01"
+        memory:
+          size: "128Mi"
+        storage:
+          - size: "512Mi"
+          - name: shm
+            size: "256Mi"
+            attributes:
+              class: ram
+  placement:
+    global:
+      pricing:
+        web:
+          denom: uakt
+          amount: 10
+deployment:
+  web:
+    global:
+      profile: web
+      count: 1
