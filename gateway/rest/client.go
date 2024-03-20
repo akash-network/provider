@@ -292,6 +292,10 @@ func (err ClientResponseError) ClientError() string {
 }
 
 func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certificate) error {
+	if len(certificates) != 1 {
+		return errors.Errorf("tls: invalid certificate chain")
+	}
+
 	prov, err := utils.VerifyCertChain(
 		context.Background(),
 		certificates,
