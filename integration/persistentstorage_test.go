@@ -50,7 +50,7 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 		s.validator.ClientCtx,
 		s.keyTenant.GetAddress(),
 		deploymentPath,
-		cliGlobalFlags(deploymentUAktDeposit, fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(7))
@@ -151,7 +151,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 		s.validator.ClientCtx,
 		s.keyTenant.GetAddress(),
 		deploymentPath,
-		cliGlobalFlags(deploymentUAktDeposit, fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(7))

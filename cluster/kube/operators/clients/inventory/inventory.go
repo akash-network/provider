@@ -53,7 +53,7 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 		return nil, false, true
 	}
 
-	if !tryAdjustMemory(&nd.Resources.Memory.Quantity, res.Memory) {
+	if !nd.Resources.Memory.Quantity.SubNLZ(res.Memory.Quantity) {
 		return nil, false, true
 	}
 
@@ -66,9 +66,17 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 		}
 
 		if !attrs.Persistent {
-			if !tryAdjustEphemeralStorage(&nd.Resources.EphemeralStorage, &res.Storage[i]) {
-				return nil, false, true
+			if attrs.Class == "ram" {
+				if !nd.Resources.Memory.Quantity.SubNLZ(storage.Quantity) {
+					return nil, false, true
+				}
+			} else {
+				// ephemeral storage
+				if !tryAdjustEphemeralStorage(&nd.Resources.EphemeralStorage, &res.Storage[i]) {
+					return nil, false, true
+				}
 			}
+
 			continue
 		}
 
@@ -195,10 +203,6 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerPar
 	}
 
 	return false
-}
-
-func tryAdjustMemory(rp *inventoryV1.ResourcePair, res *types.Memory) bool {
-	return rp.SubNLZ(res.Quantity)
 }
 
 func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *types.Storage) bool {

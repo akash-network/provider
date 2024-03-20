@@ -11,6 +11,7 @@ require (
 	github.com/cosmos/cosmos-sdk v0.45.16
 	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f
 	github.com/fsnotify/fsnotify v1.7.0
+	github.com/go-andiamo/splitter v1.2.5
 	github.com/go-kit/kit v0.12.0
 	github.com/go-logr/logr v1.2.4
 	github.com/go-logr/zapr v1.2.4
