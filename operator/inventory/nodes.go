@@ -22,8 +22,8 @@ import (
 type nodeStateEnum int
 
 const (
-	nodeStateUpdated nodeStateEnum = iota
-	nodeStateRemoved
+	nodeStateRemoved nodeStateEnum = iota
+	nodeStateUpdated
 )
 
 type nodeState struct {
