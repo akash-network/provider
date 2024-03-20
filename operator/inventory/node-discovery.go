@@ -433,16 +433,19 @@ func (dp *nodeDiscovery) monitor() error {
 			return terr
 		}
 
-		for name, pod := range currPods {
+		for name := range currPods {
+			pod := currPods[name]
+
 			subPodAllocatedResources(&node, &pod)
 
 			delete(currPods, name)
 		}
 
-		for _, pod := range pods.Items {
-			addPodAllocatedResources(&node, &pod)
+		for name := range pods.Items {
+			pod := pods.Items[name].DeepCopy()
+			addPodAllocatedResources(&node, pod)
 
-			currPods[pod.Name] = *pod.DeepCopy()
+			currPods[pod.Name] = *pod
 		}
 
 		currPodsInitCount = len(currPods)
