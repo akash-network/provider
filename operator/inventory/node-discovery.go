@@ -32,6 +32,8 @@ import (
 
 var (
 	errWorkerExit = errors.New("worker finished")
+
+	labelNvidiaComGPUPresent = fmt.Sprintf("%s.present", builder.ResourceGPUNvidia)
 )
 
 type k8sPatch struct {
@@ -367,7 +369,8 @@ func (dp *nodeDiscovery) monitor() error {
 	var podsWatch watch.Interface
 	var cfg Config
 	var sc storageClasses
-	var lastPubState nodeStateEnum
+
+	lastPubState := nodeStateRemoved
 
 	gpusIDs := make(RegistryGPUVendors)
 	currLabels := make(map[string]string)
@@ -402,7 +405,7 @@ func (dp *nodeDiscovery) monitor() error {
 
 	knode, err := dp.kc.CoreV1().Nodes().Get(ctx, dp.name, metav1.GetOptions{})
 	if err == nil {
-		currLabels = copyAkashLabels(knode.Labels)
+		currLabels = copyManagedLabels(knode.Labels)
 	}
 
 	node, err := dp.initNodeInfo(gpusIDs)
@@ -431,17 +434,13 @@ func (dp *nodeDiscovery) monitor() error {
 		}
 
 		for name, pod := range currPods {
-			for _, container := range pod.Spec.Containers {
-				subAllocatedResources(&node, container.Resources.Requests)
-			}
+			subPodAllocatedResources(&node, &pod)
 
 			delete(currPods, name)
 		}
 
 		for _, pod := range pods.Items {
-			for _, container := range pod.Spec.Containers {
-				addAllocatedResources(&node, container.Resources.Requests)
-			}
+			addPodAllocatedResources(&node, &pod)
 
 			currPods[pod.Name] = *pod.DeepCopy()
 		}
@@ -531,9 +530,7 @@ func (dp *nodeDiscovery) monitor() error {
 			case watch.Added:
 				if _, exists := currPods[obj.Name]; !exists {
 					currPods[obj.Name] = *obj.DeepCopy()
-					for _, container := range obj.Spec.Containers {
-						addAllocatedResources(&node, container.Resources.Requests)
-					}
+					addPodAllocatedResources(&node, obj)
 				} else {
 					currPodsInitCount--
 				}
@@ -544,9 +541,7 @@ func (dp *nodeDiscovery) monitor() error {
 					break
 				}
 
-				for _, container := range pod.Spec.Containers {
-					subAllocatedResources(&node, container.Resources.Requests)
-				}
+				subPodAllocatedResources(&node, &pod)
 
 				if currPodsInitCount > 0 {
 					currPodsInitCount--
@@ -582,9 +577,9 @@ func (dp *nodeDiscovery) monitor() error {
 			}
 
 			if !reflect.DeepEqual(labels, currLabels) {
-				currLabels = copyAkashLabels(labels)
+				currLabels = copyManagedLabels(labels)
 
-				for key, val := range removeAkashLabels(knode.Labels) {
+				for key, val := range removeManagedLabels(knode.Labels) {
 					labels[key] = val
 				}
 
@@ -661,45 +656,70 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIds RegistryGPUVendors) (v1.Node, erro
 	return res, nil
 }
 
-func addAllocatedResources(node *v1.Node, rl corev1.ResourceList) {
-	for name, quantity := range rl {
-		switch name {
-		case corev1.ResourceCPU:
-			node.Resources.CPU.Quantity.Allocated.Add(quantity)
-		case corev1.ResourceMemory:
-			node.Resources.Memory.Quantity.Allocated.Add(quantity)
-		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Allocated.Add(quantity)
-		case builder.ResourceGPUNvidia:
-			fallthrough
-		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Allocated.Add(quantity)
+func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
+	for _, container := range pod.Spec.Containers {
+		for name, quantity := range container.Resources.Requests {
+			switch name {
+			case corev1.ResourceCPU:
+				node.Resources.CPU.Quantity.Allocated.Add(quantity)
+			case corev1.ResourceMemory:
+				node.Resources.Memory.Quantity.Allocated.Add(quantity)
+			case corev1.ResourceEphemeralStorage:
+				node.Resources.EphemeralStorage.Allocated.Add(quantity)
+			case builder.ResourceGPUNvidia:
+				fallthrough
+			case builder.ResourceGPUAMD:
+				node.Resources.GPU.Quantity.Allocated.Add(quantity)
+			}
+		}
+
+		for _, vol := range pod.Spec.Volumes {
+			if vol.EmptyDir == nil || vol.EmptyDir.Medium != corev1.StorageMediumMemory || vol.EmptyDir.SizeLimit == nil {
+				continue
+			}
+
+			node.Resources.Memory.Quantity.Allocated.Add(*vol.EmptyDir.SizeLimit)
+		}
+	}
+
+}
+
+func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
+	for _, container := range pod.Spec.Containers {
+		for name, quantity := range container.Resources.Requests {
+			switch name {
+			case corev1.ResourceCPU:
+				node.Resources.CPU.Quantity.Allocated.Sub(quantity)
+			case corev1.ResourceMemory:
+				node.Resources.Memory.Quantity.Allocated.Sub(quantity)
+			case corev1.ResourceEphemeralStorage:
+				node.Resources.EphemeralStorage.Allocated.Sub(quantity)
+			case builder.ResourceGPUNvidia:
+				fallthrough
+			case builder.ResourceGPUAMD:
+				node.Resources.GPU.Quantity.Allocated.Sub(quantity)
+			}
+		}
+
+		for _, vol := range pod.Spec.Volumes {
+			if vol.EmptyDir == nil || vol.EmptyDir.Medium != corev1.StorageMediumMemory || vol.EmptyDir.SizeLimit == nil {
+				continue
+			}
+
+			node.Resources.Memory.Quantity.Allocated.Sub(*vol.EmptyDir.SizeLimit)
 		}
 	}
 }
 
-func subAllocatedResources(node *v1.Node, rl corev1.ResourceList) {
-	for name, quantity := range rl {
-		switch name {
-		case corev1.ResourceCPU:
-			node.Resources.CPU.Quantity.Allocated.Sub(quantity)
-		case corev1.ResourceMemory:
-			node.Resources.Memory.Quantity.Allocated.Sub(quantity)
-		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Allocated.Sub(quantity)
-		case builder.ResourceGPUNvidia:
-			fallthrough
-		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Allocated.Sub(quantity)
-		}
-	}
+func isLabelManaged(key string) bool {
+	return strings.HasPrefix(key, builder.AkashManagedLabelName) || key == labelNvidiaComGPUPresent
 }
 
-func copyAkashLabels(in map[string]string) map[string]string {
+func copyManagedLabels(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 
 	for key, val := range in {
-		if !strings.HasPrefix(key, builder.AkashManagedLabelName) {
+		if !isLabelManaged(key) {
 			continue
 		}
 
@@ -709,11 +729,11 @@ func copyAkashLabels(in map[string]string) map[string]string {
 	return out
 }
 
-func removeAkashLabels(in map[string]string) map[string]string {
+func removeManagedLabels(in map[string]string) map[string]string {
 	out := make(map[string]string)
 
 	for key, val := range in {
-		if strings.HasPrefix(key, builder.AkashManagedLabelName) {
+		if isLabelManaged(key) {
 			continue
 		}
 
@@ -764,6 +784,11 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 	node.Capabilities.StorageClasses = allowedSc
 
 	for _, info := range node.Resources.GPU.Info {
+		// nvidia device plugin requires nodes to be labeled with "nvidia.com/gpu.present"
+		if info.Vendor == "nvidia" && res[labelNvidiaComGPUPresent] != "true" {
+			res[labelNvidiaComGPUPresent] = "true"
+		}
+
 		key := fmt.Sprintf("%s.vendor.%s.model.%s", builder.AkashServiceCapabilityGPU, info.Vendor, info.Name)
 		if val, exists := res[key]; exists {
 			nval, _ := strconv.ParseUint(val, 10, 32)
