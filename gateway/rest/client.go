@@ -213,8 +213,10 @@ type ClaimsV1 struct {
 	CertSerialNumber string `json:"cert_serial_number"`
 }
 
-var errRequiredCertSerialNum = errors.New("cert_serial_number must be present in claims")
-var errNonNumericCertSerialNum = errors.New("cert_serial_number must be numeric in claims")
+var (
+	errRequiredCertSerialNum   = errors.New("cert_serial_number must be present in claims")
+	errNonNumericCertSerialNum = errors.New("cert_serial_number must be numeric in claims")
+)
 
 func (c *ClientCustomClaims) Valid() error {
 	_, err := sdk.AccAddressFromBech32(c.Subject)
@@ -290,8 +292,18 @@ func (err ClientResponseError) ClientError() string {
 }
 
 func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certificate) error {
-	if _, err := utils.VerifyCertChain(context.TODO(), certificates, c.cclient); err != nil {
-		return fmt.Errorf("verify cert chain: %w", err)
+	prov, err := utils.VerifyCertChain(
+		context.Background(),
+		certificates,
+		c.host.Hostname(),
+		x509.ExtKeyUsageServerAuth,
+		c.cclient)
+	if err != nil {
+		return err
+	}
+
+	if !c.addr.Equals(prov) {
+		return errors.New("tls: hijacked certificate")
 	}
 
 	return nil
@@ -655,8 +667,8 @@ func (c *client) LeaseLogs(ctx context.Context,
 	id mtypes.LeaseID,
 	services string,
 	follow bool,
-	tailLines int64) (*ServiceLogs, error) {
-
+	tailLines int64,
+) (*ServiceLogs, error) {
 	endpoint, err := url.Parse(c.host.String() + "/" + serviceLogsPath(id))
 	if err != nil {
 		return nil, err

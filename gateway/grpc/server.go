@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"time"
@@ -113,7 +114,7 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				owner, err := utils.VerifyCertChain(ctx, mtls.State.PeerCertificates, cquery)
+				owner, err := utils.VerifyCertChain(ctx, mtls.State.PeerCertificates, "", x509.ExtKeyUsageServerAuth, cquery)
 				if err != nil {
 					return nil, fmt.Errorf("verify cert chain: %w", err)
 				}

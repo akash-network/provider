@@ -23,8 +23,8 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 		InsecureSkipVerify: true, // nolint: gosec
 		MinVersion:         tls.VersionTLS13,
 		VerifyPeerCertificate: func(certificates [][]byte, _ [][]*x509.Certificate) error {
-			if _, err := VerifyCertChain(ctx, certificates, cquery); err != nil {
-				return fmt.Errorf("verify cert chain: %w", err)
+			if _, err := VerifyCertChain(ctx, certificates, "", x509.ExtKeyUsageClientAuth, cquery); err != nil {
+				return err
 			}
 			return nil
 		},
@@ -37,7 +37,13 @@ type certChain interface {
 	*x509.Certificate | []byte
 }
 
-func VerifyCertChain[T certChain](ctx context.Context, chain []T, cquery ctypes.QueryClient) (sdk.Address, error) {
+func VerifyCertChain[T certChain](
+	ctx context.Context,
+	chain []T,
+	dnsName string,
+	usage x509.ExtKeyUsage,
+	cquery ctypes.QueryClient,
+) (sdk.Address, error) {
 	if len(chain) == 0 {
 		return nil, nil
 	}
@@ -97,9 +103,10 @@ func VerifyCertChain[T certChain](ctx context.Context, chain []T, cquery ctypes.
 	clientCertPool.AddCert(cert)
 
 	opts := x509.VerifyOptions{
+		DNSName:                   dnsName,
 		Roots:                     clientCertPool,
 		CurrentTime:               time.Now(),
-		KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+		KeyUsages:                 []x509.ExtKeyUsage{usage},
 		MaxConstraintComparisions: 0,
 	}
 
