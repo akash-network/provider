@@ -24,7 +24,7 @@ var (
 )
 
 func (c *client) LeaseShell(ctx context.Context, lID mtypes.LeaseID, service string, podIndex uint, cmd []string,
-	stdin io.ReadCloser,
+	stdin io.Reader,
 	stdout io.Writer,
 	stderr io.Writer,
 	tty bool,
@@ -154,13 +154,6 @@ loop:
 	}
 
 	subcancel()
-
-	if stdin != nil {
-		err := stdin.Close()
-		if err != nil {
-			saveError("closing stdin", err)
-		}
-	}
 
 	// Check to see if the remote end returned an error
 	if remoteErrorData != nil {
