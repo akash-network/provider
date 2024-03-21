@@ -296,7 +296,7 @@ func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certif
 		return errors.Errorf("tls: invalid certificate chain")
 	}
 
-	prov, err := utils.VerifyOwnerCert(
+	prov, err := utils.VerifyOwnerCertBytes(
 		context.Background(),
 		certificates,
 		c.host.Hostname(),
