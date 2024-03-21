@@ -11,6 +11,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -66,16 +67,14 @@ func LeaseShellCmd() *cobra.Command {
 }
 
 func doLeaseShell(cmd *cobra.Command, args []string) error {
-	var stdin io.ReadCloser
-	var stdout io.Writer
-	var stderr io.Writer
-	stdout = os.Stdout
-	stderr = os.Stderr
+	var stdin io.Reader
+	stdout := cmd.OutOrStdout()
+	stderr := cmd.ErrOrStderr()
 	connectStdin := viper.GetBool(FlagStdin)
 	setupTty := viper.GetBool(FlagTty)
 	podIndex := viper.GetUint(FlagReplicaIndex)
 	if connectStdin || setupTty {
-		stdin = os.Stdin
+		stdin = cmd.InOrStdin()
 	}
 
 	var tty term.TTY
@@ -137,6 +136,18 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	service := args[0]
 	remoteCmd := args[1:]
+
+	if len(remoteCmd) == 1 {
+		spaceSplitter, err := splitter.NewSplitter(' ', splitter.DoubleQuotes)
+		if err != nil {
+			return err
+		}
+
+		remoteCmd, err = spaceSplitter.Split(remoteCmd[0])
+		if err != nil {
+			return err
+		}
+	}
 
 	var terminalResizes chan remotecommand.TerminalSize
 	wg := &sync.WaitGroup{}

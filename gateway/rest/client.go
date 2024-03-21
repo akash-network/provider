@@ -52,7 +52,7 @@ type Client interface {
 	LeaseLogs(ctx context.Context, id mtypes.LeaseID, services string, follow bool, tailLines int64) (*ServiceLogs, error)
 	ServiceStatus(ctx context.Context, id mtypes.LeaseID, service string) (*cltypes.ServiceStatus, error)
 	LeaseShell(ctx context.Context, id mtypes.LeaseID, service string, podIndex uint, cmd []string,
-		stdin io.ReadCloser,
+		stdin io.Reader,
 		stdout io.Writer,
 		stderr io.Writer,
 		tty bool,
