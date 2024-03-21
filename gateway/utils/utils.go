@@ -23,7 +23,7 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 		InsecureSkipVerify: true, // nolint: gosec
 		MinVersion:         tls.VersionTLS13,
 		VerifyPeerCertificate: func(certificates [][]byte, _ [][]*x509.Certificate) error {
-			if _, err := VerifyOwnerCert(ctx, certificates, "", x509.ExtKeyUsageClientAuth, cquery); err != nil {
+			if _, err := VerifyOwnerCertBytes(ctx, certificates, "", x509.ExtKeyUsageClientAuth, cquery); err != nil {
 				return err
 			}
 			return nil
@@ -33,17 +33,7 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 	return cfg, nil
 }
 
-type cert interface {
-	*x509.Certificate | []byte
-}
-
-func VerifyOwnerCert[T cert](
-	ctx context.Context,
-	chain []T,
-	dnsName string,
-	usage x509.ExtKeyUsage,
-	cquery ctypes.QueryClient,
-) (sdk.Address, error) {
+func VerifyOwnerCertBytes(ctx context.Context, chain [][]byte, dnsName string, usage x509.ExtKeyUsage, cquery ctypes.QueryClient) (sdk.Address, error) {
 	if len(chain) == 0 {
 		return nil, nil
 	}
@@ -52,17 +42,24 @@ func VerifyOwnerCert[T cert](
 		return nil, errors.Errorf("tls: invalid certificate chain")
 	}
 
-	var c *x509.Certificate
-
-	switch t := any(chain).(type) {
-	case []*x509.Certificate:
-		c = t[0]
-	case [][]byte:
-		var err error
-		if c, err = x509.ParseCertificate(t[0]); err != nil {
-			return nil, fmt.Errorf("tls: failed to parse certificate: %w", err)
-		}
+	c, err := x509.ParseCertificate(chain[0])
+	if err != nil {
+		return nil, fmt.Errorf("tls: failed to parse certificate: %w", err)
 	}
+
+	return VerifyOwnerCert(ctx, []*x509.Certificate{c}, dnsName, usage, cquery)
+}
+
+func VerifyOwnerCert(ctx context.Context, chain []*x509.Certificate, dnsName string, usage x509.ExtKeyUsage, cquery ctypes.QueryClient) (sdk.Address, error) {
+	if len(chain) == 0 {
+		return nil, nil
+	}
+
+	if len(chain) > 1 {
+		return nil, errors.Errorf("tls: invalid certificate chain")
+	}
+
+	c := chain[0]
 
 	// validation
 	owner, err := sdk.AccAddressFromBech32(c.Subject.CommonName)
