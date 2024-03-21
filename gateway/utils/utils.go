@@ -23,7 +23,7 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 		InsecureSkipVerify: true, // nolint: gosec
 		MinVersion:         tls.VersionTLS13,
 		VerifyPeerCertificate: func(certificates [][]byte, _ [][]*x509.Certificate) error {
-			if _, err := VerifyCertChain(ctx, certificates, "", x509.ExtKeyUsageClientAuth, cquery); err != nil {
+			if _, err := VerifyOwnerCert(ctx, certificates, "", x509.ExtKeyUsageClientAuth, cquery); err != nil {
 				return err
 			}
 			return nil
@@ -33,11 +33,11 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 	return cfg, nil
 }
 
-type certChain interface {
+type cert interface {
 	*x509.Certificate | []byte
 }
 
-func VerifyCertChain[T certChain](
+func VerifyOwnerCert[T cert](
 	ctx context.Context,
 	chain []T,
 	dnsName string,
@@ -52,31 +52,31 @@ func VerifyCertChain[T certChain](
 		return nil, errors.Errorf("tls: invalid certificate chain")
 	}
 
-	var cert *x509.Certificate
+	var c *x509.Certificate
 
 	switch t := any(chain).(type) {
 	case []*x509.Certificate:
-		cert = t[0]
+		c = t[0]
 	case [][]byte:
 		var err error
-		if cert, err = x509.ParseCertificate(t[0]); err != nil {
+		if c, err = x509.ParseCertificate(t[0]); err != nil {
 			return nil, fmt.Errorf("tls: failed to parse certificate: %w", err)
 		}
 	}
 
 	// validation
-	owner, err := sdk.AccAddressFromBech32(cert.Subject.CommonName)
+	owner, err := sdk.AccAddressFromBech32(c.Subject.CommonName)
 	if err != nil {
 		return nil, fmt.Errorf("tls: invalid certificate's subject common name: %w", err)
 	}
 
 	// 1. CommonName in issuer and Subject must match and be as Bech32 format
-	if cert.Subject.CommonName != cert.Issuer.CommonName {
+	if c.Subject.CommonName != c.Issuer.CommonName {
 		return nil, fmt.Errorf("tls: invalid certificate's issuer common name: %w", err)
 	}
 
 	// 2. serial number must be in
-	if cert.SerialNumber == nil {
+	if c.SerialNumber == nil {
 		return nil, fmt.Errorf("tls: invalid certificate serial number: %w", err)
 	}
 
@@ -87,7 +87,7 @@ func VerifyCertChain[T certChain](
 		&ctypes.QueryCertificatesRequest{
 			Filter: ctypes.CertificateFilter{
 				Owner:  owner.String(),
-				Serial: cert.SerialNumber.String(),
+				Serial: c.SerialNumber.String(),
 				State:  "valid",
 			},
 		},
@@ -100,7 +100,7 @@ func VerifyCertChain[T certChain](
 	}
 
 	clientCertPool := x509.NewCertPool()
-	clientCertPool.AddCert(cert)
+	clientCertPool.AddCert(c)
 
 	opts := x509.VerifyOptions{
 		DNSName:                   dnsName,
@@ -110,7 +110,7 @@ func VerifyCertChain[T certChain](
 		MaxConstraintComparisions: 0,
 	}
 
-	if _, err = cert.Verify(opts); err != nil {
+	if _, err = c.Verify(opts); err != nil {
 		return nil, fmt.Errorf("tls: unable to verify certificate: %w", err)
 	}
 

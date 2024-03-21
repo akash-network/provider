@@ -17,11 +17,22 @@ import (
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+	cmblog "github.com/tendermint/tendermint/libs/log"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/gateway/utils"
 	"github.com/akash-network/provider/tools/fromctx"
 )
+
+var (
+	_ providerv1.ProviderRPCServer = (*server)(nil)
+	_ leasev1.LeaseRPCServer       = (*server)(nil)
+)
+
+type server struct {
+	*providerV1
+	*leaseV1
+}
 
 func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, c provider.Client) error {
 	group, err := fromctx.ErrGroupFromCtx(ctx)
@@ -29,10 +40,9 @@ func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, c prov
 		return err
 	}
 
-	var (
-		grpcSrv = newServer(ctx, certs, c)
-		log     = fromctx.LogcFromCtx(ctx)
-	)
+	grpcSrv := newServer(ctx, certs, c)
+
+	log := fromctx.LogcFromCtx(ctx)
 
 	group.Go(func() error {
 		grpcLis, err := net.Listen("tcp", endpoint)
@@ -54,16 +64,6 @@ func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, c prov
 	})
 
 	return nil
-}
-
-var (
-	_ providerv1.ProviderRPCServer = (*server)(nil)
-	_ leasev1.LeaseRPCServer       = (*server)(nil)
-)
-
-type server struct {
-	*providerV1
-	*leaseV1
 }
 
 func newServer(ctx context.Context, certs []tls.Certificate, c provider.Client) *grpc.Server {
@@ -88,7 +88,7 @@ func newServer(ctx context.Context, certs []tls.Certificate, c provider.Client) 
 		}),
 		grpc.ChainUnaryInterceptor(
 			mtlsInterceptor(cquery),
-			errorLogInterceptor(),
+			errorLogInterceptor(fromctx.LogcFromCtx(ctx)),
 		),
 	)
 
@@ -111,10 +111,10 @@ func newServer(ctx context.Context, certs []tls.Certificate, c provider.Client) 
 }
 
 func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				owner, err := utils.VerifyCertChain(ctx, mtls.State.PeerCertificates, "", x509.ExtKeyUsageServerAuth, cquery)
+				owner, err := utils.VerifyOwnerCert(ctx, mtls.State.PeerCertificates, "", x509.ExtKeyUsageServerAuth, cquery)
 				if err != nil {
 					return nil, fmt.Errorf("verify cert chain: %w", err)
 				}
@@ -125,18 +125,18 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 			}
 		}
 
-		return h(ctx, req)
+		return next(ctx, req)
 	}
 }
 
 // TODO(andrewhare): Possibly replace this with
 // https://github.com/grpc-ecosystem/go-grpc-middleware/tree/main/interceptors/logging
 // to get full request/response logging?
-func errorLogInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, i *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
-		resp, err := h(ctx, req)
+func errorLogInterceptor(l cmblog.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, i *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
+		resp, err := next(ctx, req)
 		if err != nil {
-			fromctx.LogcFromCtx(ctx).Error(i.FullMethod, "err", err)
+			l.Error(i.FullMethod, "err", err)
 		}
 
 		return resp, err
