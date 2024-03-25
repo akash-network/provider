@@ -154,6 +154,42 @@ func (b *Workload) container() corev1.Container {
 	return kcontainer
 }
 
+// Return RAM volumes
+func (b *Workload) volumes() []corev1.Volume {
+	var volumes []corev1.Volume // nolint:prealloc
+
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+
+	for _, storage := range service.Resources.Storage {
+
+		// Only RAM volumes
+		sclass, ok := storage.Attributes.Find(sdl.StorageAttributeClass).AsString()
+		if !ok || sclass != sdl.StorageClassRAM {
+			continue
+		}
+
+		// No persistent volumes
+		persistent, ok := storage.Attributes.Find(sdl.StorageAttributePersistent).AsBool()
+		if !ok || persistent {
+			continue
+		}
+
+		size := resource.NewQuantity(storage.Quantity.Val.Int64(), resource.DecimalSI).DeepCopy()
+
+		volumes = append(volumes, corev1.Volume{
+			Name: fmt.Sprintf("%s-%s", service.Name, storage.Name),
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{
+					Medium:    corev1.StorageMediumMemory,
+					SizeLimit: &size,
+				},
+			},
+		})
+	}
+
+	return volumes
+}
+
 func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	var pvcs []corev1.PersistentVolumeClaim // nolint:prealloc
 

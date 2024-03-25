@@ -20,6 +20,7 @@ require (
 	github.com/gorilla/context v1.1.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
+	github.com/gyuho/linux-inspect v0.0.0-20180929231013-a492bfc5f12a
 	github.com/jaypipes/ghw v0.12.0
 	github.com/moby/term v0.5.0
 	github.com/pkg/errors v0.9.1
