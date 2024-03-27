@@ -19,8 +19,6 @@ import (
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 
-	"github.com/tendermint/tendermint/libs/log"
-
 	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
@@ -48,7 +46,6 @@ type client struct {
 
 type inventory struct {
 	inventoryV1.Cluster
-	log log.Logger
 }
 
 type inventoryState struct {
@@ -209,8 +206,6 @@ func (cl *client) subscriber(in <-chan inventoryV1.Cluster, out chan<- ctypes.In
 	var msg ctypes.Inventory
 	var och chan<- ctypes.Inventory
 
-	ilog := fromctx.LogcFromCtx(cl.ctx).With("inventory.adjuster")
-
 	for {
 		select {
 		case <-cl.ctx.Done():
@@ -218,13 +213,13 @@ func (cl *client) subscriber(in <-chan inventoryV1.Cluster, out chan<- ctypes.In
 		case inv := <-in:
 			pending = append(pending, inv)
 			if och == nil {
-				msg = newInventory(ilog, pending[0])
+				msg = newInventory(pending[0])
 				och = out
 			}
 		case och <- msg:
 			pending = pending[1:]
 			if len(pending) > 0 {
-				msg = newInventory(ilog, pending[0])
+				msg = newInventory(pending[0])
 			} else {
 				och = nil
 				msg = nil
