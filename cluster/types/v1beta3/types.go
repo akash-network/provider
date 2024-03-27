@@ -67,6 +67,7 @@ type Inventory interface {
 	Adjust(ReservationGroup, ...InventoryOption) error
 	Metrics() inventoryV1.Metrics
 	Snapshot() inventoryV1.Cluster
+	Dup() Inventory
 }
 
 type EventsWatcher interface {

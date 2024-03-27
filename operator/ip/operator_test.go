@@ -49,7 +49,7 @@ func runIPOperator(t *testing.T, run bool, aobj []runtime.Object, prerun, fn fun
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, clfromctx.CtxKeyClientInventory, cinventory.NewNull())
+	ctx = context.WithValue(ctx, clfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx))
 
 	providerAddr := testutil.AccAddress(t)
 

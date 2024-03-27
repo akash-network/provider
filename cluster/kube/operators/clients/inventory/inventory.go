@@ -1,12 +1,9 @@
 package inventory
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/tendermint/tendermint/libs/log"
 
 	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
@@ -20,10 +17,9 @@ import (
 
 var _ ctypes.Inventory = (*inventory)(nil)
 
-func newInventory(log log.Logger, clState inventoryV1.Cluster) *inventory {
+func newInventory(clState inventoryV1.Cluster) *inventory {
 	inv := &inventory{
 		Cluster: clState,
-		log:     log,
 	}
 
 	return inv
@@ -32,10 +28,15 @@ func newInventory(log log.Logger, clState inventoryV1.Cluster) *inventory {
 func (inv *inventory) dup() inventory {
 	dup := inventory{
 		Cluster: *inv.Cluster.Dup(),
-		log:     inv.log,
 	}
 
 	return dup
+}
+
+func (inv *inventory) Dup() ctypes.Inventory {
+	dup := inv.dup()
+
+	return &dup
 }
 
 // tryAdjust cluster inventory
@@ -83,11 +84,6 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 		if !nd.IsStorageClassSupported(attrs.Class) {
 			return nil, false, true
 		}
-
-		// if !nd.tryAdjustVolumesAttached(types.NewResourceValue(1)) {
-		// 	return nil, false, true
-
-		// }
 
 		storageAdjusted := false
 
@@ -272,13 +268,6 @@ nodes:
 				// same adjusted resource units as well as cluster params
 				if adjustedGroup {
 					if !reflect.DeepEqual(adjusted, &adjustedResources[i].Resources) {
-						jFirstAdjusted, _ := json.Marshal(&adjustedResources[i].Resources)
-						jCurrAdjusted, _ := json.Marshal(adjusted)
-
-						inv.log.Error(fmt.Sprintf("resource mismatch between replicas within group:\n"+
-							"\tfirst adjusted replica: %s\n"+
-							"\tcurr adjusted replica: %s", string(jFirstAdjusted), string(jCurrAdjusted)))
-
 						err = ctypes.ErrGroupResourceMismatch
 						break nodes
 					}
@@ -286,13 +275,6 @@ nodes:
 					// all replicas of the same service are expected to have same node selectors and runtimes
 					// if they don't match then provider cannot bid
 					if !reflect.DeepEqual(sparams, cparams[adjusted.ID]) {
-						jFirstSparams, _ := json.Marshal(cparams[adjusted.ID])
-						jCurrSparams, _ := json.Marshal(sparams)
-
-						inv.log.Error(fmt.Sprintf("scheduler params mismatch between replicas within group:\n"+
-							"\tfirst replica: %s\n"+
-							"\tcurr replica: %s", string(jFirstSparams), string(jCurrSparams)))
-
 						err = ctypes.ErrGroupResourceMismatch
 						break nodes
 					}
