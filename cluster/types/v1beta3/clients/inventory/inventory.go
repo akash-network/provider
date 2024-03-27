@@ -367,7 +367,7 @@ func (inv *inventory) Snapshot() inventoryV1.Cluster {
 					Quantity: inventoryV1.NewResourcePair(nd.memory.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(nd.gpu.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nd.gpu.allocatable.Int64(), nd.gpu.allocated.Int64(), resource.DecimalSI),
 				},
 				EphemeralStorage: inventoryV1.NewResourcePair(nd.ephemeralStorage.allocatable.Int64(), nd.ephemeralStorage.allocated.Int64(), resource.DecimalSI),
 				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
