@@ -109,9 +109,7 @@ const (
 	serviceHostnameOperator = "hostname-operator"
 )
 
-var (
-	errInvalidConfig = errors.New("Invalid configuration")
-)
+var errInvalidConfig = errors.New("Invalid configuration")
 
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
@@ -206,7 +204,7 @@ func RunCmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8444", "Gateway listen address")
+	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8442", "Gateway gRPC listen address")
 	if err := viper.BindPFlag(FlagGatewayGRPCListenAddress, cmd.Flags().Lookup(FlagGatewayGRPCListenAddress)); err != nil {
 		panic(err)
 	}
@@ -420,9 +418,11 @@ var allowedBidPricingStrategies = [...]string{
 	bidPricingStrategyShellScript,
 }
 
-var errNoSuchBidPricingStrategy = fmt.Errorf("No such bid pricing strategy. Allowed: %v", allowedBidPricingStrategies)
-var errInvalidValueForBidPrice = errors.New("not a valid bid price")
-var errBidPriceNegative = errors.New("Bid price cannot be a negative number")
+var (
+	errNoSuchBidPricingStrategy = fmt.Errorf("No such bid pricing strategy. Allowed: %v", allowedBidPricingStrategies)
+	errInvalidValueForBidPrice  = errors.New("not a valid bid price")
+	errBidPriceNegative         = errors.New("Bid price cannot be a negative number")
+)
 
 func strToBidPriceScale(val string) (decimal.Decimal, error) {
 	v, err := decimal.NewFromString(val)
@@ -746,7 +746,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	err = gwgrpc.NewServer(ctx, grpcaddr, []tls.Certificate{tlsCert}, service)
+	ctx = gwgrpc.ContextWithQueryClient(ctx, cl.Query())
+
+	err = gwgrpc.Serve(ctx, grpcaddr, []tls.Certificate{tlsCert}, service)
 	if err != nil {
 		return err
 	}
