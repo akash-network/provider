@@ -478,6 +478,10 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	}
 
 	var runch <-chan runner.Result
+	var currinv ctypes.Inventory
+
+	invupch := make(chan ctypes.Inventory, 1)
+
 	invch := is.clients.inventory.ResultChan()
 	var reserveChLocal <-chan inventoryRequest
 
@@ -543,6 +547,13 @@ loop:
 							"order", res.OrderID(),
 							"resource-group", res.Resources().GetName(),
 							"allocated", res.allocated)
+
+						if currinv != nil {
+							select {
+							case invupch <- currinv:
+							default:
+							}
+						}
 					}
 
 					break
@@ -606,12 +617,19 @@ loop:
 				res: resp,
 				err: err,
 			}
-			inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
+			if err == nil {
+				inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
+			} else {
+				inventoryRequestsCounter.WithLabelValues("status", "error").Inc()
+			}
 		case inv, open := <-invch:
 			if !open {
 				continue
 			}
 
+			invupch <- inv
+		case inv := <-invupch:
+			currinv = inv.Dup()
 			state.inventory = inv
 			updateIPs()
 

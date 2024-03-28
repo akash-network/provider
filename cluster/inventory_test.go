@@ -67,7 +67,7 @@ func TestInventory_reservationAllocatable(t *testing.T) {
 		}
 	}
 
-	inv := <-cinventory.NewNull("a", "b").ResultChan()
+	inv := <-cinventory.NewNull(context.Background(), "a", "b").ResultChan()
 
 	reservations := []*reservation{
 		mkres(true, mkrg(750, 0, 3*unit.Gi, 1*unit.Gi, 0, 1)),
@@ -109,7 +109,7 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -205,7 +205,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -419,7 +419,7 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA"))
 
 	inv, err := newInventoryService(
 		ctx,
@@ -473,7 +473,7 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA"))
 	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, cip.Client(mockIP))
 
 	inv, err := newInventoryService(
@@ -548,7 +548,7 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA", "nodeB"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull(ctx, "nodeA", "nodeB"))
 	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientIP, cip.Client(mockIP))
 
 	inv, err := newInventoryService(
@@ -596,6 +596,7 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 	mockIP.AssertNumberOfCalls(t, "GetIPAddressStatus", 2)
 }
 
+// following test needs refactoring it reports incorrect inventory
 func TestInventory_OverReservations(t *testing.T) {
 	scaffold := makeInventoryScaffold(t, 10)
 	defer scaffold.bus.Close()
@@ -659,10 +660,12 @@ func TestInventory_OverReservations(t *testing.T) {
 	ac := afake.NewSimpleClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
+	nullInv := cinventory.NewNull(ctx, "nodeA")
+
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
-	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, cinventory.NewNull("nodeA"))
+	ctx = context.WithValue(ctx, cfromctx.CtxKeyClientInventory, nullInv)
 
 	inv, err := newInventoryService(
 		ctx,
@@ -684,6 +687,8 @@ func TestInventory_OverReservations(t *testing.T) {
 	_, err = inv.reserve(lid1.OrderID(), group)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ctypes.ErrInsufficientCapacity)
+
+	nullInv.Commit(reservation.Resources())
 
 	// Send the event immediately to indicate it was deployed
 	err = scaffold.bus.Publish(event.ClusterDeployment{
