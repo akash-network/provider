@@ -387,11 +387,11 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerPar
 		}
 
 		if attr != nil {
-			if attr.RAM != "" && attr.RAM != info.MemorySize {
+			if (attr.RAM != "") && (attr.RAM != info.MemorySize) {
 				continue
 			}
 
-			if attr.Interface != "" && attr.RAM != info.Interface {
+			if (attr.Interface != "") && (attr.Interface != info.Interface) {
 				continue
 			}
 		}
