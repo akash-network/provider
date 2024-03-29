@@ -153,7 +153,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerPar
 				continue
 			}
 
-			if (attr.Interface != "") && (attr.Interface != info.Interface) {
+			if (attr.Interface != "") && (attr.Interface != ctypes.FilterGPUInterface(info.Interface)) {
 				continue
 			}
 		}
