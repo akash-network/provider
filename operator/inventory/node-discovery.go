@@ -27,6 +27,7 @@ import (
 	v1 "github.com/akash-network/akash-api/go/inventory/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
@@ -813,7 +814,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 		}
 
 		if info.Interface != "" {
-			key := fmt.Sprintf("%s.interface.%s", key, info.Interface)
+			key := fmt.Sprintf("%s.interface.%s", key, ctypes.FilterGPUInterface(info.Interface))
 			if val, exists := res[key]; exists {
 				nval, _ := strconv.ParseUint(val, 10, 32)
 				nval++

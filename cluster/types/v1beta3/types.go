@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"strings"
 
 	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
@@ -159,4 +160,16 @@ type HostnameServiceClient interface {
 	ReleaseHostnames(leaseID mtypes.LeaseID) error
 	CanReserveHostnames(hostnames []string, ownerAddr sdktypes.Address) error
 	PrepareHostnamesForTransfer(ctx context.Context, hostnames []string, leaseID mtypes.LeaseID) error
+}
+
+// FilterGPUInterface ensures interface values are always lower case
+// generalizes sxm* to sxm
+func FilterGPUInterface(val string) string {
+	val = strings.ToLower(val)
+
+	if strings.HasPrefix(val, "sxm") {
+		val = "sxm"
+	}
+
+	return val
 }
