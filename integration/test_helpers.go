@@ -30,6 +30,10 @@ attributes:
     value: true
   - key: capabilities/storage/2/class
     value: beta2
+  - key: capabilities/storage/3/persistent
+    value: false
+  - key: capabilities/storage/3/class
+    value: ram
 `
 )
 
