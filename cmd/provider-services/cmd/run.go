@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	cltypes "github.com/akash-network/akash-api/go/node/client/types"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
@@ -20,6 +19,8 @@ import (
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
+
+	cltypes "github.com/akash-network/akash-api/go/node/client/types"
 
 	"github.com/tendermint/tendermint/libs/log"
 
@@ -204,7 +205,7 @@ func RunCmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8442", "Gateway gRPC listen address")
+	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8444", "Gateway gRPC listen address")
 	if err := viper.BindPFlag(FlagGatewayGRPCListenAddress, cmd.Flags().Lookup(FlagGatewayGRPCListenAddress)); err != nil {
 		panic(err)
 	}

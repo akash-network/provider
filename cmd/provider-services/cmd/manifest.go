@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -22,6 +23,7 @@ import (
 
 	aclient "github.com/akash-network/provider/client"
 	gwgrpc "github.com/akash-network/provider/gateway/grpc"
+	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 var errSubmitManifestFailed = errors.New("submit manifest to some providers has been failed")
@@ -111,25 +113,43 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 				return fmt.Errorf("query client provider: %w", err)
 			}
 
-			c, err := gwgrpc.NewClient(ctx, prov.GetProvider().HostURI, cert, cl)
+			hostURIgRPC, err := grpcURI(prov.GetProvider().HostURI)
 			if err != nil {
-				return fmt.Errorf("new grpc conn: %w", err)
+				return fmt.Errorf("grpc uri: %w", err)
 			}
-
-			defer c.Close()
 
 			res := result{
 				Provider: provAddr,
 				Status:   "PASS",
 			}
 
-			if _, err = c.SendManifest(ctx, &leasev1.SendManifestRequest{
-				LeaseId:  lid,
-				Manifest: mani,
-			}); err != nil {
-				res.Error = err.Error()
-				res.Status = "FAIL"
-				submitFailed = true
+			c, err := gwgrpc.NewClient(ctx, hostURIgRPC, cert, cl)
+			if err == nil {
+				defer c.Close()
+
+				if _, err = c.SendManifest(ctx, &leasev1.SendManifestRequest{
+					LeaseId:  lid,
+					Manifest: mani,
+				}); err != nil {
+					res.Error = err.Error()
+					res.Status = "FAIL"
+					submitFailed = true
+				}
+			} else {
+				gclient, err := gwrest.NewClient(cl, provAddr, []tls.Certificate{cert})
+				if err != nil {
+					return fmt.Errorf("gwrest new client: %w", err)
+				}
+
+				err = gclient.SubmitManifest(cmd.Context(), dseq, mani)
+				if err != nil {
+					res.Error = err.Error()
+					if e, valid := err.(gwrest.ClientResponseError); valid {
+						res.ErrorMessage = e.Message
+					}
+					res.Status = "FAIL"
+					submitFailed = true
+				}
 			}
 
 			results[i] = res
