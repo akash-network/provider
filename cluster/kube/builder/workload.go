@@ -104,21 +104,30 @@ func (b *Workload) container() corev1.Container {
 		kcontainer.Resources.Limits[resourceName] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()
 	}
 
-	if mem := service.Resources.Memory; mem != nil {
-		requestedMem := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
-		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedMem.Value()), resource.DecimalSI).DeepCopy()
-		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()), resource.DecimalSI).DeepCopy()
-	}
+	var requestedMem uint64
 
 	for _, ephemeral := range service.Resources.Storage {
 		attr := ephemeral.Attributes.Find(sdl.StorageAttributePersistent)
-		if persistent, _ := attr.AsBool(); !persistent {
-			requestedStorage := sdlutil.ComputeCommittedResources(b.settings.StorageCommitLevel, ephemeral.Quantity)
-			kcontainer.Resources.Requests[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(requestedStorage.Value()), resource.DecimalSI).DeepCopy()
-			kcontainer.Resources.Limits[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(ephemeral.Quantity.Value()), resource.DecimalSI).DeepCopy()
+		persistent, _ := attr.AsBool()
+		attr = ephemeral.Attributes.Find(sdl.StorageAttributeClass)
+		class, _ := attr.AsString()
 
-			break
+		if !persistent {
+			if class == "" {
+				requestedStorage := sdlutil.ComputeCommittedResources(b.settings.StorageCommitLevel, ephemeral.Quantity)
+				kcontainer.Resources.Requests[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(requestedStorage.Value()), resource.DecimalSI).DeepCopy()
+				kcontainer.Resources.Limits[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(ephemeral.Quantity.Value()), resource.DecimalSI).DeepCopy()
+			} else if class == "ram" {
+				requestedMem += ephemeral.Quantity.Value()
+			}
 		}
+	}
+
+	// fixme: ram is never expected to be nil
+	if mem := service.Resources.Memory; mem != nil {
+		requestedRam := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
+		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRam.Value()), resource.DecimalSI).DeepCopy()
+		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()+requestedMem), resource.DecimalSI).DeepCopy()
 	}
 
 	if service.Params != nil {
