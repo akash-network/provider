@@ -122,7 +122,7 @@ func ParseStorageAttributes(attrs types.Attributes) (StorageAttributes, error) {
 	attr = attrs.Find(sdl.StorageAttributeClass)
 	class, _ := attr.AsString()
 
-	if persistent && class == "" {
+	if persistent && (class == "" || class == "ram") {
 		return StorageAttributes{}, fmt.Errorf("persistent volume must specify storage class") // nolint: goerr113
 	}
 
