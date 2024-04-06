@@ -31,6 +31,7 @@ func NewClient(ctx context.Context, addr string, cert tls.Certificate, cquery ct
 	tlsConfig := tls.Config{
 		InsecureSkipVerify: true,
 		Certificates:       []tls.Certificate{cert},
+		MinVersion:         tls.VersionTLS13,
 		VerifyPeerCertificate: func(certificates [][]byte, _ [][]*x509.Certificate) error {
 			if _, err := utils.VerifyOwnerCertBytes(ctx, certificates, "", x509.ExtKeyUsageClientAuth, cquery); err != nil {
 				return err

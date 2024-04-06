@@ -52,7 +52,7 @@ func VerifyOwnerCertBytes(ctx context.Context, chain [][]byte, dnsName string, u
 
 func VerifyOwnerCert(ctx context.Context, chain []*x509.Certificate, dnsName string, usage x509.ExtKeyUsage, cquery ctypes.QueryClient) (sdk.Address, error) {
 	if len(chain) == 0 {
-		return nil, nil
+		return nil, errors.Errorf("tls: empty chain")
 	}
 
 	if len(chain) > 1 {

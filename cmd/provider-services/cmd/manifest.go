@@ -103,12 +103,12 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	)
 
 	for i, lid := range leases {
-		err := func() error {
+		err = func() error {
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
 			provAddr, _ := sdk.AccAddressFromBech32(lid.Provider)
-			prov, err := cl.Provider(context.Background(), &ptypes.QueryProviderRequest{Owner: provAddr.String()})
+			prov, err := cl.Provider(ctx, &ptypes.QueryProviderRequest{Owner: provAddr.String()})
 			if err != nil {
 				return fmt.Errorf("query client provider: %w", err)
 			}

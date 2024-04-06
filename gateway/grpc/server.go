@@ -114,7 +114,7 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				owner, err := utils.VerifyOwnerCert(ctx, mtls.State.PeerCertificates, "", x509.ExtKeyUsageServerAuth, cquery)
+				owner, err := utils.VerifyOwnerCert(ctx, mtls.State.PeerCertificates, "", x509.ExtKeyUsageClientAuth, cquery)
 				if err != nil {
 					return nil, fmt.Errorf("verify cert chain: %w", err)
 				}
