@@ -9,6 +9,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+
 	"github.com/akash-network/provider"
 	pmanifest "github.com/akash-network/provider/manifest"
 )
@@ -23,6 +25,17 @@ func (l *leaseV1) SendManifest(ctx context.Context, r *leasev1.SendManifestReque
 		id = r.GetLeaseId().DeploymentID()
 		m  = r.GetManifest()
 	)
+
+	// HACK(andrewhare): Existing manifests expected service resource endpoints
+	// to be JSON serialized as [] instead of null when determining the manifest
+	// version hash. This forces Go to do the right thing.
+	for g := range m {
+		for s := range m[g].Services {
+			if len(m[g].Services[s].Resources.Endpoints) == 0 {
+				m[g].Services[s].Resources.Endpoints = make(types.Endpoints, 0)
+			}
+		}
+	}
 
 	err := l.c.Manifest().Submit(ctx, id, m)
 	if err == nil {
