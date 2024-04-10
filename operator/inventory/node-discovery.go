@@ -376,7 +376,6 @@ func (dp *nodeDiscovery) monitor() error {
 	gpusIDs := make(RegistryGPUVendors)
 	currLabels := make(map[string]string)
 	currPods := make(map[string]corev1.Pod)
-	currPodsInitCount := 0
 
 	select {
 	case <-dp.ctx.Done():
@@ -429,18 +428,13 @@ func (dp *nodeDiscovery) monitor() error {
 		pods, terr := kc.CoreV1().Pods(corev1.NamespaceAll).List(dp.ctx, metav1.ListOptions{
 			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", dp.name).String(),
 		})
-
 		if terr != nil {
 			return terr
 		}
 
-		for name := range currPods {
-			pod := currPods[name]
+		nodeResetAllocated(&node)
 
-			subPodAllocatedResources(&node, &pod)
-
-			delete(currPods, name)
-		}
+		currPods = make(map[string]corev1.Pod)
 
 		for name := range pods.Items {
 			pod := pods.Items[name].DeepCopy()
@@ -448,8 +442,6 @@ func (dp *nodeDiscovery) monitor() error {
 
 			currPods[pod.Name] = *pod
 		}
-
-		currPodsInitCount = len(currPods)
 
 		return nil
 	}
@@ -535,9 +527,9 @@ func (dp *nodeDiscovery) monitor() error {
 				if _, exists := currPods[obj.Name]; !exists {
 					currPods[obj.Name] = *obj.DeepCopy()
 					addPodAllocatedResources(&node, obj)
-				} else {
-					currPodsInitCount--
 				}
+
+				signalState()
 			case watch.Deleted:
 				pod, exists := currPods[obj.Name]
 				if !exists {
@@ -547,14 +539,8 @@ func (dp *nodeDiscovery) monitor() error {
 
 				subPodAllocatedResources(&node, &pod)
 
-				if currPodsInitCount > 0 {
-					currPodsInitCount--
-				}
-
 				delete(currPods, obj.Name)
-			}
 
-			if currPodsInitCount == 0 {
 				signalState()
 			}
 		case <-statech:
@@ -658,6 +644,15 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIds RegistryGPUVendors) (v1.Node, erro
 	}
 
 	return res, nil
+}
+
+func nodeResetAllocated(node *v1.Node) {
+	node.Resources.CPU.Quantity.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)
+	node.Resources.GPU.Quantity.Allocated = resource.NewQuantity(0, resource.DecimalSI)
+	node.Resources.Memory.Quantity.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)
+	node.Resources.EphemeralStorage.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)
+	node.Resources.VolumesAttached.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)
+	node.Resources.VolumesMounted.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)
 }
 
 func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
