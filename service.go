@@ -321,7 +321,7 @@ func (s *service) statusRun() {
 loop:
 	for {
 		select {
-		case <-s.lc.ShutdownRequest():
+		case <-s.cluster.Done():
 			return
 		case evt := <-events:
 			switch obj := evt.(type) {

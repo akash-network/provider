@@ -332,8 +332,6 @@ func (s *service) run(ctx context.Context, deployments []ctypes.IDeployment) {
 		}
 	}
 
-	// var inv provider.Inventory
-
 	trySignal()
 
 loop:
