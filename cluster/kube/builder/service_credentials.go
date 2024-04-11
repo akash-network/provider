@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	corev1 "k8s.io/api/core/v1"
@@ -91,10 +92,10 @@ type dockerCredentials struct {
 
 func (b serviceCredentials) encodeSecret() ([]byte, error) {
 	entry := dockerCredentialsEntry{
-		Username: b.credentials.Username,
-		Password: b.credentials.Password,
-		Email:    b.credentials.Email,
-		Auth:     encodeAuth(b.credentials.Username, b.credentials.Password),
+		Username: strings.TrimSpace(b.credentials.Username),
+		Password: strings.TrimSpace(b.credentials.Password),
+		Email:    strings.TrimSpace(b.credentials.Email),
+		Auth:     encodeAuth(strings.TrimSpace(b.credentials.Username), strings.TrimSpace(b.credentials.Password)),
 	}
 	creds := dockerCredentials{
 		Auths: map[string]dockerCredentialsEntry{
