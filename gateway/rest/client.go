@@ -35,6 +35,7 @@ import (
 
 	"github.com/akash-network/provider"
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	"github.com/akash-network/provider/gateway/utils"
 )
 
 const (
@@ -212,8 +213,10 @@ type ClaimsV1 struct {
 	CertSerialNumber string `json:"cert_serial_number"`
 }
 
-var errRequiredCertSerialNum = errors.New("cert_serial_number must be present in claims")
-var errNonNumericCertSerialNum = errors.New("cert_serial_number must be numeric in claims")
+var (
+	errRequiredCertSerialNum   = errors.New("cert_serial_number must be present in claims")
+	errNonNumericCertSerialNum = errors.New("cert_serial_number must be numeric in claims")
+)
 
 func (c *ClientCustomClaims) Valid() error {
 	_, err := sdk.AccAddressFromBech32(c.Subject)
@@ -293,63 +296,18 @@ func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certif
 		return errors.Errorf("tls: invalid certificate chain")
 	}
 
-	cert, err := x509.ParseCertificate(certificates[0])
+	prov, err := utils.VerifyOwnerCertBytes(
+		context.Background(),
+		certificates,
+		c.host.Hostname(),
+		x509.ExtKeyUsageServerAuth,
+		c.cclient)
 	if err != nil {
-		return errors.Wrap(err, "tls: failed to parse certificate")
-	}
-
-	// validation
-	var prov sdk.Address
-	if prov, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-		return errors.Wrap(err, "tls: invalid certificate's subject common name")
-	}
-
-	// 1. CommonName in issuer and Subject must be the same
-	if cert.Subject.CommonName != cert.Issuer.CommonName {
-		return errors.Wrap(err, "tls: invalid certificate's issuer common name")
+		return err
 	}
 
 	if !c.addr.Equals(prov) {
-		return errors.Errorf("tls: hijacked certificate")
-	}
-
-	// 2. serial number must be in
-	if cert.SerialNumber == nil {
-		return errors.Wrap(err, "tls: invalid certificate serial number")
-	}
-
-	// 3. look up certificate on chain. it must not be revoked
-	var resp *ctypes.QueryCertificatesResponse
-	resp, err = c.cclient.Certificates(
-		context.Background(),
-		&ctypes.QueryCertificatesRequest{
-			Filter: ctypes.CertificateFilter{
-				Owner:  prov.String(),
-				Serial: cert.SerialNumber.String(),
-				State:  "valid",
-			},
-		},
-	)
-	if err != nil {
-		return errors.Wrap(err, "tls: unable to fetch certificate from chain")
-	}
-	if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-		return errors.New("tls: attempt to use non-existing or revoked certificate")
-	}
-
-	certPool := x509.NewCertPool()
-	certPool.AddCert(cert)
-
-	opts := x509.VerifyOptions{
-		DNSName:                   c.host.Hostname(),
-		Roots:                     certPool,
-		CurrentTime:               time.Now(),
-		KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		MaxConstraintComparisions: 0,
-	}
-
-	if _, err = cert.Verify(opts); err != nil {
-		return errors.Wrap(err, "tls: unable to verify certificate")
+		return errors.New("tls: hijacked certificate")
 	}
 
 	return nil
@@ -713,8 +671,8 @@ func (c *client) LeaseLogs(ctx context.Context,
 	id mtypes.LeaseID,
 	services string,
 	follow bool,
-	tailLines int64) (*ServiceLogs, error) {
-
+	tailLines int64,
+) (*ServiceLogs, error) {
 	endpoint, err := url.Parse(c.host.String() + "/" + serviceLogsPath(id))
 	if err != nil {
 		return nil, err
@@ -815,3 +773,4 @@ func parseCloseMessage(msg string) string {
 
 	return ""
 }
+

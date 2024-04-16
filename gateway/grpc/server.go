@@ -1,96 +1,48 @@
 package grpc
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"time"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/protobuf/types/known/emptypb"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
+	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+	cmblog "github.com/tendermint/tendermint/libs/log"
 
 	"github.com/akash-network/provider"
+	"github.com/akash-network/provider/gateway/utils"
 	"github.com/akash-network/provider/tools/fromctx"
-	ptypes "github.com/akash-network/provider/types"
 )
 
-type ContextKey string
-
-const (
-	ContextKeyQueryClient = ContextKey("query-client")
-	ContextKeyOwner       = ContextKey("owner")
+var (
+	_ providerv1.ProviderRPCServer = (*server)(nil)
+	_ leasev1.LeaseRPCServer       = (*server)(nil)
 )
 
-type grpcProviderV1 struct {
-	ctx    context.Context
-	client provider.StatusClient
+type server struct {
+	*providerV1
+	*leaseV1
 }
 
-var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
-
-func QueryClientFromCtx(ctx context.Context) ctypes.QueryClient {
-	val := ctx.Value(ContextKeyQueryClient)
-	if val == nil {
-		panic("context does not have pubsub set")
-	}
-
-	return val.(ctypes.QueryClient)
-}
-
-func ContextWithOwner(ctx context.Context, address sdk.Address) context.Context {
-	return context.WithValue(ctx, ContextKeyOwner, address)
-}
-
-func OwnerFromCtx(ctx context.Context) sdk.Address {
-	val := ctx.Value(ContextKeyOwner)
-	if val == nil {
-		return sdk.AccAddress{}
-	}
-
-	return val.(sdk.Address)
-}
-
-func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient) error {
-	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
-	// certificate validation and authentication performed later in mtlsHandler
-	tlsConfig := &tls.Config{
-		Certificates:       certs,
-		ClientAuth:         tls.RequestClientCert,
-		InsecureSkipVerify: true, // nolint: gosec
-		MinVersion:         tls.VersionTLS13,
-	}
-
+func Serve(ctx context.Context, endpoint string, certs []tls.Certificate, c provider.Client) error {
 	group, err := fromctx.ErrGroupFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
+	grpcSrv := newServer(ctx, certs, c)
+
 	log := fromctx.LogcFromCtx(ctx)
-
-	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-		MinTime:             30 * time.Second,
-		PermitWithoutStream: false,
-	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
-
-	pRPC := &grpcProviderV1{
-		ctx:    ctx,
-		client: client,
-	}
-
-	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
-	gogoreflection.Register(grpcSrv)
 
 	group.Go(func() error {
 		grpcLis, err := net.Listen("tcp", endpoint)
@@ -114,102 +66,80 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 	return nil
 }
 
-func mtlsInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+func newServer(ctx context.Context, certs []tls.Certificate, c provider.Client) *grpc.Server {
+	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
+	// certificate validation and authentication performed later in mtlsHandler
+	tlsConfig := &tls.Config{
+		Certificates:       certs,
+		ClientAuth:         tls.RequestClientCert,
+		InsecureSkipVerify: true, // nolint: gosec
+		MinVersion:         tls.VersionTLS13,
+	}
+
+	cquery := MustQueryClientFromCtx(ctx)
+
+	g := grpc.NewServer(
+		grpc.Creds(
+			credentials.NewTLS(tlsConfig),
+		),
+		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+			MinTime:             30 * time.Second,
+			PermitWithoutStream: false,
+		}),
+		grpc.ChainUnaryInterceptor(
+			mtlsInterceptor(cquery),
+			errorLogInterceptor(fromctx.LogcFromCtx(ctx)),
+		),
+	)
+
+	s := &server{
+		providerV1: &providerV1{
+			ctx: ctx,
+			c:   c,
+		},
+		leaseV1: &leaseV1{
+			ctx: ctx,
+			c:   c,
+		},
+	}
+
+	providerv1.RegisterProviderRPCServer(g, s)
+	leasev1.RegisterLeaseRPCServer(g, s)
+	gogoreflection.Register(g)
+
+	return g
+}
+
+func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				certificates := mtls.State.PeerCertificates
+				owner, err := utils.VerifyOwnerCert(ctx, mtls.State.PeerCertificates, "", x509.ExtKeyUsageClientAuth, cquery)
+				if err != nil {
+					return nil, fmt.Errorf("verify cert chain: %w", err)
+				}
 
-				if len(certificates) > 0 {
-					if len(certificates) != 1 {
-						return nil, fmt.Errorf("tls: invalid certificate chain") // nolint: goerr113
-					}
-
-					cquery := QueryClientFromCtx(ctx)
-
-					cert := certificates[0]
-
-					// validation
-					var owner sdk.Address
-					if owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-						return nil, fmt.Errorf("tls: invalid certificate's subject common name: %w", err)
-					}
-
-					// 1. CommonName in issuer and Subject must match and be as Bech32 format
-					if cert.Subject.CommonName != cert.Issuer.CommonName {
-						return nil, fmt.Errorf("tls: invalid certificate's issuer common name: %w", err)
-					}
-
-					// 2. serial number must be in
-					if cert.SerialNumber == nil {
-						return nil, fmt.Errorf("tls: invalid certificate serial number: %w", err)
-					}
-
-					// 3. look up certificate on chain
-					var resp *ctypes.QueryCertificatesResponse
-					resp, err = cquery.Certificates(
-						ctx,
-						&ctypes.QueryCertificatesRequest{
-							Filter: ctypes.CertificateFilter{
-								Owner:  owner.String(),
-								Serial: cert.SerialNumber.String(),
-								State:  "valid",
-							},
-						},
-					)
-					if err != nil {
-						return nil, fmt.Errorf("tls: unable to fetch certificate from chain: %w", err)
-					}
-					if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-						return nil, errors.New("tls: attempt to use non-existing or revoked certificate") // nolint: goerr113
-					}
-
-					clientCertPool := x509.NewCertPool()
-					clientCertPool.AddCert(cert)
-
-					opts := x509.VerifyOptions{
-						Roots:                     clientCertPool,
-						CurrentTime:               time.Now(),
-						KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-						MaxConstraintComparisions: 0,
-					}
-
-					if _, err = cert.Verify(opts); err != nil {
-						return nil, fmt.Errorf("tls: unable to verify certificate: %w", err)
-					}
-
+				if owner != nil {
 					ctx = ContextWithOwner(ctx, owner)
 				}
 			}
 		}
 
-		return handler(ctx, req)
+		return next(ctx, req)
 	}
 }
 
-func (gm *grpcProviderV1) GetStatus(ctx context.Context, _ *emptypb.Empty) (*providerv1.Status, error) {
-	return gm.client.StatusV1(ctx)
-}
-
-func (gm *grpcProviderV1) StreamStatus(_ *emptypb.Empty, stream providerv1.ProviderRPC_StreamStatusServer) error {
-	bus, err := fromctx.PubSubFromCtx(gm.ctx)
-	if err != nil {
-		return err
-	}
-
-	events := bus.Sub(ptypes.PubSubTopicProviderStatus)
-
-	for {
-		select {
-		case <-gm.ctx.Done():
-			return gm.ctx.Err()
-		case <-stream.Context().Done():
-			return stream.Context().Err()
-		case evt := <-events:
-			val := evt.(providerv1.Status)
-			if err := stream.Send(&val); err != nil {
-				return err
-			}
+// TODO(andrewhare): Possibly replace this with
+// https://github.com/grpc-ecosystem/go-grpc-middleware/tree/main/interceptors/logging
+// to get full request/response logging?
+func errorLogInterceptor(l cmblog.Logger) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, i *grpc.UnaryServerInfo, next grpc.UnaryHandler) (any, error) {
+		resp, err := next(ctx, req)
+		if err != nil {
+			l.Error(i.FullMethod, "err", err)
 		}
+
+		return resp, err
 	}
 }
+
