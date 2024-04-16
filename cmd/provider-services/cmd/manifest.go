@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -16,13 +14,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	"github.com/akash-network/node/sdl"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
 	aclient "github.com/akash-network/provider/client"
-	gwgrpc "github.com/akash-network/provider/gateway/grpc"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -97,68 +92,32 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		ErrorMessage string      `json:"errorMessage,omitempty" yaml:"errorMessage,omitempty"`
 	}
 
-	var (
-		results      = make([]result, len(leases))
-		submitFailed = false
-	)
+	results := make([]result, len(leases))
+
+	submitFailed := false
 
 	for i, lid := range leases {
-		err = func() error {
-			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			defer cancel()
-
-			provAddr, _ := sdk.AccAddressFromBech32(lid.Provider)
-			prov, err := cl.Provider(ctx, &ptypes.QueryProviderRequest{Owner: provAddr.String()})
-			if err != nil {
-				return fmt.Errorf("query client provider: %w", err)
-			}
-
-			hostURIgRPC, err := grpcURI(prov.GetProvider().HostURI)
-			if err != nil {
-				return fmt.Errorf("grpc uri: %w", err)
-			}
-
-			res := result{
-				Provider: provAddr,
-				Status:   "PASS",
-			}
-
-			c, err := gwgrpc.NewClient(ctx, hostURIgRPC, cert, cl)
-			if err == nil {
-				defer c.Close()
-
-				if _, err = c.SendManifest(ctx, &leasev1.SendManifestRequest{
-					LeaseId:  lid,
-					Manifest: mani,
-				}); err != nil {
-					res.Error = err.Error()
-					res.Status = "FAIL"
-					submitFailed = true
-				}
-			} else {
-				gclient, err := gwrest.NewClient(cl, provAddr, []tls.Certificate{cert})
-				if err != nil {
-					return fmt.Errorf("gwrest new client: %w", err)
-				}
-
-				err = gclient.SubmitManifest(cmd.Context(), dseq, mani)
-				if err != nil {
-					res.Error = err.Error()
-					if e, valid := err.(gwrest.ClientResponseError); valid {
-						res.ErrorMessage = e.Message
-					}
-					res.Status = "FAIL"
-					submitFailed = true
-				}
-			}
-
-			results[i] = res
-
-			return nil
-		}()
+		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
+		gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
 		if err != nil {
 			return err
 		}
+
+		err = gclient.SubmitManifest(cmd.Context(), dseq, mani)
+		res := result{
+			Provider: prov,
+			Status:   "PASS",
+		}
+		if err != nil {
+			res.Error = err.Error()
+			if e, valid := err.(gwrest.ClientResponseError); valid {
+				res.ErrorMessage = e.Message
+			}
+			res.Status = "FAIL"
+			submitFailed = true
+		}
+
+		results[i] = res
 	}
 
 	buf := &bytes.Buffer{}
