@@ -622,12 +622,17 @@ loop:
 			} else {
 				inventoryRequestsCounter.WithLabelValues("status", "error").Inc()
 			}
-		case inv, open := <-invch:
-			if !open {
+		case inv := <-invch:
+			if inv == nil {
 				continue
 			}
 
-			invupch <- inv
+			select {
+			case invupch <- inv:
+			default:
+				<-invupch
+				invupch <- inv
+			}
 		case inv := <-invupch:
 			currinv = inv.Dup()
 			state.inventory = inv
@@ -653,6 +658,7 @@ loop:
 					}
 				}
 			}
+			// updateInventory(inv)
 		case run := <-runch:
 			runch = nil
 			t.Reset(5 * time.Second)
@@ -684,6 +690,7 @@ loop:
 		updateReservationMetrics(state.reservations)
 	}
 
+	is.log.Debug("shutting down")
 	if runch != nil {
 		<-runch
 	}
@@ -691,6 +698,8 @@ loop:
 	if is.clients.ip != nil {
 		is.clients.ip.Stop()
 	}
+
+	is.log.Debug("shutdown complete")
 }
 
 type confirmationItem struct {
