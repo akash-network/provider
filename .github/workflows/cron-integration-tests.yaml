@@ -1,8 +1,9 @@
+---
 name: Integration tests on schedule
 
 on:
   schedule:
-   - cron: '0 */12 * * *'
+    - cron: '0 */12 * * *'
 
 jobs:
   call-integration-tests:
