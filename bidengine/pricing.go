@@ -327,8 +327,9 @@ type storageElement struct {
 }
 
 type gpuVendorAttributes struct {
-	Model string  `json:"model"`
-	RAM   *string `json:"ram,omitempty"`
+	Model     string  `json:"model"`
+	RAM       *string `json:"ram,omitempty"`
+	Interface *string `json:"interface,omitempty"`
 }
 
 type gpuAttributes struct {
