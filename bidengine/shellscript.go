@@ -75,18 +75,30 @@ func parseGPU(resource *atypes.GPU) gpuElement {
 		case "vendor":
 			vendor := tokens[1]
 			model := tokens[3]
-			var ram *string
 
-			// vendor/nvidia/model/a100/ram/80Gi
-			if len(tokens) == 6 && tokens[4] == "ram" {
-				ram = new(string)
-				*ram = tokens[5]
-			}
+			tokens = tokens[4:]
 
-			res.Attributes.Vendor[vendor] = gpuVendorAttributes{
+			attrs := gpuVendorAttributes{
 				Model: model,
-				RAM:   ram,
 			}
+
+			for i := 0; i < len(tokens); i += 2 {
+				key := tokens[i]
+				val := tokens[i+1]
+
+				switch key {
+				case "ram":
+					attrs.RAM = new(string)
+					*attrs.RAM = val
+				case "interface":
+					attrs.Interface = new(string)
+					*attrs.Interface = val
+				default:
+					continue
+				}
+			}
+
+			res.Attributes.Vendor[vendor] = attrs
 		default:
 		}
 	}
