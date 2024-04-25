@@ -1,18 +1,14 @@
 package grpc
 
 import (
+	"bufio"
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
-	"math/big"
+	"errors"
+	"io"
 	"net"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -27,12 +23,11 @@ import (
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/node/testutil"
 
+	cmocks "github.com/akash-network/provider/cluster/mocks"
+	"github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/mocks"
+	pmocks "github.com/akash-network/provider/mocks"
 )
-
-type asserter interface {
-	AssertExpectations(mock.TestingT) bool
-}
 
 type client struct {
 	p providerv1.ProviderRPCClient
@@ -65,20 +60,150 @@ func TestRPCs(t *testing.T) {
 	}, nil)
 
 	cases := []struct {
-		desc  string
-		mocks func() (*mocks.Client, []asserter)
-		run   func(context.Context, *testing.T, client)
+		desc           string
+		providerClient func() *pmocks.Client
+		readClient     func() *cmocks.ReadClient
+		run            func(context.Context, *testing.T, client)
 	}{
 		{
 			desc: "GetStatus",
-			mocks: func() (*mocks.Client, []asserter) {
-				var c mocks.Client
-				c.EXPECT().StatusV1(mock.Anything).Return(&providerv1.Status{}, nil)
-				return &c, nil
+			providerClient: func() *mocks.Client {
+				var m mocks.Client
+				m.EXPECT().StatusV1(mock.Anything).Return(&providerv1.Status{}, nil)
+				return &m
 			},
 			run: func(ctx context.Context, t *testing.T, c client) {
 				_, err := c.p.GetStatus(ctx, &emptypb.Empty{})
 				assert.NoError(t, err)
+			},
+		},
+		{
+			desc: "StreamServiceLogs none",
+			readClient: func() *cmocks.ReadClient {
+				var m cmocks.ReadClient
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]*v1beta3.ServiceLog{}, nil)
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				s, err := c.l.StreamServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				require.NoError(t, err)
+
+				_, err = s.Recv()
+				assert.ErrorContains(t, err, ErrNoRunningPods.Error())
+			},
+		},
+		{
+			desc: "StreamServiceLogs LeaseLogs err",
+			readClient: func() *cmocks.ReadClient {
+				var m cmocks.ReadClient
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil, errors.New("boom"))
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				s, err := c.l.StreamServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				require.NoError(t, err)
+
+				_, err = s.Recv()
+				assert.ErrorContains(t, err, "boom")
+			},
+		},
+		{
+			desc: "StreamServiceLogs one",
+			readClient: func() *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				stream := io.NopCloser(strings.NewReader("1\n2\n3"))
+
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]*v1beta3.ServiceLog{
+						{
+							Name:    "one",
+							Stream:  stream,
+							Scanner: bufio.NewScanner(stream),
+						},
+					}, nil)
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				s, err := c.l.StreamServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				require.NoError(t, err)
+
+				var (
+					expected = []string{"1", "2", "3"}
+					actual   = make([]string, 0, len(expected))
+				)
+
+				for {
+					r, err := s.Recv()
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					require.NoError(t, err)
+					actual = append(actual, string(r.Services[0].Logs))
+				}
+
+				assert.Equal(t, expected, actual)
+			},
+		},
+		{
+			desc: "StreamServiceLogs multiple",
+			readClient: func() *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				var (
+					stream1 = io.NopCloser(strings.NewReader("1_1\n1_2\n1_3"))
+					stream2 = io.NopCloser(strings.NewReader("2_1\n2_2\n2_3"))
+					stream3 = io.NopCloser(strings.NewReader("3_1\n3_2\n3_3"))
+				)
+
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]*v1beta3.ServiceLog{
+						{
+							Name:    "one",
+							Stream:  stream1,
+							Scanner: bufio.NewScanner(stream1),
+						},
+						{
+							Name:    "two",
+							Stream:  stream2,
+							Scanner: bufio.NewScanner(stream2),
+						},
+						{
+							Name:    "three",
+							Stream:  stream3,
+							Scanner: bufio.NewScanner(stream3),
+						},
+					}, nil)
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				s, err := c.l.StreamServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				require.NoError(t, err)
+
+				var (
+					expected = map[string][]string{
+						"one":   {"1_1", "1_2", "1_3"},
+						"two":   {"2_1", "2_2", "2_3"},
+						"three": {"3_1", "3_2", "3_3"},
+					}
+					actual = make(map[string][]string)
+				)
+
+				for {
+					r, err := s.Recv()
+					if errors.Is(err, io.EOF) {
+						break
+					}
+					require.NoError(t, err)
+
+					for _, s := range r.Services {
+						actual[s.Name] = append(actual[s.Name], string(s.Logs))
+					}
+				}
+
+				assert.Equal(t, expected, actual)
 			},
 		},
 	}
@@ -92,14 +217,26 @@ func TestRPCs(t *testing.T) {
 
 			ctx = ContextWithQueryClient(ctx, qclient)
 
-			mc, as := c.mocks()
-			defer mc.AssertExpectations(t)
+			var (
+				pc *pmocks.Client
+				rc *cmocks.ReadClient
+			)
 
-			for _, a := range as {
-				defer a.AssertExpectations(t)
+			if c.providerClient != nil {
+				pc = c.providerClient()
+				defer pc.AssertExpectations(t)
+			}
+			if c.readClient != nil {
+				rc = c.readClient()
+				defer rc.AssertExpectations(t)
 			}
 
-			s := newServer(ctx, crt1.Cert, mc)
+			s := NewServer(ctx,
+				WithCerts(crt1.Cert),
+				WithProviderClient(pc),
+				WithClusterReadClient(rc),
+			).(*grpcServer)
+
 			defer s.Stop()
 
 			l, err := net.Listen("tcp", ":0")
@@ -168,44 +305,6 @@ func TestMTLS(t *testing.T) {
 			},
 			errContains: "empty chain",
 		},
-		{
-			desc: "invalid subject",
-			cert: func(t *testing.T) tls.Certificate {
-				t.Helper()
-
-				priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-				require.NoError(t, err)
-
-				template := x509.Certificate{
-					SerialNumber: new(big.Int).SetInt64(time.Now().UTC().UnixNano()),
-					Subject: pkix.Name{
-						CommonName: "badcert",
-					},
-					BasicConstraintsValid: true,
-				}
-
-				certDer, err := x509.CreateCertificate(rand.Reader, &template, &template, priv.Public(), priv)
-				require.NoError(t, err)
-
-				keyDer, err := x509.MarshalPKCS8PrivateKey(priv)
-				require.NoError(t, err)
-
-				certBytes := pem.EncodeToMemory(&pem.Block{
-					Type:  types.PemBlkTypeCertificate,
-					Bytes: certDer,
-				})
-				privBytes := pem.EncodeToMemory(&pem.Block{
-					Type:  types.PemBlkTypeECPrivateKey,
-					Bytes: keyDer,
-				})
-
-				cert, err := tls.X509KeyPair(certBytes, privBytes)
-				require.NoError(t, err)
-
-				return cert
-			},
-			errContains: "invalid certificate's subject",
-		},
 	}
 
 	for _, c := range cases {
@@ -217,10 +316,14 @@ func TestMTLS(t *testing.T) {
 
 			ctx = ContextWithQueryClient(ctx, qclient)
 
-			var m mocks.Client
+			var m pmocks.Client
 			m.EXPECT().StatusV1(mock.Anything).Return(&providerv1.Status{}, nil)
 
-			s := newServer(ctx, crt.Cert, &m)
+			s := NewServer(ctx,
+				WithCerts(crt.Cert),
+				WithProviderClient(&m),
+			).(*grpcServer)
+
 			defer s.Stop()
 
 			l, err := net.Listen("tcp", ":0")

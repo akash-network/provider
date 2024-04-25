@@ -748,7 +748,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	ctx = gwgrpc.ContextWithQueryClient(ctx, cl.Query())
 
-	if err = gwgrpc.Serve(ctx, grpcaddr, []tls.Certificate{tlsCert}, service); err != nil {
+	gs := gwgrpc.NewServer(ctx,
+		gwgrpc.WithCerts([]tls.Certificate{tlsCert}),
+		gwgrpc.WithProviderClient(service),
+	)
+
+	if err = gs.ServeOn(ctx, grpcaddr); err != nil {
 		return err
 	}
 

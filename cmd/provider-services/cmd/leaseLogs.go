@@ -1,21 +1,26 @@
 package cmd
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"sync"
+	"time"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
+	"github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
 	aclient "github.com/akash-network/provider/client"
+	gwgrpc "github.com/akash-network/provider/gateway/grpc"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
@@ -98,6 +103,72 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		return errors.Errorf("tail flag supplied with invalid value. must be >= -1")
 	}
 
+	g := leaseLogGetter{
+		cert:         cert,
+		cl:           cl,
+		svcs:         svcs,
+		follow:       follow,
+		tailLines:    tailLines,
+		outputFormat: outputFormat,
+		cctx:         cctx,
+	}
+
+	if err = g.run(ctx, leases); err != nil {
+		return fmt.Errorf("getting logs: %w", err)
+	}
+
+	return nil
+}
+
+type leaseLogGetter struct {
+	cert         tls.Certificate
+	cl           v1beta2.QueryClient
+	svcs         string
+	follow       bool
+	tailLines    int64
+	outputFormat string
+	cctx         sdkclient.Context
+}
+
+func (g leaseLogGetter) run(ctx context.Context, leases []mtypes.LeaseID) error {
+	var (
+		restLeases = make([]mtypes.LeaseID, 0, len(leases))
+		grpcLeases = make(map[mtypes.LeaseID]*gwgrpc.Client)
+	)
+
+	for _, lid := range leases {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		provAddr, _ := sdk.AccAddressFromBech32(lid.Provider)
+		prov, err := g.cl.Provider(ctx, &ptypes.QueryProviderRequest{Owner: provAddr.String()})
+		if err != nil {
+			return fmt.Errorf("query client provider: %w", err)
+		}
+
+		hostURIgRPC, err := grpcURI(prov.GetProvider().HostURI)
+		if err != nil {
+			return fmt.Errorf("grpc uri: %w", err)
+		}
+
+		client, err := gwgrpc.NewClient(ctx, hostURIgRPC, g.cert, g.cl)
+		if err == nil {
+			grpcLeases[lid] = client
+		} else {
+			restLeases = append(restLeases, lid)
+		}
+	}
+
+	g.grpc(ctx, grpcLeases)
+	g.rest(ctx, restLeases)
+
+	return nil
+}
+
+func (g leaseLogGetter) grpc(ctx context.Context, leases map[mtypes.LeaseID]*gwgrpc.Client) {
+}
+
+func (g leaseLogGetter) rest(ctx context.Context, leases []mtypes.LeaseID) {
 	type result struct {
 		lid    mtypes.LeaseID
 		error  error
@@ -109,9 +180,9 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(g.cl, prov, []tls.Certificate{g.cert})
 		if err == nil {
-			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
+			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, g.svcs, g.follow, g.tailLines)
 		} else {
 			stream.error = err
 		}
@@ -132,9 +203,9 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		fmt.Printf("[%s][%s] %s\n", evt.Lid, evt.Name, evt.Message)
 	}
 
-	if outputFormat == "json" {
+	if g.outputFormat == "json" {
 		printFn = func(evt logEntry) {
-			_ = cmdcommon.PrintJSON(cctx, evt)
+			_ = cmdcommon.PrintJSON(g.cctx, evt)
 		}
 	}
 
@@ -164,6 +235,4 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	wgStreams.Wait()
 	close(outch)
-
-	return nil
 }
