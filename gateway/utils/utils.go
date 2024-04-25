@@ -87,4 +87,3 @@ func NewServerTLSConfig(ctx context.Context, certs []tls.Certificate, cquery cty
 
 	return cfg, nil
 }
-
