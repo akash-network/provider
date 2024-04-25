@@ -28,13 +28,11 @@ func (*server) ServiceStatus(context.Context, *leasev1.ServiceStatusRequest) (*l
 
 func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.LeaseRPC_StreamServiceLogsServer) error {
 	var (
-		ctx = strm.Context()
-		id  = r.GetLeaseId()
-
-		// TODO(andrewhare): What is the format of services?
+		ctx      = strm.Context()
+		id       = r.GetLeaseId()
 		services = strings.Join(r.GetServices(), " ")
 
-		// TODO(andrewhare): Where does lines come from? Is it ignored in follow mode?
+		// TODO(andrewhare): Where does this value come from? Is it ignored in follow mode?
 		lines = int64(111)
 	)
 

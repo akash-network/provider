@@ -3,19 +3,22 @@ package cmd
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
+	"io"
+	"strings"
 	"sync"
 	"time"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	"github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	cutils "github.com/akash-network/node/x/cert/utils"
 
@@ -86,7 +89,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	}
 
 	if outputFormat != outputText && outputFormat != outputJSON {
-		return errors.Errorf("invalid output format %s. expected text|json", outputFormat)
+		return fmt.Errorf("invalid output format %s. expected text|json", outputFormat)
 	}
 
 	follow, err := cmd.Flags().GetBool(flagFollow)
@@ -100,17 +103,19 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	}
 
 	if tailLines < -1 {
-		return errors.Errorf("tail flag supplied with invalid value. must be >= -1")
+		return fmt.Errorf("tail flag supplied with invalid value. must be >= -1")
 	}
 
 	g := leaseLogGetter{
-		cert:         cert,
-		cl:           cl,
-		svcs:         svcs,
-		follow:       follow,
-		tailLines:    tailLines,
-		outputFormat: outputFormat,
-		cctx:         cctx,
+		cert:      cert,
+		cl:        cl,
+		svcs:      svcs,
+		follow:    follow,
+		tailLines: tailLines,
+		printer: printer{
+			cctx: cctx,
+			fmt:  outputFormat,
+		},
 	}
 
 	if err = g.run(ctx, leases); err != nil {
@@ -121,19 +126,18 @@ func doLeaseLogs(cmd *cobra.Command) error {
 }
 
 type leaseLogGetter struct {
-	cert         tls.Certificate
-	cl           v1beta2.QueryClient
-	svcs         string
-	follow       bool
-	tailLines    int64
-	outputFormat string
-	cctx         sdkclient.Context
+	cert      tls.Certificate
+	cl        v1beta2.QueryClient
+	svcs      string
+	follow    bool
+	tailLines int64
+	printer   printer
 }
 
 func (g leaseLogGetter) run(ctx context.Context, leases []mtypes.LeaseID) error {
 	var (
 		restLeases = make([]mtypes.LeaseID, 0, len(leases))
-		grpcLeases = make(map[mtypes.LeaseID]*gwgrpc.Client)
+		grpcLeases = make(map[mtypes.LeaseID]*gwgrpc.Client, len(leases))
 	)
 
 	for _, lid := range leases {
@@ -166,6 +170,50 @@ func (g leaseLogGetter) run(ctx context.Context, leases []mtypes.LeaseID) error 
 }
 
 func (g leaseLogGetter) grpc(ctx context.Context, leases map[mtypes.LeaseID]*gwgrpc.Client) {
+	var wg sync.WaitGroup
+	wg.Add(len(leases))
+
+	for lid, cc := range leases {
+		go func(c *gwgrpc.Client, id mtypes.LeaseID) {
+			defer wg.Done()
+
+			req := leasev1.ServiceLogsRequest{
+				Services: strings.Split(g.svcs, " "),
+				LeaseId:  id,
+			}
+
+			logErr := func(err error) {
+				fmt.Printf("lease %v: %v", id, err)
+			}
+
+			s, err := c.StreamServiceLogs(ctx, &req)
+			if err != nil {
+				logErr(fmt.Errorf("stream service logs: %w", err))
+				return
+			}
+
+			for {
+				r, err := s.Recv()
+				switch {
+				case errors.Is(err, io.EOF):
+					break
+				case err != nil:
+					logErr(fmt.Errorf("recv: %w", err))
+					return
+				}
+
+				for _, s := range r.Services {
+					g.printer.write(logEntry{
+						Name:    s.GetName(),
+						Message: string(s.GetLogs()),
+						Lid:     id,
+					})
+				}
+			}
+		}(cc, lid)
+	}
+
+	wg.Wait()
 }
 
 func (g leaseLogGetter) rest(ctx context.Context, leases []mtypes.LeaseID) {
@@ -192,26 +240,11 @@ func (g leaseLogGetter) rest(ctx context.Context, leases []mtypes.LeaseID) {
 
 	var wgStreams sync.WaitGroup
 
-	type logEntry struct {
-		gwrest.ServiceLogMessage `json:",inline"`
-		Lid                      mtypes.LeaseID `json:"lease_id"`
-	}
-
 	outch := make(chan logEntry)
-
-	printFn := func(evt logEntry) {
-		fmt.Printf("[%s][%s] %s\n", evt.Lid, evt.Name, evt.Message)
-	}
-
-	if g.outputFormat == "json" {
-		printFn = func(evt logEntry) {
-			_ = cmdcommon.PrintJSON(g.cctx, evt)
-		}
-	}
 
 	go func() {
 		for evt := range outch {
-			printFn(evt)
+			g.printer.write(evt)
 		}
 	}()
 
@@ -226,8 +259,9 @@ func (g leaseLogGetter) rest(ctx context.Context, leases []mtypes.LeaseID) {
 
 			for res := range stream.stream.Stream {
 				outch <- logEntry{
-					ServiceLogMessage: res,
-					Lid:               stream.lid,
+					Name:    res.Name,
+					Message: res.Message,
+					Lid:     stream.lid,
 				}
 			}
 		}(stream)
@@ -235,4 +269,23 @@ func (g leaseLogGetter) rest(ctx context.Context, leases []mtypes.LeaseID) {
 
 	wgStreams.Wait()
 	close(outch)
+}
+
+type logEntry struct {
+	Name    string         `json:"name"`
+	Message string         `json:"message"`
+	Lid     mtypes.LeaseID `json:"lease_id"`
+}
+
+type printer struct {
+	fmt  string
+	cctx sdkclient.Context
+}
+
+func (p printer) write(e logEntry) {
+	if p.fmt == "json" {
+		cmdcommon.PrintJSON(p.cctx, e)
+	} else {
+		fmt.Printf("[%s][%s] %s\n", e.Lid, e.Name, e.Message)
+	}
 }
