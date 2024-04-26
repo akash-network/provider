@@ -3,9 +3,7 @@ package cmd
 import (
 	"context"
 	"crypto/tls"
-	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +11,8 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
@@ -141,9 +141,6 @@ func (g leaseLogGetter) run(ctx context.Context, leases []mtypes.LeaseID) error 
 	)
 
 	for _, lid := range leases {
-		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-
 		provAddr, _ := sdk.AccAddressFromBech32(lid.Provider)
 		prov, err := g.cl.Provider(ctx, &ptypes.QueryProviderRequest{Owner: provAddr.String()})
 		if err != nil {
@@ -155,7 +152,10 @@ func (g leaseLogGetter) run(ctx context.Context, leases []mtypes.LeaseID) error 
 			return fmt.Errorf("grpc uri: %w", err)
 		}
 
-		client, err := gwgrpc.NewClient(ctx, hostURIgRPC, g.cert, g.cl)
+		ctxDial, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		client, err := gwgrpc.NewClient(ctxDial, hostURIgRPC, g.cert, g.cl)
 		if err == nil {
 			grpcLeases[lid] = client
 		} else {
@@ -183,7 +183,7 @@ func (g leaseLogGetter) grpc(ctx context.Context, leases map[mtypes.LeaseID]*gwg
 			}
 
 			logErr := func(err error) {
-				fmt.Printf("lease %v: %v", id, err)
+				fmt.Printf("[%s]: %v", id, err)
 			}
 
 			s, err := c.StreamServiceLogs(ctx, &req)
@@ -193,21 +193,28 @@ func (g leaseLogGetter) grpc(ctx context.Context, leases map[mtypes.LeaseID]*gwg
 			}
 
 			for {
-				r, err := s.Recv()
-				switch {
-				case errors.Is(err, io.EOF):
-					break
-				case err != nil:
-					logErr(fmt.Errorf("recv: %w", err))
+				select {
+				case <-ctx.Done():
 					return
-				}
+				default:
+					r, err := s.Recv()
+					if err != nil {
+						if e, ok := status.FromError(err); ok {
+							if e.Code() != codes.Canceled {
+								logErr(fmt.Errorf("recv: %w", err))
+							}
+						}
 
-				for _, s := range r.Services {
-					g.printer.write(logEntry{
-						Name:    s.GetName(),
-						Message: string(s.GetLogs()),
-						Lid:     id,
-					})
+						return
+					}
+
+					for _, s := range r.Services {
+						g.printer.write(logEntry{
+							Name:    s.GetName(),
+							Message: string(s.GetLogs()),
+							Lid:     id,
+						})
+					}
 				}
 			}
 		}(cc, lid)

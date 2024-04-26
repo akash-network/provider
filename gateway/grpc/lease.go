@@ -53,43 +53,40 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 	for _, ll := range logs {
 		go func(l *v1beta3.ServiceLog) {
 			defer l.Stream.Close()
+			defer func() { errs <- nil }()
 
 			for l.Scanner.Scan() {
-				if ctxErr := ctx.Err(); ctxErr != nil {
-					if !isContextDoneErr(ctxErr) {
-						errs <- fmt.Errorf("ctx err: %w", ctxErr)
-					}
+				select {
+				case <-ctx.Done():
 					return
-				}
+				default:
+					var (
+						buf  = l.Scanner.Bytes()
+						logs = make([]byte, len(buf))
+					)
 
-				var (
-					buf  = l.Scanner.Bytes()
-					logs = make([]byte, len(buf))
-				)
+					copy(logs, buf)
 
-				copy(logs, buf)
-
-				resp := leasev1.ServiceLogsResponse{
-					Services: []*leasev1.ServiceLogs{
-						{
-							Name: l.Name,
-							Logs: buf,
+					resp := leasev1.ServiceLogsResponse{
+						Services: []*leasev1.ServiceLogs{
+							{
+								Name: l.Name,
+								Logs: buf,
+							},
 						},
-					},
+					}
+
+					if sendErr := stream.Send(&resp); sendErr != nil {
+						errs <- fmt.Errorf("stream send: %w", sendErr)
+						return
+					}
 				}
 
-				if sendErr := stream.Send(&resp); sendErr != nil {
-					errs <- fmt.Errorf("stream send: %w", sendErr)
+				if scanErr := l.Scanner.Err(); scanErr != nil {
+					errs <- fmt.Errorf("scanner err: %w", err)
 					return
 				}
 			}
-
-			if scanErr := l.Scanner.Err(); scanErr != nil {
-				errs <- fmt.Errorf("scanner err: %w", err)
-				return
-			}
-
-			errs <- nil
 		}(ll)
 	}
 
@@ -122,9 +119,4 @@ func (s *safeLogStream) Send(r *leasev1.ServiceLogsResponse) error {
 	}
 
 	return nil
-}
-
-func isContextDoneErr(err error) bool {
-	return errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded)
 }

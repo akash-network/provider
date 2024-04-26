@@ -30,8 +30,9 @@ func (c *Client) Close() error {
 
 func NewClient(ctx context.Context, addr string, cert tls.Certificate, cquery ctypes.QueryClient) (*Client, error) {
 	tlsConfig := tls.Config{
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS13,
+		InsecureSkipVerify: true,
+		Certificates:       []tls.Certificate{cert},
+		MinVersion:         tls.VersionTLS13,
 		VerifyPeerCertificate: func(chain [][]byte, _ [][]*x509.Certificate) error {
 			if len(chain) == 0 {
 				return errors.New("tls: empty chain")

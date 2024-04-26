@@ -751,6 +751,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	gs := gwgrpc.NewServer(ctx,
 		gwgrpc.WithCerts([]tls.Certificate{tlsCert}),
 		gwgrpc.WithProviderClient(service),
+		gwgrpc.WithClusterReadClient(service.Cluster()),
 	)
 
 	if err = gs.ServeOn(ctx, grpcaddr); err != nil {
