@@ -31,9 +31,7 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 		ctx      = strm.Context()
 		id       = r.GetLeaseId()
 		services = strings.Join(r.GetServices(), " ")
-
-		// TODO(andrewhare): Where does this value come from? Is it ignored in follow mode?
-		lines = int64(0)
+		lines    = int64(0)
 	)
 
 	logs, err := s.rc.LeaseLogs(ctx, id, services, true, &lines)
