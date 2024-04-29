@@ -218,6 +218,20 @@ spec:
                                         type: string
                                       model:
                                         type: string
+                          credentials:
+                            type: object
+                            nullable: true
+                            properties:
+                              host:
+                                type: string
+                              email:
+                                type: string
+                              email:
+                                type: string
+                              username:
+                                type: string
+                              password:
+                                type: string
     - name: v2beta1
       served: false
       storage: false
