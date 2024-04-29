@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -337,8 +338,18 @@ func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certif
 		return errors.New("tls: attempt to use non-existing or revoked certificate")
 	}
 
+	block, rest := pem.Decode(resp.Certificates[0].Certificate.Cert)
+	if len(rest) > 0 {
+		return fmt.Errorf("%w: tls: failed to decode onchain certificate", err)
+	}
+
+	onchainCert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("%w: tls: failed to parse onchain certificate", err)
+	}
+
 	certPool := x509.NewCertPool()
-	certPool.AddCert(cert)
+	certPool.AddCert(onchainCert)
 
 	opts := x509.VerifyOptions{
 		DNSName:                   c.host.Hostname(),

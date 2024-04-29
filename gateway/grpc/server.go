@@ -3,6 +3,7 @@ package grpc
 import (
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -164,8 +165,18 @@ func mtlsInterceptor() grpc.UnaryServerInterceptor {
 						return nil, errors.New("tls: attempt to use non-existing or revoked certificate") // nolint: goerr113
 					}
 
+					block, rest := pem.Decode(resp.Certificates[0].Certificate.Cert)
+					if len(rest) > 0 {
+						return nil, fmt.Errorf("%w: tls: failed to decode onchain certificate", err)
+					}
+
+					onchainCert, err := x509.ParseCertificate(block.Bytes)
+					if err != nil {
+						return nil, fmt.Errorf("%w: tls: failed to parse onchain certificate", err)
+					}
+
 					clientCertPool := x509.NewCertPool()
-					clientCertPool.AddCert(cert)
+					clientCertPool.AddCert(onchainCert)
 
 					opts := x509.VerifyOptions{
 						Roots:                     clientCertPool,
