@@ -59,7 +59,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return markRPCServerError(err)
 	}
 
-	gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
 	if err != nil {
 		return err
 	}
