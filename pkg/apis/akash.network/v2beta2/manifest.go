@@ -26,9 +26,17 @@ type Manifest struct {
 // ManifestList stores metadata and items list of manifest
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ManifestList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata"`
+	metav1.TypeMeta `           json:",inline"`
+	metav1.ListMeta `           json:"metadata"`
 	Items           []Manifest `json:"items"`
+}
+
+// ManifestServiceCredentials stores docker registry credentials
+type ManifestServiceCredentials struct {
+	Host     string `json:"host"`
+	Email    string `json:"email"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // ManifestService stores name, image, args, env, unit, count and expose list of service
@@ -46,8 +54,9 @@ type ManifestService struct {
 	// Overlay Network Links
 	Expose []ManifestServiceExpose `json:"expose,omitempty"`
 	// Miscellaneous service parameters
-	Params          *ManifestServiceParams `json:"params,omitempty"`
-	SchedulerParams *SchedulerParams       `json:"scheduler_params,omitempty"`
+	Params          *ManifestServiceParams      `json:"params,omitempty"`
+	SchedulerParams *SchedulerParams            `json:"scheduler_params,omitempty"`
+	Credentials     *ManifestServiceCredentials `json:"credentials,omitempty"`
 }
 
 // ManifestGroup stores metadata, name and list of SDL manifest services
@@ -71,8 +80,8 @@ type ManifestStatus struct {
 }
 
 type ManifestStorageParams struct {
-	Name     string `json:"name" yaml:"name"`
-	Mount    string `json:"mount" yaml:"mount"`
+	Name     string `json:"name"     yaml:"name"`
+	Mount    string `json:"mount"    yaml:"mount"`
 	ReadOnly bool   `json:"readOnly" yaml:"readOnly"`
 }
 
@@ -299,6 +308,15 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
 			})
+		}
+	}
+
+	if ams.Credentials != nil {
+		ms.Credentials = &ManifestServiceCredentials{
+			Host:     ams.Credentials.Host,
+			Email:    ams.Credentials.Email,
+			Username: ams.Credentials.Username,
+			Password: ams.Credentials.Password,
 		}
 	}
 
