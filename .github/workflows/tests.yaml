@@ -140,7 +140,11 @@ jobs:
         run: make codegen
       - name: Ensure no files changed/added/removed
         run: |
-          if [[ -z "$(git status --short)" ]]; then
+          git add .
+          git diff --exit-code --quiet HEAD --
+          exit_status=$?
+          if [[ $exit_status -ne 0 ]]; then
+              echo "codegen test resulted in code changes\n\n"
               git status
               exit 1
           fi
