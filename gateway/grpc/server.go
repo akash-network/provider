@@ -18,7 +18,6 @@ import (
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/cluster"
@@ -165,8 +164,6 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 				certificates := mtls.State.PeerCertificates
 
 				if len(certificates) > 0 {
-					cquery := QueryClientFromCtx(ctx)
-
 					owner, _, err := atls.ValidatePeerCertificates(ctx, cquery, certificates, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 					if err != nil {
 						return nil, err
@@ -174,22 +171,6 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 
 					ctx = ContextWithOwner(ctx, owner)
 				}
-
-				clientCertPool := x509.NewCertPool()
-				clientCertPool.AddCert(cert)
-
-				opts := x509.VerifyOptions{
-					Roots:                     clientCertPool,
-					CurrentTime:               time.Now(),
-					KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-					MaxConstraintComparisions: 0,
-				}
-
-				if _, err = cert.Verify(opts); err != nil {
-					return nil, fmt.Errorf("tls: unable to verify certificate: %w", err)
-				}
-
-				ctx = ContextWithOwner(ctx, owner)
 			}
 		}
 
