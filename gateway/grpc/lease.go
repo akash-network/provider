@@ -33,10 +33,6 @@ func (*server) ServiceLogs(context.Context, *leasev1.ServiceLogsRequest) (*lease
 }
 
 func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequest) (*leasev1.ServiceStatusResponse, error) {
-	if s.ip == nil {
-		return &leasev1.ServiceStatusResponse{}, nil
-	}
-
 	ctx = fromctx.ApplyToContext(ctx, s.clusterSettings)
 
 	id := r.GetLeaseId()
@@ -52,7 +48,7 @@ func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequ
 	i := getInfo(m)
 
 	ips := make(map[string][]leasev1.LeaseIPStatus)
-	if i.hasLeasedIPs {
+	if s.ip != nil && i.hasLeasedIPs {
 		var statuses []ip.LeaseIPStatus
 		if statuses, err = s.ip.GetIPAddressStatus(ctx, id.OrderID()); err != nil {
 			return nil, fmt.Errorf("get ip address status: %w", err)
