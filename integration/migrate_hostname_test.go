@@ -263,7 +263,7 @@ func (s *E2EMigrateHostname) TestE2EMigrateHostname() {
 		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
 	)
 	s.Require().Error(err)
-	s.Require().Contains(err.Error(), "remote server returned 404")
+	s.Require().Contains(err.Error(), "lease does not exist")
 	s.Require().NotNil(cmdResult)
 
 	// confirm hostname still reachable, on the hostname it was migrated to
