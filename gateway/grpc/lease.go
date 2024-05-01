@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
@@ -237,6 +239,38 @@ func (s *safeLogStream) Send(r *leasev1.ServiceLogsResponse) error {
 	return nil
 }
 
-func (*server) StreamServiceStatus(*leasev1.ServiceStatusRequest, leasev1.LeaseRPC_StreamServiceStatusServer) error {
-	panic("unimplemented")
+const defaultServiceStatusInterval = 5 * time.Second
+
+func (s *server) StreamServiceStatus(r *leasev1.ServiceStatusRequest, strm leasev1.LeaseRPC_StreamServiceStatusServer) error {
+	var (
+		ctx = strm.Context()
+		id  = r.GetLeaseId()
+	)
+
+	interval := defaultServiceStatusInterval
+
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		i := md.Get("interval")[0]
+
+		var err error
+		if interval, err = time.ParseDuration(i); err != nil {
+			return fmt.Errorf("parse duration %s: %w", i, err)
+		}
+	}
+
+	t := time.NewTicker(interval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
+			res, err := s.ServiceStatus(ctx, &leasev1.ServiceStatusRequest{LeaseId: id})
+			if err != nil {
+				return fmt.Errorf("service status: %w", err)
+			}
+
+			strm.Send(res)
+		}
+	}
 }

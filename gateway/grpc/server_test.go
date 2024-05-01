@@ -9,12 +9,14 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	types "github.com/akash-network/akash-api/go/node/cert/v1beta3"
@@ -347,6 +349,52 @@ func TestRPCs(t *testing.T) {
 				}
 
 				assert.Equal(t, expected, actual)
+			},
+		},
+
+		// StreamServiceStatus
+		{
+			desc: "StreamServiceStatus",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				mgi := newManifestGroup(t)
+
+				m.EXPECT().GetManifestGroup(mock.Anything, mock.Anything).
+					Return(true, mgi, nil)
+
+				m.EXPECT().LeaseStatus(mock.Anything, mock.Anything).
+					Return(nil, nil)
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				interval := 500 * time.Millisecond
+
+				ctx = metadata.AppendToOutgoingContext(ctx, "interval", interval.String())
+				s, err := c.l.StreamServiceStatus(ctx, &leasev1.ServiceStatusRequest{})
+				require.NoError(t, err)
+
+				var (
+					iterations = 3
+					after      = time.After(interval * time.Duration(iterations))
+					hits       int
+				)
+
+				for {
+					select {
+					case <-after:
+						assert.Equal(t, iterations, hits)
+						return
+					default:
+						_, err = s.Recv()
+						if errors.Is(err, io.EOF) {
+							break
+						}
+						require.NoError(t, err)
+						hits++
+					}
+				}
 			},
 		},
 	}
