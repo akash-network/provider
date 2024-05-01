@@ -43,7 +43,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return markRPCServerError(err)
 	}
 
-	gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
 	if err != nil {
 		return err
 	}
@@ -58,7 +58,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	err = gclient.MigrateHostnames(cmd.Context(), hostnames, dseq, gseq)
+	err = gclient.MigrateHostnames(ctx, hostnames, dseq, gseq)
 	if err != nil {
 		return showErrorToUser(err)
 	}
