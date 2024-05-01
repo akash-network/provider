@@ -63,7 +63,9 @@ func (c *client) LeaseShell(ctx context.Context, lID mtypes.LeaseID, service str
 
 	endpoint.RawQuery = query.Encode()
 	subctx, subcancel := context.WithCancel(ctx)
-	conn, response, err := c.wsclient.DialContext(subctx, endpoint.String(), nil)
+
+	rCl := c.newReqClient(ctx)
+	conn, response, err := rCl.wsclient.DialContext(subctx, endpoint.String(), nil)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) {
 			buf := &bytes.Buffer{}

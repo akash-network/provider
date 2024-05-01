@@ -44,7 +44,7 @@ func migrateEndpoints(cmd *cobra.Command, args []string) error {
 		return markRPCServerError(err)
 	}
 
-	gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
 	if err != nil {
 		return err
 	}

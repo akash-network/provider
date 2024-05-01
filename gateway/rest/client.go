@@ -17,6 +17,7 @@ import (
 	"time"
 
 	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	atls "github.com/akash-network/akash-api/go/util/tls"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
@@ -85,9 +86,29 @@ type ServiceLogs struct {
 	OnClose <-chan string
 }
 
+type httpClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+type client struct {
+	host    *url.URL
+	addr    sdk.Address
+	cclient ctypes.QueryClient
+	certs   []tls.Certificate
+}
+
+type reqClient struct {
+	ctx      context.Context
+	host     *url.URL
+	hclient  httpClient
+	wsclient *websocket.Dialer
+	addr     sdk.Address
+	cclient  ctypes.QueryClient
+}
+
 // NewClient returns a new Client
-func NewClient(qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certificate) (Client, error) {
-	res, err := qclient.Provider(context.Background(), &ptypes.QueryProviderRequest{Owner: addr.String()})
+func NewClient(ctx context.Context, qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certificate) (Client, error) {
+	res, err := qclient.Provider(ctx, &ptypes.QueryProviderRequest{Owner: addr.String()})
 	if err != nil {
 		return nil, err
 	}
@@ -97,20 +118,26 @@ func NewClient(qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certif
 		return nil, err
 	}
 
-	return newClient(qclient, addr, certs, uri), nil
-}
-
-func newClient(qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certificate, uri *url.URL) *client {
-	cl := &client{
+	return &client{
 		host:    uri,
 		addr:    addr,
 		cclient: qclient,
+		certs:   certs,
+	}, nil
+}
+
+func (c *client) newReqClient(ctx context.Context) *reqClient {
+	cl := &reqClient{
+		ctx:     ctx,
+		host:    c.host,
+		addr:    c.addr,
+		cclient: c.cclient,
 	}
 
 	tlsConfig := &tls.Config{
 		// must use Hostname rather than Host field as certificate is issued for host without port
-		ServerName:            uri.Hostname(),
-		Certificates:          certs,
+		ServerName:            cl.host.Hostname(),
+		Certificates:          c.certs,
 		InsecureSkipVerify:    true, // nolint: gosec
 		VerifyPeerCertificate: cl.verifyPeerCertificate,
 		MinVersion:            tls.VersionTLS13,
@@ -187,18 +214,6 @@ func NewClientDirectory(ctx context.Context, cctx cosmosclient.Context) (*Client
 	}, nil
 }
 
-type httpClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
-
-type client struct {
-	host     *url.URL
-	hclient  httpClient
-	wsclient *websocket.Dialer
-	addr     sdk.Address
-	cclient  ctypes.QueryClient
-}
-
 type ClientCustomClaims struct {
 	AkashNamespace *AkashNamespace `json:"https://akash.network/"`
 	jwt.RegisteredClaims
@@ -244,7 +259,8 @@ func (c *client) GetJWT(ctx context.Context) (*jwt.Token, error) {
 		return nil, err
 	}
 
-	resp, err := c.hclient.Do(req)
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -288,68 +304,21 @@ func (err ClientResponseError) ClientError() string {
 	return fmt.Sprintf("Remote Server returned %d\n%s", err.Status, err.Message)
 }
 
-func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certificate) error {
-	if len(certificates) != 1 {
-		return errors.Errorf("tls: invalid certificate chain")
+func (c *reqClient) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certificate) error {
+	peerCerts := make([]*x509.Certificate, 0, len(certificates))
+
+	for idx := range certificates {
+		cert, err := x509.ParseCertificate(certificates[idx])
+		if err != nil {
+			return err
+		}
+
+		peerCerts = append(peerCerts, cert)
 	}
 
-	cert, err := x509.ParseCertificate(certificates[0])
+	_, _, err := atls.ValidatePeerCertificates(c.ctx, c.cclient, peerCerts, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
 	if err != nil {
-		return errors.Wrap(err, "tls: failed to parse certificate")
-	}
-
-	// validation
-	var prov sdk.Address
-	if prov, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-		return errors.Wrap(err, "tls: invalid certificate's subject common name")
-	}
-
-	// 1. CommonName in issuer and Subject must be the same
-	if cert.Subject.CommonName != cert.Issuer.CommonName {
-		return errors.Wrap(err, "tls: invalid certificate's issuer common name")
-	}
-
-	if !c.addr.Equals(prov) {
-		return errors.Errorf("tls: hijacked certificate")
-	}
-
-	// 2. serial number must be in
-	if cert.SerialNumber == nil {
-		return errors.Wrap(err, "tls: invalid certificate serial number")
-	}
-
-	// 3. look up certificate on chain. it must not be revoked
-	var resp *ctypes.QueryCertificatesResponse
-	resp, err = c.cclient.Certificates(
-		context.Background(),
-		&ctypes.QueryCertificatesRequest{
-			Filter: ctypes.CertificateFilter{
-				Owner:  prov.String(),
-				Serial: cert.SerialNumber.String(),
-				State:  "valid",
-			},
-		},
-	)
-	if err != nil {
-		return errors.Wrap(err, "tls: unable to fetch certificate from chain")
-	}
-	if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-		return errors.New("tls: attempt to use non-existing or revoked certificate")
-	}
-
-	certPool := x509.NewCertPool()
-	certPool.AddCert(cert)
-
-	opts := x509.VerifyOptions{
-		DNSName:                   c.host.Hostname(),
-		Roots:                     certPool,
-		CurrentTime:               time.Now(),
-		KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		MaxConstraintComparisions: 0,
-	}
-
-	if _, err = cert.Verify(opts); err != nil {
-		return errors.Wrap(err, "tls: unable to verify certificate")
+		return err
 	}
 
 	return nil
@@ -390,7 +359,8 @@ func (c *client) Validate(ctx context.Context, gspec dtypes.GroupSpec) (provider
 	}
 	req.Header.Set("Content-Type", contentTypeJSON)
 
-	resp, err := c.hclient.Do(req)
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
 	if err != nil {
 		return provider.ValidateGroupSpecResult{}, err
 	}
@@ -435,7 +405,10 @@ func (c *client) SubmitManifest(ctx context.Context, dseq uint64, mani manifest.
 	}
 
 	req.Header.Set("Content-Type", contentTypeJSON)
-	resp, err := c.hclient.Do(req)
+
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
+
 	if err != nil {
 		return err
 	}
@@ -475,7 +448,8 @@ func (c *client) MigrateEndpoints(ctx context.Context, endpoints []string, dseq 
 	}
 	req.Header.Set("Content-Type", contentTypeJSON)
 
-	resp, err := c.hclient.Do(req)
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -515,7 +489,8 @@ func (c *client) MigrateHostnames(ctx context.Context, hostnames []string, dseq 
 	}
 	req.Header.Set("Content-Type", contentTypeJSON)
 
-	resp, err := c.hclient.Do(req)
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -563,7 +538,8 @@ func (c *client) LeaseEvents(ctx context.Context, id mtypes.LeaseID, _ string, f
 	query.Set("follow", strconv.FormatBool(follow))
 
 	endpoint.RawQuery = query.Encode()
-	conn, response, err := c.wsclient.DialContext(ctx, endpoint.String(), nil)
+	rCl := c.newReqClient(ctx)
+	conn, response, err := rCl.wsclient.DialContext(ctx, endpoint.String(), nil)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) {
 			buf := &bytes.Buffer{}
@@ -663,7 +639,8 @@ func (c *client) getStatus(ctx context.Context, uri string, obj interface{}) err
 	}
 	req.Header.Set("Content-Type", contentTypeJSON)
 
-	resp, err := c.hclient.Do(req)
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -737,7 +714,8 @@ func (c *client) LeaseLogs(ctx context.Context,
 
 	endpoint.RawQuery = query.Encode()
 
-	conn, response, err := c.wsclient.DialContext(ctx, endpoint.String(), nil)
+	rCl := c.newReqClient(ctx)
+	conn, response, err := rCl.wsclient.DialContext(ctx, endpoint.String(), nil)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) {
 			buf := &bytes.Buffer{}

@@ -43,7 +43,7 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return err
 	}
 
-	gclient, err := gwrest.NewClient(cl, addr, nil)
+	gclient, err := gwrest.NewClient(ctx, cl, addr, nil)
 	if err != nil {
 		return err
 	}

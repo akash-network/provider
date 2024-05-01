@@ -2,6 +2,7 @@ package rest
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"io"
@@ -23,9 +24,9 @@ import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	"github.com/akash-network/akash-api/go/testutil"
 
 	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
 
 	"github.com/akash-network/provider"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
@@ -108,7 +109,7 @@ func runRouterTest(t *testing.T, authClient bool, fn func(*routerTest)) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, certs)
+		gclient, err := NewClient(context.Background(), mocks.qclient, mf.paddr, certs)
 		require.NoError(t, err)
 		require.NotNil(t, gclient)
 
@@ -145,11 +146,12 @@ func testCertHelper(t *testing.T, test *routerTest) {
 
 	req.Header.Set("Content-Type", contentTypeJSON)
 
-	_, err = test.gwclient.hclient.Do(req)
+	rCl := test.gwclient.newReqClient(context.Background())
+	_, err = rCl.hclient.Do(req)
 	require.Error(t, err)
 	// return error message looks like
 	// Put "https://127.0.0.1:58536/deployment/652/manifest": tls: unable to verify certificate: x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs
-	require.Regexp(t, "^(Put|Get) (\".*\": )tls: unable to verify certificate: .*$", err.Error())
+	require.Regexp(t, `^(Put|Get) (".*": )tls: unable to verify certificate: \(.*\)$`, err.Error())
 }
 
 func TestRouteNotActiveClientCert(t *testing.T) {
@@ -177,7 +179,7 @@ func TestRouteNotActiveClientCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		gclient, err := NewClient(context.Background(), mocks.qclient, mf.paddr, mf.ccert.Cert)
 		require.NoError(t, err)
 		require.NotNil(t, gclient)
 
@@ -213,7 +215,7 @@ func TestRouteExpiredClientCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		gclient, err := NewClient(context.Background(), mocks.qclient, mf.paddr, mf.ccert.Cert)
 		require.NoError(t, err)
 		require.NotNil(t, gclient)
 
@@ -252,7 +254,7 @@ func TestRouteNotActiveServerCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		gclient, err := NewClient(context.Background(), mocks.qclient, mf.paddr, mf.ccert.Cert)
 		require.NoError(t, err)
 		require.NotNil(t, gclient)
 
@@ -292,7 +294,7 @@ func TestRouteExpiredServerCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		gclient, err := NewClient(context.Background(), mocks.qclient, mf.paddr, mf.ccert.Cert)
 		require.NoError(t, err)
 		require.NotNil(t, gclient)
 
@@ -312,7 +314,9 @@ func TestRouteDoesNotExist(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
+
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
@@ -356,7 +360,8 @@ func TestRouteVersionOK(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		var data versionInfo
@@ -389,7 +394,8 @@ func TestRouteStatusOK(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		data := make(map[string]interface{})
@@ -413,7 +419,8 @@ func TestRouteStatusFails(t *testing.T) {
 		require.NoError(t, err)
 
 		req.Header.Set("Content-Type", contentTypeJSON)
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
@@ -443,7 +450,8 @@ func TestRouteValidateOK(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		data := make(map[string]interface{})
@@ -473,7 +481,8 @@ func TestRouteValidateUnauthorized(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
@@ -494,7 +503,8 @@ func TestRouteValidateFails(t *testing.T) {
 		require.NoError(t, err)
 
 		req.Header.Set("Content-Type", contentTypeJSON)
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
@@ -515,7 +525,8 @@ func TestRouteValidateFailsEmptyBody(t *testing.T) {
 		require.NoError(t, err)
 
 		req.Header.Set("Content-Type", contentTypeJSON)
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -555,7 +566,8 @@ func TestRoutePutManifestOK(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -596,7 +608,8 @@ func TestRoutePutInvalidManifest(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 
@@ -689,7 +702,8 @@ func TestRouteLeaseStatusOk(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -737,7 +751,8 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
@@ -759,7 +774,8 @@ func TestRouteLeaseStatusErr(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
@@ -809,7 +825,8 @@ func TestRouteServiceStatusOK(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -849,7 +866,8 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -900,7 +918,8 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -939,7 +958,8 @@ func TestRouteServiceStatusError(t *testing.T) {
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.newReqClient(context.Background())
+		resp, err := rCl.hclient.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)

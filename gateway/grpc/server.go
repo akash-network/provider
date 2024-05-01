@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"time"
 
+	atls "github.com/akash-network/akash-api/go/util/tls"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -164,49 +164,15 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
 				certificates := mtls.State.PeerCertificates
 
-				if len(certificates) == 0 {
-					return nil, errors.New("tls: empty chain")
-				}
+				if len(certificates) > 0 {
+					cquery := QueryClientFromCtx(ctx)
 
-				if len(certificates) != 1 {
-					return nil, errors.New("tls: invalid certificate chain") // nolint: goerr113
-				}
+					owner, _, err := atls.ValidatePeerCertificates(ctx, cquery, certificates, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+					if err != nil {
+						return nil, err
+					}
 
-				cert := certificates[0]
-
-				// validation
-				var owner sdk.Address
-				if owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-					return nil, fmt.Errorf("tls: invalid certificate's subject common name: %w", err)
-				}
-
-				// 1. CommonName in issuer and Subject must match and be as Bech32 format
-				if cert.Subject.CommonName != cert.Issuer.CommonName {
-					return nil, fmt.Errorf("tls: invalid certificate's issuer common name: %w", err)
-				}
-
-				// 2. serial number must be in
-				if cert.SerialNumber == nil {
-					return nil, fmt.Errorf("tls: invalid certificate serial number: %w", err)
-				}
-
-				// 3. look up certificate on chain
-				var resp *ctypes.QueryCertificatesResponse
-				resp, err = cquery.Certificates(
-					ctx,
-					&ctypes.QueryCertificatesRequest{
-						Filter: ctypes.CertificateFilter{
-							Owner:  owner.String(),
-							Serial: cert.SerialNumber.String(),
-							State:  "valid",
-						},
-					},
-				)
-				if err != nil {
-					return nil, fmt.Errorf("tls: unable to fetch certificate from chain: %w", err)
-				}
-				if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-					return nil, errors.New("tls: attempt to use non-existing or revoked certificate") // nolint: goerr113
+					ctx = ContextWithOwner(ctx, owner)
 				}
 
 				clientCertPool := x509.NewCertPool()

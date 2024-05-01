@@ -235,7 +235,7 @@ func (g leaseLogGetter) rest(ctx context.Context, leases []mtypes.LeaseID) {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(g.cl, prov, []tls.Certificate{g.cert})
+		gclient, err := gwrest.NewClient(ctx, g.cl, prov, []tls.Certificate{cert})
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, g.svcs, g.follow, g.tailLines)
 		} else {

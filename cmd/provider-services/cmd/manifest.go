@@ -98,12 +98,12 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(cl, prov, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
 		if err != nil {
 			return err
 		}
 
-		err = gclient.SubmitManifest(cmd.Context(), dseq, mani)
+		err = gclient.SubmitManifest(ctx, dseq, mani)
 		res := result{
 			Provider: prov,
 			Status:   "PASS",

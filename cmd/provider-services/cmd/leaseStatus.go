@@ -94,7 +94,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 
 		leaseStatus = toLeaseStatus(res)
 	} else {
-		gclient, err := gwrest.NewClient(cl, provAddr, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
 		if err != nil {
 			return err
 		}
