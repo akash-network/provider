@@ -22,6 +22,7 @@ import (
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
@@ -47,6 +48,9 @@ type server struct {
 	certs             []tls.Certificate
 	providerClient    provider.Client
 	clusterReadClient cluster.ReadClient
+	ip                ip.Client
+
+	clusterSettings map[any]any
 }
 
 func (s *grpcServer) ServeOn(ctx context.Context, addr string) error {
@@ -83,6 +87,8 @@ type serverOpts struct {
 	certs             []tls.Certificate
 	providerClient    provider.Client
 	clusterReadClient cluster.ReadClient
+	clusterSettings   map[any]any
+	ipClient          ip.Client
 }
 
 type opt func(*serverOpts)
@@ -97,6 +103,14 @@ func WithProviderClient(c provider.Client) opt {
 
 func WithClusterReadClient(c cluster.ReadClient) opt {
 	return func(so *serverOpts) { so.clusterReadClient = c }
+}
+
+func WithClusterSettings(s map[any]any) opt {
+	return func(so *serverOpts) { so.clusterSettings = s }
+}
+
+func WithIPClient(c ip.Client) opt {
+	return func(so *serverOpts) { so.ipClient = c }
 }
 
 func NewServer(ctx context.Context, opts ...opt) Server {
@@ -130,9 +144,11 @@ func NewServer(ctx context.Context, opts ...opt) Server {
 	)
 
 	s := &server{
-		ctx: ctx,
-		pc:  o.providerClient,
-		rc:  o.clusterReadClient,
+		ctx:             ctx,
+		pc:              o.providerClient,
+		rc:              o.clusterReadClient,
+		clusterSettings: o.clusterSettings,
+		ip:              o.ipClient,
 	}
 
 	providerv1.RegisterProviderRPCServer(g, s)

@@ -20,13 +20,17 @@ import (
 	types "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	qmock "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
 	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
+	v1 "github.com/akash-network/akash-api/go/provider/lease/v1"
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/node/testutil"
 
 	cmocks "github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/cluster/types/v1beta3"
-	"github.com/akash-network/provider/mocks"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	"github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
+	ipmocks "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip/mocks"
 	pmocks "github.com/akash-network/provider/mocks"
+	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 type client struct {
@@ -62,13 +66,15 @@ func TestRPCs(t *testing.T) {
 	cases := []struct {
 		desc           string
 		providerClient func() *pmocks.Client
-		readClient     func() *cmocks.ReadClient
+		readClient     func(t *testing.T) *cmocks.ReadClient
+		ipClient       func(t *testing.T) *ipmocks.Client
 		run            func(context.Context, *testing.T, client)
 	}{
+		// GetStatus
 		{
 			desc: "GetStatus",
-			providerClient: func() *mocks.Client {
-				var m mocks.Client
+			providerClient: func() *pmocks.Client {
+				var m pmocks.Client
 				m.EXPECT().StatusV1(mock.Anything).Return(&providerv1.Status{}, nil)
 				return &m
 			},
@@ -77,9 +83,146 @@ func TestRPCs(t *testing.T) {
 				assert.NoError(t, err)
 			},
 		},
+
+		// ServiceStatus
+		{
+			desc: "ServiceStatus get manifest error",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				m.EXPECT().GetManifestGroup(mock.Anything, mock.Anything).
+					Return(false, v2beta2.ManifestGroup{}, errors.New("boom"))
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				_, err := c.l.ServiceStatus(ctx, &leasev1.ServiceStatusRequest{})
+				assert.ErrorContains(t, err, "boom")
+			},
+		},
+		{
+			desc: "ServiceStatus no manifest group",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				m.EXPECT().GetManifestGroup(mock.Anything, mock.Anything).
+					Return(false, v2beta2.ManifestGroup{}, nil)
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				_, err := c.l.ServiceStatus(ctx, &leasev1.ServiceStatusRequest{})
+				assert.ErrorContains(t, err, "lease does not exist")
+			},
+		},
+		{
+			desc: "ServiceStatus",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				mgi := newManifestGroup(t)
+				mgi.Services[0].Expose[0].IP = "1.2.3.4"
+				mgi.Services[0].Expose[0].Global = true
+				mgi.Services[0].Expose[0].ExternalPort = 8111
+
+				m.EXPECT().GetManifestGroup(mock.Anything, mock.Anything).
+					Return(true, mgi, nil)
+
+				m.EXPECT().ForwardedPortStatus(mock.Anything, mock.Anything).
+					Return(map[string][]ctypes.ForwardedPortStatus{
+						serviceName(t): {
+							{
+								Host:         "host",
+								Port:         1111,
+								ExternalPort: 1112,
+								Proto:        "test",
+								Name:         serviceName(t),
+							},
+						},
+					}, nil)
+
+				m.EXPECT().LeaseStatus(mock.Anything, mock.Anything).
+					Return(map[string]*ctypes.ServiceStatus{
+						serviceName(t): {
+							Name:               serviceName(t),
+							Available:          111,
+							Total:              222,
+							URIs:               []string{"1", "2", "3"},
+							ObservedGeneration: 1,
+							Replicas:           2,
+							UpdatedReplicas:    3,
+							ReadyReplicas:      4,
+							AvailableReplicas:  4,
+						},
+					}, nil)
+
+				return &m
+			},
+			ipClient: func(t *testing.T) *ipmocks.Client {
+				var m ipmocks.Client
+
+				m.EXPECT().GetIPAddressStatus(mock.Anything, mock.Anything).
+					Return([]ip.LeaseIPStatus{
+						{
+							Port:         3333,
+							ExternalPort: 3334,
+							ServiceName:  serviceName(t),
+							IP:           "4.5.6.7",
+							Protocol:     "test",
+						},
+					}, nil)
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				s, err := c.l.ServiceStatus(ctx, &leasev1.ServiceStatusRequest{
+					Services: []string{serviceName(t)},
+				})
+				require.NoError(t, err)
+
+				expected := v1.ServiceStatusResponse{
+					Services: []v1.ServiceStatus{
+						{
+							Name: serviceName(t),
+							Status: v1.LeaseServiceStatus{
+								Available:          111,
+								Total:              222,
+								Uris:               []string{"1", "2", "3"},
+								ObservedGeneration: 1,
+								Replicas:           2,
+								UpdatedReplicas:    3,
+								ReadyReplicas:      4,
+								AvailableReplicas:  4,
+							},
+							Ports: []v1.ForwarderPortStatus{
+								{
+									Host:         "host",
+									Port:         1111,
+									ExternalPort: 1112,
+									Proto:        "test",
+									Name:         serviceName(t),
+								},
+							},
+							Ips: []v1.LeaseIPStatus{
+								{
+									Port:         3333,
+									ExternalPort: 3334,
+									Protocol:     "test",
+									Ip:           "4.5.6.7",
+								},
+							},
+						},
+					},
+				}
+
+				assert.Equal(t, &expected, s)
+			},
+		},
+
+		// StreamServiceLogs
 		{
 			desc: "StreamServiceLogs none",
-			readClient: func() *cmocks.ReadClient {
+			readClient: func(t *testing.T) *cmocks.ReadClient {
 				var m cmocks.ReadClient
 				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*v1beta3.ServiceLog{}, nil)
@@ -95,7 +238,7 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "StreamServiceLogs LeaseLogs err",
-			readClient: func() *cmocks.ReadClient {
+			readClient: func(t *testing.T) *cmocks.ReadClient {
 				var m cmocks.ReadClient
 				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, errors.New("boom"))
@@ -111,7 +254,7 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "StreamServiceLogs one",
-			readClient: func() *cmocks.ReadClient {
+			readClient: func(t *testing.T) *cmocks.ReadClient {
 				var m cmocks.ReadClient
 
 				stream := io.NopCloser(strings.NewReader("1\n2\n3"))
@@ -149,7 +292,7 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "StreamServiceLogs multiple",
-			readClient: func() *cmocks.ReadClient {
+			readClient: func(t *testing.T) *cmocks.ReadClient {
 				var m cmocks.ReadClient
 
 				var (
@@ -220,6 +363,7 @@ func TestRPCs(t *testing.T) {
 			var (
 				pc *pmocks.Client
 				rc *cmocks.ReadClient
+				ip *ipmocks.Client
 			)
 
 			if c.providerClient != nil {
@@ -227,14 +371,19 @@ func TestRPCs(t *testing.T) {
 				defer pc.AssertExpectations(t)
 			}
 			if c.readClient != nil {
-				rc = c.readClient()
+				rc = c.readClient(t)
 				defer rc.AssertExpectations(t)
+			}
+			if c.ipClient != nil {
+				ip = c.ipClient(t)
+				defer ip.AssertExpectations(t)
 			}
 
 			s := NewServer(ctx,
 				WithCerts(crt1.Cert),
 				WithProviderClient(pc),
 				WithClusterReadClient(rc),
+				WithIPClient(ip),
 			).(*grpcServer)
 
 			defer s.Stop()
@@ -263,6 +412,103 @@ func TestRPCs(t *testing.T) {
 			})
 		})
 	}
+}
+
+func Test_getInfo(t *testing.T) {
+	cases := []struct {
+		desc     string
+		manifest func(t *testing.T) v2beta2.ManifestGroup
+		mgi      manifestGroupInfo
+	}{
+		{
+			desc: "has leased ips",
+			manifest: func(t *testing.T) v2beta2.ManifestGroup {
+				mgi := newManifestGroup(t)
+
+				mgi.Services[0].Expose[0].IP = "1.2.3.4"
+
+				return mgi
+			},
+			mgi: manifestGroupInfo{
+				hasLeasedIPs: true,
+			},
+		},
+		{
+			desc: "has forwarded ports",
+			manifest: func(t *testing.T) v2beta2.ManifestGroup {
+				mgi := newManifestGroup(t)
+
+				mgi.Services[0].Expose[0].Global = true
+				mgi.Services[0].Expose[0].ExternalPort = 8111
+
+				return mgi
+			},
+			mgi: manifestGroupInfo{
+				hasForwardedPorts: true,
+			},
+		},
+	}
+
+	for _, c := range cases {
+		c := c
+
+		t.Run(c.desc, func(t *testing.T) {
+			mgi := getInfo(c.manifest(t))
+			assert.Equal(t, c.mgi, mgi)
+		})
+	}
+}
+
+func newManifestGroup(t *testing.T) v2beta2.ManifestGroup {
+	t.Helper()
+
+	return v2beta2.ManifestGroup{
+		Name: serviceName(t),
+		Services: []v2beta2.ManifestService{{
+			Name:  serviceName(t),
+			Image: t.Name() + "_image",
+			Args:  nil,
+			Env:   nil,
+			Resources: v2beta2.Resources{
+				CPU: v2beta2.ResourceCPU{
+					Units: 1000,
+				},
+				Memory: v2beta2.ResourceMemory{
+					Size: "3333",
+				},
+				Storage: v2beta2.ResourceStorage{
+					{
+						Name: "default",
+						Size: "4444",
+					},
+				},
+			},
+			Count: 1,
+			Expose: []v2beta2.ManifestServiceExpose{{
+				Port:         8080,
+				ExternalPort: 80,
+				Proto:        "TCP",
+				Service:      serviceName(t),
+				Global:       true,
+				Hosts:        []string{"hello.localhost"},
+				HTTPOptions: v2beta2.ManifestServiceExposeHTTPOptions{
+					MaxBodySize: 1,
+					ReadTimeout: 2,
+					SendTimeout: 3,
+					NextTries:   4,
+					NextTimeout: 5,
+					NextCases:   nil,
+				},
+				IP:                     "",
+				EndpointSequenceNumber: 1,
+			}},
+			Params: nil,
+		}},
+	}
+}
+
+func serviceName(t *testing.T) string {
+	return t.Name() + "_service"
 }
 
 func TestMTLS(t *testing.T) {

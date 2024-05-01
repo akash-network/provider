@@ -8,8 +8,16 @@ import (
 	"sync"
 
 	leasev1 "github.com/akash-network/akash-api/go/provider/lease/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
-	"github.com/akash-network/provider/cluster/types/v1beta3"
+	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
+
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+	"github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 var ErrNoRunningPods = errors.New("no running pods")
@@ -22,8 +30,122 @@ func (*server) ServiceLogs(context.Context, *leasev1.ServiceLogsRequest) (*lease
 	panic("unimplemented")
 }
 
-func (*server) ServiceStatus(context.Context, *leasev1.ServiceStatusRequest) (*leasev1.ServiceStatusResponse, error) {
-	panic("unimplemented")
+func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequest) (*leasev1.ServiceStatusResponse, error) {
+	if s.ip == nil {
+		return &leasev1.ServiceStatusResponse{}, nil
+	}
+
+	ctx = fromctx.ApplyToContext(ctx, s.clusterSettings)
+
+	id := r.GetLeaseId()
+	found, m, err := s.rc.GetManifestGroup(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("get manifest groups: %w", err)
+	}
+
+	if !found {
+		return nil, status.Error(codes.NotFound, "lease does not exist")
+	}
+
+	i := getInfo(m)
+
+	ips := make(map[string][]leasev1.LeaseIPStatus)
+	if i.hasLeasedIPs {
+		var statuses []ip.LeaseIPStatus
+		if statuses, err = s.ip.GetIPAddressStatus(ctx, id.OrderID()); err != nil {
+			return nil, fmt.Errorf("get ip address status: %w", err)
+		}
+
+		for _, stat := range statuses {
+			ips[stat.ServiceName] = append(ips[stat.ServiceName], leasev1.LeaseIPStatus{
+				Port:         stat.Port,
+				ExternalPort: stat.ExternalPort,
+				Protocol:     stat.Protocol,
+				Ip:           stat.IP,
+			})
+		}
+	}
+
+	ports := make(map[string][]leasev1.ForwarderPortStatus)
+	if i.hasForwardedPorts {
+		var allStatuses map[string][]ctypes.ForwardedPortStatus
+		if allStatuses, err = s.rc.ForwardedPortStatus(ctx, id); err != nil {
+			return nil, fmt.Errorf("forward port status: %w", err)
+		}
+
+		for name, statuses := range allStatuses {
+			for _, stat := range statuses {
+				ports[name] = append(ports[name], leasev1.ForwarderPortStatus{
+					Name:         stat.Name,
+					Host:         stat.Host,
+					Port:         uint32(stat.Port),
+					ExternalPort: uint32(stat.ExternalPort),
+					Proto:        string(stat.Proto),
+				})
+			}
+		}
+	}
+
+	serviceStatus, err := s.rc.LeaseStatus(ctx, id)
+	switch {
+	case errors.Is(err, kubeclienterrors.ErrNoDeploymentForLease):
+		return nil, status.Error(codes.NotFound, "no deployment for lease")
+	case errors.Is(err, kubeclienterrors.ErrLeaseNotFound):
+		return nil, status.Error(codes.NotFound, "lease does not exist")
+	case kubeErrors.IsNotFound(err):
+		return nil, status.Error(codes.NotFound, "not found")
+	case err != nil:
+		return nil, fmt.Errorf("lease status: %w", err)
+	}
+
+	var resp leasev1.ServiceStatusResponse
+	for _, svc := range m.Services {
+		name := svc.Name
+		ss, ok := serviceStatus[name]
+		if !ok {
+			continue
+		}
+
+		resp.Services = append(resp.Services, leasev1.ServiceStatus{
+			Name:  name,
+			Ports: ports[name],
+			Ips:   ips[name],
+			Status: leasev1.LeaseServiceStatus{
+				Available:          ss.Available,
+				Total:              ss.Total,
+				Uris:               ss.URIs,
+				ObservedGeneration: ss.ObservedGeneration,
+				Replicas:           ss.Replicas,
+				UpdatedReplicas:    ss.UpdatedReplicas,
+				ReadyReplicas:      ss.ReadyReplicas,
+				AvailableReplicas:  ss.AvailableReplicas,
+			},
+		})
+	}
+
+	return &resp, nil
+}
+
+type manifestGroupInfo struct {
+	hasLeasedIPs      bool
+	hasForwardedPorts bool
+}
+
+func getInfo(m crd.ManifestGroup) manifestGroupInfo {
+	var i manifestGroupInfo
+
+	for _, s := range m.Services {
+		for _, e := range s.Expose {
+			if len(e.IP) > 0 {
+				i.hasLeasedIPs = true
+			}
+			if e.Global && e.ExternalPort != 80 {
+				i.hasForwardedPorts = true
+			}
+		}
+	}
+
+	return i
 }
 
 func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.LeaseRPC_StreamServiceLogsServer) error {
@@ -49,7 +171,7 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 	)
 
 	for _, ll := range logs {
-		go func(l *v1beta3.ServiceLog) {
+		go func(l *ctypes.ServiceLog) {
 			defer l.Stream.Close()
 			defer func() { errs <- nil }()
 
@@ -99,10 +221,6 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 	return nil
 }
 
-func (*server) StreamServiceStatus(*leasev1.ServiceStatusRequest, leasev1.LeaseRPC_StreamServiceStatusServer) error {
-	panic("unimplemented")
-}
-
 type safeLogStream struct {
 	s  leasev1.LeaseRPC_StreamServiceLogsServer
 	mu sync.Mutex
@@ -117,4 +235,8 @@ func (s *safeLogStream) Send(r *leasev1.ServiceLogsResponse) error {
 	}
 
 	return nil
+}
+
+func (*server) StreamServiceStatus(*leasev1.ServiceStatusRequest, leasev1.LeaseRPC_StreamServiceStatusServer) error {
+	panic("unimplemented")
 }
