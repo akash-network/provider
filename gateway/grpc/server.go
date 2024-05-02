@@ -158,19 +158,19 @@ func NewServer(ctx context.Context, opts ...opt) Server {
 }
 
 func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				certificates := mtls.State.PeerCertificates
-
-				if len(certificates) > 0 {
-					owner, _, err := atls.ValidatePeerCertificates(ctx, cquery, certificates, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-					if err != nil {
-						return nil, err
-					}
-
-					ctx = ContextWithOwner(ctx, owner)
+				owner, _, err := atls.ValidatePeerCertificates(
+					ctx,
+					cquery,
+					mtls.State.PeerCertificates,
+					[]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
+				if err != nil {
+					return nil, err
 				}
+
+				ctx = ContextWithOwner(ctx, owner)
 			}
 		}
 

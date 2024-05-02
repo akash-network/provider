@@ -28,8 +28,37 @@ func (*server) SendManifest(context.Context, *leasev1.SendManifestRequest) (*lea
 	panic("unimplemented")
 }
 
-func (*server) ServiceLogs(context.Context, *leasev1.ServiceLogsRequest) (*leasev1.ServiceLogsResponse, error) {
-	panic("unimplemented")
+func (s *server) ServiceLogs(ctx context.Context, r *leasev1.ServiceLogsRequest) (*leasev1.ServiceLogsResponse, error) {
+	var (
+		id       = r.GetLeaseId()
+		services = strings.Join(r.GetServices(), " ")
+		lines    = int64(0)
+	)
+
+	logs, err := s.rc.LeaseLogs(ctx, id, services, true, &lines)
+	if err != nil {
+		return nil, fmt.Errorf("lease logs: %w", err)
+	}
+
+	if len(logs) == 0 {
+		return nil, ErrNoRunningPods
+	}
+
+	var resp leasev1.ServiceLogsResponse
+	for _, l := range logs {
+		defer l.Stream.Close()
+
+		for l.Scanner.Scan() {
+			resp.Services = append(resp.Services,
+				newLeaseV1ServiceLogs(l.Name, l.Scanner.Bytes()))
+		}
+
+		if err := l.Scanner.Err(); err != nil {
+			return nil, fmt.Errorf("%s scanner: %w", l.Name, err)
+		}
+	}
+
+	return &resp, nil
 }
 
 func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequest) (*leasev1.ServiceStatusResponse, error) {
@@ -178,19 +207,9 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 				case <-ctx.Done():
 					return
 				default:
-					var (
-						buf  = l.Scanner.Bytes()
-						logs = make([]byte, len(buf))
-					)
-
-					copy(logs, buf)
-
 					resp := leasev1.ServiceLogsResponse{
 						Services: []*leasev1.ServiceLogs{
-							{
-								Name: l.Name,
-								Logs: buf,
-							},
+							newLeaseV1ServiceLogs(l.Name, l.Scanner.Bytes()),
 						},
 					}
 
@@ -217,6 +236,16 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 	}
 
 	return nil
+}
+
+func newLeaseV1ServiceLogs(name string, buf []byte) *leasev1.ServiceLogs {
+	logs := make([]byte, len(buf))
+	copy(logs, buf)
+
+	return &leasev1.ServiceLogs{
+		Name: name,
+		Logs: buf,
+	}
 }
 
 type safeLogStream struct {

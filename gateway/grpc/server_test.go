@@ -86,6 +86,86 @@ func TestRPCs(t *testing.T) {
 			},
 		},
 
+		// ServiceLogs
+		{
+			desc: "ServiceLogs none",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]*v1beta3.ServiceLog{}, nil)
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				_, err := c.l.ServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				assert.ErrorContains(t, err, ErrNoRunningPods.Error())
+			},
+		},
+		{
+			desc: "ServiceLogs LeaseLogs err",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return(nil, errors.New("boom"))
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				_, err := c.l.ServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				assert.ErrorContains(t, err, "boom")
+			},
+		},
+		{
+			desc: "ServiceLogs",
+			readClient: func(t *testing.T) *cmocks.ReadClient {
+				var m cmocks.ReadClient
+
+				var (
+					stream1 = io.NopCloser(strings.NewReader("1_1\n1_2\n1_3"))
+					stream2 = io.NopCloser(strings.NewReader("2_1\n2_2\n2_3"))
+					stream3 = io.NopCloser(strings.NewReader("3_1\n3_2\n3_3"))
+				)
+
+				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]*v1beta3.ServiceLog{
+						{
+							Name:    "one",
+							Stream:  stream1,
+							Scanner: bufio.NewScanner(stream1),
+						},
+						{
+							Name:    "two",
+							Stream:  stream2,
+							Scanner: bufio.NewScanner(stream2),
+						},
+						{
+							Name:    "three",
+							Stream:  stream3,
+							Scanner: bufio.NewScanner(stream3),
+						},
+					}, nil)
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				resp, err := c.l.ServiceLogs(ctx, &leasev1.ServiceLogsRequest{})
+				require.NoError(t, err)
+
+				expected := leasev1.ServiceLogsResponse{
+					Services: []*leasev1.ServiceLogs{
+						{Name: "one", Logs: []byte("1_1")},
+						{Name: "one", Logs: []byte("1_2")},
+						{Name: "one", Logs: []byte("1_3")},
+						{Name: "two", Logs: []byte("2_1")},
+						{Name: "two", Logs: []byte("2_2")},
+						{Name: "two", Logs: []byte("2_3")},
+						{Name: "three", Logs: []byte("3_1")},
+						{Name: "three", Logs: []byte("3_2")},
+						{Name: "three", Logs: []byte("3_3")},
+					},
+				}
+
+				assert.EqualValues(t, &expected, resp)
+			},
+		},
+
 		// ServiceStatus
 		{
 			desc: "ServiceStatus get manifest error",
@@ -597,7 +677,7 @@ func TestMTLS(t *testing.T) {
 			cert: func(*testing.T) tls.Certificate {
 				return tls.Certificate{}
 			},
-			errContains: "empty chain",
+			errContains: "too many peer certificates",
 		},
 	}
 
