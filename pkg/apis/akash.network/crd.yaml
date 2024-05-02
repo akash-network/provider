@@ -226,8 +226,6 @@ spec:
                                 type: string
                               email:
                                 type: string
-                              email:
-                                type: string
                               username:
                                 type: string
                               password:
