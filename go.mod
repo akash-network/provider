@@ -3,7 +3,7 @@ module github.com/akash-network/provider
 go 1.21
 
 require (
-	github.com/akash-network/akash-api v0.34.0
+	github.com/akash-network/akash-api v0.0.67
 	github.com/akash-network/node v0.34.1
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
@@ -81,9 +81,6 @@ require (
 	github.com/ChainSafe/go-schnorrkel v0.0.0-20200405005733-88cbf1b4c40d // indirect
 	github.com/DataDog/zstd v1.5.0 // indirect
 	github.com/HdrHistogram/hdrhistogram-go v1.1.2 // indirect
-	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver v1.5.0 // indirect
-	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/StackExchange/wmi v1.2.1 // indirect
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
 	github.com/alessio/shellescape v1.4.1 // indirect
@@ -225,8 +222,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
-	github.com/pseudomuto/protoc-gen-doc v1.5.1 // indirect
-	github.com/pseudomuto/protokit v0.2.1 // indirect
 	github.com/rakyll/statik v0.1.7 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/regen-network/cosmos-proto v0.3.1 // indirect
