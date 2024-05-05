@@ -53,7 +53,7 @@ replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
-	github.com/akash-network/akash-api => github.com/akash-network/akash-api v0.0.68-0.20240501222454-6db85d461499
+	github.com/akash-network/akash-api => github.com/akash-network/akash-api v0.0.68-0.20240505172348-f082c5cdbb68
 
 	github.com/cosmos/ledger-cosmos-go => github.com/akash-network/ledger-go/cosmos v0.14.4
 

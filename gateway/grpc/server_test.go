@@ -26,6 +26,11 @@ import (
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/node/testutil"
 
+	"github.com/akash-network/provider"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	kubeversion "k8s.io/apimachinery/pkg/version"
+
 	cmocks "github.com/akash-network/provider/cluster/mocks"
 	"github.com/akash-network/provider/cluster/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -67,15 +72,15 @@ func TestRPCs(t *testing.T) {
 
 	cases := []struct {
 		desc           string
-		providerClient func() *pmocks.Client
-		readClient     func(t *testing.T) *cmocks.ReadClient
-		ipClient       func(t *testing.T) *ipmocks.Client
+		providerClient func(*testing.T) *pmocks.Client
+		clusterClient  func(*testing.T) *cmocks.Client
+		ipClient       func(*testing.T) *ipmocks.Client
 		run            func(context.Context, *testing.T, client)
 	}{
 		// GetStatus
 		{
 			desc: "GetStatus",
-			providerClient: func() *pmocks.Client {
+			providerClient: func(t *testing.T) *pmocks.Client {
 				var m pmocks.Client
 				m.EXPECT().StatusV1(mock.Anything).Return(&providerv1.Status{}, nil)
 				return &m
@@ -86,11 +91,79 @@ func TestRPCs(t *testing.T) {
 			},
 		},
 
+		// GetVersion
+		{
+			desc: "GetVersion",
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
+
+				m.EXPECT().KubeVersion().Return(&kubeversion.Info{
+					Major:        "1",
+					Minor:        "2",
+					GitVersion:   "3",
+					GitTreeState: "4",
+					BuildDate:    "5",
+					GoVersion:    "6",
+					Compiler:     "7",
+					Platform:     "8",
+				}, nil)
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				r, err := c.p.GetVersion(ctx, &emptypb.Empty{})
+				require.NoError(t, err)
+
+				assert.NotEmpty(t, r.Kube)
+				assert.NotEmpty(t, r.Akash)
+			},
+		},
+
+		// Validate
+		{
+			desc: "Validate error",
+			providerClient: func(t *testing.T) *pmocks.Client {
+				var m pmocks.Client
+
+				m.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).
+					Return(provider.ValidateGroupSpecResult{}, errors.New("boom"))
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				_, err := c.p.Validate(ctx, &providerv1.ValidateRequest{})
+				assert.ErrorContains(t, err, "boom")
+			},
+		},
+		{
+			desc: "Validate",
+			providerClient: func(t *testing.T) *pmocks.Client {
+				var m pmocks.Client
+
+				m.EXPECT().Validate(mock.Anything, mock.Anything, mock.Anything).
+					Return(provider.ValidateGroupSpecResult{
+						MinBidPrice: sdk.DecCoin{
+							Denom:  t.Name(),
+							Amount: sdk.NewDec(111),
+						},
+					}, nil)
+
+				return &m
+			},
+			run: func(ctx context.Context, t *testing.T, c client) {
+				res, err := c.p.Validate(ctx, &providerv1.ValidateRequest{})
+				require.NoError(t, err)
+
+				assert.Equal(t, t.Name(), res.MinBidPrice.Denom)
+				assert.Equal(t, sdk.NewDec(111), res.MinBidPrice.Amount)
+			},
+		},
+
 		// ServiceLogs
 		{
 			desc: "ServiceLogs none",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*v1beta3.ServiceLog{}, nil)
 				return &m
@@ -102,8 +175,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "ServiceLogs LeaseLogs err",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, errors.New("boom"))
 				return &m
@@ -115,8 +188,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "ServiceLogs",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				var (
 					stream1 = io.NopCloser(strings.NewReader("1_1\n1_2\n1_3"))
@@ -169,8 +242,8 @@ func TestRPCs(t *testing.T) {
 		// ServiceStatus
 		{
 			desc: "ServiceStatus get manifest error",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				m.EXPECT().GetManifestGroup(mock.Anything, mock.Anything).
 					Return(false, v2beta2.ManifestGroup{}, errors.New("boom"))
@@ -184,8 +257,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "ServiceStatus no manifest group",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				m.EXPECT().GetManifestGroup(mock.Anything, mock.Anything).
 					Return(false, v2beta2.ManifestGroup{}, nil)
@@ -199,8 +272,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "ServiceStatus",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				mgi := newManifestGroup(t)
 				mgi.Services[0].Expose[0].IP = "1.2.3.4"
@@ -304,8 +377,8 @@ func TestRPCs(t *testing.T) {
 		// StreamServiceLogs
 		{
 			desc: "StreamServiceLogs none",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return([]*v1beta3.ServiceLog{}, nil)
 				return &m
@@ -320,8 +393,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "StreamServiceLogs LeaseLogs err",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 				m.EXPECT().LeaseLogs(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 					Return(nil, errors.New("boom"))
 				return &m
@@ -336,8 +409,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "StreamServiceLogs one",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				stream := io.NopCloser(strings.NewReader("1\n2\n3"))
 
@@ -374,8 +447,8 @@ func TestRPCs(t *testing.T) {
 		},
 		{
 			desc: "StreamServiceLogs multiple",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				var (
 					stream1 = io.NopCloser(strings.NewReader("1_1\n1_2\n1_3"))
@@ -435,8 +508,8 @@ func TestRPCs(t *testing.T) {
 		// StreamServiceStatus
 		{
 			desc: "StreamServiceStatus",
-			readClient: func(t *testing.T) *cmocks.ReadClient {
-				var m cmocks.ReadClient
+			clusterClient: func(t *testing.T) *cmocks.Client {
+				var m cmocks.Client
 
 				mgi := newManifestGroup(t)
 
@@ -490,17 +563,17 @@ func TestRPCs(t *testing.T) {
 
 			var (
 				pc *pmocks.Client
-				rc *cmocks.ReadClient
+				cc *cmocks.Client
 				ip *ipmocks.Client
 			)
 
 			if c.providerClient != nil {
-				pc = c.providerClient()
+				pc = c.providerClient(t)
 				defer pc.AssertExpectations(t)
 			}
-			if c.readClient != nil {
-				rc = c.readClient(t)
-				defer rc.AssertExpectations(t)
+			if c.clusterClient != nil {
+				cc = c.clusterClient(t)
+				defer cc.AssertExpectations(t)
 			}
 			if c.ipClient != nil {
 				ip = c.ipClient(t)
@@ -510,7 +583,7 @@ func TestRPCs(t *testing.T) {
 			s := NewServer(ctx,
 				WithCerts(crt1.Cert),
 				WithProviderClient(pc),
-				WithClusterReadClient(rc),
+				WithClusterClient(cc),
 				WithIPClient(ip),
 			).(*grpcServer)
 
@@ -663,19 +736,19 @@ func TestMTLS(t *testing.T) {
 
 	cases := []struct {
 		desc        string
-		cert        func(*testing.T) tls.Certificate
+		certs       func() []tls.Certificate
 		errContains string
 	}{
 		{
 			desc: "good cert",
-			cert: func(*testing.T) tls.Certificate {
-				return testutil.Certificate(t, testutil.AccAddress(t), com, cod).Cert[0]
+			certs: func() []tls.Certificate {
+				return crt.Cert
 			},
 		},
 		{
 			desc: "empty chain",
-			cert: func(*testing.T) tls.Certificate {
-				return tls.Certificate{}
+			certs: func() []tls.Certificate {
+				return nil
 			},
 			errContains: "too many peer certificates",
 		},
@@ -709,7 +782,7 @@ func TestMTLS(t *testing.T) {
 
 			tlsConfig := tls.Config{
 				InsecureSkipVerify: true,
-				Certificates:       []tls.Certificate{c.cert(t)},
+				Certificates:       c.certs(),
 			}
 
 			conn, err := grpc.DialContext(ctx, l.Addr().String(),

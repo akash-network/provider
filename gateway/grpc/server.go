@@ -42,12 +42,10 @@ type grpcServer struct {
 type server struct {
 	ctx context.Context
 	pc  provider.Client
-	rc  cluster.ReadClient
+	cc  cluster.Client
 
-	certs             []tls.Certificate
-	providerClient    provider.Client
-	clusterReadClient cluster.ReadClient
-	ip                ip.Client
+	certs []tls.Certificate
+	ip    ip.Client
 
 	clusterSettings map[any]any
 }
@@ -83,11 +81,11 @@ func (s *grpcServer) ServeOn(ctx context.Context, addr string) error {
 }
 
 type serverOpts struct {
-	certs             []tls.Certificate
-	providerClient    provider.Client
-	clusterReadClient cluster.ReadClient
-	clusterSettings   map[any]any
-	ipClient          ip.Client
+	certs           []tls.Certificate
+	providerClient  provider.Client
+	clusterClient   cluster.Client
+	clusterSettings map[any]any
+	ipClient        ip.Client
 }
 
 type opt func(*serverOpts)
@@ -100,8 +98,8 @@ func WithProviderClient(c provider.Client) opt {
 	return func(so *serverOpts) { so.providerClient = c }
 }
 
-func WithClusterReadClient(c cluster.ReadClient) opt {
-	return func(so *serverOpts) { so.clusterReadClient = c }
+func WithClusterClient(c cluster.Client) opt {
+	return func(so *serverOpts) { so.clusterClient = c }
 }
 
 func WithClusterSettings(s map[any]any) opt {
@@ -145,7 +143,7 @@ func NewServer(ctx context.Context, opts ...opt) Server {
 	s := &server{
 		ctx:             ctx,
 		pc:              o.providerClient,
-		rc:              o.clusterReadClient,
+		cc:              o.clusterClient,
 		clusterSettings: o.clusterSettings,
 		ip:              o.ipClient,
 	}
@@ -167,7 +165,7 @@ func mtlsInterceptor(cquery ctypes.QueryClient) grpc.UnaryServerInterceptor {
 					mtls.State.PeerCertificates,
 					[]x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
 				if err != nil {
-					return nil, err
+					return nil, fmt.Errorf("validate peer certificates: %w", err)
 				}
 
 				ctx = ContextWithOwner(ctx, owner)

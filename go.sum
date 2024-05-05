@@ -197,8 +197,8 @@ github.com/afex/hystrix-go v0.0.0-20180502004556-fa1af6a1f4f5/go.mod h1:SkGFH1ia
 github.com/agnivade/levenshtein v1.0.1/go.mod h1:CURSv5d9Uaml+FovSIICkLbAUZ9S4RqaHDIsdSBg7lM=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
 github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af/go.mod h1:K08gAheRH3/J6wwsYMMT4xOr94bZjxIelGM0+d/wbFw=
-github.com/akash-network/akash-api v0.0.68-0.20240501222454-6db85d461499 h1:kDqzcaf5K0zblTG3FlrLcy6UdROUXEA0jzd0J3kUgg0=
-github.com/akash-network/akash-api v0.0.68-0.20240501222454-6db85d461499/go.mod h1:hlloP8i0WLhFn8Gq5KkX8nwFjpsxr1QzV7OqmgFGG6U=
+github.com/akash-network/akash-api v0.0.68-0.20240505172348-f082c5cdbb68 h1:wlTZfjQRVsRKWObgpTiBuUOqxPoQ2bKxVvmMuSDuYqA=
+github.com/akash-network/akash-api v0.0.68-0.20240505172348-f082c5cdbb68/go.mod h1:VETP3ilOwLIRP40WPy806ygL/IzgGEuMoxXaCUZpRPI=
 github.com/akash-network/cometbft v0.34.27-akash h1:V1dApDOr8Ee7BJzYyQ7Z9VBtrAul4+baMeA6C49dje0=
 github.com/akash-network/cometbft v0.34.27-akash/go.mod h1:BcCbhKv7ieM0KEddnYXvQZR+pZykTKReJJYf7YC7qhw=
 github.com/akash-network/ledger-go v0.14.3 h1:LCEFkTfgGA2xFMN2CtiKvXKE7dh0QSM77PJHCpSkaAo=

@@ -35,7 +35,7 @@ func (s *server) ServiceLogs(ctx context.Context, r *leasev1.ServiceLogsRequest)
 		lines    = int64(0)
 	)
 
-	logs, err := s.rc.LeaseLogs(ctx, id, services, true, &lines)
+	logs, err := s.cc.LeaseLogs(ctx, id, services, true, &lines)
 	if err != nil {
 		return nil, fmt.Errorf("lease logs: %w", err)
 	}
@@ -65,7 +65,7 @@ func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequ
 	ctx = fromctx.ApplyToContext(ctx, s.clusterSettings)
 
 	id := r.GetLeaseId()
-	found, m, err := s.rc.GetManifestGroup(ctx, id)
+	found, m, err := s.cc.GetManifestGroup(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get manifest groups: %w", err)
 	}
@@ -96,7 +96,7 @@ func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequ
 	ports := make(map[string][]leasev1.ForwarderPortStatus)
 	if i.hasForwardedPorts {
 		var allStatuses map[string][]ctypes.ForwardedPortStatus
-		if allStatuses, err = s.rc.ForwardedPortStatus(ctx, id); err != nil {
+		if allStatuses, err = s.cc.ForwardedPortStatus(ctx, id); err != nil {
 			return nil, fmt.Errorf("forward port status: %w", err)
 		}
 
@@ -113,7 +113,7 @@ func (s *server) ServiceStatus(ctx context.Context, r *leasev1.ServiceStatusRequ
 		}
 	}
 
-	serviceStatus, err := s.rc.LeaseStatus(ctx, id)
+	serviceStatus, err := s.cc.LeaseStatus(ctx, id)
 	switch {
 	case errors.Is(err, kubeclienterrors.ErrNoDeploymentForLease):
 		return nil, status.Error(codes.NotFound, "no deployment for lease")
@@ -183,7 +183,7 @@ func (s *server) StreamServiceLogs(r *leasev1.ServiceLogsRequest, strm leasev1.L
 		lines    = int64(0)
 	)
 
-	logs, err := s.rc.LeaseLogs(ctx, id, services, true, &lines)
+	logs, err := s.cc.LeaseLogs(ctx, id, services, true, &lines)
 	if err != nil {
 		return fmt.Errorf("lease logs: %w", err)
 	}
