@@ -15,15 +15,14 @@ import (
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/sdl"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
-
 	"github.com/akash-network/provider/cluster/util"
 )
 
 type Request struct {
-	Owner          string `json:"owner"`
-	GSpec          *dtypes.GroupSpec
-	PricePrecision int
+	Owner              string `json:"owner"`
+	GSpec              *dtypes.GroupSpec
+	AllocatedResources dtypes.ResourceUnits
+	PricePrecision     int
 }
 
 const (
@@ -31,7 +30,7 @@ const (
 )
 
 type BidPricingStrategy interface {
-	CalculatePrice(context.Context, Request, ctypes.Reservation) (sdk.DecCoin, error)
+	CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error)
 }
 
 var (
@@ -130,7 +129,7 @@ func ceilBigRatToBigInt(v *big.Rat) *big.Int {
 	return result
 }
 
-func (fp scalePricing) CalculatePrice(_ context.Context, req Request, _ ctypes.Reservation) (sdk.DecCoin, error) {
+func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
 	// Use unlimited precision math here.
 	// Otherwise, a correctly crafted order could create a cost of '1' given
 	// a possible configuration
@@ -250,7 +249,7 @@ func MakeRandomRangePricing() (BidPricingStrategy, error) {
 	return randomRangePricing(0), nil
 }
 
-func (randomRangePricing) CalculatePrice(_ context.Context, req Request, _ ctypes.Reservation) (sdk.DecCoin, error) {
+func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
 	min, max := calculatePriceRange(req.GSpec)
 	if min.IsEqual(max) {
 		return max, nil

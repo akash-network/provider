@@ -15,7 +15,6 @@ import (
 	"github.com/akash-network/node/sdl"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
 )
 
@@ -127,8 +126,8 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 	return res
 }
 
-func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request, res ctypes.Reservation) (sdk.DecCoin, error) {
-	d := newDataForScript(req, res)
+func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, r Request) (sdk.DecCoin, error) {
+	d := newDataForScript(r)
 
 	buf := &bytes.Buffer{}
 	if err := json.NewEncoder(buf).Encode(&d); err != nil {
@@ -151,10 +150,10 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request, r
 	stderrBuf := &bytes.Buffer{}
 	cmd.Stderr = stderrBuf
 
-	denom := req.GSpec.Price().Denom
+	denom := r.GSpec.Price().Denom
 
 	subprocEnv := os.Environ()
-	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", req.Owner))
+	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", r.Owner))
 	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_DENOM=%s", denom))
 	cmd.Env = subprocEnv
 
@@ -190,28 +189,23 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request, r
 	return sdk.NewDecCoinFromDec(denom, price), nil
 }
 
-func newDataForScript(req Request, res ctypes.Reservation) dataForScript {
+func newDataForScript(r Request) dataForScript {
 	d := dataForScript{
-		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
-		Price:     req.GSpec.Price(),
+		Resources: make([]dataForScriptElement, len(r.GSpec.Resources)),
+		Price:     r.GSpec.Price(),
 	}
 
-	if req.PricePrecision > 0 {
-		d.PricePrecision = &req.PricePrecision
+	if r.PricePrecision > 0 {
+		d.PricePrecision = &r.PricePrecision
 	}
 
-	vendorModels := make(map[string]string)
-
-	if res != nil {
-		for _, g := range res.GetAllocatedResources() {
-			for v, a := range parseGPU(g.GPU).Attributes.Vendor {
-				vendorModels[v] = a.Model
-			}
-		}
+	resources := r.GSpec.Resources
+	if len(r.AllocatedResources) > 0 {
+		resources = r.AllocatedResources
 	}
 
 	// iterate over everything & sum it up
-	for i, group := range req.GSpec.Resources {
+	for i, group := range resources {
 		groupCount := group.Count
 
 		cpuQuantity := parseCPU(group.CPU)
@@ -219,15 +213,6 @@ func newDataForScript(req Request, res ctypes.Reservation) dataForScript {
 		memoryQuantity := parseMemory(group.Memory)
 		storageQuantity := parseStorage(group.Storage)
 		endpointQuantity := len(group.Endpoints)
-
-		for vendor, attrs := range gpuQuantity.Attributes.Vendor {
-			if attrs.Model == "*" {
-				m, ok := vendorModels[vendor]
-				if ok {
-					attrs.Model = m
-				}
-			}
-		}
 
 		d.Resources[i] = dataForScriptElement{
 			CPU:              cpuQuantity,

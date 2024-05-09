@@ -9,8 +9,6 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
 func Test_parseGPU_LastAttribute(t *testing.T) {
@@ -45,13 +43,12 @@ func Test_parseGPU_LastAttribute(t *testing.T) {
 func Test_newDataForScript_GPUWildcard(t *testing.T) {
 	cases := []struct {
 		desc string
-		req  Request
-		res  ctypes.Reservation
+		r    Request
 		gpu  gpuElement
 	}{
 		{
-			desc: "wildcard and reservation value",
-			req: Request{
+			desc: "wildcard and allocated resources",
+			r: Request{
 				GSpec: &v1beta3.GroupSpec{
 					Resources: v1beta3.ResourceUnits{
 						{
@@ -82,12 +79,20 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 						},
 					},
 				},
-			},
-			res: &testReservation{
-				ru: dtypes.ResourceUnits{
+				AllocatedResources: dtypes.ResourceUnits{
 					{
 						Resources: atypes.Resources{
 							ID: 111,
+							CPU: &atypes.CPU{
+								Units: atypes.ResourceValue{
+									Val: sdk.NewInt(111),
+								},
+							},
+							Memory: &atypes.Memory{
+								Quantity: atypes.ResourceValue{
+									Val: sdk.NewInt(111),
+								},
+							},
 							GPU: &atypes.GPU{
 								Units: atypes.ResourceValue{
 									Val: sdk.NewInt(111),
@@ -114,7 +119,7 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 		},
 		{
 			desc: "wildcard and no reservation value",
-			req: Request{
+			r: Request{
 				GSpec: &v1beta3.GroupSpec{
 					Resources: v1beta3.ResourceUnits{
 						{
@@ -146,20 +151,6 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 					},
 				},
 			},
-			res: &testReservation{
-				ru: dtypes.ResourceUnits{
-					{
-						Resources: atypes.Resources{
-							ID: 111,
-							GPU: &atypes.GPU{
-								Units: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
-								},
-							},
-						},
-					},
-				},
-			},
 			gpu: gpuElement{
 				Units: 111,
 				Attributes: gpuAttributes{
@@ -171,7 +162,7 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 		},
 		{
 			desc: "no wildcard and reservation value",
-			req: Request{
+			r: Request{
 				GSpec: &v1beta3.GroupSpec{
 					Resources: v1beta3.ResourceUnits{
 						{
@@ -202,12 +193,20 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 						},
 					},
 				},
-			},
-			res: &testReservation{
-				ru: dtypes.ResourceUnits{
+				AllocatedResources: dtypes.ResourceUnits{
 					{
 						Resources: atypes.Resources{
 							ID: 111,
+							CPU: &atypes.CPU{
+								Units: atypes.ResourceValue{
+									Val: sdk.NewInt(111),
+								},
+							},
+							Memory: &atypes.Memory{
+								Quantity: atypes.ResourceValue{
+									Val: sdk.NewInt(111),
+								},
+							},
 							GPU: &atypes.GPU{
 								Units: atypes.ResourceValue{
 									Val: sdk.NewInt(111),
@@ -238,7 +237,7 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 		c := c
 
 		t.Run(c.desc, func(t *testing.T) {
-			d := newDataForScript(c.req, c.res)
+			d := newDataForScript(c.r)
 			assert.NotEmpty(t, d)
 		})
 	}
