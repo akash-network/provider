@@ -31,6 +31,7 @@ import (
 	"github.com/akash-network/node/testutil"
 
 	clustermocks "github.com/akash-network/provider/cluster/mocks"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	"github.com/akash-network/provider/session"
 )
@@ -56,8 +57,10 @@ type alwaysFailsBidPricingStrategy struct {
 	failure error
 }
 
-var _ BidPricingStrategy = (*testBidPricingStrategy)(nil)
-var _ BidPricingStrategy = (*alwaysFailsBidPricingStrategy)(nil)
+var (
+	_ BidPricingStrategy = (*testBidPricingStrategy)(nil)
+	_ BidPricingStrategy = (*alwaysFailsBidPricingStrategy)(nil)
+)
 
 func makeMocks(s *orderTestScaffold) {
 	groupResult := &dtypes.QueryGroupResponse{}
@@ -317,7 +320,6 @@ func Test_BidOrderPriceTooHigh(t *testing.T) {
 
 	// Should have called unreserve once, nothing happened after the bid
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
-
 }
 
 func Test_BidOrderAndThenClosedUnreserve(t *testing.T) {
@@ -577,6 +579,7 @@ func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 
 	scaffold.txClient.AssertNotCalled(t, "Broadcast", mock.Anything, expMsgs, mock.Anything)
 }
+
 func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 	pricing, err := MakeRandomRangePricing()
 	require.NoError(t, err)
@@ -645,7 +648,7 @@ func Test_ShouldRecognizeLeaseCreatedIfBiddingIsSkipped(t *testing.T) {
 	require.Nil(t, broadcast)
 }
 
-func (tbps testBidPricingStrategy) CalculatePrice(_ context.Context, _ Request) (sdk.DecCoin, error) {
+func (tbps testBidPricingStrategy) CalculatePrice(_ context.Context, _ Request, _ ctypes.Reservation) (sdk.DecCoin, error) {
 	return sdk.NewInt64DecCoin(testutil.CoinDenom, int64(tbps)), nil
 }
 
@@ -674,7 +677,7 @@ func Test_BidOrderUsesBidPricingStrategy(t *testing.T) {
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
 }
 
-func (afbps alwaysFailsBidPricingStrategy) CalculatePrice(_ context.Context, _ Request) (sdk.DecCoin, error) {
+func (afbps alwaysFailsBidPricingStrategy) CalculatePrice(_ context.Context, _ Request, _ ctypes.Reservation) (sdk.DecCoin, error) {
 	return sdk.DecCoin{}, afbps.failure
 }
 

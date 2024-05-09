@@ -376,7 +376,7 @@ loop:
 					GSpec:          &group.GroupSpec,
 					PricePrecision: DefaultPricePrecision,
 				}
-				return runner.NewResult(o.cfg.PricingStrategy.CalculatePrice(ctx, priceReq))
+				return runner.NewResult(o.cfg.PricingStrategy.CalculatePrice(ctx, priceReq, reservation))
 			}, pricingDuration))
 		case result := <-pricech:
 			pricech = nil

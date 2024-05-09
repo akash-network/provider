@@ -15,6 +15,8 @@ import (
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/akash-network/node/sdl"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
+
 	"github.com/akash-network/provider/cluster/util"
 )
 
@@ -29,7 +31,7 @@ const (
 )
 
 type BidPricingStrategy interface {
-	CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error)
+	CalculatePrice(context.Context, Request, ctypes.Reservation) (sdk.DecCoin, error)
 }
 
 var (
@@ -89,8 +91,8 @@ func MakeScalePricing(
 	memoryScale decimal.Decimal,
 	storageScale Storage,
 	endpointScale decimal.Decimal,
-	ipScale decimal.Decimal) (BidPricingStrategy, error) {
-
+	ipScale decimal.Decimal,
+) (BidPricingStrategy, error) {
 	if cpuScale.IsZero() && memoryScale.IsZero() && storageScale.IsAnyZero() && endpointScale.IsZero() && ipScale.IsZero() {
 		return nil, errAllScalesZero
 	}
@@ -128,7 +130,7 @@ func ceilBigRatToBigInt(v *big.Rat) *big.Int {
 	return result
 }
 
-func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
+func (fp scalePricing) CalculatePrice(_ context.Context, req Request, _ ctypes.Reservation) (sdk.DecCoin, error) {
 	// Use unlimited precision math here.
 	// Otherwise, a correctly crafted order could create a cost of '1' given
 	// a possible configuration
@@ -248,7 +250,7 @@ func MakeRandomRangePricing() (BidPricingStrategy, error) {
 	return randomRangePricing(0), nil
 }
 
-func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
+func (randomRangePricing) CalculatePrice(_ context.Context, req Request, _ ctypes.Reservation) (sdk.DecCoin, error) {
 	min, max := calculatePriceRange(req.GSpec)
 	if min.IsEqual(max) {
 		return max, nil
@@ -317,9 +319,11 @@ func calculatePriceRange(gspec *dtypes.GroupSpec) (sdk.DecCoin, sdk.DecCoin) {
 	return sdk.NewDecCoinFromDec(rmax.Denom, cmin), sdk.NewDecCoinFromDec(rmax.Denom, cmax)
 }
 
-var errPathEmpty = errors.New("script path cannot be the empty string")
-var errProcessLimitZero = errors.New("process limit must be greater than zero")
-var errProcessRuntimeLimitZero = errors.New("process runtime limit must be greater than zero")
+var (
+	errPathEmpty               = errors.New("script path cannot be the empty string")
+	errProcessLimitZero        = errors.New("process limit must be greater than zero")
+	errProcessRuntimeLimitZero = errors.New("process runtime limit must be greater than zero")
+)
 
 type storageElement struct {
 	Class string `json:"class"`

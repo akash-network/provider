@@ -49,9 +49,7 @@ require (
 	sigs.k8s.io/kind v0.20.0
 )
 
-retract (
-	v0.6.0
-)
+retract v0.6.0
 
 replace (
 	// use cosmos fork of keyring

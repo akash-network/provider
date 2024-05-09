@@ -15,6 +15,7 @@ import (
 	"github.com/akash-network/node/sdl"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
 )
 
@@ -126,42 +127,11 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 	return res
 }
 
-func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error) {
-	buf := &bytes.Buffer{}
+func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request, res ctypes.Reservation) (sdk.DecCoin, error) {
+	d := newDataForScript(req, res)
 
-	dataForScript := &dataForScript{
-		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
-		Price:     req.GSpec.Price(),
-	}
-
-	if req.PricePrecision > 0 {
-		dataForScript.PricePrecision = &req.PricePrecision
-	}
-
-	// iterate over everything & sum it up
-	for i, group := range req.GSpec.Resources {
-		groupCount := group.Count
-
-		cpuQuantity := parseCPU(group.Resources.CPU)
-		gpuQuantity := parseGPU(group.Resources.GPU)
-		memoryQuantity := parseMemory(group.Resources.Memory)
-		storageQuantity := parseStorage(group.Resources.Storage)
-		endpointQuantity := len(group.Resources.Endpoints)
-
-		dataForScript.Resources[i] = dataForScriptElement{
-			CPU:              cpuQuantity,
-			GPU:              gpuQuantity,
-			Memory:           memoryQuantity,
-			Storage:          storageQuantity,
-			Count:            groupCount,
-			EndpointQuantity: endpointQuantity,
-			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, atypes.Endpoint_LEASED_IP),
-		}
-	}
-
-	encoder := json.NewEncoder(buf)
-	err := encoder.Encode(dataForScript)
-	if err != nil {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(&d); err != nil {
 		return sdk.DecCoin{}, err
 	}
 
@@ -175,7 +145,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	processCtx, cancel := context.WithTimeout(ctx, ssp.runtimeLimit)
 	defer cancel()
 	cmd := exec.CommandContext(processCtx, ssp.path) //nolint:gosec
-	cmd.Stdin = buf
+	cmd.Stdin = &buf
 	outputBuf := &bytes.Buffer{}
 	cmd.Stdout = outputBuf
 	stderrBuf := &bytes.Buffer{}
@@ -188,7 +158,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_DENOM=%s", denom))
 	cmd.Env = subprocEnv
 
-	err = cmd.Run()
+	err := cmd.Run()
 
 	if ctxErr := processCtx.Err(); ctxErr != nil {
 		return sdk.DecCoin{}, ctxErr
@@ -218,4 +188,57 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	}
 
 	return sdk.NewDecCoinFromDec(denom, price), nil
+}
+
+func newDataForScript(req Request, res ctypes.Reservation) dataForScript {
+	d := dataForScript{
+		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
+		Price:     req.GSpec.Price(),
+	}
+
+	if req.PricePrecision > 0 {
+		d.PricePrecision = &req.PricePrecision
+	}
+
+	vendorModels := make(map[string]string)
+
+	if res != nil {
+		for _, g := range res.GetAllocatedResources() {
+			for v, a := range parseGPU(g.GPU).Attributes.Vendor {
+				vendorModels[v] = a.Model
+			}
+		}
+	}
+
+	// iterate over everything & sum it up
+	for i, group := range req.GSpec.Resources {
+		groupCount := group.Count
+
+		cpuQuantity := parseCPU(group.CPU)
+		gpuQuantity := parseGPU(group.GPU)
+		memoryQuantity := parseMemory(group.Memory)
+		storageQuantity := parseStorage(group.Storage)
+		endpointQuantity := len(group.Endpoints)
+
+		for vendor, attrs := range gpuQuantity.Attributes.Vendor {
+			if attrs.Model == "*" {
+				m, ok := vendorModels[vendor]
+				if ok {
+					attrs.Model = m
+				}
+			}
+		}
+
+		d.Resources[i] = dataForScriptElement{
+			CPU:              cpuQuantity,
+			GPU:              gpuQuantity,
+			Memory:           memoryQuantity,
+			Storage:          storageQuantity,
+			Count:            groupCount,
+			EndpointQuantity: endpointQuantity,
+			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, atypes.Endpoint_LEASED_IP),
+		}
+	}
+
+	return d
 }
