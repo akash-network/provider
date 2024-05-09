@@ -130,8 +130,8 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request, res ctypes.Reservation) (sdk.DecCoin, error) {
 	d := newDataForScript(req, res)
 
-	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(&d); err != nil {
+	buf := &bytes.Buffer{}
+	if err := json.NewEncoder(buf).Encode(&d); err != nil {
 		return sdk.DecCoin{}, err
 	}
 
@@ -145,7 +145,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request, r
 	processCtx, cancel := context.WithTimeout(ctx, ssp.runtimeLimit)
 	defer cancel()
 	cmd := exec.CommandContext(processCtx, ssp.path) //nolint:gosec
-	cmd.Stdin = &buf
+	cmd.Stdin = buf
 	outputBuf := &bytes.Buffer{}
 	cmd.Stdout = outputBuf
 	stderrBuf := &bytes.Buffer{}
