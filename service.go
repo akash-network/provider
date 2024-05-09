@@ -69,8 +69,7 @@ func NewService(ctx context.Context,
 	bus pubsub.Bus,
 	cclient cluster.Client,
 	waiter waiter.OperatorWaiter,
-	cfg Config,
-) (Service, error) {
+	cfg Config) (Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	session = session.ForModule("provider-service")
@@ -268,7 +267,7 @@ func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.
 	// 	return ValidateGroupSpecResult{}, err
 	// }
 
-	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req, nil)
+	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
 	if err != nil {
 		return ValidateGroupSpecResult{}, err
 	}
