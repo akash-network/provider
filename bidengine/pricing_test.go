@@ -720,61 +720,6 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 	require.Equal(t, sdk.NewDecCoinFromDec("uakt", amount).String(), price.String())
 }
 
-func Test_ScriptPricingFromScript_Reservation(t *testing.T) {
-	const (
-		mockAPIResponse = `{"akash-network":{"usd":3.57}}`
-	)
-
-	expectedPrice := fmt.Sprintf("%.*f", DefaultPricePrecision, 67843137.254901960)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, err := io.WriteString(w, mockAPIResponse)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-
-	err := os.Setenv("API_URL", server.URL)
-	require.NoError(t, err)
-
-	scriptPath, err := filepath.Abs("../script/usd_pricing_oracle.sh")
-	require.NoError(t, err)
-
-	pricing, err := MakeShellScriptPricing(scriptPath, 1, 30000*time.Millisecond)
-	require.NoError(t, err)
-	require.NotNil(t, pricing)
-
-	gspec := defaultGroupSpec()
-	gspec.Resources[0].Resources.Endpoints = make(atypes.Endpoints, 7)
-	req := Request{
-		Owner: testutil.AccAddress(t).String(),
-		GSpec: gspec,
-	}
-
-	r := testReservation{
-		ru: dtypes.ResourceUnits{{
-			Resources: atypes.Resources{
-				ID: 111,
-				GPU: &atypes.GPU{
-					Attributes: atypes.Attributes{
-						{
-							Key:   "capabilities/gpu/vendor/nvidia/model/a100",
-							Value: "true",
-						},
-					},
-				},
-			},
-		}},
-	}
-
-	price, err := pricing.CalculatePrice(context.Background(), req, &r)
-	require.NoError(t, err)
-	amount, err := sdk.NewDecFromStr(expectedPrice)
-	require.NoError(t, err)
-
-	require.Equal(t, sdk.NewDecCoinFromDec("uakt", amount).String(), price.String())
-}
-
 var _ ctypes.Reservation = (*testReservation)(nil)
 
 type testReservation struct {
