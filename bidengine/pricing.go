@@ -19,9 +19,10 @@ import (
 )
 
 type Request struct {
-	Owner          string `json:"owner"`
-	GSpec          *dtypes.GroupSpec
-	PricePrecision int
+	Owner              string `json:"owner"`
+	GSpec              *dtypes.GroupSpec
+	AllocatedResources dtypes.ResourceUnits
+	PricePrecision     int
 }
 
 const (
@@ -89,8 +90,8 @@ func MakeScalePricing(
 	memoryScale decimal.Decimal,
 	storageScale Storage,
 	endpointScale decimal.Decimal,
-	ipScale decimal.Decimal) (BidPricingStrategy, error) {
-
+	ipScale decimal.Decimal,
+) (BidPricingStrategy, error) {
 	if cpuScale.IsZero() && memoryScale.IsZero() && storageScale.IsAnyZero() && endpointScale.IsZero() && ipScale.IsZero() {
 		return nil, errAllScalesZero
 	}
@@ -317,9 +318,11 @@ func calculatePriceRange(gspec *dtypes.GroupSpec) (sdk.DecCoin, sdk.DecCoin) {
 	return sdk.NewDecCoinFromDec(rmax.Denom, cmin), sdk.NewDecCoinFromDec(rmax.Denom, cmax)
 }
 
-var errPathEmpty = errors.New("script path cannot be the empty string")
-var errProcessLimitZero = errors.New("process limit must be greater than zero")
-var errProcessRuntimeLimitZero = errors.New("process runtime limit must be greater than zero")
+var (
+	errPathEmpty               = errors.New("script path cannot be the empty string")
+	errProcessLimitZero        = errors.New("process limit must be greater than zero")
+	errProcessRuntimeLimitZero = errors.New("process runtime limit must be greater than zero")
+)
 
 type storageElement struct {
 	Class string `json:"class"`

@@ -126,42 +126,11 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 	return res
 }
 
-func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error) {
+func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, r Request) (sdk.DecCoin, error) {
+	d := newDataForScript(r)
+
 	buf := &bytes.Buffer{}
-
-	dataForScript := &dataForScript{
-		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
-		Price:     req.GSpec.Price(),
-	}
-
-	if req.PricePrecision > 0 {
-		dataForScript.PricePrecision = &req.PricePrecision
-	}
-
-	// iterate over everything & sum it up
-	for i, group := range req.GSpec.Resources {
-		groupCount := group.Count
-
-		cpuQuantity := parseCPU(group.Resources.CPU)
-		gpuQuantity := parseGPU(group.Resources.GPU)
-		memoryQuantity := parseMemory(group.Resources.Memory)
-		storageQuantity := parseStorage(group.Resources.Storage)
-		endpointQuantity := len(group.Resources.Endpoints)
-
-		dataForScript.Resources[i] = dataForScriptElement{
-			CPU:              cpuQuantity,
-			GPU:              gpuQuantity,
-			Memory:           memoryQuantity,
-			Storage:          storageQuantity,
-			Count:            groupCount,
-			EndpointQuantity: endpointQuantity,
-			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, atypes.Endpoint_LEASED_IP),
-		}
-	}
-
-	encoder := json.NewEncoder(buf)
-	err := encoder.Encode(dataForScript)
-	if err != nil {
+	if err := json.NewEncoder(buf).Encode(&d); err != nil {
 		return sdk.DecCoin{}, err
 	}
 
@@ -181,14 +150,14 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	stderrBuf := &bytes.Buffer{}
 	cmd.Stderr = stderrBuf
 
-	denom := req.GSpec.Price().Denom
+	denom := r.GSpec.Price().Denom
 
 	subprocEnv := os.Environ()
-	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", req.Owner))
+	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", r.Owner))
 	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_DENOM=%s", denom))
 	cmd.Env = subprocEnv
 
-	err = cmd.Run()
+	err := cmd.Run()
 
 	if ctxErr := processCtx.Err(); ctxErr != nil {
 		return sdk.DecCoin{}, ctxErr
@@ -218,4 +187,43 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	}
 
 	return sdk.NewDecCoinFromDec(denom, price), nil
+}
+
+func newDataForScript(r Request) dataForScript {
+	d := dataForScript{
+		Resources: make([]dataForScriptElement, len(r.GSpec.Resources)),
+		Price:     r.GSpec.Price(),
+	}
+
+	if r.PricePrecision > 0 {
+		d.PricePrecision = &r.PricePrecision
+	}
+
+	resources := r.GSpec.Resources
+	if len(r.AllocatedResources) > 0 {
+		resources = r.AllocatedResources
+	}
+
+	// iterate over everything & sum it up
+	for i, group := range resources {
+		groupCount := group.Count
+
+		cpuQuantity := parseCPU(group.CPU)
+		gpuQuantity := parseGPU(group.GPU)
+		memoryQuantity := parseMemory(group.Memory)
+		storageQuantity := parseStorage(group.Storage)
+		endpointQuantity := len(group.Endpoints)
+
+		d.Resources[i] = dataForScriptElement{
+			CPU:              cpuQuantity,
+			GPU:              gpuQuantity,
+			Memory:           memoryQuantity,
+			Storage:          storageQuantity,
+			Count:            groupCount,
+			EndpointQuantity: endpointQuantity,
+			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, atypes.Endpoint_LEASED_IP),
+		}
+	}
+
+	return d
 }
