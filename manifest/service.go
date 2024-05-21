@@ -55,7 +55,6 @@ type StatusClient interface {
 //go:generate mockery --name Client
 type Client interface {
 	Submit(context.Context, dtypes.DeploymentID, manifest.Manifest) error
-	IsActive(context.Context, dtypes.DeploymentID) (bool, error)
 }
 
 // Service is the interface that includes StatusClient and Handler interfaces. It also wraps Done method
@@ -82,7 +81,6 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, ho
 		sub:             sub,
 		statusch:        make(chan chan<- *Status),
 		mreqch:          make(chan manifestRequest),
-		activeCheckCh:   make(chan isActiveCheck),
 		managers:        make(map[string]*manager),
 		managerch:       make(chan *manager),
 		lc:              lifecycle.New(),
@@ -107,9 +105,8 @@ type service struct {
 	sub     pubsub.Subscriber
 	lc      lifecycle.Lifecycle
 
-	statusch      chan chan<- *Status
-	mreqch        chan manifestRequest
-	activeCheckCh chan isActiveCheck
+	statusch chan chan<- *Status
+	mreqch   chan manifestRequest
 
 	managers  map[string]*manager
 	managerch chan *manager
@@ -129,38 +126,6 @@ type manifestRequest struct {
 func (s *service) updateGauges() {
 	manifestManagerGauge.Set(float64(len(s.managers)))
 	manifestWatchdogGauge.Set(float64(len(s.managers)))
-}
-
-type isActiveCheck struct {
-	ch         chan<- bool
-	Deployment dtypes.DeploymentID
-}
-
-func (s *service) IsActive(ctx context.Context, dID dtypes.DeploymentID) (bool, error) {
-	ch := make(chan bool, 1)
-	req := isActiveCheck{
-		Deployment: dID,
-		ch:         ch,
-	}
-
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case s.activeCheckCh <- req:
-	case <-s.lc.ShuttingDown():
-		return false, ErrNotRunning
-	case <-s.lc.Done():
-		return false, ErrNotRunning
-	}
-
-	select {
-	case <-ctx.Done():
-		return false, ctx.Err()
-	case <-s.lc.Done():
-		return false, ErrNotRunning
-	case result := <-ch:
-		return result, nil
-	}
 }
 
 // Submit incoming manifest request.
@@ -287,9 +252,6 @@ loop:
 					manager.removeLease(ev.ID)
 				}
 			}
-		case check := <-s.activeCheckCh:
-			_, ok := s.managers[dquery.DeploymentPath(check.Deployment)]
-			check.ch <- ok
 		case req := <-s.mreqch:
 			// Cancel the watchdog (if it exists), since a manifest has been received
 			s.maybeRemoveWatchdog(req.value.Deployment)
