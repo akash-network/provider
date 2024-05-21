@@ -188,7 +188,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 
 	// POST /lease/<lease-id>/shell
 	lrouter.HandleFunc("/shell",
-		leaseShellHandler(log, pclient.Cluster()))
+		leaseShellHandler(log, pclient.Cluster(), ctxConfig))
 
 	return router
 }
@@ -306,12 +306,14 @@ type leaseShellResponse struct {
 	Message  string `json:"message,omitempty"`
 }
 
-func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc {
+func leaseShellHandler(log log.Logger, cclient cluster.Client, clusterSettings map[any]any) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		leaseID := requestLeaseID(req)
 
+		leaseCtx := fromctx.ApplyToContext(req.Context(), clusterSettings)
+
 		//  check if deployment actually exists in the first place before querying kubernetes
-		status, err := cclient.LeaseStatus(req.Context(), leaseID)
+		status, err := cclient.LeaseStatus(leaseCtx, leaseID)
 		if err != nil {
 			log.Error("failed checking deployment activity", "err", err)
 			rw.WriteHeader(http.StatusInternalServerError)
