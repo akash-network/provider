@@ -464,7 +464,6 @@ func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context
 	err := ingressPager.EachListItem(ctx,
 		metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName)},
 		func(obj runtime.Object) error {
-
 			ingress := obj.(*netv1.Ingress)
 			ingressLeaseID, err := clientcommon.RecoverLeaseIDFromLabels(ingress.Labels)
 			if err != nil {
@@ -523,7 +522,7 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
 		FieldSelector:        "",
-		Watch:                false,
+		Watch:                true,
 		AllowWatchBookmarks:  false,
 		ResourceVersion:      lastResourceVersion,
 		ResourceVersionMatch: "",
