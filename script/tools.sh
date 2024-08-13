@@ -70,7 +70,7 @@ function run_bump_module() {
 		oversion=${BASH_REMATCH[0]}
 
 		nversion=v$($SEMVER bump "$cmd" "$oversion")
-		git tag -a "$prefix/$nversion" -m "$prefix/$nversion"
+		git tag -a "$nversion" -m "$nversion"
 	else
 		error "unable to find any tag for module $prefix"
 	fi
