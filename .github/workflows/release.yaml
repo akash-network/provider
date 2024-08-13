@@ -5,12 +5,13 @@ defaults:
   run:
     shell: bash
 
+# yamllint disable-line rule:truthy
 on:
   workflow_dispatch:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: provider-e2e
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
@@ -26,6 +27,8 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
