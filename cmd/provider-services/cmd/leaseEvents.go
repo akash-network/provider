@@ -24,7 +24,7 @@ func leaseEventsCmd() *cobra.Command {
 		Short:        "get lease events",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseEvents(cmd)
 		},
 	}

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/akash-network/node/sdl"
 	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -190,7 +191,7 @@ func (cl *nullInventory) run() error {
 					attrs, _ := ParseStorageAttributes(storage.Attributes)
 
 					if !attrs.Persistent {
-						if attrs.Class == "ram" {
+						if attrs.Class == sdl.StorageClassRAM {
 							ndRes.Memory.Quantity.SubNLZ(storage.Quantity)
 						} else {
 							// ephemeral storage
@@ -305,7 +306,7 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 		}
 
 		if !attrs.Persistent {
-			if attrs.Class == "ram" {
+			if attrs.Class == sdl.StorageClassRAM {
 				if !nd.Resources.Memory.Quantity.SubNLZ(storage.Quantity) {
 					return nil, false, true
 				}

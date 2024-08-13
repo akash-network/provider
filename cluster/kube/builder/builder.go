@@ -39,6 +39,11 @@ const (
 )
 
 const (
+	ValTrue  = "true"
+	ValFalse = "false"
+)
+
+const (
 	runtimeClassNoneValue = "none"
 	runtimeClassNvidia    = "nvidia"
 )

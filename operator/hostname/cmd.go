@@ -19,7 +19,7 @@ func Cmd() *cobra.Command {
 		Use:          "hostname",
 		Short:        "kubernetes operator interfacing with k8s nginx ingress",
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			group := fromctx.MustErrGroupFromCtx(ctx)
 

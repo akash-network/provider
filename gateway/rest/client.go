@@ -148,7 +148,7 @@ func (c *client) newReqClient(ctx context.Context) *reqClient {
 			TLSClientConfig: tlsConfig,
 		},
 		// Never  follow redirects
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 		Jar:     nil,
@@ -280,7 +280,7 @@ func (c *client) GetJWT(ctx context.Context) (*jwt.Token, error) {
 		return nil, err
 	}
 
-	token, err := jwt.ParseWithClaims(responseBuf.String(), &ClientCustomClaims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(responseBuf.String(), &ClientCustomClaims{}, func(_ *jwt.Token) (interface{}, error) {
 		// return the public key to be used for JWT verification
 		return resp.TLS.PeerCertificates[0].PublicKey.(*ecdsa.PublicKey), nil
 	})
@@ -690,7 +690,7 @@ func (c *client) LeaseLogs(ctx context.Context,
 	id mtypes.LeaseID,
 	services string,
 	follow bool,
-	tailLines int64) (*ServiceLogs, error) {
+	_ int64) (*ServiceLogs, error) {
 
 	endpoint, err := url.Parse(c.host.String() + "/" + serviceLogsPath(id))
 	if err != nil {

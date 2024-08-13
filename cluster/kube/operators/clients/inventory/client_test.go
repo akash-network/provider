@@ -230,8 +230,8 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 }
 
 // QueryCluster does not need to be implemented as provider only uses stream
-func (gm *testInventoryServer) QueryCluster(ctx context.Context, _ *emptypb.Empty) (*inventoryV1.Cluster, error) {
-	return nil, errors.New("unimplemented") // nolint: goerr113
+func (gm *testInventoryServer) QueryCluster(_ context.Context, _ *emptypb.Empty) (*inventoryV1.Cluster, error) {
+	return nil, errors.New("unimplemented") // nolint: err113
 }
 
 func (gm *testInventoryServer) StreamCluster(_ *emptypb.Empty, stream inventoryV1.ClusterRPC_StreamClusterServer) error {

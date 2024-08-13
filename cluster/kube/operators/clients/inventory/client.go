@@ -261,7 +261,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 		}
 
 		if len(pods.Items) == 0 {
-			return nil, fmt.Errorf("no inventory pods available") // nolint: goerr113
+			return nil, fmt.Errorf("no inventory pods available") // nolint: err113
 		}
 
 		var pod *corev1.Pod
@@ -274,7 +274,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 		}
 
 		if pod == nil {
-			return nil, fmt.Errorf("no inventory pods available") // nolint: goerr113
+			return nil, fmt.Errorf("no inventory pods available") // nolint: err113
 		}
 
 	loop:

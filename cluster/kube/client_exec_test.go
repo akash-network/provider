@@ -162,7 +162,7 @@ func withExecTestScaffold(t *testing.T, changePod func(pod *corev1.Pod) error, t
 			UserAgent: "client_exec_test.go",
 			Username:  "theusername",
 			Password:  "thepassword",
-			Proxy: func(req *http.Request) (*url.URL, error) {
+			Proxy: func(_ *http.Request) (*url.URL, error) {
 				return nil, errNoSPDYInTest
 			},
 		},

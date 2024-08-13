@@ -21,7 +21,7 @@ func leaseStatusCmd() *cobra.Command {
 		Short:        "get lease status",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseStatus(cmd)
 		},
 	}

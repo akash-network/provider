@@ -119,16 +119,16 @@ func RunCmd() *cobra.Command {
 		Use:          "run",
 		Short:        "run akash provider",
 		SilenceUsage: true,
-		PreRunE: func(cmd *cobra.Command, args []string) error {
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
 
 			if leaseFundsMonInterval < time.Minute || leaseFundsMonInterval > 24*time.Hour {
-				return errors.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: goerr113
+				return errors.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
-				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: goerr113
+				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
 			group, ctx := errgroup.WithContext(cmd.Context())

@@ -122,7 +122,7 @@ func makeMocks(s *orderTestScaffold) {
 
 	s.cluster = &clustermocks.Cluster{}
 	s.reserveCallNotify = make(chan int, 1)
-	s.cluster.On("Reserve", s.orderID, &(groupResult.Group)).Run(func(args mock.Arguments) {
+	s.cluster.On("Reserve", s.orderID, &(groupResult.Group)).Run(func(_ mock.Arguments) {
 		s.reserveCallNotify <- 0
 		time.Sleep(time.Second) // add a delay before returning response, to test race conditions
 	}).Return(mockReservation, nil)

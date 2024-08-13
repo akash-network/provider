@@ -18,7 +18,7 @@ type Waitable interface {
 
 type nullWaiter struct{}
 
-func (nw nullWaiter) WaitForAll(ctx context.Context) error {
+func (nw nullWaiter) WaitForAll(_ context.Context) error {
 	return nil
 }
 

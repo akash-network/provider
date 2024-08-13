@@ -51,7 +51,7 @@ func Cmd() *cobra.Command {
 		Use:          "inventory",
 		Short:        "kubernetes operator interfacing inventory",
 		SilenceUsage: true,
-		PreRunE: func(cmd *cobra.Command, args []string) error {
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			kubecfg := fromctx.MustKubeConfigFromCtx(cmd.Context())
 
 			rc, err := rookclientset.NewForConfig(kubecfg)
@@ -63,7 +63,7 @@ func Cmd() *cobra.Command {
 
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 
 			log := fromctx.LogrFromCtx(cmd.Context())
@@ -359,7 +359,7 @@ func registryLoader(ctx context.Context) error {
 
 	cl := &http.Client{
 		Transport: &http.Transport{
-			DialTLSContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			DialTLSContext: func(_ context.Context, network, addr string) (net.Conn, error) {
 				return tls.Dial(network, addr, tlsConfig)
 			},
 		},

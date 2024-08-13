@@ -35,7 +35,7 @@ func NewOperatorHTTP() (OperatorHTTP, error) {
 		results: make(map[string]preparedEntry),
 	}
 
-	retval.router.HandleFunc("/health", func(rw http.ResponseWriter, req *http.Request) {
+	retval.router.HandleFunc("/health", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(rw, "OK")
 	})
@@ -53,7 +53,7 @@ func NewOperatorHTTP() (OperatorHTTP, error) {
 	buf = nil // remove from scope
 	enc = nil // remove from scope
 
-	retval.router.HandleFunc("/version", func(rw http.ResponseWriter, req *http.Request) {
+	retval.router.HandleFunc("/version", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = io.Copy(rw, bytes.NewReader(akashVersionJSON))
 	}).Methods("GET")
@@ -80,7 +80,7 @@ func (opHttp *operatorHTTP) AddPreparedEndpoint(path string, prepare PrepareFn) 
 	}
 	opHttp.results[path] = entry
 
-	opHttp.router.HandleFunc(path, func(rw http.ResponseWriter, req *http.Request) {
+	opHttp.router.HandleFunc(path, func(rw http.ResponseWriter, _ *http.Request) {
 		servePreparedResult(rw, entry.data)
 	}).Methods(http.MethodGet)
 
