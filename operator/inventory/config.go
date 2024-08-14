@@ -195,7 +195,7 @@ loop:
 		case "exclude":
 			val = &res.Exclude
 		default:
-			return fmt.Errorf("config: unexpected field %s", node.Content[i].Value) // nolint: goerr113
+			return fmt.Errorf("config: unexpected field %s", node.Content[i].Value) // nolint: err113
 		}
 
 		if err := node.Content[i+1].Decode(val); err != nil {
@@ -211,7 +211,7 @@ loop:
 	for _, exl := range res.Exclude.NodeStorage {
 		for _, sc := range exl.Classes {
 			if _, exists := availSc[sc]; !exists {
-				return fmt.Errorf("storage class \"%s\" from exclude references non-existing class", sc) // nolint: goerr113
+				return fmt.Errorf("storage class \"%s\" from exclude references non-existing class", sc) // nolint: err113
 			}
 		}
 
@@ -235,7 +235,7 @@ func (nd *ExcludeRules) UnmarshalYAML(node *yaml.Node) error {
 	res := make(ExcludeRules, 0, len(excludes))
 	for i, ex := range excludes {
 		if ex == "" {
-			return fmt.Errorf("empty regexp filters are not allowed") // nolint: goerr113
+			return fmt.Errorf("empty regexp filters are not allowed") // nolint: err113
 		}
 
 		r, err := regexp.Compile(ex)
@@ -262,7 +262,7 @@ func (nd *ExcludeNodeStorage) UnmarshalYAML(node *yaml.Node) error {
 	}
 
 	if tmp.NodeFilter == "" {
-		return fmt.Errorf("empty regexp filters are not allowed") // nolint: goerr113
+		return fmt.Errorf("empty regexp filters are not allowed") // nolint: err113
 	}
 
 	r, err := regexp.Compile(tmp.NodeFilter)

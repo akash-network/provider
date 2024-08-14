@@ -192,7 +192,7 @@ func InformKubeObjects(ctx context.Context, pub pubsub.Publisher, informer cache
 					Object: obj.(runtime.Object),
 				}, []string{topic})
 			},
-			UpdateFunc: func(oldObj, newObj interface{}) {
+			UpdateFunc: func(_, newObj interface{}) {
 				pub.Pub(watch.Event{
 					Type:   watch.Modified,
 					Object: newObj.(runtime.Object),

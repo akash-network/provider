@@ -58,12 +58,12 @@ func fakeIPOperatorHandler() *fakeOperator {
 	fake.ipUsageResponse.Store([]byte{})
 
 	fake.mux.HandleFunc("/health",
-		func(rw http.ResponseWriter, req *http.Request) {
+		func(rw http.ResponseWriter, _ *http.Request) {
 			status := atomic.LoadUint32(&fake.healthStatus)
 			rw.WriteHeader(int(status))
 		})
 
-	fake.mux.HandleFunc("/ip-lease-status/", func(rw http.ResponseWriter, req *http.Request) {
+	fake.mux.HandleFunc("/ip-lease-status/", func(rw http.ResponseWriter, _ *http.Request) {
 		status := atomic.LoadUint32(&fake.ipLeaseStatusStatus)
 		rw.WriteHeader(int(status))
 
@@ -71,7 +71,7 @@ func fakeIPOperatorHandler() *fakeOperator {
 		_, _ = io.Copy(rw, bytes.NewReader(body))
 	})
 
-	fake.mux.HandleFunc("/usage", func(rw http.ResponseWriter, req *http.Request) {
+	fake.mux.HandleFunc("/usage", func(rw http.ResponseWriter, _ *http.Request) {
 		status := atomic.LoadUint32(&fake.ipUsageStatus)
 		rw.WriteHeader(int(status))
 

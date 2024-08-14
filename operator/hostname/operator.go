@@ -415,22 +415,22 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 	directive := buildDirective(ev, selectedExpose)
 
 	if isSameLease {
-		shouldConnect := false
+		// shouldConnect := false
 
 		if !exists {
-			shouldConnect = true
+			// shouldConnect = true
 			op.log.Debug("hostname target is new, applying")
 			// Check to see if port or service name is different
 		} else if entry.presentExternalPort != ev.GetExternalPort() || entry.presentServiceName != ev.GetServiceName() {
-			shouldConnect = true
+			// shouldConnect = true
 			op.log.Debug("hostname target has changed, applying")
 		}
 
-		if shouldConnect {
-			op.log.Debug("Updating ingress")
-			// Update or create the existing ingress
-			err = op.connectHostnameToDeployment(ctx, directive)
-		}
+		// if shouldConnect {
+		op.log.Debug("Updating ingress")
+		// Update or create the existing ingress
+		err = op.connectHostnameToDeployment(ctx, directive)
+		// }
 	} else {
 		op.log.Debug("Swapping ingress to new deployment")
 		//  Delete the ingress in one namespace and recreate it in the correct one
@@ -464,7 +464,6 @@ func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context
 	err := ingressPager.EachListItem(ctx,
 		metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName)},
 		func(obj runtime.Object) error {
-
 			ingress := obj.(*netv1.Ingress)
 			ingressLeaseID, err := clientcommon.RecoverLeaseIDFromLabels(ingress.Labels)
 			if err != nil {
@@ -497,13 +496,8 @@ func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context
 }
 
 func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error) {
-	var lastResourceVersion string
 	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		resources, err := op.ac.AkashV2beta2().ProviderHosts(op.ns).List(ctx, opts)
-
-		if err == nil && len(resources.GetResourceVersion()) != 0 {
-			lastResourceVersion = resources.GetResourceVersion()
-		}
 		return resources, err
 	})
 
@@ -518,19 +512,8 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 		return nil, err
 	}
 
-	op.log.Info("starting hostname watch", "resourceVersion", lastResourceVersion)
-	watcher, err := op.ac.AkashV2beta2().ProviderHosts(op.ns).Watch(ctx, metav1.ListOptions{
-		TypeMeta:             metav1.TypeMeta{},
-		LabelSelector:        "",
-		FieldSelector:        "",
-		Watch:                false,
-		AllowWatchBookmarks:  false,
-		ResourceVersion:      lastResourceVersion,
-		ResourceVersionMatch: "",
-		TimeoutSeconds:       nil,
-		Limit:                0,
-		Continue:             "",
-	})
+	op.log.Info("starting hostname watch") // , "resourceVersion", lastResourceVersion)
+	watcher, err := op.ac.AkashV2beta2().ProviderHosts(op.ns).Watch(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +547,11 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 	output := make(chan chostname.ResourceEvent)
 
 	go func() {
-		defer close(output)
+		defer func() {
+			close(output)
+			watcher.Stop()
+		}()
+
 		for _, v := range evData {
 			output <- v
 		}

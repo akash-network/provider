@@ -27,7 +27,7 @@ func Cmd() *cobra.Command {
 		Use:          "ip",
 		Short:        "kubernetes operator interfacing with Metal LB",
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ns := viper.GetString(providerflags.FlagK8sManifestNS)
 			poolName := viper.GetString(flagMetalLbPoolName)
 			logger := common.OpenLogger().With("operator", "ip")

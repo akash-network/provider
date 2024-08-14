@@ -30,6 +30,10 @@ ifeq ($(DETECTED_OS), Darwin)
 	export CGO_CFLAGS=-Wno-deprecated-declarations
 endif
 
+.PHONY: bump-%
+bump-%:
+	@./script/tools.sh bump "$*"
+
 .PHONY: bins
 bins: $(BINS)
 
@@ -75,7 +79,7 @@ docker-image:
 		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
 		-f .goreleaser-docker.yaml \
-		--debug=$(GORELEASER_DEBUG) \
+		--verbose=$(GORELEASER_DEBUG) \
 		--clean \
 		--skip=publish,validate \
 		--snapshot
@@ -108,6 +112,6 @@ release: gen-changelog
 		-f "$(GORELEASER_CONFIG)" \
 		release \
 		$(GORELEASER_SKIP) \
-		--debug=$(GORELEASER_DEBUG) \
+		--verbose=$(GORELEASER_DEBUG) \
 		--clean \
 		--release-notes=/go/src/$(GO_MOD_NAME)/.cache/changelog.md

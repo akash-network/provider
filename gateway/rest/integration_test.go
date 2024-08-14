@@ -1,4 +1,4 @@
-// nolint: goerr113
+// nolint: err113
 package rest
 
 import (
@@ -35,7 +35,7 @@ func Test_router_Status(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pclient.On("Status", mock.Anything).Return(expected, nil)
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			client, err := NewClient(context.Background(), mocks.qclient, addr, nil)
 			assert.NoError(t, err)
 			result, err := client.Status(context.Background())
@@ -49,7 +49,7 @@ func Test_router_Status(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
 		mocks.pclient.On("Status", mock.Anything).Return(nil, errors.New("oops"))
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			client, err := NewClient(context.Background(), mocks.qclient, addr, nil)
 			assert.NoError(t, err)
 			_, err = client.Status(context.Background())
@@ -67,7 +67,7 @@ func Test_router_Validate(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
 		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(expected, nil)
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, testutil.AccAddress(t), testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, addr, cert.Cert)
 			assert.NoError(t, err)
@@ -82,7 +82,7 @@ func Test_router_Validate(t *testing.T) {
 		addr := testutil.AccAddress(t)
 		mocks := createMocks()
 		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(provider.ValidateGroupSpecResult{}, errors.New("oops"))
-		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, addr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, testutil.AccAddress(t), testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, addr, cert.Cert)
 			assert.NoError(t, err)
@@ -104,7 +104,7 @@ func Test_router_Manifest(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pmclient.On("Submit", mock.Anything, did, akashmanifest.Manifest(nil)).Return(nil)
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -123,7 +123,7 @@ func Test_router_Manifest(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pmclient.On("Submit", mock.Anything, did, akashmanifest.Manifest(nil)).Return(errors.New("ded"))
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -207,7 +207,7 @@ func Test_router_LeaseStatus(t *testing.T) {
 
 		mockManifestGroups(mocks, id)
 
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -245,7 +245,7 @@ func Test_router_LeaseStatus(t *testing.T) {
 		mocks.pcclient.On("LeaseStatus", mock.Anything, id).Return(nil, errors.New("ded"))
 		mockManifestGroups(mocks, id)
 
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -270,7 +270,7 @@ func Test_router_ServiceStatus(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pcclient.On("ServiceStatus", mock.Anything, id, service).Return(expected, nil)
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)
@@ -292,7 +292,7 @@ func Test_router_ServiceStatus(t *testing.T) {
 		mocks := createMocks()
 
 		mocks.pcclient.On("ServiceStatus", mock.Anything, id, service).Return(nil, errors.New("ded"))
-		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(host string) {
+		withServer(t, paddr, mocks.pclient, mocks.qclient, nil, func(_ string) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.qclient))
 			client, err := NewClient(context.Background(), mocks.qclient, paddr, cert.Cert)
 			assert.NoError(t, err)

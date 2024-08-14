@@ -596,11 +596,11 @@ func (dp *nodeDiscovery) monitor() error {
 	}
 }
 
-func (dp *nodeDiscovery) initNodeInfo(gpusIds RegistryGPUVendors) (v1.Node, error) {
+func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors) (v1.Node, error) {
 	kc := fromctx.MustKubeClientFromCtx(dp.ctx)
 
 	cpuInfo := dp.parseCPUInfo(dp.ctx)
-	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIds)
+	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIDs)
 
 	knode, err := kc.CoreV1().Nodes().Get(dp.ctx, dp.name, metav1.GetOptions{})
 	if err != nil {
@@ -772,7 +772,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 		return res, node
 	}
 
-	res[builder.AkashManagedLabelName] = "true"
+	res[builder.AkashManagedLabelName] = builder.ValTrue
 
 	allowedSc := adjConfig.StorageClassesForNode(knode.Name)
 	for _, class := range allowedSc {

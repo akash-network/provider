@@ -687,7 +687,7 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 
 	expectedPrice := fmt.Sprintf("%.*f", DefaultPricePrecision, 67843137.254901960)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, err := io.WriteString(w, mockAPIResponse)
 		require.NoError(t, err)

@@ -17,13 +17,13 @@ func SDL2ManifestCmd() *cobra.Command {
 		Args:         cobra.ExactArgs(1),
 		Short:        "Dump manifest derived from the SDL",
 		SilenceUsage: true,
-		PreRunE: func(cmd *cobra.Command, args []string) error {
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			format := cmd.Flag(flagOutput).Value.String()
 			switch format {
 			case outputJSON:
 			case outputYAML:
 			default:
-				return fmt.Errorf("invalid output format \"%s\", expected json|yaml", format) // nolint: goerr113
+				return fmt.Errorf("invalid output format \"%s\", expected json|yaml", format) // nolint: err113
 			}
 
 			return nil

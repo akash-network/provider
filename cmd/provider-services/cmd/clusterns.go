@@ -16,7 +16,7 @@ func clusterNSCmd() *cobra.Command {
 		Short:        "print cluster namespace for given lease ID",
 		Args:         cobra.ExactArgs(0),
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			lid, err := mcli.LeaseIDFromFlags(cmd.Flags())
 			if err != nil {
 				return err

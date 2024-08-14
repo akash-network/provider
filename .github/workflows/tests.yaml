@@ -5,6 +5,7 @@ defaults:
   run:
     shell: bash
 
+# yamllint disable-line rule:truthy
 on:
   pull_request:
   push:
@@ -29,6 +30,8 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -52,6 +55,8 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - run: make test-full
 
   lint:
@@ -69,14 +74,20 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - name: Run linter
         run: make lint
 
   release-dry-run:
-    runs-on: ubuntu-latest
+    runs-on: core-e2e
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
+      - name: Cleanup build folder
+        run: |
+          sudo rm -rf ./* || true
+          sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -89,6 +100,8 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -116,8 +129,12 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: .cache/tests/coverage.txt
 
@@ -136,6 +153,8 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - name: Run codegen
         run: make codegen
       - name: Ensure no files changed/added/removed
@@ -168,6 +187,8 @@ jobs:
           go-version: "${{ env.GOVERSION }}"
       - name: Setup direnv
         uses: HatsuneMiku3939/direnv-action@v1
+        with:
+          masks: ''
       - run: make shellcheck
 
   integration-tests:

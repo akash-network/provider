@@ -500,7 +500,7 @@ func newIPOperator(ctx context.Context, logger log.Logger, ns string, cfg common
 	retval.flagIgnoredLeases = retval.server.AddPreparedEndpoint("/ignored-leases", retval.leasesIgnored.Prepare)
 	retval.flagUsage = retval.server.AddPreparedEndpoint("/usage", retval.prepareUsage)
 
-	retval.server.GetRouter().HandleFunc("/health", func(rw http.ResponseWriter, req *http.Request) {
+	retval.server.GetRouter().HandleFunc("/health", func(rw http.ResponseWriter, _ *http.Request) {
 		rw.WriteHeader(http.StatusOK)
 		_, _ = io.WriteString(rw, "OK")
 	})

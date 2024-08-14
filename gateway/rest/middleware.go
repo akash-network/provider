@@ -217,7 +217,7 @@ func resourceServerAuth(log log.Logger, providerAddr sdk.Address, publicKey *ecd
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// verify the provided JWT
-			token, err := jwt.ParseWithClaims(r.Header.Get("Authorization"), &ClientCustomClaims{}, func(token *jwt.Token) (interface{}, error) {
+			token, err := jwt.ParseWithClaims(r.Header.Get("Authorization"), &ClientCustomClaims{}, func(_ *jwt.Token) (interface{}, error) {
 				// return the public key to be used for JWT verification
 				return publicKey, nil
 			})

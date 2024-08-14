@@ -523,11 +523,11 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 
 	ipAddrStatusCalled := make(chan struct{}, 2)
 	// First call indicates no data
-	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(args mock.Arguments) {
+	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(_ mock.Arguments) {
 		ipAddrStatusCalled <- struct{}{}
 	}).Return([]cip.LeaseIPStatus{}, nil).Once()
 	// Second call indicates the IP is there and can be confirmed
-	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(args mock.Arguments) {
+	mockIP.On("GetIPAddressStatus", mock.Anything, scaffold.leaseIDs[0].OrderID()).Run(func(_ mock.Arguments) {
 		ipAddrStatusCalled <- struct{}{}
 	}).Return([]cip.LeaseIPStatus{
 		{

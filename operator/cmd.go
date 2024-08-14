@@ -29,7 +29,7 @@ func OperatorsCmd() *cobra.Command {
 		Use:          "operator",
 		Short:        "kubernetes operators control",
 		SilenceUsage: true,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			zconf := zap.NewDevelopmentConfig()
 			zconf.DisableCaller = true
 			zconf.DisableStacktrace = true

@@ -1,6 +1,6 @@
 module github.com/akash-network/provider
 
-go 1.21
+go 1.22.6
 
 require (
 	github.com/akash-network/akash-api v0.0.67
@@ -49,9 +49,7 @@ require (
 	sigs.k8s.io/kind v0.20.0
 )
 
-retract (
-	v0.6.0
-)
+retract v0.6.0
 
 replace (
 	// use cosmos fork of keyring

@@ -34,7 +34,7 @@ type fakeWaiter struct {
 	failure error
 }
 
-func (fw fakeWaiter) Check(ctx context.Context) error {
+func (fw fakeWaiter) Check(_ context.Context) error {
 	return fw.failure
 }
 

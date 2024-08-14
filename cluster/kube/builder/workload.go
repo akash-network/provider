@@ -130,8 +130,8 @@ func (b *Workload) container() corev1.Container {
 
 	// fixme: ram is never expected to be nil
 	if mem := service.Resources.Memory; mem != nil {
-		requestedRam := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
-		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRam.Value()), resource.DecimalSI).DeepCopy()
+		requestedRAM := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
+		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRAM.Value()), resource.DecimalSI).DeepCopy()
 		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()+requestedMem), resource.DecimalSI).DeepCopy()
 	}
 

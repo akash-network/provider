@@ -478,7 +478,7 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 }
 
 func createAddressHandler(log log.Logger, providerAddr sdk.Address) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		data := struct {
 			Address string `json:"address"`
 		}{
@@ -494,7 +494,7 @@ type versionInfo struct {
 }
 
 func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, _ *http.Request) {
 		kube, err := pclient.Cluster().KubeVersion()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

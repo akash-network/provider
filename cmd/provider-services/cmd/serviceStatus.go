@@ -21,7 +21,7 @@ func serviceStatusCmd() *cobra.Command {
 		Short:        "get service status",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doServiceStatus(cmd)
 		},
 	}

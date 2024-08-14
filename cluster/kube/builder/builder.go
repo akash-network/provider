@@ -35,6 +35,12 @@ const (
 	AkashLeaseOSeqLabelName       = "akash.network/lease.id.oseq"
 	AkashLeaseProviderLabelName   = "akash.network/lease.id.provider"
 	AkashLeaseManifestVersion     = "akash.network/manifest.version"
+	AkashLeaseUpdatedAt           = "akash.network/lease.updated_at"
+)
+
+const (
+	ValTrue  = "true"
+	ValFalse = "false"
 )
 
 const (
