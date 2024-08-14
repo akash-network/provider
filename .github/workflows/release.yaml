@@ -11,10 +11,14 @@ on:
 
 jobs:
   publish:
-    runs-on: provider-e2e
+    runs-on: core-e2e
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
+      - name: Cleanup build folder
+        run: |
+          sudo rm -rf ./* || true
+          sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0

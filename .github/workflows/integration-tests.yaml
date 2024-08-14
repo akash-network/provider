@@ -16,8 +16,12 @@ jobs:
   crd-e2e:
     env:
       KIND_NAME: kube
-    runs-on: provider-e2e
+    runs-on: core-e2e
     steps:
+      - name: Cleanup build folder
+        run: |
+          sudo rm -rf ./* || true
+          sudo rm -rf ./.??* || true
       - name: Setup GOPATH
         run: echo "GOPATH=$GITHUB_WORKSPACE/go" >> $GITHUB_ENV
       - name: Ensure GOPATH dirs
