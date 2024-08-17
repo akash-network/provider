@@ -39,6 +39,7 @@ func TestMonitorInstantiate(t *testing.T) {
 		deployment: deployment,
 		log:        myLog,
 		lc:         lc,
+		config:     NewDefaultConfig(),
 	}
 	monitor := newDeploymentMonitor(myDeploymentManager)
 	require.NotNil(t, monitor)
@@ -78,6 +79,7 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 		deployment: deployment,
 		log:        myLog,
 		lc:         lc,
+		config:     NewDefaultConfig(),
 	}
 	monitor := newDeploymentMonitor(myDeploymentManager)
 	require.NotNil(t, monitor)
@@ -134,6 +136,7 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 		deployment: deployment,
 		log:        myLog,
 		lc:         lc,
+		config:     NewDefaultConfig(),
 	}
 	monitor := newDeploymentMonitor(myDeploymentManager)
 	require.NotNil(t, monitor)

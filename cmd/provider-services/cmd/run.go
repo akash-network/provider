@@ -102,6 +102,11 @@ const (
 	FlagBidPriceIPScale                  = "bid-price-ip-scale"
 	FlagEnableIPOperator                 = "ip-operator"
 	FlagTxBroadcastTimeout               = "tx-broadcast-timeout"
+	FlagMonitorMaxRetries                = "monitor-max-retries"
+	FlagMonitorRetryPeriod               = "monitor-retry-period"
+	FlagMonitorRetryPeriodJitter         = "monitor-retry-period-jitter"
+	FlagMonitorHealthcheckPeriod         = "monitor-healthcheck-period"
+	FlagMonitorHealthcheckPeriodJitter   = "monitor-healthcheck-period-jitter"
 )
 
 const (
@@ -129,6 +134,14 @@ func RunCmd() *cobra.Command {
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
 				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+			}
+
+			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
+				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorRetryPeriod, 4*time.Second) // nolint: err113
+			}
+
+			if viper.GetDuration(FlagMonitorHealthcheckPeriod) < 4*time.Second {
+				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
 			}
 
 			group, ctx := errgroup.WithContext(cmd.Context())
@@ -397,6 +410,31 @@ func RunCmd() *cobra.Command {
 		panic(err)
 	}
 
+	cmd.Flags().Uint(FlagMonitorMaxRetries, 40, "max count of status retries before closing the lease. defaults to 40")
+	if err := viper.BindPFlag(FlagMonitorMaxRetries, cmd.Flags().Lookup(FlagMonitorMaxRetries)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().Duration(FlagMonitorRetryPeriod, 4*time.Second, "monitor status retry period. defaults to 4s (min value)")
+	if err := viper.BindPFlag(FlagMonitorRetryPeriod, cmd.Flags().Lookup(FlagMonitorRetryPeriod)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().Duration(FlagMonitorRetryPeriodJitter, 15*time.Second, "monitor status retry window. defaults to 15s")
+	if err := viper.BindPFlag(FlagMonitorRetryPeriodJitter, cmd.Flags().Lookup(FlagMonitorRetryPeriodJitter)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().Duration(FlagMonitorHealthcheckPeriod, 10*time.Second, "monitor healthcheck period. defaults to 10s")
+	if err := viper.BindPFlag(FlagMonitorHealthcheckPeriod, cmd.Flags().Lookup(FlagMonitorHealthcheckPeriod)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().Duration(FlagMonitorHealthcheckPeriodJitter, 5*time.Second, "monitor healthcheck window. defaults to 5s")
+	if err := viper.BindPFlag(FlagMonitorHealthcheckPeriodJitter, cmd.Flags().Lookup(FlagMonitorHealthcheckPeriodJitter)); err != nil {
+		panic(err)
+	}
+
 	if err := providerflags.AddServiceEndpointFlag(cmd, serviceHostnameOperator); err != nil {
 		panic(err)
 	}
@@ -522,6 +560,11 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	cachedResultMaxAge := viper.GetDuration(FlagCachedResultMaxAge)
 	rpcQueryTimeout := viper.GetDuration(FlagRPCQueryTimeout)
 	enableIPOperator := viper.GetBool(FlagEnableIPOperator)
+	monitorMaxRetries := viper.GetUint(FlagMonitorMaxRetries)
+	monitorRetryPeriod := viper.GetDuration(FlagMonitorRetryPeriod)
+	monitorRetryPeriodJitter := viper.GetDuration(FlagMonitorRetryPeriodJitter)
+	monitorHealthcheckPeriod := viper.GetDuration(FlagMonitorHealthcheckPeriod)
+	monitorHealthcheckPeriodJitter := viper.GetDuration(FlagMonitorHealthcheckPeriodJitter)
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
@@ -656,6 +699,11 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
 	config.ManifestTimeout = manifestTimeout
+	config.MonitorMaxRetries = monitorMaxRetries
+	config.MonitorRetryPeriod = monitorRetryPeriod
+	config.MonitorRetryPeriodJitter = monitorRetryPeriodJitter
+	config.MonitorHealthcheckPeriod = monitorHealthcheckPeriod
+	config.MonitorHealthcheckPeriodJitter = monitorHealthcheckPeriodJitter
 
 	if len(providerConfig) != 0 {
 		pConf, err := config2.ReadConfigPath(providerConfig)
