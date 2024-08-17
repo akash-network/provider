@@ -866,12 +866,11 @@ func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command) 
 
 func showErrorToUser(err error) error {
 	// If the error has a complete message associated with it then show it
-	// terr := &gwrest.ClientResponseError{}
-	// errors.As(err, terr)
-	clientResponseError, ok := err.(gwrest.ClientResponseError)
-	if ok && 0 != len(clientResponseError.Message) {
-		_, _ = fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", clientResponseError.Message)
-		err = nil
+	terr := &gwrest.ClientResponseError{}
+
+	if errors.As(err, terr) && len(terr.Message) != 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", terr.Message)
+		err = terr
 	}
 
 	return err
