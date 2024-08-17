@@ -310,20 +310,6 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 	return func(rw http.ResponseWriter, req *http.Request) {
 		leaseID := requestLeaseID(req)
 
-		//  check if deployment actually exists in the first place before querying kubernetes
-		active, err := mclient.IsActive(req.Context(), leaseID.DeploymentID())
-		if err != nil {
-			log.Error("failed checking deployment activity", "err", err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		if !active {
-			log.Info("no active deployment", "lease", leaseID)
-			rw.WriteHeader(http.StatusNotFound)
-			return
-		}
-
 		localLog := log.With("lease", leaseID.String(), "action", "shell")
 
 		vars := req.URL.Query()
@@ -343,7 +329,7 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 			return
 		}
 		tty := vars.Get("tty")
-		if 0 == len(tty) {
+		if len(tty) == 0 {
 			localLog.Error("missing parameter tty")
 			rw.WriteHeader(http.StatusBadRequest)
 			return
@@ -351,14 +337,26 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 		isTty := tty == "1"
 
 		service := vars.Get("service")
-		if 0 == len(service) {
+		if len(service) == 0 {
 			localLog.Error("missing parameter service")
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
+		status, err := cclient.ServiceStatus(req.Context(), leaseID, service)
+		if err != nil {
+			localLog.Error("unable to detect service status", "err", err)
+			return
+		}
+
+		if status.ReadyReplicas == 0 {
+			log.Info("no active replicase for service", "lease", leaseID)
+			rw.WriteHeader(http.StatusNotFound)
+			return
+		}
+
 		stdin := vars.Get("stdin")
-		if 0 == len(stdin) {
+		if len(stdin) == 0 {
 			localLog.Error("missing parameter stdin")
 			rw.WriteHeader(http.StatusBadRequest)
 			return
