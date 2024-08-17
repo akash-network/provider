@@ -74,18 +74,6 @@ func NewService(ctx context.Context,
 
 	session = session.ForModule("provider-service")
 
-	clusterConfig := cluster.NewDefaultConfig()
-	clusterConfig.InventoryResourcePollPeriod = cfg.InventoryResourcePollPeriod
-	clusterConfig.InventoryResourceDebugFrequency = cfg.InventoryResourceDebugFrequency
-	clusterConfig.InventoryExternalPortQuantity = cfg.ClusterExternalPortQuantity
-	clusterConfig.CPUCommitLevel = cfg.CPUCommitLevel
-	clusterConfig.MemoryCommitLevel = cfg.MemoryCommitLevel
-	clusterConfig.StorageCommitLevel = cfg.StorageCommitLevel
-	clusterConfig.BlockedHostnames = cfg.BlockedHostnames
-	clusterConfig.DeploymentIngressStaticHosts = cfg.DeploymentIngressStaticHosts
-	clusterConfig.DeploymentIngressDomain = cfg.DeploymentIngressDomain
-	clusterConfig.ClusterSettings = cfg.ClusterSettings
-
 	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
 	if err != nil {
 		cancel()
@@ -99,7 +87,7 @@ func NewService(ctx context.Context,
 		return nil, err
 	}
 
-	cluster, err := cluster.NewService(ctx, session, bus, cclient, waiter, clusterConfig)
+	cluster, err := cluster.NewService(ctx, session, bus, cclient, waiter, cfg.Config)
 	if err != nil {
 		cancel()
 		<-bc.lc.Done()

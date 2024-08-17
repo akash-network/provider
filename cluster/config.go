@@ -13,6 +13,11 @@ type Config struct {
 	BlockedHostnames                []string
 	DeploymentIngressStaticHosts    bool
 	DeploymentIngressDomain         string
+	MonitorMaxRetries               uint
+	MonitorRetryPeriod              time.Duration
+	MonitorRetryPeriodJitter        time.Duration
+	MonitorHealthcheckPeriod        time.Duration
+	MonitorHealthcheckPeriodJitter  time.Duration
 	ClusterSettings                 map[interface{}]interface{}
 }
 
@@ -20,5 +25,10 @@ func NewDefaultConfig() Config {
 	return Config{
 		InventoryResourcePollPeriod:     time.Second * 5,
 		InventoryResourceDebugFrequency: 10,
+		MonitorMaxRetries:               40,
+		MonitorRetryPeriod:              time.Second * 4, // nolint revive
+		MonitorRetryPeriodJitter:        time.Second * 15,
+		MonitorHealthcheckPeriod:        time.Second * 10, // nolint revive
+		MonitorHealthcheckPeriodJitter:  time.Second * 5,
 	}
 }

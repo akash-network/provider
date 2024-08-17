@@ -23,15 +23,6 @@ import (
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
-const (
-	monitorMaxRetries        = 40
-	monitorRetryPeriodMin    = time.Second * 4 // nolint revive
-	monitorRetryPeriodJitter = time.Second * 15
-
-	monitorHealthcheckPeriodMin    = time.Second * 10 // nolint revive
-	monitorHealthcheckPeriodJitter = time.Second * 5
-)
-
 var (
 	deploymentHealthCheckCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "provider_deployment_monitor_health",
@@ -45,22 +36,22 @@ type deploymentMonitor struct {
 
 	deployment ctypes.IDeployment
 
-	attempts int
+	attempts uint
 	log      log.Logger
 	lc       lifecycle.Lifecycle
 
-	clusterSettings map[interface{}]interface{}
+	config Config
 }
 
 func newDeploymentMonitor(dm *deploymentManager) *deploymentMonitor {
 	m := &deploymentMonitor{
-		bus:             dm.bus,
-		session:         dm.session,
-		client:          dm.client,
-		deployment:      dm.deployment,
-		log:             dm.log.With("cmp", "deployment-monitor"),
-		lc:              lifecycle.New(),
-		clusterSettings: dm.config.ClusterSettings,
+		bus:        dm.bus,
+		session:    dm.session,
+		client:     dm.client,
+		deployment: dm.deployment,
+		log:        dm.log.With("cmp", "deployment-monitor"),
+		lc:         lifecycle.New(),
+		config:     dm.config,
 	}
 
 	go m.lc.WatchChannel(dm.lc.ShuttingDown())
@@ -126,7 +117,7 @@ loop:
 
 			m.publishStatus(event.ClusterDeploymentPending)
 
-			if m.attempts <= monitorMaxRetries {
+			if m.attempts <= m.config.MonitorMaxRetries {
 				// unhealthy.  retry
 				tickch = m.scheduleRetry()
 				break
@@ -166,7 +157,7 @@ func (m *deploymentMonitor) runCheck(ctx context.Context) <-chan runner.Result {
 }
 
 func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
-	ctx = fromctx.ApplyToContext(ctx, m.clusterSettings)
+	ctx = fromctx.ApplyToContext(ctx, m.config.ClusterSettings)
 
 	status, err := m.client.LeaseStatus(ctx, m.deployment.LeaseID())
 
@@ -226,11 +217,11 @@ func (m *deploymentMonitor) publishStatus(status event.ClusterDeploymentStatus) 
 }
 
 func (m *deploymentMonitor) scheduleRetry() <-chan time.Time {
-	return m.schedule(monitorRetryPeriodMin, monitorRetryPeriodJitter)
+	return m.schedule(m.config.MonitorRetryPeriod, m.config.MonitorRetryPeriodJitter)
 }
 
 func (m *deploymentMonitor) scheduleHealthcheck() <-chan time.Time {
-	return m.schedule(monitorHealthcheckPeriodMin, monitorHealthcheckPeriodJitter)
+	return m.schedule(m.config.MonitorHealthcheckPeriod, m.config.MonitorHealthcheckPeriodJitter)
 }
 
 func (m *deploymentMonitor) schedule(min, jitter time.Duration) <-chan time.Time {
