@@ -572,18 +572,18 @@ func getKubernetesIP() string {
 func TestIntegrationTestSuite(t *testing.T) {
 	integrationTestOnly(t)
 
-	// suite.Run(t, new(E2EContainerToContainer))
-	// suite.Run(t, new(E2EAppNodePort))
+	suite.Run(t, new(E2EContainerToContainer))
+	suite.Run(t, new(E2EAppNodePort))
 	suite.Run(t, new(E2EDeploymentUpdate))
-	// suite.Run(t, new(E2EApp))
-	// suite.Run(t, new(E2EPersistentStorageDefault))
-	// suite.Run(t, new(E2EPersistentStorageBeta2))
-	// suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
+	suite.Run(t, new(E2EApp))
+	suite.Run(t, new(E2EPersistentStorageDefault))
+	suite.Run(t, new(E2EPersistentStorageBeta2))
+	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
 	// suite.Run(t, new(E2EStorageClassRam))
-	// suite.Run(t, new(E2EMigrateHostname))
-	// suite.Run(t, new(E2EJWTServer))
-	// suite.Run(t, new(E2ECustomCurrency))
-	// suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+	suite.Run(t, new(E2EMigrateHostname))
+	suite.Run(t, new(E2EJWTServer))
+	suite.Run(t, new(E2ECustomCurrency))
+	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 
 func (s *IntegrationTestSuite) waitForBlocksCommitted(height int) error {
