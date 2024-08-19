@@ -310,20 +310,6 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 	return func(rw http.ResponseWriter, req *http.Request) {
 		leaseID := requestLeaseID(req)
 
-		//  check if deployment actually exists in the first place before querying kubernetes
-		active, err := mclient.IsActive(req.Context(), leaseID.DeploymentID())
-		if err != nil {
-			log.Error("failed checking deployment activity", "err", err)
-			rw.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		if !active {
-			log.Info("no active deployment", "lease", leaseID)
-			rw.WriteHeader(http.StatusNotFound)
-			return
-		}
-
 		localLog := log.With("lease", leaseID.String(), "action", "shell")
 
 		vars := req.URL.Query()
@@ -343,7 +329,7 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 			return
 		}
 		tty := vars.Get("tty")
-		if 0 == len(tty) {
+		if len(tty) == 0 {
 			localLog.Error("missing parameter tty")
 			rw.WriteHeader(http.StatusBadRequest)
 			return
@@ -351,14 +337,14 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 		isTty := tty == "1"
 
 		service := vars.Get("service")
-		if 0 == len(service) {
+		if len(service) == 0 {
 			localLog.Error("missing parameter service")
 			rw.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		stdin := vars.Get("stdin")
-		if 0 == len(stdin) {
+		if len(stdin) == 0 {
 			localLog.Error("missing parameter stdin")
 			rw.WriteHeader(http.StatusBadRequest)
 			return
@@ -411,40 +397,57 @@ func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster
 			go leaseShellWebsocketHandler(localLog, wg, shellWs, stdinPipeOut, terminalSizeUpdate)
 		}
 
-		l := &sync.Mutex{}
-		stdout := wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeStdout, l)
-		stderr := wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeStderr, l)
-
-		subctx, subcancel := context.WithCancel(req.Context())
-		wg.Add(1)
-		go leaseShellPingHandler(subctx, wg, shellWs)
-
-		var stdinForExec io.Reader
-		if connectStdin {
-			stdinForExec = stdinPipeIn
-		}
-		result, err := cclient.Exec(subctx, leaseID, service, podIndex, cmd, stdinForExec, stdout, stderr, isTty, tsq)
-		subcancel()
-
 		responseData := leaseShellResponse{}
-		var resultWriter io.Writer
+		l := &sync.Mutex{}
+
+		resultWriter := wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeResult, l)
+
 		encodeData := true
-		resultWriter = wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeResult, l)
 
-		if result != nil {
-			responseData.ExitCode = result.ExitCode()
-
-			localLog.Info("lease shell completed", "exitcode", result.ExitCode())
-		} else {
-			if cluster.ErrorIsOkToSendToClient(err) {
+		status, err := cclient.ServiceStatus(req.Context(), leaseID, service)
+		if err != nil {
+			if cluster.ErrorIsOkToSendToClient(err) || errors.Is(err, kubeclienterrors.ErrNoServiceForLease) {
 				responseData.Message = err.Error()
 			} else {
-				resultWriter = wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeFailure, l)
-				// Don't return errors like this to the client, they could contain information
-				// that should not be let out
-				encodeData = false
+				http.Error(rw, err.Error(), http.StatusInternalServerError)
+			}
+		}
 
-				localLog.Error("lease exec failed", "err", err)
+		if err == nil && status.ReadyReplicas == 0 {
+			err = errors.New("no active replicase for service")
+			responseData.Message = err.Error()
+		}
+
+		if err == nil {
+			stdout := wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeStdout, l)
+			stderr := wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeStderr, l)
+
+			subctx, subcancel := context.WithCancel(req.Context())
+			wg.Add(1)
+			go leaseShellPingHandler(subctx, wg, shellWs)
+
+			var stdinForExec io.Reader
+			if connectStdin {
+				stdinForExec = stdinPipeIn
+			}
+			result, err := cclient.Exec(subctx, leaseID, service, podIndex, cmd, stdinForExec, stdout, stderr, isTty, tsq)
+			subcancel()
+
+			if result != nil {
+				responseData.ExitCode = result.ExitCode()
+
+				localLog.Info("lease shell completed", "exitcode", result.ExitCode())
+			} else {
+				if cluster.ErrorIsOkToSendToClient(err) {
+					responseData.Message = err.Error()
+				} else {
+					resultWriter = wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeFailure, l)
+					// Don't return errors like this to the client, they could contain information
+					// that should not be let out
+					encodeData = false
+
+					localLog.Error("lease exec failed", "err", err)
+				}
 			}
 		}
 
