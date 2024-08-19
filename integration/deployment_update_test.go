@@ -256,5 +256,5 @@ func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
 	_, err = ptestutil.TestLeaseShell(leaseShellCtx, s.validator.ClientCtx.WithOutputFormat("json"), extraArgs,
 		lID, 99, false, false, "notaservice", "/bin/echo", "/foo")
 	require.Error(s.T(), err)
-	require.Regexp(s.T(), ".*no such service exists with that name.*", err.Error())
+	require.Regexp(s.T(), ".*no service for that lease.*", err.Error())
 }

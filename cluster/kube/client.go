@@ -625,7 +625,6 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 	}
 
 	// Get manifest definition from CRD
-	c.log.Debug("Pulling manifest from CRD", "lease-ns", builder.LidNS(lid))
 	mani, err := wrapKubeCall("manifests-list", func() (*crd.Manifest, error) {
 		return c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, builder.LidNS(lid), metav1.GetOptions{})
 	})
@@ -636,19 +635,27 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 	}
 
 	var result *ctypes.ServiceStatus
-	isDeployment := true
 
-	for _, svc := range mani.Spec.Group.Services {
-		if svc.Name == name {
-			if params := svc.Params; params != nil {
-				for _, param := range params.Storage {
-					if param.Mount != "" {
-						isDeployment = false
-					}
-				}
-			}
+	var svc *crd.ManifestService
 
+	for i, s := range mani.Spec.Group.Services {
+		if s.Name == name {
+			svc = &mani.Spec.Group.Services[i]
 			break
+		}
+	}
+
+	if svc == nil {
+		return nil, kubeclienterrors.ErrNoServiceForLease
+	}
+
+	isDeployment := true
+	if params := svc.Params; params != nil {
+		for _, param := range params.Storage {
+			if param.Mount != "" {
+				isDeployment = false
+				break
+			}
 		}
 	}
 

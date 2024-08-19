@@ -210,5 +210,6 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return showErrorToUser(err)
 	}
+
 	return nil
 }
