@@ -40,6 +40,14 @@ function get_gotoolchain() {
 	echo -n "$gotoolchain"
 }
 
+function get_goversion() {
+	local goversion
+
+	goversion=$(go list -mod=readonly -f '{{ .Module.GoVersion }}')
+
+	echo -n "go$goversion"
+}
+
 function build_akash() {
 	dev_cache=${AP_DEVCACHE_BIN}
 	cd "$1" || exit 1
@@ -79,6 +87,9 @@ function run_bump_module() {
 case "$1" in
 	gotoolchain)
 		get_gotoolchain
+		;;
+	goversion)
+		get_goversion
 		;;
 	build-akash)
 		shift

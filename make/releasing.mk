@@ -1,6 +1,6 @@
 GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
-GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:$(GOTOOLCHAIN_SEMVER)
+GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:$(GOVERSION_SEMVER)
 GORELEASER_MOUNT_CONFIG  ?= false
 
 GORELEASER_SKIP_FLAGS    := $(GORELEASER_SKIP)
