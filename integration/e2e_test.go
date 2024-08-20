@@ -579,7 +579,7 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EPersistentStorageDefault))
 	suite.Run(t, new(E2EPersistentStorageBeta2))
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
-	// suite.Run(t, new(E2EStorageClassRam))
+	suite.Run(t, new(E2EStorageClassRam))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2EJWTServer))
 	suite.Run(t, new(E2ECustomCurrency))
