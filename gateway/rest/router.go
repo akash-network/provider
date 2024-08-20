@@ -127,21 +127,23 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 
 	hostnameRouter := router.PathPrefix(hostnamePrefix).Subrouter()
 	hostnameRouter.Use(requireOwner())
-	hostnameRouter.HandleFunc(migratePathPrefix, migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
+	hostnameRouter.HandleFunc(migratePathPrefix,
+		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
 		Methods(http.MethodPost)
 
 	endpointRouter := router.PathPrefix(endpointPrefix).Subrouter()
 	endpointRouter.Use(requireOwner())
-	endpointRouter.HandleFunc(migratePathPrefix, migrateEndpointHandler(log, pclient.ClusterService(), pclient.Cluster())).
+	endpointRouter.HandleFunc(migratePathPrefix,
+		migrateEndpointHandler(log, pclient.ClusterService(), pclient.Cluster())).
 		Methods(http.MethodPost)
 
-	// PUT /deployment/manifest
 	drouter := router.PathPrefix(deploymentPathPrefix).Subrouter()
 	drouter.Use(
 		requireOwner(),
 		requireDeploymentID(),
 	)
 
+	// PUT /deployment/manifest
 	drouter.HandleFunc("/manifest",
 		createManifestHandler(log, pclient.Manifest())).
 		Methods(http.MethodPut)
@@ -151,6 +153,11 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		requireOwner(),
 		requireLeaseID(),
 	)
+
+	// GET /lease/<lease-id>/manifest
+	drouter.HandleFunc("/manifest",
+		getManifestHandler(log, pclient.Cluster())).
+		Methods(http.MethodGet)
 
 	// GET /lease/<lease-id>/status
 	lrouter.HandleFunc("/status",
@@ -188,7 +195,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 
 	// POST /lease/<lease-id>/shell
 	lrouter.HandleFunc("/shell",
-		leaseShellHandler(log, pclient.Manifest(), pclient.Cluster()))
+		leaseShellHandler(log, pclient.Cluster()))
 
 	return router
 }
@@ -306,7 +313,7 @@ type leaseShellResponse struct {
 	Message  string `json:"message,omitempty"`
 }
 
-func leaseShellHandler(log log.Logger, mclient pmanifest.Client, cclient cluster.Client) http.HandlerFunc {
+func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc {
 	return func(rw http.ResponseWriter, req *http.Request) {
 		leaseID := requestLeaseID(req)
 
@@ -588,6 +595,29 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+}
+
+func getManifestHandler(log log.Logger, cclient cluster.ReadClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		found, grp, err := cclient.GetManifestGroup(r.Context(), requestLeaseID(r))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if !found {
+			http.Error(w, "lease not found", http.StatusNotFound)
+			return
+		}
+
+		mgrp, _, err := grp.FromCRD()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		writeJSON(log, w, &manifest.Manifest{mgrp})
 	}
 }
 

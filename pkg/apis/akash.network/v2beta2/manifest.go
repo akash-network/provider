@@ -171,7 +171,7 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 		return nil, err
 	}
 
-	group, schedulerParams, err := m.Spec.Group.fromCRD()
+	group, schedulerParams, err := m.Spec.Group.FromCRD()
 	if err != nil {
 		return nil, err
 	}
@@ -185,8 +185,8 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 	}, nil
 }
 
-// toAkash returns akash group details formatted from manifest group
-func (m *ManifestGroup) fromCRD() (mani.Group, []*SchedulerParams, error) {
+// FromCRD returns akash group details formatted from manifest group
+func (m *ManifestGroup) FromCRD() (mani.Group, []*SchedulerParams, error) {
 	am := mani.Group{
 		Name:     m.Name,
 		Services: make([]mani.Service, 0, len(m.Services)),
