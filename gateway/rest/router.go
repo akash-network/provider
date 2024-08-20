@@ -146,6 +146,10 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		createManifestHandler(log, pclient.Manifest())).
 		Methods(http.MethodPut)
 
+	drouter.HandleFunc("/manifest",
+		getManifestHandler(pclient.Manifest())).
+		Methods(http.MethodGet)
+
 	lrouter := router.PathPrefix(leasePathPrefix).Subrouter()
 	lrouter.Use(
 		requireOwner(),
@@ -588,6 +592,29 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+}
+
+func getManifestHandler(log log.Logger, cclient cluster.ReadClient) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		found, grp, err := cclient.GetManifestGroup(r.Context(), requestLeaseID(r))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if !found {
+			http.Error(w, "lease not found", http.StatusNotFound)
+			return
+		}
+
+		mgrp, _, err := grp.FromCRD()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		writeJSON(log, w, &manifest.Manifest{mgrp})
 	}
 }
 
