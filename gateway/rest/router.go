@@ -155,7 +155,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 	)
 
 	// GET /lease/<lease-id>/manifest
-	drouter.HandleFunc("/manifest",
+	lrouter.HandleFunc("/manifest",
 		getManifestHandler(log, pclient.Cluster())).
 		Methods(http.MethodGet)
 

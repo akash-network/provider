@@ -80,6 +80,41 @@ func dseqFromFlags(flags *pflag.FlagSet) (uint64, error) {
 	return flags.GetUint64(FlagDSeq)
 }
 
+func leaseIDFromFlags(cflags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
+	str, err := cflags.GetString(FlagProvider)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	provider, err := sdk.AccAddressFromBech32(str)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	dseq, err := cflags.GetUint64(FlagDSeq)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	gseq, err := cflags.GetUint32(FlagGSeq)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	oseq, err := cflags.GetUint32(FlagOSeq)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	return mtypes.LeaseID{
+		Owner:    owner,
+		DSeq:     dseq,
+		GSeq:     gseq,
+		OSeq:     oseq,
+		Provider: provider.String(),
+	}, nil
+}
+
 func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
 	provider, err := flags.GetString(FlagProvider)
 	if err != nil {
