@@ -34,6 +34,10 @@ func submitManifestPath(dseq uint64) string {
 	return fmt.Sprintf("deployment/%d/manifest", dseq)
 }
 
+func getManifestPath(id mtypes.LeaseID) string {
+	return fmt.Sprintf("%s/manifest", leasePath(id))
+}
+
 func leaseStatusPath(id mtypes.LeaseID) string {
 	return fmt.Sprintf("%s/status", leasePath(id))
 }

@@ -82,6 +82,14 @@ send-manifest:
 		--from "$(KEY_NAME)" \
 		--provider "$(PROVIDER_ADDRESS)"
 
+.PHONY: get-manifest
+get-manifest:
+	$(PROVIDER_SERVICES) get-manifest \
+		--dseq "$(DSEQ)"     \
+		--from "$(KEY_NAME)" \
+		--provider "$(PROVIDER_ADDRESS)"
+
+
 .PHONY: deployment-create
 deployment-create:
 	$(AKASH) tx deployment create "$(SDL_PATH)" \

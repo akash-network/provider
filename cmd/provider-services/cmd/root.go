@@ -39,7 +39,7 @@ func NewRootCmd() *cobra.Command {
 		return nil
 	}
 
-	cmd.AddCommand(SendManifestCmd())
+	cmd.AddCommand(ManifestCmds()...)
 	cmd.AddCommand(statusCmd())
 	cmd.AddCommand(leaseStatusCmd())
 	cmd.AddCommand(leaseEventsCmd())
