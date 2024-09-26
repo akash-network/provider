@@ -142,7 +142,10 @@ func newInventoryService(
 
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
-		reservations = append(reservations, newReservation(d.LeaseID().OrderID(), d.ManifestGroup()))
+		res := newReservation(d.LeaseID().OrderID(), d.ManifestGroup())
+		res.SetClusterParams(d.ClusterParams())
+
+		reservations = append(reservations, res)
 	}
 
 	go is.lc.WatchChannel(ctx.Done())

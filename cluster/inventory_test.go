@@ -29,6 +29,7 @@ import (
 	cmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/operator/waiter"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	aclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	afake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -187,6 +188,8 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	}
 
 	deployment.On("ManifestGroup").Return(&group)
+	deployment.On("ClusterParams").Return(crd.ClusterSettings{})
+
 	deployments[0] = deployment
 
 	clusterClient := &mocks.Client{}
