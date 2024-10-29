@@ -212,7 +212,7 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.Resou
 	}
 }
 
-func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint:golint,unparam
+func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint: golint,unparam
 	ch := make(chan inventoryResponse, 1)
 	req := inventoryRequest{
 		order: order,

@@ -186,7 +186,7 @@ func Test_ScalePricingOnMemory(t *testing.T) {
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 
-	expectedPrice := testutil.AkashDecCoin(t, int64(memoryScale*memoryQuantity))
+	expectedPrice := testutil.AkashDecCoin(t, int64(memoryScale*memoryQuantity)) // nolint: gosec
 	require.Equal(t, expectedPrice, price)
 }
 
@@ -258,7 +258,7 @@ func Test_ScalePricingOnStorage(t *testing.T) {
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 
-	decNearly(t, price.Amount, int64(storageScale*storageQuantity))
+	decNearly(t, price.Amount, int64(storageScale*storageQuantity)) // nolint: gosec
 }
 
 func Test_ScalePricingByCountOfResources(t *testing.T) {
@@ -282,12 +282,12 @@ func Test_ScalePricingByCountOfResources(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, err)
-	decNearly(t, firstPrice.Amount, int64(storageScale*storageQuantity))
+	decNearly(t, firstPrice.Amount, int64(storageScale*storageQuantity)) // nolint: gosec
 
 	gspec.Resources[0].Count = 2
 	secondPrice, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	decNearly(t, secondPrice.Amount, 2*int64(storageScale*storageQuantity))
+	decNearly(t, secondPrice.Amount, 2*int64(storageScale*storageQuantity)) // nolint: gosec
 }
 
 func Test_ScalePricingForIPs(t *testing.T) {
@@ -956,8 +956,6 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
-
 		t.Run(c.desc, func(t *testing.T) {
 			d := newDataForScript(c.r)
 			assert.NotEmpty(t, d)

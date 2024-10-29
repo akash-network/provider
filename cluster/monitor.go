@@ -171,7 +171,7 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 	for _, spec := range m.deployment.ManifestGroup().Services {
 		service, foundService := status[spec.Name]
 		if foundService {
-			if uint32(service.Available) < spec.Count {
+			if uint32(service.Available) < spec.Count { // nolint: gosec
 				badsvc++
 				m.log.Debug("service available replicas below target",
 					"service", spec.Name,
@@ -224,7 +224,7 @@ func (m *deploymentMonitor) scheduleHealthcheck() <-chan time.Time {
 	return m.schedule(m.config.MonitorHealthcheckPeriod, m.config.MonitorHealthcheckPeriodJitter)
 }
 
-func (m *deploymentMonitor) schedule(min, jitter time.Duration) <-chan time.Time {
-	period := min + time.Duration(rand.Int63n(int64(jitter))) // nolint: gosec
+func (m *deploymentMonitor) schedule(minTime, jitter time.Duration) <-chan time.Time {
+	period := minTime + time.Duration(rand.Int63n(int64(jitter))) // nolint: gosec
 	return time.After(period)
 }

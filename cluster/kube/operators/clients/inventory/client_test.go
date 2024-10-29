@@ -118,7 +118,7 @@ func (sf *inventoryScaffold) createFakeOperator(t *testing.T) {
 				{
 					Name:       "grpc",
 					Protocol:   "tcp",
-					Port:       int32(sf.ports[0]),
+					Port:       int32(sf.ports[0]), // nolint: gosec
 					TargetPort: intstr.FromString("grpc"),
 				},
 			},
@@ -144,7 +144,7 @@ func (sf *inventoryScaffold) createFakeOperator(t *testing.T) {
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "grpc",
-									ContainerPort: int32(sf.ports[0]),
+									ContainerPort: int32(sf.ports[0]), // nolint: gosec
 								},
 							},
 						},
@@ -168,7 +168,7 @@ func (sf *inventoryScaffold) createFakeOperator(t *testing.T) {
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "grpc",
-							ContainerPort: int32(sf.ports[0]),
+							ContainerPort: int32(sf.ports[0]), // nolint: gosec
 						},
 					},
 				},

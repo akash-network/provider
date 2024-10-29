@@ -87,7 +87,7 @@ AKASHD_SRC_IS_LOCAL          := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(
 AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")
 AKASHD_VERSION               := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(AKASHD_MODULE) | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
-GOLANGCI_LINT_VERSION        ?= v1.59.1
+GOLANGCI_LINT_VERSION        ?= v1.62.2
 STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
 MOCKERY_PACKAGE_NAME         := github.com/vektra/mockery/v2

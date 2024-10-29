@@ -358,8 +358,8 @@ func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
 
 func manifestServiceExposeFromAkash(amse maniv2beta1.ServiceExpose) ManifestServiceExpose {
 	return ManifestServiceExpose{
-		Port:                   uint16(amse.Port),
-		ExternalPort:           uint16(amse.ExternalPort),
+		Port:                   uint16(amse.Port),         // nolint: gosec
+		ExternalPort:           uint16(amse.ExternalPort), // nolint: gosec
 		Proto:                  amse.Proto.ToString(),
 		Service:                amse.Service,
 		Global:                 amse.Global,
@@ -425,7 +425,7 @@ func resourceUnitsFromAkash(aru types.ResourceUnits) (ResourceUnits, error) {
 		if aru.CPU.Units.Value() > math.MaxUint32 {
 			return ResourceUnits{}, errors.New("k8s api: cpu units value overflows uint32")
 		}
-		res.CPU = uint32(aru.CPU.Units.Value())
+		res.CPU = uint32(aru.CPU.Units.Value()) // nolint: gosec
 	}
 	if aru.Memory != nil {
 		res.Memory = strconv.FormatUint(aru.Memory.Quantity.Value(), 10)

@@ -300,10 +300,10 @@ loop:
 			trySignal()
 		case ch := <-s.statusch:
 			ch <- &Status{
-				Deployments: uint32(len(s.managers)),
+				Deployments: uint32(len(s.managers)), // nolint: gosec
 			}
 		case <-signalch:
-			bus.Pub(provider.ManifestStatus{Deployments: uint32(len(s.managers))}, []string{ptypes.PubSubTopicManifestStatus}, tpubsub.WithRetain())
+			bus.Pub(provider.ManifestStatus{Deployments: uint32(len(s.managers))}, []string{ptypes.PubSubTopicManifestStatus}, tpubsub.WithRetain()) // nolint: gosec
 		case manager := <-s.managerch:
 			s.session.Log().Info("manager done", "deployment", manager.daddr)
 

@@ -250,7 +250,7 @@ func TestIPOperatorGivesUpOnErrors(t *testing.T) {
 				ExternalPort: 10001,
 				SharingKey:   "akey",
 				Protocol:     "TCP",
-			}).Return(fakeError).Times(int(s.ilc.FailureLimit))
+			}).Return(fakeError).Times(int(s.ilc.FailureLimit)) // nolint: gosec
 
 		require.Greater(t, s.ilc.FailureLimit, uint(0))
 

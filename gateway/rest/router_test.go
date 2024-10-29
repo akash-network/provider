@@ -127,7 +127,7 @@ func testCertHelper(t *testing.T, test *routerTest) {
 		mock.AnythingOfType("v2beta2.Manifest"),
 	).Return(nil)
 
-	dseq := uint64(testutil.RandRangeInt(1, 1000))
+	dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
 
 	uri, err := makeURI(test.host, submitManifestPath(dseq))
 	require.NoError(t, err)
@@ -538,7 +538,7 @@ func TestRouteValidateFailsEmptyBody(t *testing.T) {
 
 func TestRoutePutManifestOK(t *testing.T) {
 	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
+		dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
 		test.pmclient.On(
 			"Submit",
 			mock.Anything,
@@ -580,7 +580,7 @@ func TestRoutePutManifestOK(t *testing.T) {
 func TestRoutePutInvalidManifest(t *testing.T) {
 	_ = dtypes.DeploymentID{}
 	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
+		dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
 		test.pmclient.On("Submit",
 			mock.Anything,
 			dtypes.DeploymentID{
@@ -787,9 +787,9 @@ func TestRouteLeaseStatusErr(t *testing.T) {
 
 func TestRouteServiceStatusOK(t *testing.T) {
 	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
 
 		status := &clustertypes.ServiceStatus{
 			Name:               "",
@@ -839,9 +839,9 @@ func TestRouteServiceStatusOK(t *testing.T) {
 
 func TestRouteServiceStatusNoDeployment(t *testing.T) {
 	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
 
 		test.pcclient.On("ServiceStatus", mock.Anything, types.LeaseID{
 			Owner:    test.caddr.String(),
@@ -879,9 +879,9 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 
 func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
 
 		kubeStatus := fakeKubernetesStatusError{
 			status: metav1.Status{
@@ -931,9 +931,9 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 
 func TestRouteServiceStatusError(t *testing.T) {
 	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
 
 		test.pcclient.On("ServiceStatus", mock.Anything, types.LeaseID{
 			Owner:    test.caddr.String(),

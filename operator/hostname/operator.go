@@ -135,7 +135,7 @@ func (op *hostnameOperator) monitorUntilError() error {
 			lastEvent:           nil,
 			presentLease:        leaseID,
 			presentServiceName:  conn.GetServiceName(),
-			presentExternalPort: uint32(conn.GetExternalPort()),
+			presentExternalPort: uint32(conn.GetExternalPort()), // nolint: gosec
 		}
 
 		op.hostnames[hostname] = entry
@@ -312,7 +312,7 @@ func buildDirective(ev chostname.ResourceEvent, serviceExpose crd.ManifestServic
 		Hostname:    ev.GetHostname(),
 		LeaseID:     ev.GetLeaseID(),
 		ServiceName: ev.GetServiceName(),
-		ServicePort: int32(ev.GetExternalPort()),
+		ServicePort: int32(ev.GetExternalPort()), // nolint: gosec
 	}
 	/*
 		Populate the configuration options
@@ -377,7 +377,7 @@ func (op *hostnameOperator) locateServiceFromManifest(ctx context.Context, lease
 			ExternalPort: uint32(expose.ExternalPort),
 		}
 
-		if externalPort == uint32(mse.GetExternalPort()) {
+		if externalPort == uint32(mse.GetExternalPort()) { // nolint: gosec
 			selectedExpose = expose
 			break
 		}

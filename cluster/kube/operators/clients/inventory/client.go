@@ -338,7 +338,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 				return nil, err
 			}
 		} else {
-			ports = append(ports, portforward.ForwardedPort{Local: uint16(svcPort)})
+			ports = append(ports, portforward.ForwardedPort{Local: uint16(svcPort)}) // nolint: gosec
 		}
 
 		endpoint = fmt.Sprintf("localhost:%d", ports[0].Local)

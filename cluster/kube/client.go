@@ -402,7 +402,6 @@ func newEventsFeedList(ctx context.Context, events []eventsv1.Event) ctypes.Even
 
 	done:
 		for _, evt := range events {
-			evt := evt
 			if !wtch.SendEvent(&evt) {
 				break done
 			}
@@ -552,8 +551,8 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 						// Record the actual port inside the container that is exposed
 						v := ctypes.ForwardedPortStatus{
 							Host:         settings.ClusterPublicHostname,
-							Port:         uint16(port.TargetPort.IntVal),
-							ExternalPort: uint16(nodePort),
+							Port:         uint16(port.TargetPort.IntVal), // nolint: gosec
+							ExternalPort: uint16(nodePort),               // nolint: gosec
 							Name:         deploymentName,
 						}
 

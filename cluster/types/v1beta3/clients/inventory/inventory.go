@@ -574,32 +574,32 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 		invNode := inventoryV1.NodeMetrics{
 			Name: nd.Name,
 			Allocatable: inventoryV1.ResourcesMetric{
-				CPU:              uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue()),
-				GPU:              uint64(nd.Resources.GPU.Quantity.Allocatable.Value()),
-				Memory:           uint64(nd.Resources.Memory.Quantity.Allocatable.Value()),
-				StorageEphemeral: uint64(nd.Resources.EphemeralStorage.Allocatable.Value()),
+				CPU:              uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue()), // nolint: gosec
+				GPU:              uint64(nd.Resources.GPU.Quantity.Allocatable.Value()),      // nolint: gosec
+				Memory:           uint64(nd.Resources.Memory.Quantity.Allocatable.Value()),   // nolint: gosec
+				StorageEphemeral: uint64(nd.Resources.EphemeralStorage.Allocatable.Value()),  // nolint: gosec
 			},
 		}
 
-		cpuTotal += uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue())
-		gpuTotal += uint64(nd.Resources.GPU.Quantity.Allocatable.Value())
-		memoryTotal += uint64(nd.Resources.Memory.Quantity.Allocatable.Value())
-		storageEphemeralTotal += uint64(nd.Resources.EphemeralStorage.Allocatable.Value())
+		cpuTotal += uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue())             // nolint: gosec
+		gpuTotal += uint64(nd.Resources.GPU.Quantity.Allocatable.Value())                  // nolint: gosec
+		memoryTotal += uint64(nd.Resources.Memory.Quantity.Allocatable.Value())            // nolint: gosec
+		storageEphemeralTotal += uint64(nd.Resources.EphemeralStorage.Allocatable.Value()) // nolint: gosec
 
 		avail := nd.Resources.CPU.Quantity.Available()
-		invNode.Available.CPU = uint64(avail.MilliValue())
+		invNode.Available.CPU = uint64(avail.MilliValue()) // nolint: gosec
 		cpuAvailable += invNode.Available.CPU
 
 		avail = nd.Resources.GPU.Quantity.Available()
-		invNode.Available.GPU = uint64(avail.Value())
+		invNode.Available.GPU = uint64(avail.Value()) // nolint: gosec
 		gpuAvailable += invNode.Available.GPU
 
 		avail = nd.Resources.Memory.Quantity.Available()
-		invNode.Available.Memory = uint64(avail.Value())
+		invNode.Available.Memory = uint64(avail.Value()) // nolint: gosec
 		memoryAvailable += invNode.Available.Memory
 
 		avail = nd.Resources.EphemeralStorage.Available()
-		invNode.Available.StorageEphemeral = uint64(avail.Value())
+		invNode.Available.StorageEphemeral = uint64(avail.Value()) // nolint: gosec
 		storageEphemeralAvailable += invNode.Available.StorageEphemeral
 
 		ret.Nodes = append(ret.Nodes, invNode)
