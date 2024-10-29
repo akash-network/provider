@@ -48,6 +48,7 @@ type Client interface {
 	Status(ctx context.Context) (*provider.Status, error)
 	Validate(ctx context.Context, gspec dtypes.GroupSpec) (provider.ValidateGroupSpecResult, error)
 	SubmitManifest(ctx context.Context, dseq uint64, mani manifest.Manifest) error
+	GetManifest(ctx context.Context, id mtypes.LeaseID) (manifest.Manifest, error)
 	LeaseStatus(ctx context.Context, id mtypes.LeaseID) (LeaseStatus, error)
 	LeaseEvents(ctx context.Context, id mtypes.LeaseID, services string, follow bool) (*LeaseKubeEvents, error)
 	LeaseLogs(ctx context.Context, id mtypes.LeaseID, services string, follow bool, tailLines int64) (*ServiceLogs, error)
@@ -423,6 +424,46 @@ func (c *client) SubmitManifest(ctx context.Context, dseq uint64, mani manifest.
 	}
 
 	return createClientResponseErrorIfNotOK(resp, responseBuf)
+}
+
+func (c *client) GetManifest(ctx context.Context, lid mtypes.LeaseID) (manifest.Manifest, error) {
+	uri, err := makeURI(c.host, getManifestPath(lid))
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	rCl := c.newReqClient(ctx)
+	resp, err := rCl.hclient.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	err = createClientResponseErrorIfNotOK(resp, bytes.NewBuffer(body))
+	if err != nil {
+		return nil, err
+	}
+
+	var mani manifest.Manifest
+	if err = json.Unmarshal(body, &mani); err != nil {
+		return nil, err
+	}
+
+	return mani, nil
 }
 
 func (c *client) MigrateEndpoints(ctx context.Context, endpoints []string, dseq uint64, gseq uint32) error {

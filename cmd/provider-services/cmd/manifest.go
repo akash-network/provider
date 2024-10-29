@@ -25,6 +25,13 @@ var (
 	errSubmitManifestFailed = errors.New("submit manifest to some providers has been failed")
 )
 
+func ManifestCmds() []*cobra.Command {
+	return []*cobra.Command{
+		SendManifestCmd(),
+		GetManifestCmd(),
+	}
+}
+
 // SendManifestCmd looks up the Providers blockchain information,
 // and POSTs the SDL file to the Gateway address.
 func SendManifestCmd() *cobra.Command {
@@ -41,6 +48,77 @@ func SendManifestCmd() *cobra.Command {
 	addManifestFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
+
+	return cmd
+}
+
+// GetManifestCmd reads current manifest from the provider
+func GetManifestCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:          "get-manifest",
+		Args:         cobra.ExactArgs(0),
+		Short:        "Read manifest from provider",
+		SilenceUsage: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cctx, err := sdkclient.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			ctx := cmd.Context()
+
+			cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+			if err != nil {
+				return err
+			}
+
+			cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
+			if err != nil {
+				return markRPCServerError(err)
+			}
+
+			lid, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
+			if err != nil {
+				return err
+			}
+
+			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
+			gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+			if err != nil {
+				return err
+			}
+
+			mani, err := gclient.GetManifest(ctx, lid)
+			if err != nil {
+				return err
+			}
+
+			buf := &bytes.Buffer{}
+
+			switch cmd.Flag(flagOutput).Value.String() {
+			case outputJSON:
+				err = json.NewEncoder(buf).Encode(mani)
+			case outputYAML:
+				err = yaml.NewEncoder(buf).Encode(mani)
+			}
+
+			if err != nil {
+				return err
+			}
+
+			_, err = fmt.Fprint(cmd.OutOrStdout(), buf.String())
+
+			if err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+
+	addLeaseFlags(cmd)
+
+	cmd.Flags().StringP(flagOutput, "o", outputYAML, "output format json|yaml. default yaml")
 
 	return cmd
 }
