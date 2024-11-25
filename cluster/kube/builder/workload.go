@@ -13,6 +13,7 @@ import (
 	"pkg.akt.dev/go/sdl"
 	sdlutil "pkg.akt.dev/go/sdl/util"
 
+	pmanifest "github.com/akash-network/provider/manifest"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
@@ -419,6 +420,30 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOwner, lid.Owner)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, lid.Provider)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashClusterPublicHostname, b.settings.ClusterPublicHostname)
+
+	ingressHost := pmanifest.IngressHost(lid, b.Name())
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashIngressHostname, fmt.Sprintf("%s.%s", ingressHost, b.settings.DeploymentIngressDomain))
+
+	svc := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+
+	// Add hostnames from service expose configurations
+	for _, expose := range svc.Expose {
+		if expose.IsIngress() {
+			// Add custom hostnames if specified
+			for idx, hostname := range expose.Hosts {
+				env = addIfNotPresent(envVarsAlreadyAdded, env,
+					fmt.Sprintf("%s_%d_%d", envVarAkashIngressCustomHostname, expose.Port, idx),
+					hostname)
+			}
+		}
+
+		if expose.Global {
+			// Add external port mappings
+			env = addIfNotPresent(envVarsAlreadyAdded, env,
+				fmt.Sprintf("%s_%d", envVarAkashExternalPort, expose.Port),
+				expose.ExternalPort)
+		}
+	}
 
 	return env
 }
