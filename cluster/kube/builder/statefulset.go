@@ -18,12 +18,15 @@ type statefulSet struct {
 
 var _ StatefulSet = (*statefulSet)(nil)
 
-func BuildStatefulSet(workload Workload) StatefulSet {
+func BuildStatefulSet(workload Workload, svc Service) StatefulSet {
 	ss := &statefulSet{
 		Workload: workload,
 	}
 
 	ss.Workload.log = ss.Workload.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	if svc != nil {
+		ss.setService(svc.(*service))
+	}
 
 	return ss
 }

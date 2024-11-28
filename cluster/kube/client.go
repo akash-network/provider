@@ -281,10 +281,20 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			}
 		}
 
+		hasServices := len(service.Expose) > 0
+
+		var localService builder.Service
+		var globalService builder.Service
+
+		if hasServices {
+			localService = builder.BuildService(workload, false)
+			globalService = builder.BuildService(workload, true)
+		}
+
 		if persistent {
-			svc.statefulSet = builder.BuildStatefulSet(workload)
+			svc.statefulSet = builder.BuildStatefulSet(workload, globalService)
 		} else {
-			svc.deployment = builder.NewDeployment(workload)
+			svc.deployment = builder.NewDeployment(workload, globalService)
 		}
 
 		applies.services = append(applies.services, svc)
@@ -294,8 +304,8 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			continue
 		}
 
-		svc.localService = builder.BuildService(workload, false)
-		svc.globalService = builder.BuildService(workload, true)
+		svc.localService = localService
+		svc.globalService = globalService
 
 	}
 
@@ -357,6 +367,34 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if gsvc := applyObjs.globalService; gsvc != nil && gsvc.Any() {
 			if err = applyService(ctx, c.kc, gsvc); err != nil {
 				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+		}
+
+		if lsvc := applyObjs.localService; lsvc != nil && lsvc.Any() {
+			if err = applyService(ctx, c.kc, lsvc); err != nil {
+				c.log.Error("applying local service", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+		}
+
+		if gsvc := applyObjs.globalService; gsvc != nil && gsvc.Any() {
+			if err = applyService(ctx, c.kc, gsvc); err != nil {
+				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+		}
+
+		if applyObjs.statefulSet != nil {
+			if err = applyStatefulSet(ctx, c.kc, applyObjs.statefulSet); err != nil {
+				c.log.Error("applying statefulSet", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+		}
+
+		if applyObjs.deployment != nil {
+			if err = applyDeployment(ctx, c.kc, applyObjs.deployment); err != nil {
+				c.log.Error("applying deployment", "err", err, "lease", lid, "service", service.Name)
 				return err
 			}
 		}

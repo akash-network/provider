@@ -33,6 +33,7 @@ type workloadBase interface {
 type Workload struct {
 	builder
 	serviceIdx int
+	service    *service
 }
 
 var _ workloadBase = (*Workload)(nil)
@@ -383,6 +384,10 @@ func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
 	return []corev1.LocalObjectReference{{Name: sname}}
 }
 
+func (b *Workload) setService(service *service) {
+	b.service = service
+}
+
 func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, env []corev1.EnvVar) []corev1.EnvVar {
 	lid := b.deployment.LeaseID()
 
@@ -412,9 +417,13 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 
 		if expose.Global {
 			// Add external port mappings
-			env = addIfNotPresent(envVarsAlreadyAdded, env,
-				fmt.Sprintf("%s_%d", envVarAkashExternalPort, expose.Port),
-				expose.ExternalPort)
+			if svc := b.service; svc != nil {
+				if nodePort, exists := svc.portMap[int32(expose.Port)]; exists {
+					env = addIfNotPresent(envVarsAlreadyAdded, env,
+						fmt.Sprintf("%s_%d", envVarAkashExternalPort, expose.Port),
+						fmt.Sprintf("%d", nodePort))
+				}
+			}
 		}
 	}
 
