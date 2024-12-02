@@ -357,8 +357,8 @@ func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
 
 func manifestServiceExposeFromAkash(amse mani.ServiceExpose) ManifestServiceExpose {
 	return ManifestServiceExpose{
-		Port:                   uint16(amse.Port),
-		ExternalPort:           uint16(amse.ExternalPort),
+		Port:                   uint16(amse.Port),         // nolint: gosec
+		ExternalPort:           uint16(amse.ExternalPort), // nolint: gosec
 		Proto:                  amse.Proto.ToString(),
 		Service:                amse.Service,
 		Global:                 amse.Global,

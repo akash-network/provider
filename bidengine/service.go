@@ -228,7 +228,7 @@ loop:
 			}
 		case ch := <-s.statusch:
 			ch <- &Status{
-				Orders: uint32(len(s.orders)),
+				Orders: uint32(len(s.orders)), // nolint: gosec
 			}
 		case order := <-s.drainch:
 			// child done
@@ -237,7 +237,7 @@ loop:
 			ordersCounter.WithLabelValues("stop").Inc()
 			trySignal()
 		case <-signalch:
-			bus.Pub(provider.BidEngineStatus{Orders: uint32(len(s.orders))}, []string{ptypes.PubSubTopicBidengineStatus}, tpubsub.WithRetain())
+			bus.Pub(provider.BidEngineStatus{Orders: uint32(len(s.orders))}, []string{ptypes.PubSubTopicBidengineStatus}, tpubsub.WithRetain()) // nolint: gosec
 		}
 		s.updateOrderManagerGauge()
 	}

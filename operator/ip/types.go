@@ -63,8 +63,8 @@ func (b *barrier) waitUntilClear(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			clear := 0 == atomic.LoadInt32(&b.active)
-			if clear {
+			isClear := 0 == atomic.LoadInt32(&b.active)
+			if isClear {
 				return nil
 			}
 		case <-ctx.Done():

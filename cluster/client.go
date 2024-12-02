@@ -195,8 +195,8 @@ func (c *nullClient) LeaseStatus(_ context.Context, lid mtypes.LeaseID) (map[str
 	for _, svc := range lease.group.Services {
 		resp[svc.Name] = &ctypes.ServiceStatus{
 			Name:      svc.Name,
-			Available: int32(svc.Count),
-			Total:     int32(svc.Count),
+			Available: int32(svc.Count), // nolint: gosec
+			Total:     int32(svc.Count), // nolint: gosec
 		}
 	}
 

@@ -381,10 +381,10 @@ loop:
 			}
 		case ch := <-s.statusch:
 			ch <- &ctypes.Status{
-				Leases: uint32(len(s.managers)),
+				Leases: uint32(len(s.managers)), // nolint: gosec
 			}
 		case ch := <-s.statusV1ch:
-			ch <- uint32(len(s.managers))
+			ch <- uint32(len(s.managers)) // nolint: gosec
 		case <-signalch:
 			istatus, _ := s.inventory.statusV1(ctx)
 
@@ -393,7 +393,7 @@ loop:
 			}
 
 			msg := provider.ClusterStatus{
-				Leases:    provider.Leases{Active: uint32(len(s.managers))},
+				Leases:    provider.Leases{Active: uint32(len(s.managers))}, // nolint: gosec
 				Inventory: *istatus,
 			}
 			bus.Pub(msg, []string{ptypes.PubSubTopicClusterStatus}, tpubsub.WithRetain())

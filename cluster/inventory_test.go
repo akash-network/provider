@@ -263,7 +263,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	}
 
 	// availableExternalEndpoints should be consumed because of the deployed reservation
-	require.Equal(t, uint(1000-countOfRandomPortService), inv.availableExternalPorts)
+	require.Equal(t, uint(1000-countOfRandomPortService), inv.availableExternalPorts) // nolint: gosec
 
 	// Unreserving the allocated reservation should reclaim the availableExternalEndpoints
 	err = inv.unreserve(lid.OrderID())
@@ -464,8 +464,8 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 
 	ipQty := testutil.RandRangeInt(1, 100)
 	mockIP.On("GetIPAddressUsage", mock.Anything).Return(cip.AddressUsage{
-		Available: uint(ipQty),
-		InUse:     uint(ipQty),
+		Available: uint(ipQty), // nolint: gosec
+		InUse:     uint(ipQty), // nolint: gosec
 	}, nil)
 	mockIP.On("Stop")
 
@@ -520,8 +520,8 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 
 	ipQty := testutil.RandRangeInt(5, 10)
 	mockIP.On("GetIPAddressUsage", mock.Anything).Return(cip.AddressUsage{
-		Available: uint(ipQty),
-		InUse:     uint(ipQty - 1), // not all in use
+		Available: uint(ipQty),     // nolint: gosec
+		InUse:     uint(ipQty - 1), // nolint: gosec
 	}, nil)
 
 	ipAddrStatusCalled := make(chan struct{}, 2)
@@ -717,5 +717,5 @@ func TestInventory_OverReservations(t *testing.T) {
 	<-inv.lc.Done()
 
 	// No ports used yet
-	require.Equal(t, uint(1000-countOfRandomPortService), inv.availableExternalPorts)
+	require.Equal(t, uint(1000-countOfRandomPortService), inv.availableExternalPorts) // nolint: gosec
 }

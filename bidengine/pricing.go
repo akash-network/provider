@@ -144,11 +144,11 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 
 	endpointTotal := decimal.NewFromInt(0)
 	ipTotal := decimal.NewFromInt(0).Add(fp.ipScale)
-	ipTotal = ipTotal.Mul(decimal.NewFromInt(int64(util.GetEndpointQuantityOfResourceGroup(req.GSpec, atypes.Endpoint_LEASED_IP))))
+	ipTotal = ipTotal.Mul(decimal.NewFromInt(int64(util.GetEndpointQuantityOfResourceGroup(req.GSpec, atypes.Endpoint_LEASED_IP)))) // nolint: gosec
 
 	// iterate over everything & sum it up
 	for _, group := range req.GSpec.Resources {
-		groupCount := decimal.NewFromInt(int64(group.Count)) // Expand uint32 to int64
+		groupCount := decimal.NewFromInt(int64(group.Count)) // // nolint: gosec
 
 		cpuQuantity := decimal.NewFromBigInt(group.Resources.CPU.Units.Val.BigInt(), 0)
 		cpuQuantity = cpuQuantity.Mul(groupCount)
@@ -174,7 +174,7 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 			total, exists := storageTotal[storageClass]
 
 			if !exists {
-				return sdk.DecCoin{}, errors.Wrapf(errNoPriceScaleForStorageClass, storageClass)
+				return sdk.DecCoin{}, errors.Wrapf(errNoPriceScaleForStorageClass, "%s", storageClass)
 			}
 
 			total = total.Add(storageQuantity)
@@ -250,14 +250,14 @@ func MakeRandomRangePricing() (BidPricingStrategy, error) {
 }
 
 func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
-	min, max := calculatePriceRange(req.GSpec)
-	if min.IsEqual(max) {
-		return max, nil
+	minPrice, maxPrice := calculatePriceRange(req.GSpec)
+	if minPrice.IsEqual(maxPrice) {
+		return maxPrice, nil
 	}
 
 	const scale = 10000
 
-	delta := max.Amount.Sub(min.Amount).Mul(sdk.NewDec(scale))
+	delta := maxPrice.Amount.Sub(minPrice.Amount).Mul(sdk.NewDec(scale))
 
 	minbid := delta.TruncateInt64()
 	if minbid < 1 {
@@ -269,8 +269,8 @@ func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.De
 	}
 
 	scaledValue := sdk.NewDecFromBigInt(val).QuoInt64(scale).QuoInt64(100)
-	amount := min.Amount.Add(scaledValue)
-	return sdk.NewDecCoinFromDec(min.Denom, amount), nil
+	amount := minPrice.Amount.Add(scaledValue)
+	return sdk.NewDecCoinFromDec(minPrice.Denom, amount), nil
 }
 
 func calculatePriceRange(gspec *dtypes.GroupSpec) (sdk.DecCoin, sdk.DecCoin) {

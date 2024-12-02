@@ -180,7 +180,7 @@ func resourcesFromAkash(aru types.Resources) (Resources, error) {
 		if aru.CPU.Units.Value() > math.MaxUint32 {
 			return Resources{}, errors.New("k8s api: cpu units value overflows uint32")
 		}
-		res.CPU.Units = uint32(aru.CPU.Units.Value())
+		res.CPU.Units = uint32(aru.CPU.Units.Value()) // nolint: gosec
 		res.CPU.Attributes = aru.CPU.Attributes.Dup()
 	}
 
@@ -193,7 +193,7 @@ func resourcesFromAkash(aru types.Resources) (Resources, error) {
 		if aru.GPU.Units.Value() > math.MaxUint32 {
 			return Resources{}, errors.New("k8s api: gpu units value overflows uint32")
 		}
-		res.GPU.Units = uint32(aru.GPU.Units.Value())
+		res.GPU.Units = uint32(aru.GPU.Units.Value()) // nolint: gosec
 		res.GPU.Attributes = aru.GPU.Attributes
 	}
 

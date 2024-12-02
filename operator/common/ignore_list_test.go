@@ -3,11 +3,12 @@ package common
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/akash-network/node/testutil"
-	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
 	"time"
+
+	"github.com/akash-network/node/testutil"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIgnoreList(t *testing.T) {
@@ -48,7 +49,7 @@ func TestIgnoreList(t *testing.T) {
 }
 
 func TestIgnoreListFailureLimit(t *testing.T) {
-	failureLimit := uint(testutil.RandRangeInt(3, 10))
+	failureLimit := uint(testutil.RandRangeInt(3, 10)) // nolint: gosec
 	il := NewIgnoreList(IgnoreListConfig{
 		FailureLimit: failureLimit,
 		EntryLimit:   100,

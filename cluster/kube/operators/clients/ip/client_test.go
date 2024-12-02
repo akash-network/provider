@@ -34,16 +34,16 @@ type fakeOperator struct {
 }
 
 func (fio *fakeOperator) setHealthStatus(status int) {
-	atomic.StoreUint32(&fio.healthStatus, uint32(status))
+	atomic.StoreUint32(&fio.healthStatus, uint32(status)) // nolint: gosec
 }
 
 func (fio *fakeOperator) setIPLeaseStatusResponse(status int, body []byte) {
-	atomic.StoreUint32(&fio.ipLeaseStatusStatus, uint32(status))
+	atomic.StoreUint32(&fio.ipLeaseStatusStatus, uint32(status)) // nolint: gosec
 	fio.ipLeaseStatusResponse.Store(body)
 }
 
 func (fio *fakeOperator) setIPUsageResponse(status int, body []byte) {
-	atomic.StoreUint32(&fio.ipUsageStatus, uint32(status))
+	atomic.StoreUint32(&fio.ipUsageStatus, uint32(status)) // nolint: gosec
 	fio.ipUsageResponse.Store(body)
 }
 
@@ -113,7 +113,7 @@ func TestIPOperatorClient(t *testing.T) {
 
 	srv := net.SRV{
 		Target:   "localhost",
-		Port:     uint16(portNumber),
+		Port:     uint16(portNumber), // nolint: gosec
 		Priority: 0,
 		Weight:   0,
 	}

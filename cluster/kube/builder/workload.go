@@ -84,8 +84,8 @@ func (b *Workload) container() corev1.Container {
 
 	if cpu := service.Resources.CPU; cpu != nil {
 		requestedCPU := sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units)
-		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(requestedCPU.Value()), resource.Milli).DeepCopy()
-		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(cpu.Units.Value()), resource.Milli).DeepCopy()
+		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(requestedCPU.Value()), resource.Milli).DeepCopy() // nolint: gosec
+		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(cpu.Units.Value()), resource.Milli).DeepCopy()      // nolint: gosec
 	}
 
 	if gpu := service.Resources.GPU; gpu != nil && gpu.Units.Value() > 0 {
@@ -105,8 +105,8 @@ func (b *Workload) container() corev1.Container {
 		//  - can specify GPU in both limits and requests but these two values must be equal.
 		//  - cannot specify GPU requests without specifying limits.
 		requestedGPU := sdlutil.ComputeCommittedResources(b.settings.GPUCommitLevel, gpu.Units)
-		kcontainer.Resources.Requests[resourceName] = resource.NewQuantity(int64(requestedGPU.Value()), resource.DecimalSI).DeepCopy()
-		kcontainer.Resources.Limits[resourceName] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()
+		kcontainer.Resources.Requests[resourceName] = resource.NewQuantity(int64(requestedGPU.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
+		kcontainer.Resources.Limits[resourceName] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()      // nolint: gosec
 	}
 
 	var requestedMem uint64
@@ -120,8 +120,8 @@ func (b *Workload) container() corev1.Container {
 		if !persistent {
 			if class == "" {
 				requestedStorage := sdlutil.ComputeCommittedResources(b.settings.StorageCommitLevel, ephemeral.Quantity)
-				kcontainer.Resources.Requests[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(requestedStorage.Value()), resource.DecimalSI).DeepCopy()
-				kcontainer.Resources.Limits[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(ephemeral.Quantity.Value()), resource.DecimalSI).DeepCopy()
+				kcontainer.Resources.Requests[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(requestedStorage.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
+				kcontainer.Resources.Limits[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(ephemeral.Quantity.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
 			} else if class == "ram" {
 				requestedMem += ephemeral.Quantity.Value()
 			}
@@ -131,8 +131,8 @@ func (b *Workload) container() corev1.Container {
 	// fixme: ram is never expected to be nil
 	if mem := service.Resources.Memory; mem != nil {
 		requestedRAM := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
-		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRAM.Value()), resource.DecimalSI).DeepCopy()
-		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()+requestedMem), resource.DecimalSI).DeepCopy()
+		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRAM.Value()), resource.DecimalSI).DeepCopy()            // nolint: gosec
+		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()+requestedMem), resource.DecimalSI).DeepCopy() // nolint: gosec
 	}
 
 	if service.Params != nil {
@@ -161,7 +161,7 @@ func (b *Workload) container() corev1.Container {
 
 	for _, expose := range service.Expose {
 		kcontainer.Ports = append(kcontainer.Ports, corev1.ContainerPort{
-			ContainerPort: int32(expose.Port),
+			ContainerPort: int32(expose.Port), // nolint: gosec
 		})
 	}
 
@@ -232,7 +232,7 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 			},
 		}
 
-		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.NewQuantity(int64(storage.Quantity.Value()), resource.DecimalSI).DeepCopy()
+		pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.NewQuantity(int64(storage.Quantity.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
 
 		attr = storage.Attributes.Find(sdl.StorageAttributeClass)
 		if class, valid := attr.AsString(); valid && class != sdl.StorageClassDefault {
@@ -262,7 +262,7 @@ func (b *Workload) runtimeClass() *string {
 
 func (b *Workload) replicas() *int32 {
 	replicas := new(int32)
-	*replicas = int32(b.deployment.ManifestGroup().Services[b.serviceIdx].Count)
+	*replicas = int32(b.deployment.ManifestGroup().Services[b.serviceIdx].Count) // nolint: gosec
 
 	return replicas
 }

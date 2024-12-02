@@ -143,7 +143,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, r Request) (sd
 
 	processCtx, cancel := context.WithTimeout(ctx, ssp.runtimeLimit)
 	defer cancel()
-	cmd := exec.CommandContext(processCtx, ssp.path) //nolint:gosec
+	cmd := exec.CommandContext(processCtx, ssp.path) // nolint: gosec
 	cmd.Stdin = buf
 	outputBuf := &bytes.Buffer{}
 	cmd.Stdout = outputBuf

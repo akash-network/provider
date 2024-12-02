@@ -441,7 +441,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	}
 
 	for host, serviceExpose := range hosts {
-		externalPort := uint32(serviceExpose.GetExternalPort())
+		externalPort := uint32(serviceExpose.GetExternalPort()) // nolint: gosec
 		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort)
 		if err != nil {
 			// TODO - counter
@@ -457,7 +457,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		externalPort := serviceExpose.expose.GetExternalPort()
 		port := serviceExpose.expose.Port
 
-		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
+		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false) // nolint: gosec
 		if err != nil {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
 				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)

@@ -297,8 +297,8 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 				leaseID:      leaseID,
 				ip:           ingress.IP,
 				serviceName:  selectedServiceName,
-				externalPort: uint32(port.Port),
-				port:         uint32(port.TargetPort.IntValue()),
+				externalPort: uint32(port.Port),                  // nolint: gosec
+				port:         uint32(port.TargetPort.IntValue()), // nolint: gosec
 				sharingKey:   service.ObjectMeta.Annotations[metalLbAllowSharedIP],
 				protocol:     proto,
 			})
@@ -373,7 +373,7 @@ func (c *client) CreateIPPassthrough(ctx context.Context, directive cip.ClusterI
 	port := corev1.ServicePort{
 		Name:       portName,
 		Protocol:   proto,
-		Port:       int32(directive.ExternalPort),
+		Port:       int32(directive.ExternalPort), // nolint: gosec
 		TargetPort: intstr.FromInt(int(directive.Port)),
 	}
 
@@ -478,7 +478,7 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]cip.Passthrough, erro
 			v := ipPassthrough{
 				lID:          leaseID,
 				serviceName:  serviceName,
-				externalPort: uint32(port),
+				externalPort: uint32(port), // nolint: gosec
 				sharingKey:   sharingKey,
 				protocol:     mproto,
 			}
