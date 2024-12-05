@@ -222,7 +222,13 @@ func (c *rancher) run(startch chan<- struct{}) error {
 									continue
 								}
 
-								params := scs[pv.Spec.StorageClassName]
+								params, exists := scs[pv.Spec.StorageClassName]
+								// pv can be created with non-existing storage class, so just skip it for now
+								// todo @troian may need to recount volume if storageclass is added later
+								if !exists {
+									continue
+								}
+
 								params.allocated += uint64(capacity.Value()) // nolint: gosec
 
 								pvMap[pv.Name] = pv
