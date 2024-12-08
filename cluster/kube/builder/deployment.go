@@ -18,12 +18,15 @@ type deployment struct {
 
 var _ Deployment = (*deployment)(nil)
 
-func NewDeployment(workload Workload) Deployment {
+func NewDeployment(workload Workload, svc Service) Deployment {
 	ss := &deployment{
 		Workload: workload,
 	}
 
 	ss.Workload.log = ss.Workload.log.With("object", "deployment", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	if svc != nil {
+		ss.setService(svc.(*service))
+	}
 
 	return ss
 }

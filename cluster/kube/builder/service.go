@@ -2,7 +2,6 @@ package builder
 
 import (
 	"fmt"
-
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -21,6 +20,7 @@ type Service interface {
 type service struct {
 	Workload
 	requireNodePort bool
+	portMap         map[int32]int32
 }
 
 var _ Service = (*service)(nil)
@@ -29,6 +29,7 @@ func BuildService(workload Workload, requireNodePort bool) Service {
 	ss := &service{
 		Workload:        workload,
 		requireNodePort: requireNodePort,
+		portMap:         make(map[int32]int32),
 	}
 
 	ss.Workload.log = ss.Workload.log.With("object", "service", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
@@ -68,6 +69,8 @@ func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
 		},
 	}
 
+	b.updatePortMap(ports)
+
 	return svc, nil
 }
 
@@ -101,7 +104,24 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 	}
 
 	obj.Spec.Ports = ports
+
+	b.updatePortMap(ports)
+
 	return obj, nil
+}
+
+func (b *service) updatePortMap(ports []corev1.ServicePort) {
+	b.log.Debug("provider/cluster/kube/builder: updating port map", "requireNodePort", b.requireNodePort, "service", b.Name)
+	if !b.requireNodePort {
+		return
+	}
+
+	b.portMap = make(map[int32]int32)
+	for _, port := range ports {
+		if port.NodePort > 0 {
+			b.portMap[port.TargetPort.IntVal] = port.NodePort
+		}
+	}
 }
 
 func (b *service) Any() bool {

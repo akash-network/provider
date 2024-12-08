@@ -4,15 +4,16 @@ package kube
 
 import (
 	"context"
-
+	"fmt"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
 	metricsutils "github.com/akash-network/node/util/metrics"
-
 	"github.com/akash-network/provider/cluster/kube/builder"
 	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"k8s.io/client-go/util/retry"
 )
 
 func applyNS(ctx context.Context, kc kubernetes.Interface, b builder.NS) error {
@@ -115,18 +116,50 @@ func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Dep
 
 	switch {
 	case err == nil:
-		obj, err = b.Update(obj)
+		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			obj, err = kc.AppsV1().Deployments(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
 
-		if err == nil {
-			_, err = kc.AppsV1().Deployments(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-update", err)
+			obj, err = b.Update(obj)
+			if err != nil {
+				return err
+			}
 
+			result, err := kc.AppsV1().Deployments(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
+			if err != nil {
+				return err
+			}
+
+			getFunc := func(ctx context.Context, name, ns string, opts metav1.GetOptions) (interface{}, error) {
+				return kc.AppsV1().Deployments(ns).Get(ctx, name, opts)
+			}
+			watchFunc := func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				return kc.AppsV1().Deployments(b.NS()).Watch(ctx, opts)
+			}
+			return waitForProcessedVersion(ctx, getFunc, watchFunc, b.NS(), b.Name(), result.ResourceVersion)
+		})
+		if retryErr != nil {
+			return retryErr
 		}
+
 	case errors.IsNotFound(err):
 		obj, err = b.Create()
 		if err == nil {
-			_, err = kc.AppsV1().Deployments(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
+			result, err := kc.AppsV1().Deployments(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-create", err)
+			if err != nil {
+				return err
+			}
+
+			getFunc := func(ctx context.Context, name, ns string, opts metav1.GetOptions) (interface{}, error) {
+				return kc.AppsV1().Deployments(ns).Get(ctx, name, opts)
+			}
+			watchFunc := func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				return kc.AppsV1().Deployments(b.NS()).Watch(ctx, opts)
+			}
+			return waitForProcessedVersion(ctx, getFunc, watchFunc, b.NS(), b.Name(), result.ResourceVersion)
 		}
 	}
 	return err
@@ -138,18 +171,50 @@ func applyStatefulSet(ctx context.Context, kc kubernetes.Interface, b builder.St
 
 	switch {
 	case err == nil:
-		obj, err = b.Update(obj)
+		retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			obj, err = kc.AppsV1().StatefulSets(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
 
-		if err == nil {
-			_, err = kc.AppsV1().StatefulSets(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-update", err)
+			obj, err = b.Update(obj)
+			if err != nil {
+				return err
+			}
 
+			result, err := kc.AppsV1().StatefulSets(b.NS()).Update(ctx, obj, metav1.UpdateOptions{})
+			if err != nil {
+				return err
+			}
+
+			getFunc := func(ctx context.Context, name, ns string, opts metav1.GetOptions) (interface{}, error) {
+				return kc.AppsV1().StatefulSets(ns).Get(ctx, name, opts)
+			}
+			watchFunc := func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				return kc.AppsV1().StatefulSets(b.NS()).Watch(ctx, opts)
+			}
+			return waitForProcessedVersion(ctx, getFunc, watchFunc, b.NS(), b.Name(), result.ResourceVersion)
+		})
+		if retryErr != nil {
+			return retryErr
 		}
+
 	case errors.IsNotFound(err):
 		obj, err = b.Create()
 		if err == nil {
-			_, err = kc.AppsV1().StatefulSets(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
+			result, err := kc.AppsV1().StatefulSets(b.NS()).Create(ctx, obj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-create", err)
+			if err != nil {
+				return err
+			}
+
+			getFunc := func(ctx context.Context, name, ns string, opts metav1.GetOptions) (interface{}, error) {
+				return kc.AppsV1().StatefulSets(ns).Get(ctx, name, opts)
+			}
+			watchFunc := func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
+				return kc.AppsV1().StatefulSets(b.NS()).Watch(ctx, opts)
+			}
+			return waitForProcessedVersion(ctx, getFunc, watchFunc, b.NS(), b.Name(), result.ResourceVersion)
 		}
 	}
 	return err
@@ -198,4 +263,42 @@ func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest)
 	}
 
 	return err
+}
+
+func waitForProcessedVersion(ctx context.Context,
+	getFunc func(ctx context.Context, name, ns string, opts metav1.GetOptions) (interface{}, error),
+	watchFunc func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error),
+	ns, name string, resourceVersion string) error {
+
+	// First try to get the object with the new resource version
+	_, err := getFunc(ctx, name, ns, metav1.GetOptions{
+		ResourceVersion: resourceVersion,
+	})
+	if err == nil {
+		return nil
+	}
+	if !errors.IsNotFound(err) && !errors.IsConflict(err) {
+		return err
+	}
+
+	// If we couldn't get it, then watch for changes
+	watcher, err := watchFunc(ctx, metav1.ListOptions{
+		FieldSelector:   fmt.Sprintf("metadata.name=%s", name),
+		ResourceVersion: resourceVersion,
+	})
+	if err != nil {
+		return err
+	}
+	defer watcher.Stop()
+
+	for {
+		select {
+		case event := <-watcher.ResultChan():
+			if event.Type == watch.Modified {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
