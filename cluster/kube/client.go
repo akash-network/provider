@@ -6,24 +6,25 @@ import (
 	"fmt"
 	"io"
 	"runtime/debug"
+	"slices"
 	"strings"
 
+	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/tendermint/tendermint/libs/log"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
+	netv1 "k8s.io/api/networking/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	restclient "k8s.io/client-go/rest"
-
-	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
 	"github.com/akash-network/node/sdl"
 	metricsutils "github.com/akash-network/node/util/metrics"
@@ -65,6 +66,8 @@ func (c *client) String() string {
 
 func wrapKubeCall[T any](label string, fn func() (T, error)) (T, error) {
 	res, err := fn()
+
+	_ = "https://github.com/akash-network/provider/blob/main/cluster/kube/client.go#L70"
 
 	status := metricsutils.SuccessLabel
 	if err != nil {
@@ -200,6 +203,117 @@ type deploymentApplies struct {
 	services  []*deploymentService
 }
 
+type previousObj struct {
+	nmani           *crd.Manifest
+	umani           *crd.Manifest
+	omani           *crd.Manifest
+	nns             *corev1.Namespace
+	uns             *corev1.Namespace
+	ons             *corev1.Namespace
+	nNetPolicies    []netv1.NetworkPolicy
+	uNetPolicies    []netv1.NetworkPolicy
+	oNetPolicies    []netv1.NetworkPolicy
+	nServiceCreds   []*corev1.Secret
+	uServiceCreds   []*corev1.Secret
+	oServiceCreds   []*corev1.Secret
+	nStatefulSets   []*appsv1.StatefulSet
+	uStatefulSets   []*appsv1.StatefulSet
+	oStatefulSets   []*appsv1.StatefulSet
+	nDeployments    []*appsv1.Deployment
+	uDeployments    []*appsv1.Deployment
+	oDeployments    []*appsv1.Deployment
+	nLocalServices  []*corev1.Service
+	uLocalServices  []*corev1.Service
+	oLocalServices  []*corev1.Service
+	nGlobalServices []*corev1.Service
+	uGlobalServices []*corev1.Service
+	oGlobalServices []*corev1.Service
+}
+
+func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac akashclient.Interface) []error {
+	var errs []error
+
+	for _, val := range slices.Backward(p.nGlobalServices) {
+		if err := kc.CoreV1().Services(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oGlobalServices) {
+		if _, err := kc.CoreV1().Services(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.nLocalServices) {
+		if err := kc.CoreV1().Services(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oLocalServices) {
+		if _, err := kc.CoreV1().Services(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oDeployments) {
+		if _, err := kc.AppsV1().Deployments(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oStatefulSets) {
+		if _, err := kc.AppsV1().StatefulSets(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.nServiceCreds) {
+		if err := kc.CoreV1().Secrets(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oServiceCreds) {
+		if _, err := kc.CoreV1().Secrets(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.nNetPolicies) {
+		if err := kc.NetworkingV1().NetworkPolicies(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oNetPolicies) {
+		if _, err := kc.NetworkingV1().NetworkPolicies(val.Namespace).Update(ctx, &val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if p.nns != nil {
+		if err := kc.CoreV1().Namespaces().Delete(ctx, p.nns.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if p.ons != nil {
+		if _, err := kc.CoreV1().Namespaces().Update(ctx, p.ons, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if p.omani != nil {
+		if _, err := ac.AkashV2beta2().Manifests(p.omani.Namespace).Update(ctx, p.omani, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
+}
+
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
 	var settings builder.Settings
 	var valid bool
@@ -235,6 +349,8 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		services: make([]*deploymentService, 0, len(group.Services)),
 	}
 
+	po := &previousObj{}
+
 	defer func() {
 		tmpErr := err
 
@@ -255,12 +371,42 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			applyMsgLog("unable to deploy lid=%s. last known state:\n", lid)
 
 			c.log.Error(fmt.Sprintf(dMsg, dArgs...))
+
+			c.log.Info("attempting recover objects to previous state")
+			po.recover(ctx, c.kc, c.ac)
 		}
 	}()
 
+	applies.cmanifest = builder.BuildManifest(c.log, settings, c.ns, cdeployment)
+	if cdeployment.UpdateManifest() {
+		po.nmani, po.umani, po.omani, err = applyManifest(ctx, c.ac, applies.cmanifest)
+		if err != nil {
+			c.log.Error("applying manifest", "err", err, "lease", lid)
+			return err
+		}
+	} else {
+		po.omani, err = c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, applies.cmanifest.Name(), metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	var resourceVersion string
+
+	if po.nmani != nil {
+		resourceVersion = po.nmani.ResourceVersion
+	} else if po.umani != nil {
+		resourceVersion = po.umani.ResourceVersion
+	} else {
+		resourceVersion = po.omani.ResourceVersion
+	}
+
+	if cdeployment.GetResourceVersion() == "" {
+		cdeployment.SetResourceVersion(resourceVersion)
+	}
+
 	applies.ns = builder.BuildNS(settings, cdeployment)
 	applies.netPol = builder.BuildNetPol(settings, cdeployment)
-	applies.cmanifest = builder.BuildManifest(c.log, settings, c.ns, cdeployment)
 
 	for svcIdx := range group.Services {
 		workload := builder.NewWorkloadBuilder(c.log, settings, cdeployment, svcIdx)
@@ -270,7 +416,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		svc := &deploymentService{}
 
 		if service.Credentials != nil {
-			svc.credentials = builder.NewServiceCredentials(workload.NS(), workload.Name(), service.Credentials)
+			svc.credentials = builder.NewServiceCredentials(workload, service.Credentials)
 		}
 
 		persistent := false
@@ -296,25 +442,18 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 		svc.localService = builder.BuildService(workload, false)
 		svc.globalService = builder.BuildService(workload, true)
-
 	}
 
-	if err := applyNS(ctx, c.kc, applies.ns); err != nil {
+	po.nns, po.uns, po.ons, err = applyNS(ctx, c.kc, applies.ns)
+	if err != nil {
 		c.log.Error("applying namespace", "err", err, "lease", lid)
 		return err
 	}
 
-	if err := applyNetPolicies(ctx, c.kc, applies.netPol); err != nil { //
+	po.nNetPolicies, po.uNetPolicies, po.oNetPolicies, err = applyNetPolicies(ctx, c.kc, applies.netPol)
+	if err != nil { //
 		c.log.Error("applying namespace network policies", "err", err, "lease", lid)
 		return err
-	}
-
-	if cdeployment.UpdateManifest() {
-		err = applyManifest(ctx, c.ac, applies.cmanifest)
-		if err != nil {
-			c.log.Error("applying manifest", "err", err, "lease", lid)
-			return err
-		}
 	}
 
 	if err = cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
@@ -327,37 +466,92 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		service := &group.Services[svcIdx]
 
 		if applyObjs.credentials != nil {
-			if err = applyServiceCredentials(ctx, c.kc, applyObjs.credentials); err != nil {
+			nobj, uobj, obj, err := applyServiceCredentials(ctx, c.kc, applyObjs.credentials)
+			if err != nil {
 				c.log.Error("applying credentials", "err", err, "lease", lid, "service", service.Name)
 				return err
+			}
+
+			if nobj != nil {
+				po.nServiceCreds = append(po.nServiceCreds, nobj)
+			}
+			if uobj != nil {
+				po.uServiceCreds = append(po.uServiceCreds, uobj)
+			}
+			if obj != nil {
+				po.oServiceCreds = append(po.oServiceCreds, obj)
 			}
 		}
 
 		if applyObjs.statefulSet != nil {
-			if err = applyStatefulSet(ctx, c.kc, applyObjs.statefulSet); err != nil {
+			nobj, uobj, oobj, err := applyStatefulSet(ctx, c.kc, applyObjs.statefulSet)
+			if err != nil {
 				c.log.Error("applying statefulSet", "err", err, "lease", lid, "service", service.Name)
 				return err
+			}
+
+			if nobj != nil {
+				po.nStatefulSets = append(po.nStatefulSets, nobj)
+			}
+			if uobj != nil {
+				po.uStatefulSets = append(po.uStatefulSets, uobj)
+			}
+			if oobj != nil {
+				po.oStatefulSets = append(po.oStatefulSets, oobj)
 			}
 		}
 
 		if applyObjs.deployment != nil {
-			if err = applyDeployment(ctx, c.kc, applyObjs.deployment); err != nil {
+			nobj, uobj, oobj, err := applyDeployment(ctx, c.kc, applyObjs.deployment)
+			if err != nil {
 				c.log.Error("applying deployment", "err", err, "lease", lid, "service", service.Name)
 				return err
+			}
+
+			if nobj != nil {
+				po.nDeployments = append(po.nDeployments, nobj)
+			}
+			if uobj != nil {
+				po.uDeployments = append(po.uDeployments, uobj)
+			}
+			if oobj != nil {
+				po.oDeployments = append(po.oDeployments, oobj)
 			}
 		}
 
 		if lsvc := applyObjs.localService; lsvc != nil && lsvc.Any() {
-			if err = applyService(ctx, c.kc, lsvc); err != nil {
+			nobj, uobj, oobj, err := applyService(ctx, c.kc, lsvc)
+			if err != nil {
 				c.log.Error("applying local service", "err", err, "lease", lid, "service", service.Name)
 				return err
+			}
+
+			if nobj != nil {
+				po.nLocalServices = append(po.nLocalServices, nobj)
+			}
+			if uobj != nil {
+				po.uLocalServices = append(po.uLocalServices, uobj)
+			}
+			if oobj != nil {
+				po.oLocalServices = append(po.oLocalServices, oobj)
 			}
 		}
 
 		if gsvc := applyObjs.globalService; gsvc != nil && gsvc.Any() {
-			if err = applyService(ctx, c.kc, gsvc); err != nil {
+			nobj, uobj, oobj, err := applyService(ctx, c.kc, gsvc)
+			if err != nil {
 				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
 				return err
+			}
+
+			if nobj != nil {
+				po.nGlobalServices = append(po.nGlobalServices, nobj)
+			}
+			if uobj != nil {
+				po.uGlobalServices = append(po.uGlobalServices, uobj)
+			}
+			if oobj != nil {
+				po.oGlobalServices = append(po.oGlobalServices, oobj)
 			}
 		}
 	}
@@ -366,6 +560,8 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 }
 
 func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
+	c.log.Info("tearing down lease", "lease", lid)
+
 	_, result := wrapKubeCall("namespaces-delete", func() (interface{}, error) {
 		return nil, c.kc.CoreV1().Namespaces().Delete(ctx, builder.LidNS(lid), metav1.DeleteOptions{})
 	})

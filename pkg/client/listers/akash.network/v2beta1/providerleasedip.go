@@ -19,10 +19,10 @@ limitations under the License.
 package v2beta1
 
 import (
-	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/cache"
+	akashnetworkv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ProviderLeasedIPLister helps list ProviderLeasedIPs.
@@ -30,7 +30,7 @@ import (
 type ProviderLeasedIPLister interface {
 	// List lists all ProviderLeasedIPs in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta1.ProviderLeasedIP, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta1.ProviderLeasedIP, err error)
 	// ProviderLeasedIPs returns an object that can list and get ProviderLeasedIPs.
 	ProviderLeasedIPs(namespace string) ProviderLeasedIPNamespaceLister
 	ProviderLeasedIPListerExpansion
@@ -38,25 +38,17 @@ type ProviderLeasedIPLister interface {
 
 // providerLeasedIPLister implements the ProviderLeasedIPLister interface.
 type providerLeasedIPLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*akashnetworkv2beta1.ProviderLeasedIP]
 }
 
 // NewProviderLeasedIPLister returns a new ProviderLeasedIPLister.
 func NewProviderLeasedIPLister(indexer cache.Indexer) ProviderLeasedIPLister {
-	return &providerLeasedIPLister{indexer: indexer}
-}
-
-// List lists all ProviderLeasedIPs in the indexer.
-func (s *providerLeasedIPLister) List(selector labels.Selector) (ret []*v2beta1.ProviderLeasedIP, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta1.ProviderLeasedIP))
-	})
-	return ret, err
+	return &providerLeasedIPLister{listers.New[*akashnetworkv2beta1.ProviderLeasedIP](indexer, akashnetworkv2beta1.Resource("providerleasedip"))}
 }
 
 // ProviderLeasedIPs returns an object that can list and get ProviderLeasedIPs.
 func (s *providerLeasedIPLister) ProviderLeasedIPs(namespace string) ProviderLeasedIPNamespaceLister {
-	return providerLeasedIPNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return providerLeasedIPNamespaceLister{listers.NewNamespaced[*akashnetworkv2beta1.ProviderLeasedIP](s.ResourceIndexer, namespace)}
 }
 
 // ProviderLeasedIPNamespaceLister helps list and get ProviderLeasedIPs.
@@ -64,36 +56,15 @@ func (s *providerLeasedIPLister) ProviderLeasedIPs(namespace string) ProviderLea
 type ProviderLeasedIPNamespaceLister interface {
 	// List lists all ProviderLeasedIPs in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta1.ProviderLeasedIP, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta1.ProviderLeasedIP, err error)
 	// Get retrieves the ProviderLeasedIP from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v2beta1.ProviderLeasedIP, error)
+	Get(name string) (*akashnetworkv2beta1.ProviderLeasedIP, error)
 	ProviderLeasedIPNamespaceListerExpansion
 }
 
 // providerLeasedIPNamespaceLister implements the ProviderLeasedIPNamespaceLister
 // interface.
 type providerLeasedIPNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all ProviderLeasedIPs in the indexer for a given namespace.
-func (s providerLeasedIPNamespaceLister) List(selector labels.Selector) (ret []*v2beta1.ProviderLeasedIP, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta1.ProviderLeasedIP))
-	})
-	return ret, err
-}
-
-// Get retrieves the ProviderLeasedIP from the indexer for a given namespace and name.
-func (s providerLeasedIPNamespaceLister) Get(name string) (*v2beta1.ProviderLeasedIP, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v2beta1.Resource("providerleasedip"), name)
-	}
-	return obj.(*v2beta1.ProviderLeasedIP), nil
+	listers.ResourceIndexer[*akashnetworkv2beta1.ProviderLeasedIP]
 }

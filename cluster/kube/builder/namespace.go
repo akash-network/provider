@@ -36,6 +36,7 @@ func (b *ns) Create() (*corev1.Namespace, error) { // nolint:golint,unparam
 
 func (b *ns) Update(obj *corev1.Namespace) (*corev1.Namespace, error) { // nolint:golint,unparam
 	obj.Name = b.NS()
-	obj.Labels = b.labels()
+	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+
 	return obj, nil
 }

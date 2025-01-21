@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
@@ -540,6 +541,13 @@ func newServiceRouter(apiTimeout, queryTimeout time.Duration) *serviceRouter {
 
 	metricsRouter.HandleFunc("/health", rt.healthHandler).GetHandler()
 	metricsRouter.HandleFunc("/ready", rt.readyHandler)
+
+	debugRouter := mRouter.PathPrefix("/debug").Subrouter()
+	debugRouter.HandleFunc("/pprof/", pprof.Index)
+	debugRouter.HandleFunc("/pprof/cmdline", pprof.Cmdline)
+	debugRouter.HandleFunc("/pprof/profile", pprof.Profile)
+	debugRouter.HandleFunc("/pprof/symbol", pprof.Symbol)
+	debugRouter.HandleFunc("/pprof/trace", pprof.Trace)
 
 	return rt
 }

@@ -31,7 +31,10 @@ type workloadBase interface {
 
 type Workload struct {
 	builder
-	serviceIdx int
+	serviceIdx  int
+	volumesObjs []corev1.Volume
+	pvcsObjs    []corev1.PersistentVolumeClaim
+	secretsRefs []corev1.LocalObjectReference
 }
 
 var _ workloadBase = (*Workload)(nil)
@@ -41,7 +44,7 @@ func NewWorkloadBuilder(
 	settings Settings,
 	deployment IClusterDeployment,
 	serviceIdx int) Workload {
-	return Workload{
+	res := Workload{
 		builder: builder{
 			settings:   settings,
 			log:        log.With("module", "kube-builder"),
@@ -49,6 +52,12 @@ func NewWorkloadBuilder(
 		},
 		serviceIdx: serviceIdx,
 	}
+
+	res.volumesObjs = res.volumes()
+	res.pvcsObjs = res.persistentVolumeClaims()
+	res.secretsRefs = res.imagePullSecrets()
+
+	return res
 }
 
 func (b *Workload) Name() string {
@@ -175,7 +184,6 @@ func (b *Workload) volumes() []corev1.Volume {
 	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	for _, storage := range service.Resources.Storage {
-
 		// Only RAM volumes
 		sclass, ok := storage.Attributes.Find(sdl.StorageAttributeClass).AsString()
 		if !ok || sclass != sdl.StorageClassRAM {
@@ -222,7 +230,7 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-				Resources: corev1.ResourceRequirements{
+				Resources: corev1.VolumeResourceRequirements{
 					Limits:   make(corev1.ResourceList),
 					Requests: make(corev1.ResourceList),
 				},
@@ -363,16 +371,23 @@ func nodeSelectorsFromResources(res *crd.SchedulerResources) []corev1.NodeSelect
 func (b *Workload) labels() map[string]string {
 	obj := b.builder.labels()
 	obj[AkashManifestServiceLabelName] = b.deployment.ManifestGroup().Services[b.serviceIdx].Name
+
+	return obj
+}
+
+func (b *Workload) selectorLabels() map[string]string {
+	obj := b.builder.selectorLabels()
+	obj[AkashManifestServiceLabelName] = b.deployment.ManifestGroup().Services[b.serviceIdx].Name
+
 	return obj
 }
 
 func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
-
 	sname := b.settings.DockerImagePullSecretsName
 
 	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 	if service.Credentials != nil {
-		sname = NewServiceCredentials(b.NS(), b.Name(), service.Credentials).Name()
+		sname = NewServiceCredentials(*b, service.Credentials).Name()
 	}
 
 	if sname == "" {

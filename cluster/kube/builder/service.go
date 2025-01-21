@@ -63,7 +63,7 @@ func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     b.workloadServiceType(),
-			Selector: b.labels(),
+			Selector: b.selectorLabels(),
 			Ports:    ports,
 		},
 	}
@@ -72,8 +72,8 @@ func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
 }
 
 func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // nolint:golint,unparam
-	obj.Labels = b.labels()
-	obj.Spec.Selector = b.labels()
+	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	obj.Spec.Selector = b.selectorLabels()
 	ports, err := b.ports()
 	if err != nil {
 		return nil, err

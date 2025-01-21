@@ -19,13 +19,13 @@ limitations under the License.
 package v2beta2
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	apisakashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	versioned "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
-	v2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // ProviderLeasedIPs.
 type ProviderLeasedIPInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v2beta2.ProviderLeasedIPLister
+	Lister() akashnetworkv2beta2.ProviderLeasedIPLister
 }
 
 type providerLeasedIPInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredProviderLeasedIPInformer(client versioned.Interface, namespace s
 				return client.AkashV2beta2().ProviderLeasedIPs(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&akashnetworkv2beta2.ProviderLeasedIP{},
+		&apisakashnetworkv2beta2.ProviderLeasedIP{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *providerLeasedIPInformer) defaultInformer(client versioned.Interface, r
 }
 
 func (f *providerLeasedIPInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&akashnetworkv2beta2.ProviderLeasedIP{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisakashnetworkv2beta2.ProviderLeasedIP{}, f.defaultInformer)
 }
 
-func (f *providerLeasedIPInformer) Lister() v2beta2.ProviderLeasedIPLister {
-	return v2beta2.NewProviderLeasedIPLister(f.Informer().GetIndexer())
+func (f *providerLeasedIPInformer) Lister() akashnetworkv2beta2.ProviderLeasedIPLister {
+	return akashnetworkv2beta2.NewProviderLeasedIPLister(f.Informer().GetIndexer())
 }

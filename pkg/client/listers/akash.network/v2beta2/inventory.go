@@ -19,10 +19,10 @@ limitations under the License.
 package v2beta2
 
 import (
-	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/cache"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // InventoryLister helps list Inventories.
@@ -30,39 +30,19 @@ import (
 type InventoryLister interface {
 	// List lists all Inventories in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta2.Inventory, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta2.Inventory, err error)
 	// Get retrieves the Inventory from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v2beta2.Inventory, error)
+	Get(name string) (*akashnetworkv2beta2.Inventory, error)
 	InventoryListerExpansion
 }
 
 // inventoryLister implements the InventoryLister interface.
 type inventoryLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*akashnetworkv2beta2.Inventory]
 }
 
 // NewInventoryLister returns a new InventoryLister.
 func NewInventoryLister(indexer cache.Indexer) InventoryLister {
-	return &inventoryLister{indexer: indexer}
-}
-
-// List lists all Inventories in the indexer.
-func (s *inventoryLister) List(selector labels.Selector) (ret []*v2beta2.Inventory, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta2.Inventory))
-	})
-	return ret, err
-}
-
-// Get retrieves the Inventory from the index for a given name.
-func (s *inventoryLister) Get(name string) (*v2beta2.Inventory, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v2beta2.Resource("inventory"), name)
-	}
-	return obj.(*v2beta2.Inventory), nil
+	return &inventoryLister{listers.New[*akashnetworkv2beta2.Inventory](indexer, akashnetworkv2beta2.Resource("inventory"))}
 }

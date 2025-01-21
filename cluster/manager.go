@@ -67,6 +67,7 @@ type deploymentManager struct {
 	lc                  lifecycle.Lifecycle
 	hostnameService     ctypes.HostnameServiceClient
 	config              Config
+	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
 }
 
@@ -90,6 +91,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		hostnameService:     s.HostnameService(),
 		config:              s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
+		isNewLease:          isNewLease,
 		currentHostnames:    make(map[string]struct{}),
 	}
 
@@ -180,7 +182,7 @@ loop:
 			case dsDeployActive:
 				if result != nil {
 					// Run the teardown code to get rid of anything created that might be hanging out
-					runch = dm.startTeardown()
+					// runch = dm.startTeardown()
 				} else {
 					dm.log.Debug("deploy complete")
 					dm.state = dsDeployComplete
@@ -299,6 +301,7 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 
 		close(chErr)
 	}()
+
 	return chErr
 }
 

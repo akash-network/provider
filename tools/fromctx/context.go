@@ -8,12 +8,11 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
+	cmblog "github.com/tendermint/tendermint/libs/log"
 	"github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-
-	cmblog "github.com/tendermint/tendermint/libs/log"
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
