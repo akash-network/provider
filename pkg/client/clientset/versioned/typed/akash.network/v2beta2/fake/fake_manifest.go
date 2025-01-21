@@ -19,112 +19,33 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
 	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/applyconfiguration/akash.network/v2beta2"
+	typedakashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeManifests implements ManifestInterface
-type FakeManifests struct {
+// fakeManifests implements ManifestInterface
+type fakeManifests struct {
+	*gentype.FakeClientWithListAndApply[*v2beta2.Manifest, *v2beta2.ManifestList, *akashnetworkv2beta2.ManifestApplyConfiguration]
 	Fake *FakeAkashV2beta2
-	ns   string
 }
 
-var manifestsResource = schema.GroupVersionResource{Group: "akash.network", Version: "v2beta2", Resource: "manifests"}
-
-var manifestsKind = schema.GroupVersionKind{Group: "akash.network", Version: "v2beta2", Kind: "Manifest"}
-
-// Get takes name of the manifest, and returns the corresponding manifest object, and an error if there is any.
-func (c *FakeManifests) Get(ctx context.Context, name string, options v1.GetOptions) (result *v2beta2.Manifest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(manifestsResource, c.ns, name), &v2beta2.Manifest{})
-
-	if obj == nil {
-		return nil, err
+func newFakeManifests(fake *FakeAkashV2beta2, namespace string) typedakashnetworkv2beta2.ManifestInterface {
+	return &fakeManifests{
+		gentype.NewFakeClientWithListAndApply[*v2beta2.Manifest, *v2beta2.ManifestList, *akashnetworkv2beta2.ManifestApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v2beta2.SchemeGroupVersion.WithResource("manifests"),
+			v2beta2.SchemeGroupVersion.WithKind("Manifest"),
+			func() *v2beta2.Manifest { return &v2beta2.Manifest{} },
+			func() *v2beta2.ManifestList { return &v2beta2.ManifestList{} },
+			func(dst, src *v2beta2.ManifestList) { dst.ListMeta = src.ListMeta },
+			func(list *v2beta2.ManifestList) []*v2beta2.Manifest { return gentype.ToPointerSlice(list.Items) },
+			func(list *v2beta2.ManifestList, items []*v2beta2.Manifest) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v2beta2.Manifest), err
-}
-
-// List takes label and field selectors, and returns the list of Manifests that match those selectors.
-func (c *FakeManifests) List(ctx context.Context, opts v1.ListOptions) (result *v2beta2.ManifestList, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewListAction(manifestsResource, manifestsKind, c.ns, opts), &v2beta2.ManifestList{})
-
-	if obj == nil {
-		return nil, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v2beta2.ManifestList{ListMeta: obj.(*v2beta2.ManifestList).ListMeta}
-	for _, item := range obj.(*v2beta2.ManifestList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested manifests.
-func (c *FakeManifests) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(manifestsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a manifest and creates it.  Returns the server's representation of the manifest, and an error, if there is any.
-func (c *FakeManifests) Create(ctx context.Context, manifest *v2beta2.Manifest, opts v1.CreateOptions) (result *v2beta2.Manifest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(manifestsResource, c.ns, manifest), &v2beta2.Manifest{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.Manifest), err
-}
-
-// Update takes the representation of a manifest and updates it. Returns the server's representation of the manifest, and an error, if there is any.
-func (c *FakeManifests) Update(ctx context.Context, manifest *v2beta2.Manifest, opts v1.UpdateOptions) (result *v2beta2.Manifest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(manifestsResource, c.ns, manifest), &v2beta2.Manifest{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.Manifest), err
-}
-
-// Delete takes name of the manifest and deletes it. Returns an error if one occurs.
-func (c *FakeManifests) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(manifestsResource, c.ns, name, opts), &v2beta2.Manifest{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeManifests) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(manifestsResource, c.ns, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v2beta2.ManifestList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched manifest.
-func (c *FakeManifests) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v2beta2.Manifest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(manifestsResource, c.ns, name, pt, data, subresources...), &v2beta2.Manifest{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.Manifest), err
 }

@@ -8,12 +8,10 @@ import (
 	"github.com/pkg/errors"
 	tpubsub "github.com/troian/pubsub"
 
-	"github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
-
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
+	"github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/node/pubsub"
 
@@ -80,14 +78,14 @@ func NewService(ctx context.Context,
 		return nil, err
 	}
 
-	bc, err := newBalanceChecker(ctx, bankTypes.NewQueryClient(cctx), cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
+	bc, err := newBalanceChecker(ctx, cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
 	if err != nil {
 		session.Log().Error("starting balance checker", "err", err)
 		cancel()
 		return nil, err
 	}
 
-	cluster, err := cluster.NewService(ctx, session, bus, cclient, waiter, cfg.Config)
+	cluster, err := cluster.NewService(ctx, session, bus, cl, accAddr, cclient, waiter, cfg.Config)
 	if err != nil {
 		cancel()
 		<-bc.lc.Done()

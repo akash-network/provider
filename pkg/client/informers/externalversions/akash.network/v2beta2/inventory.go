@@ -19,13 +19,13 @@ limitations under the License.
 package v2beta2
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	apisakashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	versioned "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
-	v2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // Inventories.
 type InventoryInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v2beta2.InventoryLister
+	Lister() akashnetworkv2beta2.InventoryLister
 }
 
 type inventoryInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredInventoryInformer(client versioned.Interface, resyncPeriod time.
 				return client.AkashV2beta2().Inventories().Watch(context.TODO(), options)
 			},
 		},
-		&akashnetworkv2beta2.Inventory{},
+		&apisakashnetworkv2beta2.Inventory{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *inventoryInformer) defaultInformer(client versioned.Interface, resyncPe
 }
 
 func (f *inventoryInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&akashnetworkv2beta2.Inventory{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisakashnetworkv2beta2.Inventory{}, f.defaultInformer)
 }
 
-func (f *inventoryInformer) Lister() v2beta2.InventoryLister {
-	return v2beta2.NewInventoryLister(f.Informer().GetIndexer())
+func (f *inventoryInformer) Lister() akashnetworkv2beta2.InventoryLister {
+	return akashnetworkv2beta2.NewInventoryLister(f.Informer().GetIndexer())
 }

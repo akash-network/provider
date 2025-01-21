@@ -79,11 +79,12 @@ func (m *deploymentMonitor) run() {
 
 	tickch := m.scheduleRetry()
 
+	prevStatus := event.ClusterDeploymentUnknown
+
 loop:
 	for {
 		select {
 		case err := <-m.lc.ShutdownRequest():
-			m.log.Debug("shutting down")
 			m.lc.ShutdownInitiated(err)
 			break loop
 
@@ -99,34 +100,41 @@ loop:
 				m.log.Error("monitor check", "err", err)
 			}
 
-			ok := result.Value().(bool)
+			var currStatus event.ClusterDeploymentStatus
 
-			m.log.Info("check result", "ok", ok, "attempt", m.attempts)
+			healthy := result.Value().(bool)
 
-			if ok {
-				// healthy
+			if healthy {
+				currStatus = event.ClusterDeploymentDeployed
+
 				m.attempts = 0
 				tickch = m.scheduleHealthcheck()
-				m.publishStatus(event.ClusterDeploymentDeployed)
+
 				deploymentHealthCheckCounter.WithLabelValues("up").Inc()
-
-				break
 			} else {
+				currStatus = event.ClusterDeploymentPending
+
 				deploymentHealthCheckCounter.WithLabelValues("down").Inc()
+				m.log.Info("check result", "ok", false, "attempt", m.attempts)
+
 			}
 
-			m.publishStatus(event.ClusterDeploymentPending)
-
-			if m.attempts <= m.config.MonitorMaxRetries {
-				// unhealthy.  retry
-				tickch = m.scheduleRetry()
-				break
+			if currStatus != prevStatus {
+				m.publishStatus(currStatus)
+				prevStatus = currStatus
 			}
 
-			m.log.Error("deployment failed.  closing lease.")
-			deploymentHealthCheckCounter.WithLabelValues("failed").Inc()
-			closech = m.runCloseLease(ctx)
+			if !healthy {
+				if m.attempts <= m.config.MonitorMaxRetries {
+					// unhealthy.  retry
+					tickch = m.scheduleRetry()
+					break
+				}
 
+				m.log.Error("deployment failed.  closing lease.")
+				deploymentHealthCheckCounter.WithLabelValues("failed").Inc()
+				closech = m.runCloseLease(ctx)
+			}
 		case <-closech:
 			closech = nil
 		}
@@ -134,23 +142,16 @@ loop:
 	cancel()
 
 	if runch != nil {
-		m.log.Debug("read runch")
 		<-runch
 	}
 
 	if closech != nil {
-		m.log.Debug("read closech")
 		<-closech
 	}
-
-	// TODO
-	// Check that we got here
-	m.log.Debug("shutdown complete")
 }
 
 func (m *deploymentMonitor) runCheck(ctx context.Context) <-chan runner.Result {
 	m.attempts++
-	m.log.Debug("running check", "attempt", m.attempts)
 	return runner.Do(func() runner.Result {
 		return runner.NewResult(m.doCheck(ctx))
 	})

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -36,6 +37,7 @@ const (
 	AkashLeaseProviderLabelName   = "akash.network/lease.id.provider"
 	AkashLeaseManifestVersion     = "akash.network/manifest.version"
 	AkashLeaseUpdatedAt           = "akash.network/lease.updated_at"
+	AkashManifestResourceVersion  = "akash.network/manifest.resource.version"
 )
 
 const (
@@ -72,13 +74,16 @@ type IClusterDeployment interface {
 	ManifestGroup() *mani.Group
 	UpdateManifest() bool
 	ClusterParams() crd.ClusterSettings
+	SetResourceVersion(string)
+	GetResourceVersion() string
 }
 
 type ClusterDeployment struct {
-	Lid            mtypes.LeaseID
-	Group          *mani.Group
-	Sparams        crd.ClusterSettings
-	updateManifest bool
+	Lid             mtypes.LeaseID
+	Group           *mani.Group
+	Sparams         crd.ClusterSettings
+	resourceVersion string
+	updateManifest  bool
 }
 
 var _ IClusterDeployment = (*ClusterDeployment)(nil)
@@ -107,10 +112,11 @@ func ClusterDeploymentFromDeployment(d ctypes.IDeployment) (IClusterDeployment, 
 	}
 
 	cd := &ClusterDeployment{
-		Lid:            d.LeaseID(),
-		Group:          d.ManifestGroup(),
-		Sparams:        cparams,
-		updateManifest: updateManifest,
+		Lid:             d.LeaseID(),
+		Group:           d.ManifestGroup(),
+		Sparams:         cparams,
+		resourceVersion: d.ResourceVersion(),
+		updateManifest:  updateManifest,
 	}
 
 	if err := cd.validate(); err != nil {
@@ -149,6 +155,14 @@ func (d *ClusterDeployment) ManifestGroup() *mani.Group {
 
 func (d *ClusterDeployment) ClusterParams() crd.ClusterSettings {
 	return d.Sparams
+}
+
+func (d *ClusterDeployment) SetResourceVersion(val string) {
+	d.resourceVersion = val
+}
+
+func (d *ClusterDeployment) GetResourceVersion() string {
+	return d.resourceVersion
 }
 
 func (d *ClusterDeployment) UpdateManifest() bool {
@@ -195,6 +209,7 @@ type builderBase interface {
 	NS() string
 	Name() string
 	Validate() error
+	IsObjectRevisionLatest(map[string]string) bool
 }
 
 type builder struct {
@@ -214,14 +229,36 @@ func (b *builder) Name() string {
 }
 
 func (b *builder) labels() map[string]string {
-	return map[string]string{
+	res := map[string]string{
 		AkashManagedLabelName: "true",
 		akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
 	}
+
+	res[AkashManifestResourceVersion] = b.deployment.GetResourceVersion()
+
+	return res
+}
+
+func (b *builder) selectorLabels() map[string]string {
+	res := map[string]string{
+		AkashManagedLabelName: "true",
+		akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
+	}
+
+	return res
 }
 
 func (b *builder) Validate() error {
 	return nil
+}
+
+func (b *builder) IsObjectRevisionLatest(labels map[string]string) bool {
+	objVersion, exists := labels[AkashManifestResourceVersion]
+	if !exists {
+		return false
+	}
+
+	return b.deployment.GetResourceVersion() == objVersion
 }
 
 func addIfNotPresent(envVarsAlreadyAdded map[string]int, env []corev1.EnvVar, key string, value interface{}) []corev1.EnvVar {
@@ -251,5 +288,22 @@ func AppendLeaseLabels(lid mtypes.LeaseID, labels map[string]string) map[string]
 	labels[AkashLeaseGSeqLabelName] = strconv.FormatUint(uint64(lid.GSeq), 10)
 	labels[AkashLeaseOSeqLabelName] = strconv.FormatUint(uint64(lid.OSeq), 10)
 	labels[AkashLeaseProviderLabelName] = lid.Provider
+
 	return labels
+}
+
+func updateAkashLabels(currLabels, newLabels map[string]string) map[string]string {
+	res := make(map[string]string)
+
+	for name, val := range currLabels {
+		if !strings.HasPrefix(name, AkashManagedLabelName) {
+			res[name] = val
+		}
+	}
+
+	for name, val := range newLabels {
+		res[name] = val
+	}
+
+	return res
 }

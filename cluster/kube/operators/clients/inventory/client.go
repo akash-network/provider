@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"golang.org/x/net/context"
@@ -247,6 +246,8 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 
 	isUnderTest := fromctx.IsInventoryUnderTestFromCtx(ctx)
 
+	var pf *portforward.PortForwarder
+
 	if !kutil.IsInsideKubernetes() || isUnderTest {
 		kc := fromctx.MustKubeClientFromCtx(ctx)
 
@@ -309,7 +310,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 			dialer := spdy.NewDialer(upgrader, hcl, http.MethodPost, req.URL())
 
 			errch := make(chan error, 1)
-			pf, err := portforward.New(dialer, []string{fmt.Sprintf(":%d", svcPort)}, ctx.Done(), make(chan struct{}), os.Stdout, os.Stderr)
+			pf, err = portforward.New(dialer, []string{fmt.Sprintf(":%d", svcPort)}, ctx.Done(), make(chan struct{}), nil, nil)
 			if err != nil {
 				return nil, err
 			}
@@ -361,7 +362,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 }
 
 func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventoryState) error {
-	log := fromctx.LogcFromCtx(ctx).With("inventory")
+	log := fromctx.LogcFromCtx(ctx).With("operator", "inventory")
 
 	// Establish the gRPC connection
 	conn, err := grpc.Dial(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -381,7 +382,7 @@ func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventorySt
 
 	}()
 
-	log.Info(fmt.Sprintf("dialing inventory operator at %s", endpoint))
+	log.Info("dialing inventory operator", "endpoint", endpoint)
 
 	client := inventoryV1.NewClusterRPCClient(conn)
 

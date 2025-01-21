@@ -19,13 +19,13 @@ limitations under the License.
 package v2beta2
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	apisakashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	versioned "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
-	v2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // Manifests.
 type ManifestInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v2beta2.ManifestLister
+	Lister() akashnetworkv2beta2.ManifestLister
 }
 
 type manifestInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredManifestInformer(client versioned.Interface, namespace string, r
 				return client.AkashV2beta2().Manifests(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&akashnetworkv2beta2.Manifest{},
+		&apisakashnetworkv2beta2.Manifest{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *manifestInformer) defaultInformer(client versioned.Interface, resyncPer
 }
 
 func (f *manifestInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&akashnetworkv2beta2.Manifest{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisakashnetworkv2beta2.Manifest{}, f.defaultInformer)
 }
 
-func (f *manifestInformer) Lister() v2beta2.ManifestLister {
-	return v2beta2.NewManifestLister(f.Informer().GetIndexer())
+func (f *manifestInformer) Lister() akashnetworkv2beta2.ManifestLister {
+	return akashnetworkv2beta2.NewManifestLister(f.Informer().GetIndexer())
 }

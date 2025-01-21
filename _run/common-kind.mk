@@ -2,7 +2,9 @@
 # KinD, it's fine to use other names locally, however in GH container name 
 # is configured by engineerd/setup-kind. `kind-control-plane` is the docker
 # image's name in GH Actions.
-export KIND_NAME ?= $(shell basename $$PWD)
+KIND_NAME ?= $(shell basename $$PWD)
+
+export KIND_NAME
 
 ifeq (, $(KINDEST_VERSION))
 $(error "KINDEST_VERSION is not set")

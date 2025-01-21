@@ -182,6 +182,7 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 		cparams: ClusterSettings{
 			SchedulerParams: schedulerParams,
 		},
+		resourceVersion: m.ResourceVersion,
 	}, nil
 }
 

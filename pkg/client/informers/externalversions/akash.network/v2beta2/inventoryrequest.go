@@ -19,13 +19,13 @@ limitations under the License.
 package v2beta2
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	apisakashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	versioned "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
-	v2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // InventoryRequests.
 type InventoryRequestInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v2beta2.InventoryRequestLister
+	Lister() akashnetworkv2beta2.InventoryRequestLister
 }
 
 type inventoryRequestInformer struct {
@@ -70,7 +70,7 @@ func NewFilteredInventoryRequestInformer(client versioned.Interface, resyncPerio
 				return client.AkashV2beta2().InventoryRequests().Watch(context.TODO(), options)
 			},
 		},
-		&akashnetworkv2beta2.InventoryRequest{},
+		&apisakashnetworkv2beta2.InventoryRequest{},
 		resyncPeriod,
 		indexers,
 	)
@@ -81,9 +81,9 @@ func (f *inventoryRequestInformer) defaultInformer(client versioned.Interface, r
 }
 
 func (f *inventoryRequestInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&akashnetworkv2beta2.InventoryRequest{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisakashnetworkv2beta2.InventoryRequest{}, f.defaultInformer)
 }
 
-func (f *inventoryRequestInformer) Lister() v2beta2.InventoryRequestLister {
-	return v2beta2.NewInventoryRequestLister(f.Informer().GetIndexer())
+func (f *inventoryRequestInformer) Lister() akashnetworkv2beta2.InventoryRequestLister {
+	return akashnetworkv2beta2.NewInventoryRequestLister(f.Informer().GetIndexer())
 }

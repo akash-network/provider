@@ -19,10 +19,10 @@ limitations under the License.
 package v2beta1
 
 import (
-	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/cache"
+	akashnetworkv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ManifestLister helps list Manifests.
@@ -30,7 +30,7 @@ import (
 type ManifestLister interface {
 	// List lists all Manifests in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta1.Manifest, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta1.Manifest, err error)
 	// Manifests returns an object that can list and get Manifests.
 	Manifests(namespace string) ManifestNamespaceLister
 	ManifestListerExpansion
@@ -38,25 +38,17 @@ type ManifestLister interface {
 
 // manifestLister implements the ManifestLister interface.
 type manifestLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*akashnetworkv2beta1.Manifest]
 }
 
 // NewManifestLister returns a new ManifestLister.
 func NewManifestLister(indexer cache.Indexer) ManifestLister {
-	return &manifestLister{indexer: indexer}
-}
-
-// List lists all Manifests in the indexer.
-func (s *manifestLister) List(selector labels.Selector) (ret []*v2beta1.Manifest, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta1.Manifest))
-	})
-	return ret, err
+	return &manifestLister{listers.New[*akashnetworkv2beta1.Manifest](indexer, akashnetworkv2beta1.Resource("manifest"))}
 }
 
 // Manifests returns an object that can list and get Manifests.
 func (s *manifestLister) Manifests(namespace string) ManifestNamespaceLister {
-	return manifestNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return manifestNamespaceLister{listers.NewNamespaced[*akashnetworkv2beta1.Manifest](s.ResourceIndexer, namespace)}
 }
 
 // ManifestNamespaceLister helps list and get Manifests.
@@ -64,36 +56,15 @@ func (s *manifestLister) Manifests(namespace string) ManifestNamespaceLister {
 type ManifestNamespaceLister interface {
 	// List lists all Manifests in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta1.Manifest, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta1.Manifest, err error)
 	// Get retrieves the Manifest from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v2beta1.Manifest, error)
+	Get(name string) (*akashnetworkv2beta1.Manifest, error)
 	ManifestNamespaceListerExpansion
 }
 
 // manifestNamespaceLister implements the ManifestNamespaceLister
 // interface.
 type manifestNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all Manifests in the indexer for a given namespace.
-func (s manifestNamespaceLister) List(selector labels.Selector) (ret []*v2beta1.Manifest, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta1.Manifest))
-	})
-	return ret, err
-}
-
-// Get retrieves the Manifest from the indexer for a given namespace and name.
-func (s manifestNamespaceLister) Get(name string) (*v2beta1.Manifest, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v2beta1.Resource("manifest"), name)
-	}
-	return obj.(*v2beta1.Manifest), nil
+	listers.ResourceIndexer[*akashnetworkv2beta1.Manifest]
 }

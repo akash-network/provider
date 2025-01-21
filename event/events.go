@@ -39,6 +39,7 @@ func (ev ManifestReceived) ManifestGroup() *mani.Group {
 type ClusterDeploymentStatus string
 
 const (
+	ClusterDeploymentUnknown ClusterDeploymentStatus = "unknown"
 	// ClusterDeploymentUpdated is used whenever the deployment in the cluster is updated but may not be functional
 	ClusterDeploymentUpdated ClusterDeploymentStatus = "updated"
 	// ClusterDeploymentPending is used when cluster deployment status is pending

@@ -162,6 +162,51 @@ func (_c *IDeployment_ManifestGroup_Call) RunAndReturn(run func() *v2beta2.Group
 	return _c
 }
 
+// ResourceVersion provides a mock function with given fields:
+func (_m *IDeployment) ResourceVersion() string {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for ResourceVersion")
+	}
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
+// IDeployment_ResourceVersion_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResourceVersion'
+type IDeployment_ResourceVersion_Call struct {
+	*mock.Call
+}
+
+// ResourceVersion is a helper method to define mock.On call
+func (_e *IDeployment_Expecter) ResourceVersion() *IDeployment_ResourceVersion_Call {
+	return &IDeployment_ResourceVersion_Call{Call: _e.mock.On("ResourceVersion")}
+}
+
+func (_c *IDeployment_ResourceVersion_Call) Run(run func()) *IDeployment_ResourceVersion_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *IDeployment_ResourceVersion_Call) Return(_a0 string) *IDeployment_ResourceVersion_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *IDeployment_ResourceVersion_Call) RunAndReturn(run func() string) *IDeployment_ResourceVersion_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewIDeployment creates a new instance of IDeployment. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
 func NewIDeployment(t interface {

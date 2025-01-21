@@ -19,112 +19,35 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
 	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/applyconfiguration/akash.network/v2beta2"
+	typedakashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeProviderHosts implements ProviderHostInterface
-type FakeProviderHosts struct {
+// fakeProviderHosts implements ProviderHostInterface
+type fakeProviderHosts struct {
+	*gentype.FakeClientWithListAndApply[*v2beta2.ProviderHost, *v2beta2.ProviderHostList, *akashnetworkv2beta2.ProviderHostApplyConfiguration]
 	Fake *FakeAkashV2beta2
-	ns   string
 }
 
-var providerhostsResource = schema.GroupVersionResource{Group: "akash.network", Version: "v2beta2", Resource: "providerhosts"}
-
-var providerhostsKind = schema.GroupVersionKind{Group: "akash.network", Version: "v2beta2", Kind: "ProviderHost"}
-
-// Get takes name of the providerHost, and returns the corresponding providerHost object, and an error if there is any.
-func (c *FakeProviderHosts) Get(ctx context.Context, name string, options v1.GetOptions) (result *v2beta2.ProviderHost, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(providerhostsResource, c.ns, name), &v2beta2.ProviderHost{})
-
-	if obj == nil {
-		return nil, err
+func newFakeProviderHosts(fake *FakeAkashV2beta2, namespace string) typedakashnetworkv2beta2.ProviderHostInterface {
+	return &fakeProviderHosts{
+		gentype.NewFakeClientWithListAndApply[*v2beta2.ProviderHost, *v2beta2.ProviderHostList, *akashnetworkv2beta2.ProviderHostApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v2beta2.SchemeGroupVersion.WithResource("providerhosts"),
+			v2beta2.SchemeGroupVersion.WithKind("ProviderHost"),
+			func() *v2beta2.ProviderHost { return &v2beta2.ProviderHost{} },
+			func() *v2beta2.ProviderHostList { return &v2beta2.ProviderHostList{} },
+			func(dst, src *v2beta2.ProviderHostList) { dst.ListMeta = src.ListMeta },
+			func(list *v2beta2.ProviderHostList) []*v2beta2.ProviderHost {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v2beta2.ProviderHostList, items []*v2beta2.ProviderHost) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v2beta2.ProviderHost), err
-}
-
-// List takes label and field selectors, and returns the list of ProviderHosts that match those selectors.
-func (c *FakeProviderHosts) List(ctx context.Context, opts v1.ListOptions) (result *v2beta2.ProviderHostList, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewListAction(providerhostsResource, providerhostsKind, c.ns, opts), &v2beta2.ProviderHostList{})
-
-	if obj == nil {
-		return nil, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v2beta2.ProviderHostList{ListMeta: obj.(*v2beta2.ProviderHostList).ListMeta}
-	for _, item := range obj.(*v2beta2.ProviderHostList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested providerHosts.
-func (c *FakeProviderHosts) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(providerhostsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a providerHost and creates it.  Returns the server's representation of the providerHost, and an error, if there is any.
-func (c *FakeProviderHosts) Create(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.CreateOptions) (result *v2beta2.ProviderHost, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(providerhostsResource, c.ns, providerHost), &v2beta2.ProviderHost{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.ProviderHost), err
-}
-
-// Update takes the representation of a providerHost and updates it. Returns the server's representation of the providerHost, and an error, if there is any.
-func (c *FakeProviderHosts) Update(ctx context.Context, providerHost *v2beta2.ProviderHost, opts v1.UpdateOptions) (result *v2beta2.ProviderHost, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(providerhostsResource, c.ns, providerHost), &v2beta2.ProviderHost{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.ProviderHost), err
-}
-
-// Delete takes name of the providerHost and deletes it. Returns an error if one occurs.
-func (c *FakeProviderHosts) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(providerhostsResource, c.ns, name, opts), &v2beta2.ProviderHost{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeProviderHosts) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(providerhostsResource, c.ns, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v2beta2.ProviderHostList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched providerHost.
-func (c *FakeProviderHosts) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v2beta2.ProviderHost, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(providerhostsResource, c.ns, name, pt, data, subresources...), &v2beta2.ProviderHost{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.ProviderHost), err
 }

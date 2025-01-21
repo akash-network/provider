@@ -23,9 +23,10 @@ type Status struct {
 }
 
 type deployment struct {
-	lid     mtypes.LeaseID
-	group   mani.Group
-	cparams interface{}
+	lid             mtypes.LeaseID
+	group           mani.Group
+	cparams         interface{}
+	resourceVersion string
 }
 
 func (d deployment) LeaseID() mtypes.LeaseID {
@@ -38,6 +39,10 @@ func (d deployment) ManifestGroup() *mani.Group {
 
 func (d deployment) ClusterParams() interface{} {
 	return d.cparams
+}
+
+func (d deployment) ResourceVersion() string {
+	return d.resourceVersion
 }
 
 // LeaseID stores deployment, group sequence, order, provider and metadata

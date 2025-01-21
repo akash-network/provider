@@ -29,23 +29,23 @@ type FakeAkashV2beta1 struct {
 }
 
 func (c *FakeAkashV2beta1) Inventories() v2beta1.InventoryInterface {
-	return &FakeInventories{c}
+	return newFakeInventories(c)
 }
 
 func (c *FakeAkashV2beta1) InventoryRequests() v2beta1.InventoryRequestInterface {
-	return &FakeInventoryRequests{c}
+	return newFakeInventoryRequests(c)
 }
 
 func (c *FakeAkashV2beta1) Manifests(namespace string) v2beta1.ManifestInterface {
-	return &FakeManifests{c, namespace}
+	return newFakeManifests(c, namespace)
 }
 
 func (c *FakeAkashV2beta1) ProviderHosts(namespace string) v2beta1.ProviderHostInterface {
-	return &FakeProviderHosts{c, namespace}
+	return newFakeProviderHosts(c, namespace)
 }
 
 func (c *FakeAkashV2beta1) ProviderLeasedIPs(namespace string) v2beta1.ProviderLeasedIPInterface {
-	return &FakeProviderLeasedIPs{c, namespace}
+	return newFakeProviderLeasedIPs(c, namespace)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

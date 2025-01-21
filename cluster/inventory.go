@@ -655,13 +655,11 @@ loop:
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
-					// FIXME check is call for Adjust actually needed to be here
 					if err := state.inventory.Adjust(r); err != nil {
 						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
 					}
 				}
 			}
-			// updateInventory(inv)
 		case run := <-runch:
 			runch = nil
 			t.Reset(5 * time.Second)
