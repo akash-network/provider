@@ -12,7 +12,7 @@ export AKASH_KEYRING_BACKEND    = test
 export AKASH_GAS_ADJUSTMENT     = 2
 export AKASH_CHAIN_ID           = local
 export AKASH_YES                = true
-export AKASH_GAS_PRICES         = 0.025uakt
+export AKASH_GAS_PRICES         = 0.0025uakt
 export AKASH_GAS                = auto
 export AKASH_NODE               = http://localhost:26657
 
