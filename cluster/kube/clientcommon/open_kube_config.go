@@ -42,7 +42,6 @@ func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
 		return cfg, fmt.Errorf("%w: error building kubernetes config", err)
 	}
 	cfg.RateLimiter = rateLimiter
-	// cfg.Timeout
 
 	return cfg, err
 }

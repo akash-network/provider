@@ -38,7 +38,7 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 		},
 		Spec: appsv1.StatefulSetSpec{
 			Selector: &metav1.LabelSelector{
-				MatchLabels: b.labels(),
+				MatchLabels: b.selectorLabels(),
 			},
 			Replicas: b.replicas(),
 			Template: corev1.PodTemplateSpec{
@@ -53,11 +53,11 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 					},
 					AutomountServiceAccountToken: &falseValue,
 					Containers:                   []corev1.Container{b.container()},
-					ImagePullSecrets:             b.imagePullSecrets(),
-					Volumes:                      b.volumes(),
+					ImagePullSecrets:             b.secretsRefs,
+					Volumes:                      b.volumesObjs,
 				},
 			},
-			VolumeClaimTemplates: b.persistentVolumeClaims(),
+			VolumeClaimTemplates: b.pvcsObjs,
 		},
 	}
 
@@ -65,8 +65,8 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 }
 
 func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:golint,unparam
-	obj.Labels = b.labels()
-	obj.Spec.Selector.MatchLabels = b.labels()
+	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	obj.Spec.Selector.MatchLabels = b.selectorLabels()
 	obj.Spec.Replicas = b.replicas()
 	obj.Spec.Template.Labels = b.labels()
 	obj.Spec.Template.Spec.Affinity = b.affinity()

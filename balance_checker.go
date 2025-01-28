@@ -7,7 +7,6 @@ import (
 
 	"github.com/boz/go-lifecycle"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	btypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrpc "github.com/tendermint/tendermint/rpc/core/types"
 
@@ -53,7 +52,6 @@ type balanceChecker struct {
 	lc      lifecycle.Lifecycle
 	bus     pubsub.Bus
 	ownAddr sdk.AccAddress
-	bqc     btypes.QueryClient
 	aqc     aclient.QueryClient
 	leases  map[mtypes.LeaseID]*leaseState
 	cfg     BalanceCheckerConfig
@@ -66,13 +64,14 @@ type leaseCheckResponse struct {
 	err        error
 }
 
-func newBalanceChecker(ctx context.Context,
-	bqc btypes.QueryClient,
+func newBalanceChecker(
+	ctx context.Context,
 	aqc aclient.QueryClient,
 	accAddr sdk.AccAddress,
 	clientSession session.Session,
 	bus pubsub.Bus,
-	cfg BalanceCheckerConfig) (*balanceChecker, error) {
+	cfg BalanceCheckerConfig,
+) (*balanceChecker, error) {
 
 	bc := &balanceChecker{
 		ctx:     ctx,
@@ -81,7 +80,6 @@ func newBalanceChecker(ctx context.Context,
 		bus:     bus,
 		lc:      lifecycle.New(),
 		ownAddr: accAddr,
-		bqc:     bqc,
 		aqc:     aqc,
 		leases:  make(map[mtypes.LeaseID]*leaseState),
 		cfg:     cfg,

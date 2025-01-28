@@ -639,6 +639,7 @@ loop:
 		case inv := <-invupch:
 			currinv = inv.Dup()
 			state.inventory = inv
+
 			updateIPs()
 
 			metrics := state.inventory.Metrics()
@@ -655,13 +656,13 @@ loop:
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
-					// FIXME check is call for Adjust actually needed to be here
 					if err := state.inventory.Adjust(r); err != nil {
 						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
 					}
 				}
 			}
-			// updateInventory(inv)
+
+			trySignal()
 		case run := <-runch:
 			runch = nil
 			t.Reset(5 * time.Second)
@@ -687,7 +688,11 @@ loop:
 
 			trySignal()
 		case <-signalch:
-			bus.Pub(state.inventory.Snapshot(), []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
+			inv, err := is.getStatusV1(state)
+			if err != nil {
+				continue
+			}
+			bus.Pub(inv, []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
 		}
 
 		updateReservationMetrics(state.reservations)

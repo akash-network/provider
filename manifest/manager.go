@@ -269,7 +269,6 @@ func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResu
 		},
 		Pagination: nil,
 	})
-
 	if err != nil {
 		return manifestManagerFetchDataResult{}, err
 	}
@@ -381,7 +380,7 @@ func (m *manager) validateRequests() {
 		default:
 		}
 		if err := m.validateRequest(req); err != nil {
-			m.log.Error("invalid manifest: %s", err.Error())
+			m.log.Error("invalid manifest", "error", err.Error())
 			req.ch <- err
 			continue
 		}
@@ -406,6 +405,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	case <-req.ctx.Done():
 		return req.ctx.Err()
 	default:
+	}
+
+	err := req.value.Manifest.Validate()
+	if err != nil {
+		return err
 	}
 
 	// ensure that an uploaded manifest matches the hash declared on

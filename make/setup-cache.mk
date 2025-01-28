@@ -85,17 +85,17 @@ $(GOLANGCI_LINT_VERSION_FILE): $(AP_DEVCACHE)
 	touch $@
 $(GOLANGCI_LINT): $(GOLANGCI_LINT_VERSION_FILE)
 
-$(K8S_CODE_GEN_VERSION_FILE): $(AP_DEVCACHE)
-	@echo "installing k8s code-generator $(K8S_CODE_GEN_VERSION) ..."
+$(K8S_CODEGEN_VERSION_FILE): $(AP_DEVCACHE)
+	@echo "installing k8s code-generator $(K8S_CODEGEN_VERSION) ..."
 	rm -f $(K8S_GO_TO_PROTOBUF)
 	GOBIN=$(AP_DEVCACHE_BIN) go install k8s.io/code-generator/...
-	wget -q https://raw.githubusercontent.com/kubernetes/code-generator/$(K8S_CODE_GEN_VERSION)/$(K8S_KUBE_CODEGEN_FILE) -O $(K8S_KUBE_CODEGEN)
+	wget -q https://raw.githubusercontent.com/kubernetes/code-generator/$(K8S_CODEGEN_VERSION)/$(K8S_KUBE_CODEGEN_FILE) -O $(K8S_KUBE_CODEGEN)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
 	chmod +x $(K8S_KUBE_CODEGEN)
-$(K8S_GO_TO_PROTOBUF): $(K8S_CODE_GEN_VERSION_FILE)
-$(K8S_KUBE_CODEGEN): $(K8S_CODE_GEN_VERSION_FILE)
+$(K8S_KUBE_CODEGEN): $(K8S_CODEGEN_VERSION_FILE)
+$(K8S_GO_TO_PROTOBUF): $(K8S_CODEGEN_VERSION_FILE)
 
 ifeq (false, $(_SYSTEM_KIND))
 $(KIND_VERSION_FILE): $(AP_DEVCACHE)

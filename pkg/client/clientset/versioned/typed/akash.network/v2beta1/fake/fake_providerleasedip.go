@@ -19,124 +19,35 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
 	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	akashnetworkv2beta1 "github.com/akash-network/provider/pkg/client/applyconfiguration/akash.network/v2beta1"
+	typedakashnetworkv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeProviderLeasedIPs implements ProviderLeasedIPInterface
-type FakeProviderLeasedIPs struct {
+// fakeProviderLeasedIPs implements ProviderLeasedIPInterface
+type fakeProviderLeasedIPs struct {
+	*gentype.FakeClientWithListAndApply[*v2beta1.ProviderLeasedIP, *v2beta1.ProviderLeasedIPList, *akashnetworkv2beta1.ProviderLeasedIPApplyConfiguration]
 	Fake *FakeAkashV2beta1
-	ns   string
 }
 
-var providerleasedipsResource = schema.GroupVersionResource{Group: "akash.network", Version: "v2beta1", Resource: "providerleasedips"}
-
-var providerleasedipsKind = schema.GroupVersionKind{Group: "akash.network", Version: "v2beta1", Kind: "ProviderLeasedIP"}
-
-// Get takes name of the providerLeasedIP, and returns the corresponding providerLeasedIP object, and an error if there is any.
-func (c *FakeProviderLeasedIPs) Get(ctx context.Context, name string, options v1.GetOptions) (result *v2beta1.ProviderLeasedIP, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewGetAction(providerleasedipsResource, c.ns, name), &v2beta1.ProviderLeasedIP{})
-
-	if obj == nil {
-		return nil, err
+func newFakeProviderLeasedIPs(fake *FakeAkashV2beta1, namespace string) typedakashnetworkv2beta1.ProviderLeasedIPInterface {
+	return &fakeProviderLeasedIPs{
+		gentype.NewFakeClientWithListAndApply[*v2beta1.ProviderLeasedIP, *v2beta1.ProviderLeasedIPList, *akashnetworkv2beta1.ProviderLeasedIPApplyConfiguration](
+			fake.Fake,
+			namespace,
+			v2beta1.SchemeGroupVersion.WithResource("providerleasedips"),
+			v2beta1.SchemeGroupVersion.WithKind("ProviderLeasedIP"),
+			func() *v2beta1.ProviderLeasedIP { return &v2beta1.ProviderLeasedIP{} },
+			func() *v2beta1.ProviderLeasedIPList { return &v2beta1.ProviderLeasedIPList{} },
+			func(dst, src *v2beta1.ProviderLeasedIPList) { dst.ListMeta = src.ListMeta },
+			func(list *v2beta1.ProviderLeasedIPList) []*v2beta1.ProviderLeasedIP {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v2beta1.ProviderLeasedIPList, items []*v2beta1.ProviderLeasedIP) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v2beta1.ProviderLeasedIP), err
-}
-
-// List takes label and field selectors, and returns the list of ProviderLeasedIPs that match those selectors.
-func (c *FakeProviderLeasedIPs) List(ctx context.Context, opts v1.ListOptions) (result *v2beta1.ProviderLeasedIPList, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewListAction(providerleasedipsResource, providerleasedipsKind, c.ns, opts), &v2beta1.ProviderLeasedIPList{})
-
-	if obj == nil {
-		return nil, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v2beta1.ProviderLeasedIPList{ListMeta: obj.(*v2beta1.ProviderLeasedIPList).ListMeta}
-	for _, item := range obj.(*v2beta1.ProviderLeasedIPList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested providerLeasedIPs.
-func (c *FakeProviderLeasedIPs) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewWatchAction(providerleasedipsResource, c.ns, opts))
-
-}
-
-// Create takes the representation of a providerLeasedIP and creates it.  Returns the server's representation of the providerLeasedIP, and an error, if there is any.
-func (c *FakeProviderLeasedIPs) Create(ctx context.Context, providerLeasedIP *v2beta1.ProviderLeasedIP, opts v1.CreateOptions) (result *v2beta1.ProviderLeasedIP, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewCreateAction(providerleasedipsResource, c.ns, providerLeasedIP), &v2beta1.ProviderLeasedIP{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta1.ProviderLeasedIP), err
-}
-
-// Update takes the representation of a providerLeasedIP and updates it. Returns the server's representation of the providerLeasedIP, and an error, if there is any.
-func (c *FakeProviderLeasedIPs) Update(ctx context.Context, providerLeasedIP *v2beta1.ProviderLeasedIP, opts v1.UpdateOptions) (result *v2beta1.ProviderLeasedIP, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateAction(providerleasedipsResource, c.ns, providerLeasedIP), &v2beta1.ProviderLeasedIP{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta1.ProviderLeasedIP), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeProviderLeasedIPs) UpdateStatus(ctx context.Context, providerLeasedIP *v2beta1.ProviderLeasedIP, opts v1.UpdateOptions) (*v2beta1.ProviderLeasedIP, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewUpdateSubresourceAction(providerleasedipsResource, "status", c.ns, providerLeasedIP), &v2beta1.ProviderLeasedIP{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta1.ProviderLeasedIP), err
-}
-
-// Delete takes name of the providerLeasedIP and deletes it. Returns an error if one occurs.
-func (c *FakeProviderLeasedIPs) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewDeleteActionWithOptions(providerleasedipsResource, c.ns, name, opts), &v2beta1.ProviderLeasedIP{})
-
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeProviderLeasedIPs) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewDeleteCollectionAction(providerleasedipsResource, c.ns, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v2beta1.ProviderLeasedIPList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched providerLeasedIP.
-func (c *FakeProviderLeasedIPs) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v2beta1.ProviderLeasedIP, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewPatchSubresourceAction(providerleasedipsResource, c.ns, name, pt, data, subresources...), &v2beta1.ProviderLeasedIP{})
-
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta1.ProviderLeasedIP), err
 }

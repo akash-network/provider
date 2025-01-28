@@ -17,11 +17,10 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tendermint/tendermint/libs/log"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
-
-	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"

@@ -242,6 +242,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 
 // Update a single NetworkPolicy with correct labels.
 func (b *netPol) Update(obj *netv1.NetworkPolicy) (*netv1.NetworkPolicy, error) { // nolint:golint,unparam
-	obj.Labels = b.labels()
+	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+
 	return obj, nil
 }

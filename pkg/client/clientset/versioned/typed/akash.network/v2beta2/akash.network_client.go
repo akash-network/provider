@@ -19,10 +19,10 @@ limitations under the License.
 package v2beta2
 
 import (
-	"net/http"
+	http "net/http"
 
-	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	"github.com/akash-network/provider/pkg/client/clientset/versioned/scheme"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	scheme "github.com/akash-network/provider/pkg/client/clientset/versioned/scheme"
 	rest "k8s.io/client-go/rest"
 )
 
@@ -105,10 +105,10 @@ func New(c rest.Interface) *AkashV2beta2Client {
 }
 
 func setConfigDefaults(config *rest.Config) error {
-	gv := v2beta2.SchemeGroupVersion
+	gv := akashnetworkv2beta2.SchemeGroupVersion
 	config.GroupVersion = &gv
 	config.APIPath = "/apis"
-	config.NegotiatedSerializer = scheme.Codecs.WithoutConversion()
+	config.NegotiatedSerializer = rest.CodecFactoryForGeneratedClient(scheme.Scheme, scheme.Codecs).WithoutConversion()
 
 	if config.UserAgent == "" {
 		config.UserAgent = rest.DefaultKubernetesUserAgent()

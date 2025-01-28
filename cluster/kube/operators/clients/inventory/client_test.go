@@ -209,9 +209,6 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 
 	kc := kfake.NewSimpleClientset()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
-	// ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kc.Discovery().RESTClient())
-	// ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kubernetes.Interface(kc))
-
 	ctx = context.WithValue(ctx, fromctx.CtxKeyInventoryUnderTest, true)
 
 	gSrv := setupInventoryGRPC(ctx, group, ports[0])

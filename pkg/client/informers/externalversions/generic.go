@@ -19,7 +19,7 @@ limitations under the License.
 package externalversions
 
 import (
-	"fmt"
+	fmt "fmt"
 
 	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"

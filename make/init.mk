@@ -92,7 +92,7 @@ STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
 MOCKERY_PACKAGE_NAME         := github.com/vektra/mockery/v2
 MOCKERY_VERSION              ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(MOCKERY_PACKAGE_NAME))
-K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
+K8S_CODEGEN_VERSION          ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
 
 AKASHD_BUILD_FROM_SRC        := false
 ifeq (false,$(AKASHD_SRC_IS_LOCAL))
@@ -122,7 +122,7 @@ endif
 STATIK_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/statik/$(STATIK_VERSION)
 GIT_CHGLOG_VERSION_FILE          := $(AP_DEVCACHE_VERSIONS)/git-chglog/$(GIT_CHGLOG_VERSION)
 MOCKERY_VERSION_FILE             := $(AP_DEVCACHE_VERSIONS)/mockery/v$(MOCKERY_VERSION)
-K8S_CODE_GEN_VERSION_FILE        := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODE_GEN_VERSION)
+K8S_CODEGEN_VERSION_FILE         := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODEGEN_VERSION)
 GOLANGCI_LINT_VERSION_FILE       := $(AP_DEVCACHE_VERSIONS)/golangci-lint/$(GOLANGCI_LINT_VERSION)
 AKASHD_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/akash/$(AKASHD_VERSION)
 KIND_VERSION_FILE                := $(AP_DEVCACHE_VERSIONS)/kind/$(KIND_VERSION)
@@ -130,7 +130,7 @@ KIND_VERSION_FILE                := $(AP_DEVCACHE_VERSIONS)/kind/$(KIND_VERSION)
 STATIK                           := $(AP_DEVCACHE_BIN)/statik
 GIT_CHGLOG                       := $(AP_DEVCACHE_BIN)/git-chglog
 MOCKERY                          := $(AP_DEVCACHE_BIN)/mockery
-K8S_KUBE_CODEGEN_FILE            := generate-groups.sh
+K8S_KUBE_CODEGEN_FILE            := kube_codegen.sh
 K8S_KUBE_CODEGEN                 := $(AP_DEVCACHE_BIN)/$(K8S_KUBE_CODEGEN_FILE)
 K8S_GO_TO_PROTOBUF               := $(AP_DEVCACHE_BIN)/go-to-protobuf
 GOLANGCI_LINT                    := $(AP_DEVCACHE_BIN)/golangci-lint
