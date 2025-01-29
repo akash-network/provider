@@ -11,13 +11,12 @@ import (
 	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/desertbit/timer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	tpubsub "github.com/troian/pubsub"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/tendermint/tendermint/libs/log"
+	tpubsub "github.com/troian/pubsub"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
@@ -486,23 +485,23 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	invupch := make(chan ctypes.Inventory, 1)
 
 	invch := is.clients.inventory.ResultChan()
-	var reserveChLocal <-chan inventoryRequest
+	var reservech <-chan inventoryRequest
 
 	resumeProcessingReservations := func() {
-		reserveChLocal = is.reservech
+		reservech = is.reservech
 	}
 
 	t := timer.NewStoppedTimer()
 
 	updateIPs := func() {
 		if is.clients.ip != nil {
-			reserveChLocal = nil
+			reservech = nil
 			if runch == nil {
 				t.Stop()
 				runch = is.runCheck(rctx, state)
 			}
-		} else if reserveChLocal == nil && state.inventory != nil {
-			reserveChLocal = is.reservech
+		} else if reservech == nil && state.inventory != nil {
+			reservech = is.reservech
 		}
 	}
 
@@ -516,7 +515,6 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		default:
 		}
 	}
-
 loop:
 	for {
 		select {
@@ -566,7 +564,7 @@ loop:
 			}
 		case <-t.C:
 			updateIPs()
-		case req := <-reserveChLocal:
+		case req := <-reservech:
 			is.handleRequest(req, state)
 		case req := <-is.lookupch:
 			// lookup registration
@@ -612,14 +610,21 @@ loop:
 			inventoryRequestsCounter.WithLabelValues("unreserve", "not-found").Inc()
 			req.ch <- inventoryResponse{err: errReservationNotFound}
 		case responseCh := <-is.statusch:
-			responseCh <- is.getStatus(state)
+			select {
+			case responseCh <- is.getStatus(state):
+			default:
+			}
 			inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
 		case responseCh := <-is.statusV1ch:
 			resp, err := is.getStatusV1(state)
-			responseCh <- invSnapshotResp{
+			select {
+			case responseCh <- invSnapshotResp{
 				res: resp,
 				err: err,
+			}:
+			default:
 			}
+
 			if err == nil {
 				inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
 			} else {
@@ -631,11 +636,11 @@ loop:
 			}
 
 			select {
-			case invupch <- inv:
+			case <-invupch:
 			default:
-				<-invupch
-				invupch <- inv
 			}
+
+			invupch <- inv
 		case inv := <-invupch:
 			currinv = inv.Dup()
 			state.inventory = inv
@@ -692,6 +697,7 @@ loop:
 			if err != nil {
 				continue
 			}
+
 			bus.Pub(inv, []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
 		}
 
