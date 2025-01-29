@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/boz/go-lifecycle"
-	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	tpubsub "github.com/troian/pubsub"
 
 	"github.com/pkg/errors"
@@ -13,12 +12,11 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
 	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/node/pubsub"
 
@@ -485,92 +483,102 @@ func findDeployments(
 	aqc aclient.QueryClient,
 	accAddr sdktypes.AccAddress,
 ) ([]ctypes.IDeployment, error) {
-	var presp *sdkquery.PageResponse
-	var leases []mtypes.QueryLeaseResponse
-	bids := make(map[string]mtypes.Bid)
-
-	limit := uint64(100)
-	errorCnt := 0
-
-	for {
-		preq := &sdkquery.PageRequest{
-			Key:   nil,
-			Limit: limit,
-		}
-
-		if presp != nil {
-			preq.Key = presp.NextKey
-		}
-
-		resp, err := aqc.Bids(ctx, &mtypes.QueryBidsRequest{
-			Filters: mtypes.BidFilters{
-				Provider: accAddr.String(),
-				State:    mtypes.BidActive.String(),
-			}})
-		if err != nil {
-			if errorCnt > 1 {
-				return nil, err
-			}
-
-			errorCnt++
-
-			continue
-		}
-		errorCnt = 0
-
-		for _, resp := range resp.Bids {
-			bids[resp.Bid.BidID.DeploymentID().String()] = resp.Bid
-		}
-
-		if uint64(len(resp.Bids)) < limit {
-			break
-		}
-
-		presp = resp.Pagination
-	}
-
-	presp = nil
-	for {
-		preq := &sdkquery.PageRequest{
-			Key:   nil,
-			Limit: limit,
-		}
-
-		if presp != nil {
-			preq.Key = presp.NextKey
-		}
-
-		resp, err := aqc.Leases(ctx, &mtypes.QueryLeasesRequest{
-			Filters: mtypes.LeaseFilters{
-				Provider: accAddr.String(),
-				State:    mtypes.LeaseActive.String(),
-			}})
-		if err != nil {
-			if errorCnt > 1 {
-				return nil, err
-			}
-
-			errorCnt++
-
-			continue
-		}
-
-		errorCnt = 0
-
-		leases = append(leases, resp.Leases...)
-		if uint64(len(resp.Leases)) < limit {
-			break
-		}
-
-		presp = resp.Pagination
-	}
-
-	for _, resp := range leases {
-		did := resp.Lease.LeaseID.DeploymentID().String()
-		if _, exists := bids[did]; !exists {
-			delete(bids, did)
-		}
-	}
+	// TODO @troian
+	// var presp *sdkquery.PageResponse
+	// var leases []mtypes.QueryLeaseResponse
+	// bids := make(map[string]mtypes.Bid)
+	//
+	// limit := uint64(10)
+	// errorCnt := 0
+	//
+	// log.Info("detecting active leases")
+	//
+	// for {
+	// 	preq := &sdkquery.PageRequest{
+	// 		Key:   nil,
+	// 		Limit: limit,
+	// 	}
+	//
+	// 	if presp != nil {
+	// 		preq.Key = presp.NextKey
+	// 	}
+	//
+	// 	resp, err := aqc.Bids(ctx, &mtypes.QueryBidsRequest{
+	// 		Filters: mtypes.BidFilters{
+	// 			Provider: accAddr.String(),
+	// 			State:    mtypes.BidActive.String(),
+	// 		},
+	// 		Pagination: preq,
+	// 	})
+	// 	if err != nil {
+	// 		if errorCnt > 1 {
+	// 			return nil, err
+	// 		}
+	//
+	// 		errorCnt++
+	//
+	// 		continue
+	// 	}
+	// 	errorCnt = 0
+	//
+	// 	log.Info("found active bids", "active", len(resp.Bids))
+	// 	for _, resp := range resp.Bids {
+	// 		bids[resp.Bid.BidID.DeploymentID().String()] = resp.Bid
+	// 	}
+	//
+	// 	if uint64(len(resp.Bids)) < limit {
+	// 		break
+	// 	}
+	//
+	// 	presp = resp.Pagination
+	// }
+	//
+	// presp = nil
+	// for {
+	// 	preq := &sdkquery.PageRequest{
+	// 		Key:   nil,
+	// 		Limit: limit,
+	// 	}
+	//
+	// 	if presp != nil {
+	// 		preq.Key = presp.NextKey
+	// 	}
+	//
+	// 	resp, err := aqc.Leases(ctx, &mtypes.QueryLeasesRequest{
+	// 		Filters: mtypes.LeaseFilters{
+	// 			Provider: accAddr.String(),
+	// 			State:    mtypes.LeaseActive.String(),
+	// 		},
+	// 		Pagination: preq,
+	// 	})
+	// 	if err != nil {
+	// 		if errorCnt > 1 {
+	// 			return nil, err
+	// 		}
+	//
+	// 		errorCnt++
+	//
+	// 		continue
+	// 	}
+	//
+	// 	errorCnt = 0
+	//
+	// 	log.Info("found active leases", "active", len(resp.Leases))
+	//
+	// 	leases = append(leases, resp.Leases...)
+	// 	if uint64(len(resp.Leases)) < limit {
+	// 		break
+	// 	}
+	//
+	// 	presp = resp.Pagination
+	// }
+	//
+	// for _, resp := range leases {
+	// 	did := resp.Lease.LeaseID.DeploymentID().String()
+	// 	if _, exists := bids[did]; !exists {
+	// 		delete(bids, did)
+	// 	}
+	// }
 
 	deployments, err := client.Deployments(ctx)
 	if err != nil {
