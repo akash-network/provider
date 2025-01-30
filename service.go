@@ -5,13 +5,18 @@ import (
 	"time"
 
 	"github.com/boz/go-lifecycle"
+
 	"github.com/pkg/errors"
 	tpubsub "github.com/troian/pubsub"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
+
+	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 
 	"github.com/akash-network/node/pubsub"
 
@@ -28,7 +33,7 @@ import (
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
 type ValidateClient interface {
-	Validate(context.Context, sdk.Address, dtypes.GroupSpec) (ValidateGroupSpecResult, error)
+	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (ValidateGroupSpecResult, error)
 }
 
 // StatusClient is the interface which includes status of service
@@ -62,7 +67,7 @@ type Service interface {
 // Simple wrapper around various services needed for running a provider.
 func NewService(ctx context.Context,
 	cctx client.Context,
-	accAddr sdk.AccAddress,
+	accAddr sdktypes.AccAddress,
 	session session.Session,
 	bus pubsub.Bus,
 	cclient cluster.Client,
@@ -78,21 +83,21 @@ func NewService(ctx context.Context,
 		return nil, err
 	}
 
-	bc, err := newBalanceChecker(ctx, cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
+	bcSvc, err := newBalanceChecker(ctx, cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
 	if err != nil {
 		session.Log().Error("starting balance checker", "err", err)
 		cancel()
 		return nil, err
 	}
 
-	cluster, err := cluster.NewService(ctx, session, bus, cl, accAddr, cclient, waiter, cfg.Config)
+	clusterSvc, err := cluster.NewService(ctx, session, bus, cclient, waiter, cfg.Config)
 	if err != nil {
 		cancel()
-		<-bc.lc.Done()
+		<-bcSvc.lc.Done()
 		return nil, err
 	}
 
-	bidengine, err := bidengine.NewService(ctx, session, cluster, bus, waiter, bidengine.Config{
+	bidengineSvc, err := bidengine.NewService(ctx, cl, session, clusterSvc, bus, waiter, bidengine.Config{
 		PricingStrategy: cfg.BidPricingStrategy,
 		Deposit:         cfg.BidDeposit,
 		BidTimeout:      cfg.BidTimeout,
@@ -103,8 +108,8 @@ func NewService(ctx context.Context,
 		errmsg := "creating bidengine service"
 		session.Log().Error(errmsg, "err", err)
 		cancel()
-		<-cluster.Done()
-		<-bc.lc.Done()
+		<-clusterSvc.Done()
+		<-bcSvc.lc.Done()
 		return nil, errors.Wrap(err, errmsg)
 	}
 
@@ -115,26 +120,26 @@ func NewService(ctx context.Context,
 		CachedResultMaxAge:                cfg.CachedResultMaxAge,
 	}
 
-	manifest, err := manifest.NewService(ctx, session, bus, cluster.HostnameService(), manifestConfig)
+	manifestSvc, err := manifest.NewService(ctx, session, bus, clusterSvc.HostnameService(), manifestConfig)
 	if err != nil {
 		session.Log().Error("creating manifest handler", "err", err)
 		cancel()
-		<-cluster.Done()
-		<-bidengine.Done()
-		<-bc.lc.Done()
+		<-clusterSvc.Done()
+		<-bidengineSvc.Done()
+		<-bcSvc.lc.Done()
 		return nil, err
 	}
 
 	svc := &service{
 		session:   session,
 		bus:       bus,
-		cluster:   cluster,
+		cluster:   clusterSvc,
 		cclient:   cclient,
-		bidengine: bidengine,
-		manifest:  manifest,
+		bidengine: bidengineSvc,
+		manifest:  manifestSvc,
 		ctx:       ctx,
 		cancel:    cancel,
-		bc:        bc,
+		bc:        bcSvc,
 		lc:        lifecycle.New(),
 		config:    cfg,
 	}
@@ -144,6 +149,112 @@ func NewService(ctx context.Context,
 	go svc.statusRun()
 
 	return svc, nil
+}
+
+func queryExistingLeases(
+	ctx context.Context,
+	aqc sclient.QueryClient,
+	accAddr sdktypes.AccAddress,
+) ([]mtypes.Bid, error) {
+	var presp *sdkquery.PageResponse
+	var leases []mtypes.QueryLeaseResponse
+
+	bidsMap := make(map[string]mtypes.Bid)
+
+	limit := uint64(10)
+	errorCnt := 0
+
+	for {
+		preq := &sdkquery.PageRequest{
+			Key:   nil,
+			Limit: limit,
+		}
+
+		if presp != nil {
+			preq.Key = presp.NextKey
+		}
+
+		resp, err := aqc.Bids(ctx, &mtypes.QueryBidsRequest{
+			Filters: mtypes.BidFilters{
+				Provider: accAddr.String(),
+				State:    mtypes.BidActive.String(),
+			},
+			Pagination: preq,
+		})
+		if err != nil {
+			if errorCnt > 1 {
+				return nil, err
+			}
+
+			errorCnt++
+
+			continue
+		}
+		errorCnt = 0
+
+		for _, resp := range resp.Bids {
+			bidsMap[resp.Bid.BidID.DeploymentID().String()] = resp.Bid
+		}
+
+		if uint64(len(resp.Bids)) < limit {
+			break
+		}
+
+		presp = resp.Pagination
+	}
+
+	presp = nil
+	for {
+		preq := &sdkquery.PageRequest{
+			Key:   nil,
+			Limit: limit,
+		}
+
+		if presp != nil {
+			preq.Key = presp.NextKey
+		}
+
+		resp, err := aqc.Leases(ctx, &mtypes.QueryLeasesRequest{
+			Filters: mtypes.LeaseFilters{
+				Provider: accAddr.String(),
+				State:    mtypes.LeaseActive.String(),
+			},
+			Pagination: preq,
+		})
+		if err != nil {
+			if errorCnt > 1 {
+				return nil, err
+			}
+
+			errorCnt++
+
+			continue
+		}
+
+		errorCnt = 0
+
+		leases = append(leases, resp.Leases...)
+		if uint64(len(resp.Leases)) < limit {
+			break
+		}
+
+		presp = resp.Pagination
+	}
+
+	for _, resp := range leases {
+		did := resp.Lease.LeaseID.DeploymentID().String()
+		if _, exists := bidsMap[did]; !exists {
+			delete(bidsMap, did)
+		}
+	}
+
+	res := make([]mtypes.Bid, 0, len(bidsMap))
+
+	for _, bid := range bidsMap {
+		res = append(res, bid)
+	}
+
+	return res, nil
 }
 
 type service struct {
@@ -232,7 +343,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	}, nil
 }
 
-func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.GroupSpec) (ValidateGroupSpecResult, error) {
+func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (ValidateGroupSpecResult, error) {
 	// FUTURE - pass owner here
 	req := bidengine.Request{
 		Owner: owner.String(),
