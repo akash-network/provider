@@ -12,7 +12,6 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
@@ -110,8 +109,6 @@ func NewService(
 	ctx context.Context,
 	session session.Session,
 	bus pubsub.Bus,
-	aqc aclient.QueryClient,
-	accAddr sdktypes.AccAddress,
 	client Client,
 	waiter waiter.OperatorWaiter,
 	cfg Config,
@@ -125,7 +122,7 @@ func NewService(
 		return nil, err
 	}
 
-	deployments, err := findDeployments(ctx, log, client, aqc, accAddr)
+	deployments, err := findDeployments(ctx, log, client)
 	if err != nil {
 		sub.Close()
 		return nil, err
@@ -434,6 +431,7 @@ loop:
 		}
 		s.updateDeploymentManagerGauge()
 	}
+
 	s.log.Debug("draining deployment managers...", "qty", len(s.managers))
 	for _, manager := range s.managers {
 		if manager != nil {
@@ -480,106 +478,7 @@ func findDeployments(
 	ctx context.Context,
 	log log.Logger,
 	client Client,
-	aqc aclient.QueryClient,
-	accAddr sdktypes.AccAddress,
 ) ([]ctypes.IDeployment, error) {
-	// TODO @troian
-	// var presp *sdkquery.PageResponse
-	// var leases []mtypes.QueryLeaseResponse
-	// bids := make(map[string]mtypes.Bid)
-	//
-	// limit := uint64(10)
-	// errorCnt := 0
-	//
-	// log.Info("detecting active leases")
-	//
-	// for {
-	// 	preq := &sdkquery.PageRequest{
-	// 		Key:   nil,
-	// 		Limit: limit,
-	// 	}
-	//
-	// 	if presp != nil {
-	// 		preq.Key = presp.NextKey
-	// 	}
-	//
-	// 	resp, err := aqc.Bids(ctx, &mtypes.QueryBidsRequest{
-	// 		Filters: mtypes.BidFilters{
-	// 			Provider: accAddr.String(),
-	// 			State:    mtypes.BidActive.String(),
-	// 		},
-	// 		Pagination: preq,
-	// 	})
-	// 	if err != nil {
-	// 		if errorCnt > 1 {
-	// 			return nil, err
-	// 		}
-	//
-	// 		errorCnt++
-	//
-	// 		continue
-	// 	}
-	// 	errorCnt = 0
-	//
-	// 	log.Info("found active bids", "active", len(resp.Bids))
-	// 	for _, resp := range resp.Bids {
-	// 		bids[resp.Bid.BidID.DeploymentID().String()] = resp.Bid
-	// 	}
-	//
-	// 	if uint64(len(resp.Bids)) < limit {
-	// 		break
-	// 	}
-	//
-	// 	presp = resp.Pagination
-	// }
-	//
-	// presp = nil
-	// for {
-	// 	preq := &sdkquery.PageRequest{
-	// 		Key:   nil,
-	// 		Limit: limit,
-	// 	}
-	//
-	// 	if presp != nil {
-	// 		preq.Key = presp.NextKey
-	// 	}
-	//
-	// 	resp, err := aqc.Leases(ctx, &mtypes.QueryLeasesRequest{
-	// 		Filters: mtypes.LeaseFilters{
-	// 			Provider: accAddr.String(),
-	// 			State:    mtypes.LeaseActive.String(),
-	// 		},
-	// 		Pagination: preq,
-	// 	})
-	// 	if err != nil {
-	// 		if errorCnt > 1 {
-	// 			return nil, err
-	// 		}
-	//
-	// 		errorCnt++
-	//
-	// 		continue
-	// 	}
-	//
-	// 	errorCnt = 0
-	//
-	// 	log.Info("found active leases", "active", len(resp.Leases))
-	//
-	// 	leases = append(leases, resp.Leases...)
-	// 	if uint64(len(resp.Leases)) < limit {
-	// 		break
-	// 	}
-	//
-	// 	presp = resp.Pagination
-	// }
-	//
-	// for _, resp := range leases {
-	// 	did := resp.Lease.LeaseID.DeploymentID().String()
-	// 	if _, exists := bids[did]; !exists {
-	// 		delete(bids, did)
-	// 	}
-	// }
-
 	deployments, err := client.Deployments(ctx)
 	if err != nil {
 		log.Error("fetching deployments", "err", err)
