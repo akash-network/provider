@@ -3,17 +3,21 @@ package bidengine
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"os"
 
-	provider "github.com/akash-network/akash-api/go/provider/v1"
+	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/boz/go-lifecycle"
 
-	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
-
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/node/pubsub"
 	mquery "github.com/akash-network/node/x/market/query"
 
@@ -56,26 +60,21 @@ type Service interface {
 }
 
 // NewService creates new service instance and returns error in case of failure
-func NewService(ctx context.Context, session session.Session, cluster cluster.Cluster, bus pubsub.Bus, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
+func NewService(pctx context.Context, aqc sclient.QueryClient, session session.Session, cluster cluster.Cluster, bus pubsub.Bus, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
 	session = session.ForModule("bidengine-service")
-
-	existingOrders, err := queryExistingOrders(ctx, session)
-	if err != nil {
-		session.Log().Error("finding existing orders", "err", err)
-		return nil, err
-	}
 
 	sub, err := bus.Subscribe()
 	if err != nil {
 		return nil, err
 	}
 
-	session.Log().Info("found orders", "count", len(existingOrders))
-
 	providerAttrService, err := newProviderAttrSignatureService(session, bus)
 	if err != nil {
 		return nil, err
 	}
+
+	ctx, cancel := context.WithCancel(pctx)
+	group, _ := errgroup.WithContext(ctx)
 
 	s := &service{
 		session:  session,
@@ -85,6 +84,9 @@ func NewService(ctx context.Context, session session.Session, cluster cluster.Cl
 		statusch: make(chan chan<- *Status),
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
+		ordersch: make(chan []mtypes.OrderID, 100),
+		group:    group,
+		cancel:   cancel,
 		lc:       lifecycle.New(),
 		cfg:      cfg,
 		pass:     providerAttrService,
@@ -92,7 +94,10 @@ func NewService(ctx context.Context, session session.Session, cluster cluster.Cl
 	}
 
 	go s.lc.WatchContext(ctx)
-	go s.run(ctx, existingOrders)
+	go s.run(pctx)
+	group.Go(func() error {
+		return s.ordersFetcher(ctx, aqc)
+	})
 
 	return s, nil
 }
@@ -108,9 +113,12 @@ type service struct {
 	statusch chan chan<- *Status
 	orders   map[string]*order
 	drainch  chan *order
+	ordersch chan []mtypes.OrderID
 
-	lc   lifecycle.Lifecycle
-	pass *providerAttrSignatureService
+	group  *errgroup.Group
+	cancel context.CancelFunc
+	lc     lifecycle.Lifecycle
+	pass   *providerAttrSignatureService
 
 	waiter waiter.OperatorWaiter
 }
@@ -158,7 +166,88 @@ func (s *service) updateOrderManagerGauge() {
 	orderManagerGauge.Set(float64(len(s.orders)))
 }
 
-func (s *service) run(ctx context.Context, existingOrders []mtypes.OrderID) {
+func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
+	homeDir := fmt.Sprintf("%s/provider", aqc.ClientContext().HomeDir)
+	err := os.MkdirAll(homeDir, os.ModePerm)
+	if err != nil {
+		s.session.Log().Error("unable to create provider caching dir", "error", err)
+	}
+
+	var nextKey []byte
+
+	cacheFile, err := os.OpenFile(fmt.Sprintf("%s/orders_cache", homeDir), os.O_RDWR|os.O_CREATE, 0666)
+	if err == nil {
+		nextKey, _ = io.ReadAll(cacheFile)
+
+		_ = cacheFile.Truncate(0)
+	}
+
+	totalOrders := 0
+
+	limit := 3000
+
+	defer func() {
+		if cacheFile != nil {
+			if len(nextKey) > 0 {
+				s.session.Log().Info("caching next key")
+				_, _ = cacheFile.Write(nextKey)
+			}
+
+			_ = cacheFile.Close()
+		}
+	}()
+
+loop:
+	for {
+		preq := &sdkquery.PageRequest{
+			Key:   nextKey,
+			Limit: uint64(limit),
+		}
+
+		resp, err := aqc.Orders(ctx, &mtypes.QueryOrdersRequest{
+			Filters:    mtypes.OrderFilters{},
+			Pagination: preq,
+		})
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				break
+			}
+
+			continue
+		}
+
+		if resp.Pagination != nil {
+			nextKey = resp.Pagination.NextKey
+		}
+
+		totalOrders += len(resp.Orders)
+
+		var orders []mtypes.OrderID
+
+		for _, order := range resp.Orders {
+			if order.State != mtypes.OrderOpen {
+				continue
+			}
+			orders = append(orders, order.OrderID)
+		}
+
+		select {
+		case s.ordersch <- orders:
+		case <-ctx.Done():
+			break loop
+		}
+
+		if len(resp.Orders) < limit {
+			break
+		}
+	}
+
+	s.session.Log().Info("total orders", "orders", totalOrders)
+
+	return ctx.Err()
+}
+
+func (s *service) run(ctx context.Context) {
 	defer s.lc.ShutdownCompleted()
 	defer s.sub.Close()
 	s.updateOrderManagerGauge()
@@ -166,20 +255,9 @@ func (s *service) run(ctx context.Context, existingOrders []mtypes.OrderID) {
 	// wait for configured operators to be online & responsive before proceeding
 	err := s.waiter.WaitForAll(ctx)
 	if err != nil {
+		s.cancel()
 		s.lc.ShutdownInitiated(err)
 		return
-	}
-
-	for _, orderID := range existingOrders {
-		key := mquery.OrderPath(orderID)
-		s.session.Log().Debug("creating catchup order", "order", key)
-		order, err := newOrder(s, orderID, s.cfg, s.pass, true)
-		if err != nil {
-			s.session.Log().Error("creating catchup order", "order", key, "err", err)
-			continue
-		}
-		s.orders[key] = order
-		s.updateOrderManagerGauge()
 	}
 
 	bus := fromctx.MustPubSubFromCtx(ctx)
@@ -200,8 +278,20 @@ loop:
 		select {
 		case <-s.lc.ShutdownRequest():
 			s.lc.ShutdownInitiated(nil)
+			s.cancel()
 			break loop
-
+		case orders := <-s.ordersch:
+			for _, orderID := range orders {
+				key := mquery.OrderPath(orderID)
+				s.session.Log().Debug("creating catchup order", "order", key)
+				order, err := newOrder(s, orderID, s.cfg, s.pass, true)
+				if err != nil {
+					s.session.Log().Error("creating catchup order", "order", key, "err", err)
+					continue
+				}
+				s.orders[key] = order
+				s.updateOrderManagerGauge()
+			}
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) { // nolint: gocritic
 			case mtypes.EventOrderCreated:
@@ -242,6 +332,8 @@ loop:
 		s.updateOrderManagerGauge()
 	}
 
+	_ = s.group.Wait()
+
 	s.pass.lc.ShutdownAsync(nil)
 
 	s.session.Log().Info("draining order monitors", "qty", len(s.orders))
@@ -255,31 +347,4 @@ loop:
 	s.session.Log().Debug("waiting on provider attributes service")
 	<-s.pass.lc.Done()
 	s.session.Log().Info("shutdown complete")
-}
-
-func queryExistingOrders(ctx context.Context, session session.Session) ([]mtypes.OrderID, error) {
-	params := &mtypes.QueryOrdersRequest{
-		Filters: mtypes.OrderFilters{},
-		Pagination: &sdkquery.PageRequest{
-			Limit: 10000,
-		},
-	}
-	res, err := session.Client().Query().Orders(ctx, params)
-	if err != nil {
-		session.Log().Error("error querying open orders:", "err", err)
-		return nil, err
-	}
-	orders := res.Orders
-
-	existingOrders := make([]mtypes.OrderID, 0)
-	for i := range orders {
-		pOrder := &orders[i]
-		// Only check existing orders that are open
-		if pOrder.State != mtypes.OrderOpen {
-			continue
-		}
-		existingOrders = append(existingOrders, pOrder.OrderID)
-	}
-
-	return existingOrders, nil
 }

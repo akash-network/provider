@@ -218,6 +218,11 @@ spec:
                                         type: string
                                       model:
                                         type: string
+                                      interface:
+                                        type: string
+                                      memory_size:
+                                        type: string
+                                        format: uint64
                           credentials:
                             type: object
                             nullable: true
