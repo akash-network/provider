@@ -71,6 +71,11 @@ jobs:
         run: |
           make modvendor
           cat "$GITHUB_WORKSPACE/env.backup" > "$GITHUB_ENV"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: 'pip'
+      - run: pip install tqdm
       - name: Setup direnv for provider
         run: direnv export gha >> "$GITHUB_ENV"
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
@@ -94,44 +99,54 @@ jobs:
           node_image: "kindest/node:${{ env.KINDEST_VERSION }}"
           cluster_name: "${{ env.KIND_NAME }}"
           config: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube/kind-config.yaml
+      - name: Setup run environment
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
+        run: |
+          direnv allow
+          cat "$GITHUB_ENV" > "$GITHUB_WORKSPACE/env_provider.backup"
+          direnv export gha >> "$GITHUB_ENV"
+          cat "$GITHUB_ENV" > "$GITHUB_WORKSPACE/env_run.backup"
       - name: Configure Kind cluster
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
-          KUSTOMIZE_INSTALLS=akash-operator-inventory make -s -C _run/kube kube-cluster-setup-e2e-ci
+          KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e-ci
       - name: Setup K8S ingress
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
-          make -s -C _run/kube kind-k8s-ip
+          make kind-k8s-ip
       - name: K8S dump config
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl config view
       - name: K8S dump cluster info
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl cluster-info
       - name: K8S dump running pods
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl get deployments,pods,ingress,svc -A
       - name: K8S wait for operator inventory
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
-          make -s -C _run/kube kube-deployment-rollout-operator-inventory
+          make kube-deployment-rollout-operator-inventory
         env:
           KUBE_ROLLOUT_TIMEOUT: 360
+      - name: Run modvendor on akash-api
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: cat "$GITHUB_WORKSPACE/env_run.backup" > "$GITHUB_ENV"
       - name: Run E2E Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make test-e2e-integration
       - name: Print operator inventory logs
         if: always()
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl -n akash-services logs -l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-service,app.kubernetes.io/name=inventory
       - name: Print operator inventory discovery logs
         if: always()
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl -n akash-services logs -l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-hardware-discovery,app.kubernetes.io/name=inventory
       - name: Run K8s Tests
@@ -139,6 +154,6 @@ jobs:
         run: |
           make test-k8s-integration
       - name: Post-Run K8S environment
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl get ns,pods,ingress,svc -A

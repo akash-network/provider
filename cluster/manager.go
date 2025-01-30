@@ -182,7 +182,7 @@ loop:
 			case dsDeployActive:
 				if result != nil {
 					// Run the teardown code to get rid of anything created that might be hanging out
-					// runch = dm.startTeardown()
+					runch = dm.startTeardown()
 				} else {
 					dm.log.Debug("deploy complete")
 					dm.state = dsDeployComplete
@@ -234,12 +234,12 @@ loop:
 	dm.log.Debug("waiting on dm.wg")
 	dm.wg.Wait()
 
-	if dm.state < dsDeployComplete {
-		dm.log.Info("shutting down unclean, running teardown now")
-		ctx, cancel := context.WithTimeout(context.Background(), uncleanShutdownGracePeriod)
-		defer cancel()
-		teardownErr = dm.doTeardown(ctx)
-	}
+	// if dm.isNewLease && (dm.state < dsDeployComplete) {
+	// 	dm.log.Info("shutting down unclean, running teardown now")
+	// 	ctx, cancel := context.WithTimeout(context.Background(), uncleanShutdownGracePeriod)
+	// 	defer cancel()
+	// 	teardownErr = dm.doTeardown(ctx)
+	// }
 
 	if teardownErr != nil {
 		dm.log.Error("lease teardown failed", "err", teardownErr)
