@@ -34,7 +34,7 @@ require (
 	github.com/spf13/viper v1.18.2
 	github.com/stretchr/testify v1.9.0
 	github.com/tendermint/tendermint v0.34.27
-	github.com/troian/pubsub v0.1.1
+	github.com/troian/pubsub v0.1.2
 	github.com/vektra/mockery/v2 v2.40.2
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.30.0
@@ -51,14 +51,16 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.2
 )
 
-retract v0.6.0
+retract (
+	v0.6.0
+	v0.6.5
+)
 
 replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
 	github.com/cosmos/ledger-cosmos-go => github.com/akash-network/ledger-go/cosmos v0.14.4
-
 	// Fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	// TODO Remove it: https://github.com/cosmos/cosmos-sdk/issues/10409
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.8.1
