@@ -31,6 +31,7 @@ func NewDeployment(workload Workload) Deployment {
 func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unparam
 	falseValue := false
 
+	revisionHistoryLimit := int32(1)
 	kdeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   b.Name(),
@@ -40,7 +41,8 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 			Selector: &metav1.LabelSelector{
 				MatchLabels: b.selectorLabels(),
 			},
-			Replicas: b.replicas(),
+			RevisionHistoryLimit: &revisionHistoryLimit,
+			Replicas:             b.replicas(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: b.labels(),
@@ -64,7 +66,10 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 }
 
 func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:golint,unparam
+	revisionHistoryLimit := int32(1)
+
 	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	obj.Spec.RevisionHistoryLimit = &revisionHistoryLimit
 	obj.Spec.Selector.MatchLabels = b.selectorLabels()
 	obj.Spec.Replicas = b.replicas()
 	obj.Spec.Template.Labels = b.labels()
