@@ -225,8 +225,8 @@ func (bc *balanceChecker) run(startCh chan<- error) {
 loop:
 	for {
 		select {
-		case <-bc.lc.ShutdownRequest():
-			bc.log.Debug("shutting down")
+		case shutdownErr := <-bc.lc.ShutdownRequest():
+			bc.log.Debug("received shutdown request", "err", shutdownErr)
 			bc.lc.ShutdownInitiated(nil)
 			cancel()
 			break loop

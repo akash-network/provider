@@ -345,6 +345,7 @@ loop:
 	for {
 		select {
 		case err := <-s.lc.ShutdownRequest():
+			s.log.Debug("received shutdown request", "err", err)
 			s.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-s.sub.Events():

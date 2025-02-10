@@ -164,8 +164,8 @@ loop:
 	for {
 		select {
 		case shutdownErr = <-dm.lc.ShutdownRequest():
+			dm.log.Debug("received shutdown request", "err", shutdownErr)
 			break loop
-
 		case deployment := <-dm.updatech:
 			dm.deployment = deployment
 			newch := dm.handleUpdate(ctx)

@@ -47,6 +47,7 @@ const (
 	topicKubeNodes        = "kube-nodes"
 	topicKubeCephClusters = "kube-ceph-clusters"
 	topicKubePV           = "kube-pv"
+	topicKubePods         = "kube-pods"
 )
 
 type dpReqType int
