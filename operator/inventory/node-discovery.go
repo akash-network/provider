@@ -345,6 +345,18 @@ initloop:
 	}
 }
 
+func isPodAllocated(status corev1.PodStatus) bool {
+	isScheduled := false
+	for _, condition := range status.Conditions {
+		isScheduled = (condition.Type == corev1.PodScheduled) && (condition.Status == corev1.ConditionTrue)
+		if isScheduled {
+			break
+		}
+	}
+
+	return isScheduled && (status.Phase == corev1.PodRunning)
+}
+
 func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
@@ -368,7 +380,7 @@ func (dp *nodeDiscovery) monitor() error {
 		bus.Unsub(scch)
 	}()
 
-	var podsWatch watch.Interface
+	// var podsWatch watch.Interface
 	var cfg Config
 	var sc storageClasses
 
@@ -416,22 +428,22 @@ func (dp *nodeDiscovery) monitor() error {
 	}
 
 	restartPodsWatcher := func() error {
-		if podsWatch != nil {
-			select {
-			case <-podsWatch.ResultChan():
-			default:
-			}
-		}
-
-		var terr error
-		podsWatch, terr = kc.CoreV1().Pods(corev1.NamespaceAll).Watch(dp.ctx, metav1.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", dp.name).String(),
-		})
-
-		if terr != nil {
-			log.Error(terr, "unable to start pods watcher")
-			return terr
-		}
+		// if podsWatch != nil {
+		// 	select {
+		// 	case <-podsWatch.ResultChan():
+		// 	default:
+		// 	}
+		// }
+		//
+		// var terr error
+		// podsWatch, terr = kc.CoreV1().Pods(corev1.NamespaceAll).Watch(dp.ctx, metav1.ListOptions{
+		// 	FieldSelector: fields.OneTermEqualSelector("spec.nodeName", dp.name).String(),
+		// })
+		//
+		// if terr != nil {
+		// 	log.Error(terr, "unable to start pods watcher")
+		// 	return terr
+		// }
 
 		pods, terr := kc.CoreV1().Pods(corev1.NamespaceAll).List(dp.ctx, metav1.ListOptions{
 			FieldSelector: fields.OneTermEqualSelector("spec.nodeName", dp.name).String(),
@@ -444,8 +456,13 @@ func (dp *nodeDiscovery) monitor() error {
 
 		currPods = make(map[string]corev1.Pod)
 
-		for name := range pods.Items {
-			pod := pods.Items[name].DeepCopy()
+		for idx := range pods.Items {
+			pod := pods.Items[idx].DeepCopy()
+
+			if !isPodAllocated(pod.Status) {
+				continue
+			}
+
 			addPodAllocatedResources(&node, pod)
 
 			currPods[pod.Name] = *pod
@@ -459,11 +476,13 @@ func (dp *nodeDiscovery) monitor() error {
 		return err
 	}
 
-	defer func() {
-		if podsWatch != nil {
-			podsWatch.Stop()
-		}
-	}()
+	podsch := bus.Sub(topicKubePods)
+
+	// defer func() {
+	// 	if podsWatch != nil {
+	// 		podsWatch.Stop()
+	// 	}
+	// }()
 
 	statech := make(chan struct{}, 1)
 	labelch := make(chan struct{}, 1)
@@ -514,8 +533,9 @@ func (dp *nodeDiscovery) monitor() error {
 				if obj.Name == dp.name {
 					switch evt.Type {
 					case watch.Modified:
-						if nodeAllocatableChanged(knode, obj, &node) {
-							podsWatch.Stop()
+						if nodeAllocatableChanged(knode, obj) {
+							// podsWatch.Stop()
+							updateNodeInfo(obj, &node)
 							if err = restartPodsWatcher(); err != nil {
 								return err
 							}
@@ -527,38 +547,73 @@ func (dp *nodeDiscovery) monitor() error {
 					knode = obj.DeepCopy()
 				}
 			}
-		case res, isopen := <-podsWatch.ResultChan():
-			if !isopen {
-				podsWatch.Stop()
-				if err = restartPodsWatcher(); err != nil {
-					return err
+		// case res, isopen := <-podsWatch.ResultChan():
+		case rEvt := <-podsch:
+			evt := rEvt.(watch.Event)
+		done:
+			switch obj := evt.Object.(type) {
+			case *corev1.Pod:
+				if obj.Spec.NodeName != dp.name {
+					break done
 				}
 
-				continue
+				switch evt.Type {
+				case watch.Added:
+					fallthrough
+				case watch.Modified:
+					if _, exists := currPods[obj.Name]; !exists && isPodAllocated(obj.Status) {
+						currPods[obj.Name] = *obj.DeepCopy()
+						addPodAllocatedResources(&node, obj)
+					}
+
+					signalState()
+				case watch.Deleted:
+					pod, exists := currPods[obj.Name]
+					if !exists {
+						log.Info("received pod delete event for item that does not exist. check node inventory logic, it's might have bug in it!")
+						break
+					}
+
+					subPodAllocatedResources(&node, &pod)
+
+					delete(currPods, obj.Name)
+					signalState()
+				}
 			}
+			// pod.
+			// if !isopen {
+			// 	podsWatch.Stop()
+			// 	if err = restartPodsWatcher(); err != nil {
+			// 		return err
+			// 	}
+			//
+			// 	continue
+			// }
 
-			obj := res.Object.(*corev1.Pod)
-			switch res.Type {
-			case watch.Added:
-				if _, exists := currPods[obj.Name]; !exists {
-					currPods[obj.Name] = *obj.DeepCopy()
-					addPodAllocatedResources(&node, obj)
-				}
-
-				signalState()
-			case watch.Deleted:
-				pod, exists := currPods[obj.Name]
-				if !exists {
-					log.Info("received pod delete event for item that does not exist. check node inventory logic, it's might have bug in it!")
-					break
-				}
-
-				subPodAllocatedResources(&node, &pod)
-
-				delete(currPods, obj.Name)
-
-				signalState()
-			}
+			// obj := res.Object.(*corev1.Pod)
+			// switch res.Type {
+			// case watch.Added:
+			// 	fallthrough
+			// case watch.Modified:
+			// 	if _, exists := currPods[obj.Name]; !exists && isPodAllocated(obj.Status) {
+			// 		currPods[obj.Name] = *obj.DeepCopy()
+			// 		addPodAllocatedResources(&node, obj)
+			// 	}
+			//
+			// 	signalState()
+			// case watch.Deleted:
+			// 	pod, exists := currPods[obj.Name]
+			// 	if !exists {
+			// 		log.Info("received pod delete event for item that does not exist. check node inventory logic, it's might have bug in it!")
+			// 		break
+			// 	}
+			//
+			// 	subPodAllocatedResources(&node, &pod)
+			//
+			// 	delete(currPods, obj.Name)
+			//
+			// 	signalState()
+			// }
 		case <-statech:
 			if len(currLabels) > 0 {
 				bus.Pub(nodeState{
@@ -612,7 +667,7 @@ func (dp *nodeDiscovery) monitor() error {
 	}
 }
 
-func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node, node *v1.Node) bool {
+func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	changed := len(prev.Status.Allocatable) != len(curr.Status.Allocatable)
 
 	if !changed {
@@ -623,10 +678,6 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node, node *v1.Node)
 				break
 			}
 		}
-	}
-
-	if changed {
-		updateNodeInfo(curr, node)
 	}
 
 	return changed
@@ -678,21 +729,6 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 		}
 	}
 }
-
-// // trimAllocated ensure allocated does not overrun allocatable
-// // Deprecated to be replaced with function from akash-api after sdk-47 upgrade
-// func trimAllocated(rp *v1.ResourcePair) {
-// 	allocated := rp.Allocated.Value()
-// 	allocatable := rp.Allocatable.Value()
-//
-// 	if allocated <= allocatable {
-// 		return
-// 	}
-//
-// 	allocated = allocatable
-//
-// 	rp.Allocated.Set(allocated)
-// }
 
 func nodeResetAllocated(node *v1.Node) {
 	node.Resources.CPU.Quantity.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)

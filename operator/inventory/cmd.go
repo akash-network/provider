@@ -224,6 +224,11 @@ func Cmd() *cobra.Command {
 				factory.Core().V1().Nodes().Informer(),
 				topicKubeNodes)
 
+			InformKubeObjects(ctx,
+				bus,
+				factory.Core().V1().Pods().Informer(),
+				topicKubePods)
+
 			fromctx.MustStartupChFromCtx(ctx) <- struct{}{}
 			err = group.Wait()
 

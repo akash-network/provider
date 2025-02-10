@@ -96,7 +96,11 @@ func NewService(pctx context.Context, aqc sclient.QueryClient, session session.S
 	go s.lc.WatchContext(ctx)
 	go s.run(pctx)
 	group.Go(func() error {
-		return s.ordersFetcher(ctx, aqc)
+		err := s.ordersFetcher(ctx, aqc)
+
+		<-ctx.Done()
+
+		return err
 	})
 
 	return s, nil
@@ -276,7 +280,8 @@ func (s *service) run(ctx context.Context) {
 loop:
 	for {
 		select {
-		case <-s.lc.ShutdownRequest():
+		case shutdownErr := <-s.lc.ShutdownRequest():
+			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
 			s.lc.ShutdownInitiated(nil)
 			s.cancel()
 			break loop
