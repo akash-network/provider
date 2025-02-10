@@ -68,11 +68,8 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 }
 
 func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:golint,unparam
-	revisionHistoryLimit := int32(1)
-
 	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
 	obj.Spec.Replicas = b.replicas()
-	obj.Spec.RevisionHistoryLimit = &revisionHistoryLimit
 	obj.Spec.Selector.MatchLabels = b.selectorLabels()
 	obj.Spec.Template.Labels = b.labels()
 	obj.Spec.Template.Spec.Affinity = b.affinity()

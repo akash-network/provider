@@ -9,14 +9,10 @@ import (
 	"github.com/pkg/errors"
 	tpubsub "github.com/troian/pubsub"
 
+	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/cosmos/cosmos-sdk/client"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
-
-	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 
 	"github.com/akash-network/node/pubsub"
 
@@ -151,112 +147,6 @@ func NewService(ctx context.Context,
 	return svc, nil
 }
 
-func queryExistingLeases(
-	ctx context.Context,
-	aqc sclient.QueryClient,
-	accAddr sdktypes.AccAddress,
-) ([]mtypes.Bid, error) {
-	var presp *sdkquery.PageResponse
-	var leases []mtypes.QueryLeaseResponse
-
-	bidsMap := make(map[string]mtypes.Bid)
-
-	limit := uint64(10)
-	errorCnt := 0
-
-	for {
-		preq := &sdkquery.PageRequest{
-			Key:   nil,
-			Limit: limit,
-		}
-
-		if presp != nil {
-			preq.Key = presp.NextKey
-		}
-
-		resp, err := aqc.Bids(ctx, &mtypes.QueryBidsRequest{
-			Filters: mtypes.BidFilters{
-				Provider: accAddr.String(),
-				State:    mtypes.BidActive.String(),
-			},
-			Pagination: preq,
-		})
-		if err != nil {
-			if errorCnt > 1 {
-				return nil, err
-			}
-
-			errorCnt++
-
-			continue
-		}
-		errorCnt = 0
-
-		for _, resp := range resp.Bids {
-			bidsMap[resp.Bid.BidID.DeploymentID().String()] = resp.Bid
-		}
-
-		if uint64(len(resp.Bids)) < limit {
-			break
-		}
-
-		presp = resp.Pagination
-	}
-
-	presp = nil
-	for {
-		preq := &sdkquery.PageRequest{
-			Key:   nil,
-			Limit: limit,
-		}
-
-		if presp != nil {
-			preq.Key = presp.NextKey
-		}
-
-		resp, err := aqc.Leases(ctx, &mtypes.QueryLeasesRequest{
-			Filters: mtypes.LeaseFilters{
-				Provider: accAddr.String(),
-				State:    mtypes.LeaseActive.String(),
-			},
-			Pagination: preq,
-		})
-		if err != nil {
-			if errorCnt > 1 {
-				return nil, err
-			}
-
-			errorCnt++
-
-			continue
-		}
-
-		errorCnt = 0
-
-		leases = append(leases, resp.Leases...)
-		if uint64(len(resp.Leases)) < limit {
-			break
-		}
-
-		presp = resp.Pagination
-	}
-
-	for _, resp := range leases {
-		did := resp.Lease.LeaseID.DeploymentID().String()
-		if _, exists := bidsMap[did]; !exists {
-			delete(bidsMap, did)
-		}
-	}
-
-	res := make([]mtypes.Bid, 0, len(bidsMap))
-
-	for _, bid := range bidsMap {
-		res = append(res, bid)
-	}
-
-	return res, nil
-}
-
 type service struct {
 	config  Config
 	session session.Session
@@ -379,12 +269,14 @@ func (s *service) run() {
 
 	// Wait for any service to finish
 	select {
-	case <-s.lc.ShutdownRequest():
+	case shutdownErr := <-s.lc.ShutdownRequest():
+		s.session.Log().Info("received shutdown request", "err", shutdownErr)
 	case <-s.cluster.Done():
 	case <-s.bidengine.Done():
 	case <-s.manifest.Done():
 	}
 
+	s.session.Log().Info("shutting down services")
 	// Shut down all services
 	s.lc.ShutdownInitiated(nil)
 	s.cancel()
