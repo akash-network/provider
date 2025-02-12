@@ -330,17 +330,17 @@ func TestInventorySingleNodeNoPods(t *testing.T) {
 				Name: "test",
 				Resources: inventoryV1.NodeResources{
 					CPU: inventoryV1.CPU{
-						Quantity: inventoryV1.NewResourcePair(expectedCPU, 0, "m"),
+						Quantity: inventoryV1.NewResourcePair(expectedCPU, expectedCPU, 0, "m"),
 					},
 					Memory: inventoryV1.Memory{
-						Quantity: inventoryV1.NewResourcePair(expectedMemory, 0, "M"),
+						Quantity: inventoryV1.NewResourcePair(expectedMemory, expectedMemory, 0, "M"),
 					},
 					GPU: inventoryV1.GPU{
-						Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 					},
-					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, 0, "M"),
-					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, expectedStorage, 0, "M"),
+					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
 				Capabilities: inventoryV1.NodeCapabilities{},
 			},
@@ -380,17 +380,17 @@ func TestInventorySingleNodeWithPods(t *testing.T) {
 				Name: "test",
 				Resources: inventoryV1.NodeResources{
 					CPU: inventoryV1.CPU{
-						Quantity: inventoryV1.NewResourcePair(expectedCPU, cpuPerContainer*totalContainers, "m"),
+						Quantity: inventoryV1.NewResourcePair(expectedCPU, expectedCPU, cpuPerContainer*totalContainers, "m"),
 					},
 					Memory: inventoryV1.Memory{
-						Quantity: inventoryV1.NewResourcePair(expectedMemory, memoryPerContainer*totalContainers, "M"),
+						Quantity: inventoryV1.NewResourcePair(expectedMemory, expectedMemory, memoryPerContainer*totalContainers, "M"),
 					},
 					GPU: inventoryV1.GPU{
-						Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 					},
-					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, storagePerContainer*totalContainers, "M"),
-					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, expectedStorage, storagePerContainer*totalContainers, "M"),
+					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
 				Capabilities: inventoryV1.NodeCapabilities{},
 			},
@@ -617,30 +617,30 @@ func multipleReplicasGenNodes() inventoryV1.Nodes {
 			Name: "node1",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 51020, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 51020, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 8589934592, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 8589934592, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 		{
 			Name: "node2",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 51000, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 51000, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(2, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(2, 2, 0, resource.DecimalSI),
 					Info: inventoryV1.GPUInfoS{
 						{
 							Vendor:     "nvidia",
@@ -660,43 +660,43 @@ func multipleReplicasGenNodes() inventoryV1.Nodes {
 						},
 					},
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 8589934592, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 8589934592, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 		{
 			Name: "node3",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 275, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 275, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 0, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 0, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 		{
 			Name: "node4",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 305, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 305, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 0, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 0, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 	}
