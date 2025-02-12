@@ -4,7 +4,7 @@ go 1.23.5
 
 require (
 	github.com/akash-network/akash-api v0.0.73
-	github.com/akash-network/node v0.34.1
+	github.com/akash-network/node v0.36.0
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1
@@ -52,8 +52,8 @@ require (
 )
 
 retract (
-	v0.6.0
 	v0.6.5
+	v0.6.0
 )
 
 replace (
