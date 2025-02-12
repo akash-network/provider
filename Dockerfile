@@ -3,17 +3,17 @@ LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provid
 
 COPY provider-services /usr/bin/
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN \
-    apt-get update \
- && apt-get install -y --no-install-recommends \
+RUN apt -qq update \
+ && DEBIAN_FRONTEND=noninteractive apt -qq -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" --no-install-recommends install \
     tini \
-    ca-certificates \
     pci.ids \
+    curl \
+    jq \
+    bc \
+    mawk \
+    ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-ENV DEBIAN_FRONTEND=
 
 # default port for provider API
 EXPOSE 8443
