@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type Deployment interface {
@@ -31,7 +32,11 @@ func NewDeployment(workload Workload) Deployment {
 func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unparam
 	falseValue := false
 
-	revisionHistoryLimit := int32(1)
+	revisionHistoryLimit := int32(10)
+
+	maxSurge := intstr.FromInt32(0)
+	maxUnavailable := intstr.FromInt32(1)
+
 	kdeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   b.Name(),
@@ -40,6 +45,13 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: b.selectorLabels(),
+			},
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+					MaxSurge:       &maxSurge,
+				},
 			},
 			RevisionHistoryLimit: &revisionHistoryLimit,
 			Replicas:             b.replicas(),
@@ -66,10 +78,7 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 }
 
 func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:golint,unparam
-	revisionHistoryLimit := int32(1)
-
 	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
-	obj.Spec.RevisionHistoryLimit = &revisionHistoryLimit
 	obj.Spec.Selector.MatchLabels = b.selectorLabels()
 	obj.Spec.Replicas = b.replicas()
 	obj.Spec.Template.Labels = b.labels()
