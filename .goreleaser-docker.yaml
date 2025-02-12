@@ -1,17 +1,21 @@
+---
 version: 2
 project_name: provider
 env:
   - GO111MODULE=on
   - DOCKER_CLI_EXPERIMENTAL="enabled"
+  - CGO_ENABLED=1
 builds:
-  - id: provider-services-linux
+  - id: provider-services-linux-arm64
     binary: provider-services
     main: ./cmd/provider-services
     goarch:
-      - amd64
       - arm64
     goos:
       - linux
+    env:
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
     flags:
       - "-mod={{ .Env.MOD }}"
       - "-tags={{ .Env.BUILD_TAGS }}"
@@ -19,6 +23,27 @@ builds:
     ldflags:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+      - -extldflags "-lc -lrt -lpthread --static"
+  - id: provider-services-linux-amd64
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - amd64
+    goos:
+      - linux
+    env:
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "{{ .Env.STRIP_FLAGS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+      - -extldflags "-lc -lrt -lpthread --static"
 archives:
   - format: binary
 dockers:

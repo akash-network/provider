@@ -362,6 +362,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 								Quantity: inventory.ResourcePair{
 									Allocated:   &allocated,
 									Allocatable: resource.NewQuantity(int64(pool.Stats.MaxAvail), resource.DecimalSI), // nolint: gosec
+									Capacity:    resource.NewQuantity(int64(pool.Stats.MaxAvail), resource.DecimalSI), // nolint: gosec
 								},
 								Info: inventory.StorageInfo{
 									Class: class,
