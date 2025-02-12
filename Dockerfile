@@ -7,6 +7,10 @@ RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
     tini \
+    jq \
+    bc \
+    mawk \
+    curl \
     ca-certificates \
     pci.ids \
  && rm -rf /var/lib/apt/lists/*
