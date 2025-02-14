@@ -6,7 +6,7 @@ TEST_MODULES ?= $(shell $(GO) list ./... | grep -v '/mocks\|/kubernetes_mock\|/p
 
 KIND_NAME := kube
 
-include _run/common-kind.mk
+include _run/common-kind-vars.mk
 
 KIND_VARS              ?= KUBE_INGRESS_IP="$(KIND_K8S_IP)" KUBE_INGRESS_PORT="$(KIND_HTTP_PORT)"
 
