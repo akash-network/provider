@@ -11,6 +11,7 @@ RUN \
     tini \
     jq \
     bc \
+    netcat-traditional \
     mawk \
     curl \
     ca-certificates \
