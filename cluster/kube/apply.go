@@ -4,6 +4,7 @@ package kube
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,6 +12,8 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
 	metricsutils "github.com/akash-network/node/util/metrics"
@@ -19,6 +22,12 @@ import (
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
+
+type k8sPatch struct {
+	Op    string      `json:"op"`
+	Path  string      `json:"path"`
+	Value interface{} `json:"value"`
+}
 
 func applyNS(ctx context.Context, kc kubernetes.Interface, b builder.NS) (*corev1.Namespace, *corev1.Namespace, *corev1.Namespace, error) {
 	oobj, err := kc.CoreV1().Namespaces().Get(ctx, b.Name(), metav1.GetOptions{})
@@ -144,11 +153,56 @@ func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Dep
 	case err == nil:
 		curr := oobj.DeepCopy()
 		oobj, err = b.Update(oobj)
-		if err == nil && (b.IsObjectRevisionLatest(curr.Labels) ||
+		if err != nil {
+			break
+		}
+
+		if b.IsObjectRevisionLatest(curr.Labels) ||
 			!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels)) {
+			!reflect.DeepEqual(curr.Labels, oobj.Labels) {
 			uobj, err = kc.AppsV1().Deployments(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-update", err)
+		}
+
+		var patches []k8sPatch
+
+		if rev := curr.Spec.RevisionHistoryLimit; rev == nil || *rev != 10 {
+			patches = append(patches, k8sPatch{
+				Op:    "add",
+				Path:  "/spec/revisionHistoryLimit",
+				Value: int32(10),
+			})
+		}
+
+		ustrategy := &oobj.Spec.Strategy
+		if uobj != nil {
+			ustrategy = &uobj.Spec.Strategy
+		}
+
+		maxSurge := intstr.FromInt32(0)
+		maxUnavailable := intstr.FromInt32(1)
+
+		strategy := appsv1.DeploymentStrategy{
+			Type: appsv1.RollingUpdateDeploymentStrategyType,
+			RollingUpdate: &appsv1.RollingUpdateDeployment{
+				MaxUnavailable: &maxUnavailable,
+				MaxSurge:       &maxSurge,
+			},
+		}
+
+		if !reflect.DeepEqual(&strategy, &ustrategy) {
+			patches = append(patches, k8sPatch{
+				Op:    "replace",
+				Path:  "/spec/strategy",
+				Value: strategy,
+			})
+		}
+
+		if len(patches) > 0 {
+			data, _ := json.Marshal(patches)
+
+			oobj, err = kc.AppsV1().Deployments(b.NS()).Patch(ctx, oobj.Name, k8stypes.JSONPatchType, data, metav1.PatchOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-patch", err)
 		}
 	case errors.IsNotFound(err):
 		oobj, err = b.Create()
@@ -172,13 +226,57 @@ func applyStatefulSet(ctx context.Context, kc kubernetes.Interface, b builder.St
 	case err == nil:
 		curr := oobj.DeepCopy()
 		oobj, err = b.Update(oobj)
-		if err == nil && (b.IsObjectRevisionLatest(curr.Labels) ||
+		if err != nil {
+			break
+		}
+
+		if b.IsObjectRevisionLatest(curr.Labels) ||
 			!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels)) {
+			!reflect.DeepEqual(curr.Labels, oobj.Labels) {
 			uobj, err = kc.AppsV1().StatefulSets(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-update", err)
-
 		}
+
+		// var patches []k8sPatch
+		//
+		// if rev := curr.Spec.RevisionHistoryLimit; rev == nil || *rev != 10 {
+		// 	patches = append(patches, k8sPatch{
+		// 		Op:    "add",
+		// 		Path:  "/spec/revisionHistoryLimit",
+		// 		Value: int32(10),
+		// 	})
+		// }
+		//
+		// ustrategy := &oobj.Spec.UpdateStrategy
+		// if uobj != nil {
+		// 	ustrategy = &uobj.Spec.UpdateStrategy
+		// }
+		//
+		// partition := int32(0)
+		// maxUnavailable := intstr.FromInt32(1)
+		//
+		// strategy := appsv1.StatefulSetUpdateStrategy{
+		// 	Type: appsv1.RollingUpdateStatefulSetStrategyType,
+		// 	RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+		// 		Partition:      &partition,
+		// 		MaxUnavailable: &maxUnavailable,
+		// 	},
+		// }
+		//
+		// if !reflect.DeepEqual(&strategy, ustrategy) {
+		// 	patches = append(patches, k8sPatch{
+		// 		Op:    "replace",
+		// 		Path:  "/spec/updateStrategy",
+		// 		Value: strategy,
+		// 	})
+		// }
+		//
+		// if len(patches) > 0 {
+		// 	data, _ := json.Marshal(patches)
+		//
+		// 	oobj, err = kc.AppsV1().StatefulSets(b.NS()).Patch(ctx, oobj.Name, k8stypes.JSONPatchType, data, metav1.PatchOptions{})
+		// 	metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-patch", err)
+		// }
 	case errors.IsNotFound(err):
 		oobj, err = b.Create()
 		if err == nil {
@@ -242,21 +340,3 @@ func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest)
 
 	return nobj, uobj, oobj, err
 }
-
-// TODO: re-enable.  see #946
-// func applyRestrictivePodSecPoliciesToNS(ctx context.Context, kc kubernetes.Interface, p builder.PspRestricted) error {
-// 	obj, err := kc.PolicyV1beta1().PodSecurityPolicies().Get(ctx, p.Name(), metav1.GetOptions{})
-// 	switch {
-// 	case err == nil:
-// 		obj, err = p.Update(obj)
-// 		if err == nil {
-// 			_, err = kc.PolicyV1beta1().PodSecurityPolicies().Update(ctx, obj, metav1.UpdateOptions{})
-// 		}
-// 	case errors.IsNotFound(err):
-// 		obj, err = p.Create()
-// 		if err == nil {
-// 			_, err = kc.PolicyV1beta1().PodSecurityPolicies().Create(ctx, obj, metav1.CreateOptions{})
-// 		}
-// 	}
-// 	return err
-// }

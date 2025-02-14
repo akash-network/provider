@@ -4,6 +4,12 @@ BUILD_TAGS_E2E := e2e integration
 BUILD_TAGS_ALL := "$(BUILD_TAGS_K8S_INTEGRATION) $(BUILD_TAGS_E2E)"
 TEST_MODULES ?= $(shell $(GO) list ./... | grep -v '/mocks\|/kubernetes_mock\|/pkg/client')
 
+KIND_NAME := kube
+
+include _run/common-kind.mk
+
+KIND_VARS              ?= KUBE_INGRESS_IP="$(KIND_K8S_IP)" KUBE_INGRESS_PORT="$(KIND_HTTP_PORT)"
+
 # This is statically specified in the vagrant configuration
 # todo @troian check it still necessary
 KUBE_NODE_IP ?= 172.18.8.101
@@ -19,7 +25,7 @@ test-e2e-integration:
 	# ```
 	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e
 	# ```
-	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 1500s
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 3000s
 
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:

@@ -191,7 +191,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 				{
 					Name:  "psutil",
 					Image: dp.image,
-					Command: []string{
+					Args: []string{
 						"provider-services",
 						"tools",
 						"psutil",
@@ -345,6 +345,18 @@ initloop:
 	}
 }
 
+func isPodAllocated(status corev1.PodStatus) bool {
+	isScheduled := false
+	for _, condition := range status.Conditions {
+		isScheduled = (condition.Type == corev1.PodScheduled) && (condition.Status == corev1.ConditionTrue)
+		if isScheduled {
+			break
+		}
+	}
+
+	return isScheduled && (status.Phase == corev1.PodRunning)
+}
+
 func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
@@ -444,8 +456,13 @@ func (dp *nodeDiscovery) monitor() error {
 
 		currPods = make(map[string]corev1.Pod)
 
-		for name := range pods.Items {
-			pod := pods.Items[name].DeepCopy()
+		for idx := range pods.Items {
+			pod := pods.Items[idx].DeepCopy()
+
+			if !isPodAllocated(pod.Status) {
+				continue
+			}
+
 			addPodAllocatedResources(&node, pod)
 
 			currPods[pod.Name] = *pod
@@ -514,8 +531,9 @@ func (dp *nodeDiscovery) monitor() error {
 				if obj.Name == dp.name {
 					switch evt.Type {
 					case watch.Modified:
-						if nodeAllocatableChanged(knode, obj, &node) {
-							podsWatch.Stop()
+						if nodeAllocatableChanged(knode, obj) {
+							// podsWatch.Stop()
+							updateNodeInfo(obj, &node)
 							if err = restartPodsWatcher(); err != nil {
 								return err
 							}
@@ -540,7 +558,9 @@ func (dp *nodeDiscovery) monitor() error {
 			obj := res.Object.(*corev1.Pod)
 			switch res.Type {
 			case watch.Added:
-				if _, exists := currPods[obj.Name]; !exists {
+				fallthrough
+			case watch.Modified:
+				if _, exists := currPods[obj.Name]; !exists && isPodAllocated(obj.Status) {
 					currPods[obj.Name] = *obj.DeepCopy()
 					addPodAllocatedResources(&node, obj)
 				}
@@ -612,7 +632,7 @@ func (dp *nodeDiscovery) monitor() error {
 	}
 }
 
-func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node, node *v1.Node) bool {
+func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	changed := len(prev.Status.Allocatable) != len(curr.Status.Allocatable)
 
 	if !changed {
@@ -623,10 +643,6 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node, node *v1.Node)
 				break
 			}
 		}
-	}
-
-	if changed {
-		updateNodeInfo(curr, node)
 	}
 
 	return changed
@@ -640,20 +656,20 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 		Name: knode.Name,
 		Resources: v1.NodeResources{
 			CPU: v1.CPU{
-				Quantity: v1.NewResourcePairMilli(0, 0, resource.DecimalSI),
+				Quantity: v1.NewResourcePairMilli(0, 0, 0, resource.DecimalSI),
 				Info:     cpuInfo,
 			},
 			GPU: v1.GPU{
-				Quantity: v1.NewResourcePair(0, 0, resource.DecimalSI),
+				Quantity: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				Info:     gpuInfo,
 			},
 			Memory: v1.Memory{
-				Quantity: v1.NewResourcePair(0, 0, resource.DecimalSI),
+				Quantity: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				Info:     nil,
 			},
-			EphemeralStorage: v1.NewResourcePair(0, 0, resource.DecimalSI),
-			VolumesAttached:  v1.NewResourcePair(0, 0, resource.DecimalSI),
-			VolumesMounted:   v1.NewResourcePair(0, 0, resource.DecimalSI),
+			EphemeralStorage: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+			VolumesAttached:  v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+			VolumesMounted:   v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 		},
 	}
 
@@ -677,22 +693,22 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
 		}
 	}
-}
 
-// // trimAllocated ensure allocated does not overrun allocatable
-// // Deprecated to be replaced with function from akash-api after sdk-47 upgrade
-// func trimAllocated(rp *v1.ResourcePair) {
-// 	allocated := rp.Allocated.Value()
-// 	allocatable := rp.Allocatable.Value()
-//
-// 	if allocated <= allocatable {
-// 		return
-// 	}
-//
-// 	allocated = allocatable
-//
-// 	rp.Allocated.Set(allocated)
-// }
+	for name, r := range knode.Status.Capacity {
+		switch name {
+		case corev1.ResourceCPU:
+			node.Resources.CPU.Quantity.Capacity.SetMilli(r.MilliValue())
+		case corev1.ResourceMemory:
+			node.Resources.Memory.Quantity.Capacity.Set(r.Value())
+		case corev1.ResourceEphemeralStorage:
+			node.Resources.EphemeralStorage.Capacity.Set(r.Value())
+		case builder.ResourceGPUNvidia:
+			fallthrough
+		case builder.ResourceGPUAMD:
+			node.Resources.GPU.Quantity.Capacity.Set(r.Value())
+		}
+	}
+}
 
 func nodeResetAllocated(node *v1.Node) {
 	node.Resources.CPU.Quantity.Allocated = resource.NewMilliQuantity(0, resource.DecimalSI)
