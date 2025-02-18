@@ -346,15 +346,13 @@ initloop:
 }
 
 func isPodAllocated(status corev1.PodStatus) bool {
-	isScheduled := false
 	for _, condition := range status.Conditions {
-		isScheduled = (condition.Type == corev1.PodScheduled) && (condition.Status == corev1.ConditionTrue)
-		if isScheduled {
-			break
+		if condition.Type == corev1.PodScheduled {
+			return (condition.Status == corev1.ConditionTrue) && (status.Phase == corev1.PodRunning)
 		}
 	}
 
-	return isScheduled && (status.Phase == corev1.PodRunning)
+	return false
 }
 
 func (dp *nodeDiscovery) monitor() error {
@@ -564,8 +562,6 @@ func (dp *nodeDiscovery) monitor() error {
 					currPods[obj.Name] = *obj.DeepCopy()
 					addPodAllocatedResources(&node, obj)
 				}
-
-				signalState()
 			case watch.Deleted:
 				pod, exists := currPods[obj.Name]
 				if !exists {
@@ -576,9 +572,8 @@ func (dp *nodeDiscovery) monitor() error {
 				subPodAllocatedResources(&node, &pod)
 
 				delete(currPods, obj.Name)
-
-				signalState()
 			}
+			signalState()
 		case <-statech:
 			if len(currLabels) > 0 {
 				bus.Pub(nodeState{

@@ -3,7 +3,7 @@ module github.com/akash-network/provider
 go 1.23.5
 
 require (
-	github.com/akash-network/akash-api v0.0.75
+	github.com/akash-network/akash-api v0.0.76
 	github.com/akash-network/node v0.36.0
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
