@@ -1,6 +1,8 @@
 package builder
 
 import (
+	"strconv"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,11 +33,65 @@ func NewDeployment(workload *Workload) Deployment {
 
 func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:unparam
 	falseValue := false
+	trueValue := true
 
 	revisionHistoryLimit := int32(10)
 
 	maxSurge := intstr.FromInt32(0)
 	maxUnavailable := intstr.FromInt32(1)
+
+	// Add config volume
+	configVolume := corev1.Volume{
+		Name: AkashConfigVolume,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+
+	// Calculate if NodePort is required
+	requiresNodePort := false
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	for _, expose := range service.Expose {
+		if expose.Global {
+			requiresNodePort = true
+			break
+		}
+	}
+
+	// Add init container
+	initContainer := corev1.Container{
+		Name:  AkashConfigInitName,
+		Image: "alpine/curl:3.14",
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			akashInitScript,
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "SERVICE_NAME",
+				Value: b.Name(),
+			},
+			{
+				Name:  "AKASH_CONFIG_PATH", 
+				Value: AkashConfigMount,
+			},
+			{
+				Name:  "AKASH_CONFIG_FILE",
+				Value: AkashConfigEnvFile, 
+			},
+			{
+				Name:  "AKASH_REQUIRES_NODEPORT",
+				Value: strconv.FormatBool(requiresNodePort),
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      AkashConfigVolume,
+				MountPath: AkashConfigMount,
+			},
+		},
+	}
 
 	kdeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,10 +121,11 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:unparam
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot: &falseValue,
 					},
-					AutomountServiceAccountToken: &falseValue,
-					Containers:                   []corev1.Container{b.container()},
-					ImagePullSecrets:             b.secretsRefs,
-					Volumes:                      b.volumesObjs,
+					AutomountServiceAccountToken: &trueValue,
+					InitContainers:              []corev1.Container{initContainer},
+					Containers:                  []corev1.Container{b.container()},
+					ImagePullSecrets:            b.secretsRefs,
+					Volumes:                     append(b.volumesObjs, configVolume),
 				},
 			},
 		},

@@ -36,6 +36,7 @@ type Workload struct {
 	volumesObjs []corev1.Volume
 	pvcsObjs    []corev1.PersistentVolumeClaim
 	secretsRefs []corev1.LocalObjectReference
+	podSpec     *corev1.PodSpec
 }
 
 var _ workloadBase = (*Workload)(nil)
@@ -62,6 +63,7 @@ func NewWorkloadBuilder(
 			sparams:    sparams,
 		},
 		serviceIdx: serviceIdx,
+		podSpec:    &corev1.PodSpec{},
 	}
 
 	res.volumesObjs = res.volumes()
@@ -85,11 +87,23 @@ func (b *Workload) container() corev1.Container {
 	service := &b.group.Services[b.serviceIdx]
 	sparams := b.sparams[b.serviceIdx]
 
+	// Use default service account
+	b.podSpec.ServiceAccountName = "default"
+
+	// Add config volume mount
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      AkashConfigVolume,
+			MountPath: AkashConfigMount,
+		},
+	}
+
 	kcontainer := corev1.Container{
-		Name:    service.Name,
-		Image:   service.Image,
-		Command: service.Command,
-		Args:    service.Args,
+		Name:         service.Name,
+		Image:        service.Image,
+		Command:      service.Command,
+		Args:         service.Args,
+		VolumeMounts: volumeMounts,
 		Resources: corev1.ResourceRequirements{
 			Limits:   make(corev1.ResourceList),
 			Requests: make(corev1.ResourceList),
@@ -168,6 +182,7 @@ func (b *Workload) container() corev1.Container {
 	}
 
 	envVarsAdded := make(map[string]int)
+
 	for _, env := range service.Env {
 		parts := strings.SplitN(env, "=", 2)
 		switch len(parts) {
@@ -435,13 +450,6 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 					fmt.Sprintf("%s_%d_%d", envVarAkashIngressCustomHostname, expose.Port, idx),
 					hostname)
 			}
-		}
-
-		if expose.Global {
-			// Add external port mappings
-			env = addIfNotPresent(envVarsAlreadyAdded, env,
-				fmt.Sprintf("%s_%d", envVarAkashExternalPort, expose.Port),
-				expose.ExternalPort)
 		}
 	}
 
