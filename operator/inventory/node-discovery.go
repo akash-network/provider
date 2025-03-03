@@ -25,7 +25,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	v1 "github.com/akash-network/akash-api/go/inventory/v1"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -346,15 +345,13 @@ initloop:
 }
 
 func isPodAllocated(status corev1.PodStatus) bool {
-	isScheduled := false
 	for _, condition := range status.Conditions {
-		isScheduled = (condition.Type == corev1.PodScheduled) && (condition.Status == corev1.ConditionTrue)
-		if isScheduled {
-			break
+		if condition.Type == corev1.PodScheduled {
+			return (condition.Status == corev1.ConditionTrue) && (status.Phase == corev1.PodRunning)
 		}
 	}
 
-	return isScheduled && (status.Phase == corev1.PodRunning)
+	return false
 }
 
 func (dp *nodeDiscovery) monitor() error {
@@ -564,8 +561,6 @@ func (dp *nodeDiscovery) monitor() error {
 					currPods[obj.Name] = *obj.DeepCopy()
 					addPodAllocatedResources(&node, obj)
 				}
-
-				signalState()
 			case watch.Deleted:
 				pod, exists := currPods[obj.Name]
 				if !exists {
@@ -576,9 +571,8 @@ func (dp *nodeDiscovery) monitor() error {
 				subPodAllocatedResources(&node, &pod)
 
 				delete(currPods, obj.Name)
-
-				signalState()
 			}
+			signalState()
 		case <-statech:
 			if len(currLabels) > 0 {
 				bus.Pub(nodeState{
@@ -745,24 +739,31 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 			node.Resources.Memory.Quantity.Allocated.Add(*vol.EmptyDir.SizeLimit)
 		}
 	}
+}
 
+func subAllocatedNLZ(allocated *resource.Quantity, val resource.Quantity) {
+	newVal := allocated.Value() - val.Value()
+	if newVal < 0 {
+		newVal = 0
+	}
+
+	allocated.Set(newVal)
 }
 
 func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
-			rv := types.NewResourceValue(uint64(quantity.Value()))
 			switch name {
 			case corev1.ResourceCPU:
-				node.Resources.CPU.Quantity.SubMilliNLZ(rv)
+				subAllocatedNLZ(node.Resources.CPU.Quantity.Allocated, quantity)
 			case corev1.ResourceMemory:
-				node.Resources.Memory.Quantity.SubNLZ(rv)
+				subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, quantity)
 			case corev1.ResourceEphemeralStorage:
-				node.Resources.EphemeralStorage.SubNLZ(rv)
+				subAllocatedNLZ(node.Resources.EphemeralStorage.Allocated, quantity)
 			case builder.ResourceGPUNvidia:
 				fallthrough
 			case builder.ResourceGPUAMD:
-				node.Resources.GPU.Quantity.SubNLZ(rv)
+				subAllocatedNLZ(node.Resources.GPU.Quantity.Allocated, quantity)
 			}
 		}
 
@@ -771,9 +772,7 @@ func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 				continue
 			}
 
-			rv := types.NewResourceValue(uint64((*vol.EmptyDir.SizeLimit).Value()))
-
-			node.Resources.Memory.Quantity.SubNLZ(rv)
+			subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, *vol.EmptyDir.SizeLimit)
 		}
 	}
 }

@@ -484,22 +484,7 @@ func Test_ShouldNotBidWhenAlreadySet(t *testing.T) {
 	testutil.ChannelWaitForValue(t, scaffold.reserveCallNotify)
 
 	// Should have queried for the bid
-	queryCalls := scaffold.queryClient.Calls
-
-	var lastBid mock.Call
-
-	for _, call := range queryCalls {
-		if call.Method == "Bid" {
-			lastBid = call
-		}
-	}
-	require.Equal(t, "Bid", lastBid.Method)
-
-	qResult := lastBid.Arguments[1]
-	require.IsType(t, &mtypes.QueryBidRequest{}, qResult)
-
-	query := qResult.(*mtypes.QueryBidRequest)
-	require.Equal(t, *scaffold.bidID, query.ID)
+	scaffold.queryClient.AssertCalled(t, "Bid", mock.Anything, &mtypes.QueryBidRequest{ID: *scaffold.bidID})
 
 	// Should have called reserve once
 	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
