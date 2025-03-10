@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type Deployment interface {
@@ -31,6 +32,11 @@ func NewDeployment(workload Workload) Deployment {
 func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unparam
 	falseValue := false
 
+	revisionHistoryLimit := int32(10)
+
+	maxSurge := intstr.FromInt32(0)
+	maxUnavailable := intstr.FromInt32(1)
+
 	kdeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   b.Name(),
@@ -40,7 +46,15 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 			Selector: &metav1.LabelSelector{
 				MatchLabels: b.selectorLabels(),
 			},
-			Replicas: b.replicas(),
+			Strategy: appsv1.DeploymentStrategy{
+				Type: appsv1.RollingUpdateDeploymentStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateDeployment{
+					MaxUnavailable: &maxUnavailable,
+					MaxSurge:       &maxSurge,
+				},
+			},
+			RevisionHistoryLimit: &revisionHistoryLimit,
+			Replicas:             b.replicas(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: b.labels(),

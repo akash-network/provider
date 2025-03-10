@@ -66,7 +66,7 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 
 	cluster := inventoryV1.Cluster{}
 	cluster.Storage = append(cluster.Storage, inventoryV1.Storage{
-		Quantity: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage-(10*unit.Gi), resource.DecimalSI),
+		Quantity: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage, nullClientStorage-(10*unit.Gi), resource.DecimalSI),
 		Info: inventoryV1.StorageInfo{
 			Class: "beta2",
 		},
@@ -77,17 +77,17 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 			Name: ndName,
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, 100, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, nullClientCPU, 100, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(nullClientMemory, 1*unit.Gi, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nullClientMemory, nullClientMemory, 1*unit.Gi, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, 10*unit.Gi, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage, 10*unit.Gi, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 			Capabilities: inventoryV1.NodeCapabilities{},
 		}
@@ -100,17 +100,17 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 			Name: "solo",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, 100, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, nullClientCPU, 100, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(nullClientMemory, 1*unit.Gi, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nullClientMemory, nullClientMemory, 1*unit.Gi, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(nullClientGPU, 1, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nullClientGPU, nullClientGPU, 1, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, 10*unit.Gi, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage, 10*unit.Gi, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 			Capabilities: inventoryV1.NodeCapabilities{},
 		})

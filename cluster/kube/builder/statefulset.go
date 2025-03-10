@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type StatefulSet interface {
@@ -31,16 +32,29 @@ func BuildStatefulSet(workload Workload) StatefulSet {
 func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,unparam
 	falseValue := false
 
+	revisionHistoryLimit := int32(1)
+
+	partition := int32(0)
+	maxUnavailable := intstr.FromInt32(1)
+
 	kdeployment := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   b.Name(),
 			Labels: b.labels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition:      &partition,
+					MaxUnavailable: &maxUnavailable,
+				},
+			},
 			Selector: &metav1.LabelSelector{
 				MatchLabels: b.selectorLabels(),
 			},
-			Replicas: b.replicas(),
+			RevisionHistoryLimit: &revisionHistoryLimit,
+			Replicas:             b.replicas(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: b.labels(),
@@ -66,8 +80,8 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 
 func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:golint,unparam
 	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
-	obj.Spec.Selector.MatchLabels = b.selectorLabels()
 	obj.Spec.Replicas = b.replicas()
+	obj.Spec.Selector.MatchLabels = b.selectorLabels()
 	obj.Spec.Template.Labels = b.labels()
 	obj.Spec.Template.Spec.Affinity = b.affinity()
 	obj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
