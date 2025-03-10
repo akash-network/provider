@@ -36,7 +36,7 @@ import (
 	"github.com/akash-network/provider/tools/fromctx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1"
+	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
 var (
