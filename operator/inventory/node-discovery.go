@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jaypipes/ghw/pkg/cpu"
@@ -29,6 +34,9 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/tools/fromctx"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1"
 )
 
 var (
@@ -124,31 +132,258 @@ func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+
 	select {
 	case <-ctx.Done():
+		log.Error(ctx.Err(), "context cancelled while querying GPU")
 		return nil, ctx.Err()
 	case <-dp.ctx.Done():
+		log.Error(dp.ctx.Err(), "node discovery context cancelled while querying GPU")
 		return nil, dp.ctx.Err()
 	case <-rctx.Done():
+		log.Error(rctx.Err(), "timeout while querying GPU (5s timeout)")
 		return nil, rctx.Err()
 	case dp.readch <- dpReadReq{
 		ctx:  rctx,
 		op:   dpReqGPU,
 		resp: respch,
 	}:
+		log.V(2).Info("sent GPU query request")
 	}
 
 	select {
 	case <-ctx.Done():
+		log.Error(ctx.Err(), "context cancelled while waiting for GPU response")
 		return nil, ctx.Err()
 	case <-dp.ctx.Done():
+		log.Error(dp.ctx.Err(), "node discovery context cancelled while waiting for GPU response")
 		return nil, dp.ctx.Err()
 	case resp := <-respch:
 		if resp.data == nil {
+			log.Error(resp.err, "received nil data in GPU response")
 			return nil, resp.err
 		}
+		log.V(2).Info("successfully received GPU info")
 		return resp.data.(*gpu.Info), resp.err
 	}
+}
+
+func (dp *nodeDiscovery) queryNvidiaDevicePlugin(ctx context.Context) (*gpu.Info, error) {
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	
+	// Common base directories to search
+	baseDirs := []string{
+		"/var/lib",
+		"/data",
+		"/opt",
+		"/var/run",
+		"/run",
+		"/tmp",
+	}
+
+	// Common subdirectories to look for
+	subDirs := []string{
+		"kubelet/device-plugins",
+		"kubelet/plugins_registry",
+		"kubelet/plugins",
+		"device-plugins",
+		"plugins_registry",
+		"plugins",
+	}
+
+	// Common socket names
+	socketNames := []string{
+		"nvidia-gpu.sock",
+		"nvidia.sock",
+	}
+
+	// Create a channel to receive results
+	resultChan := make(chan string, 1)
+	errorChan := make(chan error, 1)
+	doneChan := make(chan struct{})
+
+	// Create a context with timeout for the entire search
+	searchCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	// Start parallel search
+	var wg sync.WaitGroup
+	for _, baseDir := range baseDirs {
+		wg.Add(1)
+		go func(dir string) {
+			defer wg.Done()
+			// First try direct paths
+			for _, subDir := range subDirs {
+				for _, socketName := range socketNames {
+					path := filepath.Join(dir, subDir, socketName)
+					if _, err := os.Stat(path); err == nil {
+						select {
+						case resultChan <- path:
+						case <-searchCtx.Done():
+						}
+						return
+					}
+				}
+			}
+
+			// Then try recursive search
+			err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil // Skip errors
+				}
+				if info.IsDir() {
+					return nil // Continue walking
+				}
+				if info.Mode()&os.ModeSocket != 0 {
+					for _, socketName := range socketNames {
+						if strings.HasSuffix(path, socketName) {
+							select {
+							case resultChan <- path:
+							case <-searchCtx.Done():
+								return fmt.Errorf("search cancelled")
+							}
+							return fmt.Errorf("found socket") // Stop walking
+						}
+					}
+				}
+				return nil
+			})
+			if err != nil && err.Error() != "found socket" {
+				select {
+				case errorChan <- err:
+				case <-searchCtx.Done():
+				}
+			}
+		}(baseDir)
+	}
+
+	// Wait for all searches to complete
+	go func() {
+		wg.Wait()
+		close(doneChan)
+	}()
+
+	// Wait for result or timeout
+	var socketPath string
+	select {
+	case socketPath = <-resultChan:
+		log.Info("Found NVIDIA device plugin socket", "path", socketPath)
+	case err := <-errorChan:
+		log.Error(err, "Error during socket search")
+		return nil, fmt.Errorf("error searching for NVIDIA device plugin socket: %v", err)
+	case <-searchCtx.Done():
+		log.Error(nil, "Timeout while searching for NVIDIA device plugin socket")
+		return nil, fmt.Errorf("timeout searching for NVIDIA device plugin socket")
+	case <-doneChan:
+		log.Error(nil, "NVIDIA device plugin socket not found")
+		return nil, fmt.Errorf("NVIDIA device plugin socket not found")
+	}
+
+	// Create a gRPC connection
+	conn, err := grpc.Dial(
+		socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDialer(func(addr string, timeout time.Duration) (net.Conn, error) {
+			return net.DialTimeout("unix", addr, timeout)
+		}),
+	)
+	if err != nil {
+		log.Error(err, "Failed to connect to NVIDIA device plugin")
+		return nil, err
+	}
+	defer conn.Close()
+
+	// Create a device plugin client
+	client := pluginapi.NewDevicePluginClient(conn)
+
+	// Create a context with timeout
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// List available devices
+	resp, err := client.ListAndWatch(ctx, &pluginapi.Empty{})
+	if err != nil {
+		log.Error(err, "Failed to list devices from NVIDIA device plugin")
+		return nil, err
+	}
+
+	// Get the first response
+	response, err := resp.Recv()
+	if err != nil {
+		log.Error(err, "Failed to receive device list from NVIDIA device plugin")
+		return nil, err
+	}
+
+	// Log device information
+	for _, device := range response.Devices {
+		health := "Healthy"
+		if device.Health != pluginapi.Healthy {
+			health = "Unhealthy"
+		}
+		log.Info("NVIDIA GPU Device", 
+			"id", device.ID,
+			"health", health,
+			"topology", device.Topology,
+		)
+	}
+
+	// Convert device plugin response to gpu.Info
+	gpuInfo := &gpu.Info{
+		GraphicsCards: make([]*gpu.GraphicsCard, 0, len(response.Devices)),
+	}
+
+	for _, device := range response.Devices {
+		// Extract GPU information from device properties
+		var vendorID, productID string
+		var gpuName string
+
+		// Parse device properties to get vendor and product IDs
+		for _, prop := range device.Properties {
+			switch prop.Name {
+			case "vendor":
+				vendorID = fmt.Sprintf("%x", prop.Value)
+			case "product":
+				productID = fmt.Sprintf("%x", prop.Value)
+			case "name":
+				gpuName = prop.Value
+			}
+		}
+
+		// If we couldn't get the vendor ID from properties, use NVIDIA's ID
+		if vendorID == "" {
+			vendorID = "10de"
+		}
+
+		// Create a graphics card entry with actual GPU information
+		card := &gpu.GraphicsCard{
+			DeviceInfo: &gpu.DeviceInfo{
+				Vendor: &gpu.VendorInfo{
+					ID:   vendorID,
+					Name: "nvidia",
+				},
+				Product: &gpu.ProductInfo{
+					ID:   productID,
+					Name: gpuName,
+				},
+			},
+		}
+
+		// Add additional device properties as attributes
+		for _, prop := range device.Properties {
+			if prop.Name != "vendor" && prop.Name != "product" && prop.Name != "name" {
+				card.DeviceInfo.Product.Attributes = append(card.DeviceInfo.Product.Attributes, &gpu.ProductAttribute{
+					Name:  prop.Name,
+					Value: prop.Value,
+				})
+			}
+		}
+
+		gpuInfo.GraphicsCards = append(gpuInfo.GraphicsCards, card)
+	}
+
+	log.V(2).Info("Successfully queried NVIDIA GPUs", "count", len(gpuInfo.GraphicsCards))
+	return gpuInfo, nil
 }
 
 func (dp *nodeDiscovery) apiConnector() error {
@@ -680,7 +915,7 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 		case corev1.ResourceMemory:
 			node.Resources.Memory.Quantity.Allocatable.Set(r.Value())
 		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
+			node.Resources.EphemeralStorage.Allocated.Set(r.Value())
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
@@ -915,9 +1150,60 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
-
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
+	// Query NVIDIA device plugin first
+	nvidiaInfo, err := dp.queryNvidiaDevicePlugin(ctx)
+	if err != nil {
+		log.Error(err, "failed to query NVIDIA device plugin")
+	} else if nvidiaInfo != nil {
+		// Process NVIDIA GPUs from device plugin
+		for _, card := range nvidiaInfo.GraphicsCards {
+			if card.DeviceInfo == nil || card.DeviceInfo.Vendor == nil || card.DeviceInfo.Product == nil {
+				continue
+			}
+
+			vendor, exists := info[card.DeviceInfo.Vendor.ID]
+			if !exists {
+				continue
+			}
+
+			model, exists := vendor.Devices[card.DeviceInfo.Product.ID]
+			if !exists {
+				continue
+			}
+
+			// Create base GPU info
+			gpuInfo := v1.GPUInfo{
+				Vendor:     vendor.Name,
+				VendorID:   card.DeviceInfo.Vendor.ID,
+				Name:       model.Name,
+				ModelID:    card.DeviceInfo.Product.ID,
+				Interface:  model.Interface,
+				MemorySize: model.MemorySize,
+			}
+
+			// Add additional attributes from nvidia-smi
+			if card.DeviceInfo.Product.Name != "" {
+				gpuInfo.Attributes = append(gpuInfo.Attributes, v1.Attribute{
+					Key:   "gpu_name",
+					Value: card.DeviceInfo.Product.Name,
+				})
+			}
+
+			// Add memory information
+			if card.DeviceInfo.Product.MemorySize != "" {
+				gpuInfo.Attributes = append(gpuInfo.Attributes, v1.Attribute{
+					Key:   "memory_size",
+					Value: card.DeviceInfo.Product.MemorySize,
+				})
+			}
+
+			res = append(res, gpuInfo)
+		}
+	}
+
+	// Then query GPU info as before for non-NVIDIA GPUs
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
 		log.Error(err, "unable to query gpu")
@@ -961,6 +1247,5 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 	}
 
 	sort.Sort(res)
-
 	return res
 }
