@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -171,7 +170,7 @@ func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 
 func (dp *nodeDiscovery) queryNvidiaDevicePlugin(ctx context.Context) (*gpu.Info, error) {
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
-	
+
 	// Common base directories to search
 	baseDirs := []string{
 		"/var/lib",
@@ -321,7 +320,7 @@ func (dp *nodeDiscovery) queryNvidiaDevicePlugin(ctx context.Context) (*gpu.Info
 		if device.Health != pluginapi.Healthy {
 			health = "Unhealthy"
 		}
-		log.Info("NVIDIA GPU Device", 
+		log.Info("NVIDIA GPU Device",
 			"id", device.ID,
 			"health", health,
 			"topology", device.Topology,
