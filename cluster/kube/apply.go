@@ -236,47 +236,6 @@ func applyStatefulSet(ctx context.Context, kc kubernetes.Interface, b builder.St
 			uobj, err = kc.AppsV1().StatefulSets(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-update", err)
 		}
-
-		// var patches []k8sPatch
-		//
-		// if rev := curr.Spec.RevisionHistoryLimit; rev == nil || *rev != 10 {
-		// 	patches = append(patches, k8sPatch{
-		// 		Op:    "add",
-		// 		Path:  "/spec/revisionHistoryLimit",
-		// 		Value: int32(10),
-		// 	})
-		// }
-		//
-		// ustrategy := &oobj.Spec.UpdateStrategy
-		// if uobj != nil {
-		// 	ustrategy = &uobj.Spec.UpdateStrategy
-		// }
-		//
-		// partition := int32(0)
-		// maxUnavailable := intstr.FromInt32(1)
-		//
-		// strategy := appsv1.StatefulSetUpdateStrategy{
-		// 	Type: appsv1.RollingUpdateStatefulSetStrategyType,
-		// 	RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-		// 		Partition:      &partition,
-		// 		MaxUnavailable: &maxUnavailable,
-		// 	},
-		// }
-		//
-		// if !reflect.DeepEqual(&strategy, ustrategy) {
-		// 	patches = append(patches, k8sPatch{
-		// 		Op:    "replace",
-		// 		Path:  "/spec/updateStrategy",
-		// 		Value: strategy,
-		// 	})
-		// }
-		//
-		// if len(patches) > 0 {
-		// 	data, _ := json.Marshal(patches)
-		//
-		// 	oobj, err = kc.AppsV1().StatefulSets(b.NS()).Patch(ctx, oobj.Name, k8stypes.JSONPatchType, data, metav1.PatchOptions{})
-		// 	metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-patch", err)
-		// }
 	case errors.IsNotFound(err):
 		oobj, err = b.Create()
 		if err == nil {

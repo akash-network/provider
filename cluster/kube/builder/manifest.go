@@ -52,8 +52,10 @@ func (b *manifest) Update(obj *crd.Manifest) (*crd.Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	obj.Spec = m.Spec
 	obj.Labels = b.labels()
+
 	return obj, nil
 }
 

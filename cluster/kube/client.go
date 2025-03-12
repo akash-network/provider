@@ -314,6 +314,12 @@ func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac a
 	return errs
 }
 
+type deployObjNames struct {
+	deployments  map[string]string
+	statefulSets map[string]string
+	services     map[string]string
+}
+
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
 	var settings builder.Settings
 	var valid bool
@@ -383,6 +389,31 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if err != nil {
 			c.log.Error("applying manifest", "err", err, "lease", lid)
 			return err
+		}
+
+		currSvcs := make(map[string]*crd.ManifestService)
+
+		for _, svc := range po.omani.Spec.Group.Services {
+			currSvcs[svc.Name] = &svc
+		}
+
+		var nMani *crd.Manifest
+
+		if po.nmani != nil {
+			nMani = po.nmani
+		} else {
+			nMani = po.umani
+		}
+
+		for _, svc := range nMani.Spec.Group.Services {
+			if _, exists := currSvcs[svc.Name]; !exists {
+				return fmt.Errorf("service %s not found: %w", svc.Name, builder.ErrManifestRenameNotAllowed)
+			}
+			delete(currSvcs, svc.Name)
+		}
+
+		if len(currSvcs) > 0 {
+			return fmt.Errorf("manifest does not match service names with existing version: %w", builder.ErrManifestRenameNotAllowed)
 		}
 	} else {
 		po.omani, err = c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, applies.cmanifest.Name(), metav1.GetOptions{})
@@ -459,6 +490,39 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	if err = cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
 		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
 		return err
+	}
+
+	objNames := deployObjNames{
+		deployments:  make(map[string]string),
+		statefulSets: make(map[string]string),
+		services:     make(map[string]string),
+	}
+
+	cSvcs, err := c.kc.CoreV1().Services(po.ons.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	cDepls, err := c.kc.AppsV1().Deployments(po.ons.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	cStats, err := c.kc.AppsV1().StatefulSets(po.ons.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range cSvcs.Items {
+		objNames.services[obj.Name] = obj.ResourceVersion
+	}
+
+	for _, obj := range cDepls.Items {
+		objNames.deployments[obj.Name] = obj.ResourceVersion
+	}
+
+	for _, obj := range cStats.Items {
+		objNames.statefulSets[obj.Name] = obj.ResourceVersion
 	}
 
 	for svcIdx := range group.Services {

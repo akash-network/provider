@@ -19,8 +19,6 @@ type ServiceCredentials interface {
 
 type serviceCredentials struct {
 	Workload
-	// ns          string
-	// serviceName string
 	credentials *mani.ServiceImageCredentials
 }
 
