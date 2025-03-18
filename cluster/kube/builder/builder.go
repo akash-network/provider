@@ -60,7 +60,9 @@ const (
 )
 
 var (
-	ErrKubeBuilder = errors.New("kube-builder")
+	ErrKubeBuilder              = errors.New("kube-builder")
+	ErrManifestServiceMismatch  = errors.New("manifest service mismatch")
+	ErrManifestRenameNotAllowed = errors.New("manifest service rename is not allowed")
 )
 
 var (
@@ -216,6 +218,9 @@ type builder struct {
 	log        log.Logger
 	settings   Settings
 	deployment IClusterDeployment
+	mani       *crd.Manifest
+	group      mani.Group
+	sparams    []*crd.SchedulerParams
 }
 
 var _ builderBase = (*builder)(nil)
