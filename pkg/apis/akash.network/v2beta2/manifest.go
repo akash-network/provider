@@ -244,6 +244,15 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 		Expose:    make([]mani.ServiceExpose, 0, len(ms.Expose)),
 	}
 
+	if ms.Credentials != nil {
+		ams.Credentials = &mani.ServiceImageCredentials{
+			Host:     ms.Credentials.Host,
+			Email:    ms.Credentials.Email,
+			Username: ms.Credentials.Username,
+			Password: ms.Credentials.Password,
+		}
+	}
+
 	for _, expose := range ms.Expose {
 		value, err := expose.toAkash()
 		if err != nil {
