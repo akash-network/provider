@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"runtime/debug"
 	"slices"
 	"strings"
@@ -314,6 +315,12 @@ func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac a
 	return errs
 }
 
+type deployObjNames struct {
+	deployments  map[string]string
+	statefulSets map[string]string
+	services     map[string]string
+}
+
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
 	var settings builder.Settings
 	var valid bool
@@ -345,10 +352,6 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	lid := cdeployment.LeaseID()
 	group := cdeployment.ManifestGroup()
 
-	applies := deploymentApplies{
-		services: make([]*deploymentService, 0, len(group.Services)),
-	}
-
 	po := &previousObj{}
 
 	defer func() {
@@ -377,16 +380,67 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		}
 	}()
 
+	applies := deploymentApplies{
+		services: make([]*deploymentService, 0, len(group.Services)),
+	}
+
 	applies.cmanifest = builder.BuildManifest(c.log, settings, c.ns, cdeployment)
+
+	po.omani, err = c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, applies.cmanifest.Name(), metav1.GetOptions{})
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "akash-manifests-get", err, kerrors.IsNotFound)
+
+	if err != nil && !kerrors.IsNotFound(err) {
+		return err
+	} else if kerrors.IsNotFound(err) {
+		po.omani = nil
+	}
+
+	// at this moment send manifest REST handle cannot validate new manifest against existing services.
+	// this part ensures tenant cannot rename or add/delete services in the manifest after creating deployment
 	if cdeployment.UpdateManifest() {
-		po.nmani, po.umani, po.omani, err = applyManifest(ctx, c.ac, applies.cmanifest)
+		if po.omani != nil {
+			po.umani, err = applies.cmanifest.Update(po.omani)
+		} else {
+			po.nmani, err = applies.cmanifest.Create()
+		}
+
 		if err != nil {
-			c.log.Error("applying manifest", "err", err, "lease", lid)
 			return err
 		}
-	} else {
-		po.omani, err = c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, applies.cmanifest.Name(), metav1.GetOptions{})
+
+		currSvcs := make(map[string]*crd.ManifestService)
+
+		if po.omani != nil {
+			for _, svc := range po.omani.Spec.Group.Services {
+				currSvcs[svc.Name] = &svc
+			}
+		}
+
+		if po.umani != nil {
+			for _, svc := range po.umani.Spec.Group.Services {
+				if _, exists := currSvcs[svc.Name]; !exists {
+					return fmt.Errorf("service %s not found: %w", svc.Name, builder.ErrManifestRenameNotAllowed)
+				}
+				delete(currSvcs, svc.Name)
+			}
+		}
+
+		if len(currSvcs) > 0 {
+			return fmt.Errorf("manifest does not match service names with existing version: %w", builder.ErrManifestRenameNotAllowed)
+		}
+
+		if po.omani != nil {
+			if !reflect.DeepEqual(&po.umani.Spec, &po.omani.Spec) || !reflect.DeepEqual(po.umani.Labels, po.omani.Labels) {
+				po.umani, err = c.ac.AkashV2beta2().Manifests(applies.cmanifest.NS()).Update(ctx, po.umani, metav1.UpdateOptions{})
+				metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-update", err)
+			}
+		} else {
+			po.nmani, err = c.ac.AkashV2beta2().Manifests(applies.cmanifest.NS()).Create(ctx, po.nmani, metav1.CreateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-create", err)
+		}
+
 		if err != nil {
+			c.log.Error("applying manifest", "err", err, "lease", lid)
 			return err
 		}
 	}
@@ -451,7 +505,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	}
 
 	po.nNetPolicies, po.uNetPolicies, po.oNetPolicies, err = applyNetPolicies(ctx, c.kc, applies.netPol)
-	if err != nil { //
+	if err != nil {
 		c.log.Error("applying namespace network policies", "err", err, "lease", lid)
 		return err
 	}
@@ -459,6 +513,39 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	if err = cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
 		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
 		return err
+	}
+
+	objNames := deployObjNames{
+		deployments:  make(map[string]string),
+		statefulSets: make(map[string]string),
+		services:     make(map[string]string),
+	}
+
+	cSvcs, err := c.kc.CoreV1().Services(po.ons.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	cDepls, err := c.kc.AppsV1().Deployments(po.ons.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	cStats, err := c.kc.AppsV1().StatefulSets(po.ons.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, obj := range cSvcs.Items {
+		objNames.services[obj.Name] = obj.ResourceVersion
+	}
+
+	for _, obj := range cDepls.Items {
+		objNames.deployments[obj.Name] = obj.ResourceVersion
+	}
+
+	for _, obj := range cStats.Items {
+		objNames.statefulSets[obj.Name] = obj.ResourceVersion
 	}
 
 	for svcIdx := range group.Services {

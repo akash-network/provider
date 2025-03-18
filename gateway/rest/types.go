@@ -12,6 +12,7 @@ type LeasedIPStatus struct {
 }
 
 type LeaseStatus struct {
+	Messages       []string                                 `json:"errors,omitempty"`
 	Services       map[string]*cltypes.ServiceStatus        `json:"services"`
 	ForwardedPorts map[string][]cltypes.ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
 	IPs            map[string][]LeasedIPStatus              `json:"ips"`

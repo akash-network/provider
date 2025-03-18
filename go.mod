@@ -4,7 +4,7 @@ go 1.23.5
 
 require (
 	github.com/akash-network/akash-api v0.0.75
-	github.com/akash-network/node v0.36.0
+	github.com/akash-network/node v0.38.0
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1
@@ -60,13 +60,15 @@ replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
+	github.com/cosmos/cosmos-sdk => github.com/akash-network/cosmos-sdk v0.45.16-akash.3
+
 	github.com/cosmos/ledger-cosmos-go => github.com/akash-network/ledger-go/cosmos v0.14.4
 	// Fix upstream GHSA-h395-qcrw-5vmq vulnerability.
 	// TODO Remove it: https://github.com/cosmos/cosmos-sdk/issues/10409
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.8.1
 
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
-	github.com/tendermint/tendermint => github.com/akash-network/cometbft v0.34.27-akash
+	github.com/tendermint/tendermint => github.com/akash-network/cometbft v0.34.27-akash.2
 
 	github.com/zondax/hid => github.com/troian/hid v0.13.2
 

@@ -347,7 +347,7 @@ initloop:
 func isPodAllocated(status corev1.PodStatus) bool {
 	for _, condition := range status.Conditions {
 		if condition.Type == corev1.PodScheduled {
-			return (condition.Status == corev1.ConditionTrue) && (status.Phase == corev1.PodRunning)
+			return condition.Status == corev1.ConditionTrue
 		}
 	}
 
@@ -529,7 +529,6 @@ func (dp *nodeDiscovery) monitor() error {
 					switch evt.Type {
 					case watch.Modified:
 						if nodeAllocatableChanged(knode, obj) {
-							// podsWatch.Stop()
 							updateNodeInfo(obj, &node)
 							if err = restartPodsWatcher(); err != nil {
 								return err

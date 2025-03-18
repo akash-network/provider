@@ -69,6 +69,7 @@ type deploymentManager struct {
 	config              Config
 	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
+	messages            []string
 }
 
 func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease bool) *deploymentManager {
@@ -180,13 +181,16 @@ loop:
 			}
 			switch dm.state {
 			case dsDeployActive:
+				// regardless of error from deploy, mark as complete
+				// save the last error if any for user to retrieve status of the deployment
+				dm.log.Debug("deploy complete")
+				dm.state = dsDeployComplete
+				dm.startMonitor()
+
 				if result != nil {
-					// Run the teardown code to get rid of anything created that might be hanging out
-					runch = dm.startTeardown()
+					dm.messages = []string{result.Error()}
 				} else {
-					dm.log.Debug("deploy complete")
-					dm.state = dsDeployComplete
-					dm.startMonitor()
+					dm.messages = nil
 				}
 			case dsDeployPending:
 				if result != nil {

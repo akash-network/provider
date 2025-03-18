@@ -72,8 +72,10 @@ func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
 }
 
 func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // nolint:golint,unparam
-	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
-	obj.Spec.Selector = b.selectorLabels()
+	uobj := obj.DeepCopy()
+
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj.Spec.Selector = b.selectorLabels()
 	ports, err := b.ports()
 	if err != nil {
 		return nil, err
@@ -81,7 +83,6 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 
 	// retain provisioned NodePort values
 	if b.requireNodePort {
-
 		// for each newly-calculated port
 		for i, port := range ports {
 
@@ -100,8 +101,9 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 		}
 	}
 
-	obj.Spec.Ports = ports
-	return obj, nil
+	uobj.Spec.Ports = ports
+
+	return uobj, nil
 }
 
 func (b *service) Any() bool {
