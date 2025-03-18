@@ -53,10 +53,12 @@ func (b *manifest) Update(obj *crd.Manifest) (*crd.Manifest, error) {
 		return nil, err
 	}
 
-	obj.Spec = m.Spec
-	obj.Labels = b.labels()
+	uobj := obj.DeepCopy()
 
-	return obj, nil
+	uobj.Spec = m.Spec
+	uobj.Labels = b.labels()
+
+	return uobj, nil
 }
 
 func (b *manifest) NS() string {

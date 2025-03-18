@@ -63,14 +63,16 @@ func (b serviceCredentials) Update(obj *corev1.Secret) (*corev1.Secret, error) {
 		return nil, err
 	}
 
-	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj := obj.DeepCopy()
 
-	obj.Data = map[string][]byte{
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+
+	uobj.Data = map[string][]byte{
 		corev1.DockerConfigJsonKey: data,
 	}
-	obj.Type = corev1.SecretTypeDockerConfigJson
+	uobj.Type = corev1.SecretTypeDockerConfigJson
 
-	return obj, nil
+	return uobj, nil
 }
 
 type dockerCredentialsEntry struct {

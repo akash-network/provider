@@ -482,7 +482,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	}
 
 	po.nNetPolicies, po.uNetPolicies, po.oNetPolicies, err = applyNetPolicies(ctx, c.kc, applies.netPol)
-	if err != nil { //
+	if err != nil {
 		c.log.Error("applying namespace network policies", "err", err, "lease", lid)
 		return err
 	}
