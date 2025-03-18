@@ -58,3 +58,5 @@ include make/mod.mk
 include make/lint.mk
 include make/test-integration.mk
 include make/codegen.mk
+include make/tools.mk
+include make/changelog.mk
