@@ -111,7 +111,7 @@ The Akash Network Provider is a Go-based implementation that enables providers t
    ```
 3. Install required tools:
    ```bash
-   make tools
+   make cache
    ```
 4. Set up your development environment:
    ```bash
