@@ -854,7 +854,10 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 		if info.Vendor == "nvidia" && res[labelNvidiaComGPUPresent] != "true" {
 			res[labelNvidiaComGPUPresent] = "true"
 		}
-
+                var gpuModelAlias = map[string]string{
+                 "rtx4080super": "rtx4080s",
+                  // add other mappings as needed
+                 }
 		key := fmt.Sprintf("%s.vendor.%s.model.%s", builder.AkashServiceCapabilityGPU, info.Vendor, info.Name)
 		if val, exists := res[key]; exists {
 			nval, _ := strconv.ParseUint(val, 10, 32)
