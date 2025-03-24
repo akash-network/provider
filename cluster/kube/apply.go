@@ -19,8 +19,6 @@ import (
 	metricsutils "github.com/akash-network/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	crdapi "github.com/akash-network/provider/pkg/client/clientset/versioned"
 )
 
 type k8sPatch struct {
@@ -38,19 +36,18 @@ func applyNS(ctx context.Context, kc kubernetes.Interface, b builder.NS) (*corev
 
 	switch {
 	case err == nil:
-		curr := oobj.DeepCopy()
-		oobj, err = b.Update(oobj)
+		uobj, err = b.Update(oobj)
 
 		if err == nil && (!b.IsObjectRevisionLatest(oobj.Labels) ||
-			!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels)) {
-			uobj, err = kc.CoreV1().Namespaces().Update(ctx, oobj, metav1.UpdateOptions{})
+			!reflect.DeepEqual(&uobj.Spec, &oobj.Spec) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
+			uobj, err = kc.CoreV1().Namespaces().Update(ctx, uobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "namespaces-update", err)
 		}
 	case errors.IsNotFound(err):
-		oobj, err = b.Create()
+		nobj, err = b.Create()
 		if err == nil {
-			nobj, err = kc.CoreV1().Namespaces().Create(ctx, oobj, metav1.CreateOptions{})
+			nobj, err = kc.CoreV1().Namespaces().Create(ctx, nobj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "namespaces-create", err)
 		}
 	}
@@ -85,12 +82,11 @@ func applyNetPolicies(ctx context.Context, kc kubernetes.Interface, b builder.Ne
 
 		switch {
 		case err == nil:
-			curr := oobj.DeepCopy()
-			oobj, err = b.Update(oobj)
+			uobj, err = b.Update(oobj)
 
-			if err == nil && (!b.IsObjectRevisionLatest(curr.Labels) ||
-				!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-				!reflect.DeepEqual(curr.Labels, oobj.Labels)) {
+			if err == nil && (!b.IsObjectRevisionLatest(uobj.Labels) ||
+				!reflect.DeepEqual(&uobj.Spec, &oobj.Spec) ||
+				!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
 				uobj, err = kc.NetworkingV1().NetworkPolicies(b.NS()).Update(ctx, pol, metav1.UpdateOptions{})
 				metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "networking-policies-update", err)
 				if err == nil {
@@ -122,18 +118,17 @@ func applyServiceCredentials(ctx context.Context, kc kubernetes.Interface, b bui
 
 	switch {
 	case err == nil:
-		curr := oobj.DeepCopy()
-		oobj, err = b.Update(oobj)
-		if err == nil && (!b.IsObjectRevisionLatest(curr.Labels) ||
-			!reflect.DeepEqual(&curr.Data, &oobj.Data) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels)) {
-			uobj, err = kc.CoreV1().Secrets(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
+		uobj, err = b.Update(oobj)
+		if err == nil && (!b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(&uobj.Data, &oobj.Data) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
+			uobj, err = kc.CoreV1().Secrets(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "secrets-get", err)
 		}
 	case errors.IsNotFound(err):
-		oobj, err = b.Create()
+		nobj, err = b.Create()
 		if err == nil {
-			nobj, err = kc.CoreV1().Secrets(b.NS()).Create(ctx, oobj, metav1.CreateOptions{})
+			nobj, err = kc.CoreV1().Secrets(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "secrets-create", err)
 		}
 	}
@@ -151,22 +146,21 @@ func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Dep
 
 	switch {
 	case err == nil:
-		curr := oobj.DeepCopy()
-		oobj, err = b.Update(oobj)
+		uobj, err = b.Update(oobj)
 		if err != nil {
 			break
 		}
 
-		if b.IsObjectRevisionLatest(curr.Labels) ||
-			!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels) {
-			uobj, err = kc.AppsV1().Deployments(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
+		if b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(&uobj.Spec, &oobj.Spec) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels) {
+			uobj, err = kc.AppsV1().Deployments(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-update", err)
 		}
 
 		var patches []k8sPatch
 
-		if rev := curr.Spec.RevisionHistoryLimit; rev == nil || *rev != 10 {
+		if rev := oobj.Spec.RevisionHistoryLimit; rev == nil || *rev != 10 {
 			patches = append(patches, k8sPatch{
 				Op:    "add",
 				Path:  "/spec/revisionHistoryLimit",
@@ -205,9 +199,9 @@ func applyDeployment(ctx context.Context, kc kubernetes.Interface, b builder.Dep
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-patch", err)
 		}
 	case errors.IsNotFound(err):
-		oobj, err = b.Create()
+		nobj, err = b.Create()
 		if err == nil {
-			nobj, err = kc.AppsV1().Deployments(b.NS()).Create(ctx, oobj, metav1.CreateOptions{})
+			nobj, err = kc.AppsV1().Deployments(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "deployments-create", err)
 		}
 	}
@@ -224,63 +218,21 @@ func applyStatefulSet(ctx context.Context, kc kubernetes.Interface, b builder.St
 
 	switch {
 	case err == nil:
-		curr := oobj.DeepCopy()
-		oobj, err = b.Update(oobj)
+		uobj, err = b.Update(oobj)
 		if err != nil {
 			break
 		}
 
-		if b.IsObjectRevisionLatest(curr.Labels) ||
-			!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels) {
-			uobj, err = kc.AppsV1().StatefulSets(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
+		if b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(&uobj.Spec, &oobj.Spec) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels) {
+			uobj, err = kc.AppsV1().StatefulSets(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-update", err)
 		}
-
-		// var patches []k8sPatch
-		//
-		// if rev := curr.Spec.RevisionHistoryLimit; rev == nil || *rev != 10 {
-		// 	patches = append(patches, k8sPatch{
-		// 		Op:    "add",
-		// 		Path:  "/spec/revisionHistoryLimit",
-		// 		Value: int32(10),
-		// 	})
-		// }
-		//
-		// ustrategy := &oobj.Spec.UpdateStrategy
-		// if uobj != nil {
-		// 	ustrategy = &uobj.Spec.UpdateStrategy
-		// }
-		//
-		// partition := int32(0)
-		// maxUnavailable := intstr.FromInt32(1)
-		//
-		// strategy := appsv1.StatefulSetUpdateStrategy{
-		// 	Type: appsv1.RollingUpdateStatefulSetStrategyType,
-		// 	RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
-		// 		Partition:      &partition,
-		// 		MaxUnavailable: &maxUnavailable,
-		// 	},
-		// }
-		//
-		// if !reflect.DeepEqual(&strategy, ustrategy) {
-		// 	patches = append(patches, k8sPatch{
-		// 		Op:    "replace",
-		// 		Path:  "/spec/updateStrategy",
-		// 		Value: strategy,
-		// 	})
-		// }
-		//
-		// if len(patches) > 0 {
-		// 	data, _ := json.Marshal(patches)
-		//
-		// 	oobj, err = kc.AppsV1().StatefulSets(b.NS()).Patch(ctx, oobj.Name, k8stypes.JSONPatchType, data, metav1.PatchOptions{})
-		// 	metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-patch", err)
-		// }
 	case errors.IsNotFound(err):
-		oobj, err = b.Create()
+		nobj, err = b.Create()
 		if err == nil {
-			nobj, err = kc.AppsV1().StatefulSets(b.NS()).Create(ctx, oobj, metav1.CreateOptions{})
+			nobj, err = kc.AppsV1().StatefulSets(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "statefulset-create", err)
 		}
 	}
@@ -296,45 +248,18 @@ func applyService(ctx context.Context, kc kubernetes.Interface, b builder.Servic
 
 	switch {
 	case err == nil:
-		curr := oobj.DeepCopy()
-		oobj, err = b.Update(oobj)
-		if err == nil && (b.IsObjectRevisionLatest(curr.Labels) ||
-			!reflect.DeepEqual(&curr.Spec, &oobj.Spec) ||
-			!reflect.DeepEqual(curr.Labels, oobj.Labels)) {
-			uobj, err = kc.CoreV1().Services(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
+		uobj, err = b.Update(oobj)
+		if err == nil && (b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(&uobj.Spec, &oobj.Spec) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
+			uobj, err = kc.CoreV1().Services(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "services-update", err)
 		}
 	case errors.IsNotFound(err):
-		oobj, err = b.Create()
+		nobj, err = b.Create()
 		if err == nil {
-			nobj, err = kc.CoreV1().Services(b.NS()).Create(ctx, oobj, metav1.CreateOptions{})
+			nobj, err = kc.CoreV1().Services(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "services-create", err)
-		}
-	}
-
-	return nobj, uobj, oobj, err
-}
-
-func applyManifest(ctx context.Context, kc crdapi.Interface, b builder.Manifest) (*crd.Manifest, *crd.Manifest, *crd.Manifest, error) {
-	oobj, err := kc.AkashV2beta2().Manifests(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
-	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "akash-manifests-get", err, errors.IsNotFound)
-
-	var nobj *crd.Manifest
-	var uobj *crd.Manifest
-
-	switch {
-	case err == nil:
-		curr := oobj.DeepCopy()
-		oobj, err = b.Update(oobj)
-		if err == nil && (!reflect.DeepEqual(&curr.Spec, &oobj.Spec) || !reflect.DeepEqual(curr.Labels, oobj.Labels)) {
-			uobj, err = kc.AkashV2beta2().Manifests(b.NS()).Update(ctx, oobj, metav1.UpdateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-update", err)
-		}
-	case errors.IsNotFound(err):
-		oobj, err = b.Create()
-		if err == nil {
-			nobj, err = kc.AkashV2beta2().Manifests(b.NS()).Create(ctx, oobj, metav1.CreateOptions{})
-			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "akash-manifests-create", err)
 		}
 	}
 

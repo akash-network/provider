@@ -116,7 +116,6 @@ loop:
 
 				deploymentHealthCheckCounter.WithLabelValues("down").Inc()
 				m.log.Info("check result", "ok", false, "attempt", m.attempts)
-
 			}
 
 			if currStatus != prevStatus {
