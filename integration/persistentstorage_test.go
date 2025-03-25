@@ -119,7 +119,7 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
 
-	// give kube to to reschedule pod
+	// give kube to reschedule pod
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	<-ctx.Done()
@@ -218,7 +218,7 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 	httpResp = queryAppWithRetries(s.T(), appURL, testHost, attempts)
 	s.Require().Equal(http.StatusOK, httpResp.StatusCode)
 
-	// give kube to to reschedule pod
+	// give kube to reschedule pod
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 
 	<-ctx.Done()
