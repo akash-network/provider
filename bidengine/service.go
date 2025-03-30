@@ -3,18 +3,13 @@ package bidengine
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
-	"os"
 
 	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	"github.com/boz/go-lifecycle"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
-	"golang.org/x/sync/errgroup"
-
-	"github.com/boz/go-lifecycle"
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
@@ -28,12 +23,10 @@ import (
 	ptypes "github.com/akash-network/provider/types"
 )
 
-var (
-	ordersCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "provider_order_handler",
-		Help: "The total number of orders created",
-	}, []string{"action"})
-)
+var ordersCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "provider_order_handler",
+	Help: "The total number of orders created",
+}, []string{"action"})
 
 // ErrNotRunning declares new error with message "not running"
 var ErrNotRunning = errors.New("not running")
@@ -44,13 +37,11 @@ type StatusClient interface {
 	StatusV1(ctx context.Context) (*provider.BidEngineStatus, error)
 }
 
-var (
-	orderManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
-		Name:        "provider_order_manager",
-		Help:        "",
-		ConstLabels: nil,
-	})
-)
+var orderManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
+	Name:        "provider_order_manager",
+	Help:        "",
+	ConstLabels: nil,
+})
 
 // Service handles bidding on orders.
 type Service interface {
@@ -60,7 +51,15 @@ type Service interface {
 }
 
 // NewService creates new service instance and returns error in case of failure
-func NewService(pctx context.Context, aqc sclient.QueryClient, session session.Session, cluster cluster.Cluster, bus pubsub.Bus, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
+func NewService(
+	pctx context.Context,
+	aqc sclient.QueryClient,
+	session session.Session,
+	cluster cluster.Cluster,
+	bus pubsub.Bus,
+	waiter waiter.OperatorWaiter,
+	cfg Config,
+) (Service, error) {
 	session = session.ForModule("bidengine-service")
 
 	sub, err := bus.Subscribe()
@@ -73,9 +72,6 @@ func NewService(pctx context.Context, aqc sclient.QueryClient, session session.S
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(pctx)
-	group, _ := errgroup.WithContext(ctx)
-
 	s := &service{
 		session:  session,
 		cluster:  cluster,
@@ -85,23 +81,14 @@ func NewService(pctx context.Context, aqc sclient.QueryClient, session session.S
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
 		ordersch: make(chan []mtypes.OrderID, 100),
-		group:    group,
-		cancel:   cancel,
 		lc:       lifecycle.New(),
 		cfg:      cfg,
 		pass:     providerAttrService,
 		waiter:   waiter,
 	}
 
-	go s.lc.WatchContext(ctx)
+	go s.lc.WatchContext(pctx)
 	go s.run(pctx)
-	group.Go(func() error {
-		err := s.ordersFetcher(ctx, aqc)
-
-		<-ctx.Done()
-
-		return err
-	})
 
 	return s, nil
 }
@@ -119,10 +106,8 @@ type service struct {
 	drainch  chan *order
 	ordersch chan []mtypes.OrderID
 
-	group  *errgroup.Group
-	cancel context.CancelFunc
-	lc     lifecycle.Lifecycle
-	pass   *providerAttrSignatureService
+	lc   lifecycle.Lifecycle
+	pass *providerAttrSignatureService
 
 	waiter waiter.OperatorWaiter
 }
@@ -171,35 +156,9 @@ func (s *service) updateOrderManagerGauge() {
 }
 
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	homeDir := fmt.Sprintf("%s/provider", aqc.ClientContext().HomeDir)
-	err := os.MkdirAll(homeDir, os.ModePerm)
-	if err != nil {
-		s.session.Log().Error("unable to create provider caching dir", "error", err)
-	}
-
 	var nextKey []byte
 
-	cacheFile, err := os.OpenFile(fmt.Sprintf("%s/orders_cache", homeDir), os.O_RDWR|os.O_CREATE, 0666)
-	if err == nil {
-		nextKey, _ = io.ReadAll(cacheFile)
-
-		_ = cacheFile.Truncate(0)
-	}
-
-	totalOrders := 0
-
-	limit := 3000
-
-	defer func() {
-		if cacheFile != nil {
-			if len(nextKey) > 0 {
-				s.session.Log().Info("caching next key")
-				_, _ = cacheFile.Write(nextKey)
-			}
-
-			_ = cacheFile.Close()
-		}
-	}()
+	limit := cap(s.ordersch)
 
 loop:
 	for {
@@ -209,7 +168,9 @@ loop:
 		}
 
 		resp, err := aqc.Orders(ctx, &mtypes.QueryOrdersRequest{
-			Filters:    mtypes.OrderFilters{},
+			Filters: mtypes.OrderFilters{
+				State: mtypes.OrderOpen.String(),
+			},
 			Pagination: preq,
 		})
 		if err != nil {
@@ -224,14 +185,9 @@ loop:
 			nextKey = resp.Pagination.NextKey
 		}
 
-		totalOrders += len(resp.Orders)
-
 		var orders []mtypes.OrderID
 
 		for _, order := range resp.Orders {
-			if order.State != mtypes.OrderOpen {
-				continue
-			}
 			orders = append(orders, order.OrderID)
 		}
 
@@ -241,12 +197,10 @@ loop:
 			break loop
 		}
 
-		if len(resp.Orders) < limit {
-			break
+		if len(nextKey) == 0 {
+			break loop
 		}
 	}
-
-	s.session.Log().Info("total orders", "orders", totalOrders)
 
 	return ctx.Err()
 }
@@ -259,7 +213,6 @@ func (s *service) run(ctx context.Context) {
 	// wait for configured operators to be online & responsive before proceeding
 	err := s.waiter.WaitForAll(ctx)
 	if err != nil {
-		s.cancel()
 		s.lc.ShutdownInitiated(err)
 		return
 	}
@@ -283,7 +236,6 @@ loop:
 		case shutdownErr := <-s.lc.ShutdownRequest():
 			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
 			s.lc.ShutdownInitiated(nil)
-			s.cancel()
 			break loop
 		case orders := <-s.ordersch:
 			for _, orderID := range orders {
@@ -336,8 +288,6 @@ loop:
 		}
 		s.updateOrderManagerGauge()
 	}
-
-	_ = s.group.Wait()
 
 	s.pass.lc.ShutdownAsync(nil)
 
