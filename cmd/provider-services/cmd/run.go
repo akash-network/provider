@@ -798,9 +798,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	group.Go(func() error {
-		return events.Publish(ctx, cctx.Client, "provider-cli", bus)
-	})
+	evtSvc, err := events.NewEvents(ctx, cctx.Client, "provider-cli", bus)
+	if err != nil {
+		return err
+	}
 
 	group.Go(func() error {
 		<-service.Done()
@@ -814,12 +815,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group.Go(func() error {
 		<-ctx.Done()
+		evtSvc.Shutdown()
 		return gwRest.Close()
 	})
 
 	if metricsRouter != nil {
 		group.Go(func() error {
-			// fixme ovrclk/engineering#609
 			// nolint: gosec
 			srv := http.Server{Addr: metricsListener, Handler: metricsRouter}
 			go func() {
