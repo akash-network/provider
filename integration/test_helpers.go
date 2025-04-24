@@ -4,6 +4,9 @@ package integration
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,6 +15,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 const (
@@ -173,4 +179,117 @@ func appEnv(t *testing.T) (string, string) {
 	appPort := os.Getenv("KUBE_INGRESS_PORT")
 	require.NotEmpty(t, appPort)
 	return host, appPort
+}
+
+type Observer struct {
+	initialUIDs     map[string]struct{}
+	initialRestarts map[string]int32
+	namespace       string
+}
+
+type ErrUnexpectedStateChange struct {
+	reason string
+}
+
+func (e ErrUnexpectedStateChange) Error() string {
+	return fmt.Sprintf("unexpected state change: %s", e.reason)
+}
+
+func NewObserver(namespace string) *Observer {
+	return &Observer{
+		initialUIDs:     make(map[string]struct{}),
+		initialRestarts: make(map[string]int32),
+		namespace:       namespace,
+	}
+}
+
+func (o *Observer) Observe(kubeClient kubernetes.Interface) error {
+	initialPods, err := kubeClient.CoreV1().Pods(o.namespace).List(context.Background(), metav1.ListOptions{
+		LabelSelector: "akash.network/manifest-service=web",
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, pod := range initialPods.Items {
+		o.initialUIDs[string(pod.UID)] = struct{}{}
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			o.initialRestarts[pod.Name] = containerStatus.RestartCount
+		}
+	}
+
+	return nil
+}
+
+func (o *Observer) podRestartedOrNewPodCreated(pod corev1.Pod) bool {
+	if o.newPodCreated(pod) {
+		return true
+	}
+
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		if containerStatus.RestartCount > o.initialRestarts[pod.Name] {
+			return true
+		}
+	}
+	return false
+}
+
+func (o *Observer) newPodCreated(pod corev1.Pod) bool {
+	_, exists := o.initialUIDs[string(pod.UID)]
+	return !exists
+}
+
+func (o *Observer) VerifyNewPodCreate(kubeClient kubernetes.Interface) error {
+	timeout := time.After(30 * time.Second)
+	tick := time.Tick(5 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return errors.New("timeout waiting for deployment update")
+		case <-tick:
+			updatedPods, err := kubeClient.CoreV1().Pods(o.namespace).List(context.Background(), metav1.ListOptions{
+				LabelSelector: "akash.network/manifest-service=web",
+			})
+			if err != nil {
+				return err
+			}
+
+			newPodCreated := false
+			for _, pod := range updatedPods.Items {
+				// Check if this is a new pod
+				newPodCreated = o.newPodCreated(pod)
+				if newPodCreated {
+					break
+				}
+			}
+
+			if newPodCreated {
+				return nil
+			}
+		}
+	}
+}
+
+func (o *Observer) VerifyNoChangeOccurred(kubeClient kubernetes.Interface) error {
+	timeout := time.After(30 * time.Second)
+	tick := time.Tick(5 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			return nil
+		case <-tick:
+			updatedPods, err := kubeClient.CoreV1().Pods(o.namespace).List(context.Background(), metav1.ListOptions{
+				LabelSelector: "akash.network/manifest-service=web",
+			})
+			if err != nil {
+				return err
+			}
+
+			for _, pod := range updatedPods.Items {
+				if o.podRestartedOrNewPodCreated(pod) {
+					return ErrUnexpectedStateChange{"container restarted or new pod created"}
+				}
+			}
+		}
+	}
 }

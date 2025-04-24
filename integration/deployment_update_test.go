@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
+	cutil "github.com/akash-network/provider/cluster/util"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -20,6 +22,8 @@ import (
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
 	ptestutil "github.com/akash-network/provider/testutil/provider"
+
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 type E2EDeploymentUpdate struct {
@@ -109,6 +113,14 @@ func (s *E2EDeploymentUpdate) TestE2EDeploymentUpdate() {
 	s.Require().NoError(s.waitForBlocksCommitted(2))
 	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
 
+	// Get initial pod information
+	kubeClient := fromctx.MustKubeClientFromCtx(s.ctx)
+	namespace := cutil.LeaseIDToNamespace(lid)
+	observer := NewObserver(namespace)
+
+	err = observer.Observe(kubeClient)
+	s.Require().NoError(err)
+
 	// Send Updated Manifest to Provider
 	_, err = ptestutil.TestSendManifest(
 		s.validator.ClientCtx.WithOutputFormat("json"),
@@ -120,6 +132,9 @@ func (s *E2EDeploymentUpdate) TestE2EDeploymentUpdate() {
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
 	queryAppWithHostname(s.T(), appURL, 50, "testupdateb.localhost")
+
+	err = observer.VerifyNewPodCreate(kubeClient)
+	s.Require().NoError(err)
 }
 
 func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
@@ -186,6 +201,14 @@ func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
 
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
+
+	// Get initial pod information
+	kubeClient := fromctx.MustKubeClientFromCtx(s.ctx)
+	namespace := cutil.LeaseIDToNamespace(lID)
+	observer := NewObserver(namespace)
+
+	err = observer.Observe(kubeClient)
+	s.Require().NoError(err)
 
 	extraArgs := []string{
 		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
@@ -257,4 +280,7 @@ func (s *E2EDeploymentUpdate) TestE2ELeaseShell() {
 		lID, 99, false, false, "notaservice", "/bin/echo", "/foo")
 	require.Error(s.T(), err)
 	require.Regexp(s.T(), ".*no service for that lease.*", err.Error())
+
+	err = observer.VerifyNoChangeOccurred(kubeClient)
+	s.Require().NoError(err)
 }
