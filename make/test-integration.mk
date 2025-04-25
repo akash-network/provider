@@ -25,7 +25,7 @@ test-e2e-integration:
 	# ```
 	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e
 	# ```
-	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite/TestE2EDeploymentCreateProviderShutdown -timeout 3000s
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 3000s
 
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:
