@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"sync"
 
@@ -23,13 +24,18 @@ var (
 	ErrLeaseShellProviderError = fmt.Errorf("%w: the provider encountered an unknown error", errLeaseShell)
 )
 
-func (c *client) LeaseShell(ctx context.Context, lID mtypes.LeaseID, service string, podIndex uint, cmd []string,
+func (c *client) LeaseShell(
+	ctx context.Context,
+	lID mtypes.LeaseID,
+	service string,
+	podIndex uint,
+	cmd []string,
 	stdin io.Reader,
 	stdout io.Writer,
 	stderr io.Writer,
 	tty bool,
-	terminalResize <-chan remotecommand.TerminalSize) error {
-
+	terminalResize <-chan remotecommand.TerminalSize,
+) error {
 	endpoint, err := url.Parse(c.host.String() + "/" + leaseShellPath(lID))
 	if err != nil {
 		return err
@@ -65,7 +71,21 @@ func (c *client) LeaseShell(ctx context.Context, lID mtypes.LeaseID, service str
 	subctx, subcancel := context.WithCancel(ctx)
 
 	rCl := c.newReqClient(ctx)
-	conn, response, err := rCl.wsclient.DialContext(subctx, endpoint.String(), nil)
+
+	var hdr http.Header
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			subcancel()
+			return err
+		}
+
+		hdr = make(http.Header)
+		hdr.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
+	conn, response, err := rCl.wsclient.DialContext(subctx, endpoint.String(), hdr)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) {
 			buf := &bytes.Buffer{}

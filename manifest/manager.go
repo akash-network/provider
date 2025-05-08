@@ -163,8 +163,11 @@ loop:
 
 		case ev := <-m.leasech:
 			m.log.Info("new lease", "lease", ev.LeaseID)
+
+			// fetch owner's public key
 			m.clearFetched()
 			m.maybeScheduleStop()
+
 			runch = m.maybeFetchData(ctx, runch)
 		case id := <-m.rmleasech:
 			m.log.Info("lease removed", "lease", id)

@@ -101,8 +101,8 @@ func OperatorsCmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.Flags().String(common.FlagRESTAddress, "0.0.0.0", "listen address for REST server")
-	if err := viper.BindPFlag(common.FlagRESTAddress, cmd.Flags().Lookup(common.FlagRESTAddress)); err != nil {
+	cmd.PersistentFlags().String(common.FlagRESTAddress, "0.0.0.0", "listen address for REST server")
+	if err := viper.BindPFlag(common.FlagRESTAddress, cmd.PersistentFlags().Lookup(common.FlagRESTAddress)); err != nil {
 		panic(err)
 	}
 

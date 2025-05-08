@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"errors"
 
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/spf13/cobra"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	cutils "github.com/akash-network/node/x/cert/utils"
 
 	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
@@ -38,12 +36,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
-	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
@@ -20,7 +20,6 @@ import (
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
-	cutils "github.com/akash-network/node/x/cert/utils"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
@@ -124,12 +123,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 	lID := bidID.LeaseID()
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(ctx, cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
-	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 	if err != nil {
 		return err
 	}

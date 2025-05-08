@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"crypto/tls"
-
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
 	cmdcommon "github.com/akash-network/node/cmd/common"
-	cutils "github.com/akash-network/node/x/cert/utils"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
@@ -62,12 +60,7 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
-	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+	gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 	if err != nil {
 		return err
 	}

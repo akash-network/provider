@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"sync"
 
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
@@ -11,7 +11,6 @@ import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
-	cutils "github.com/akash-network/node/x/cert/utils"
 
 	aclient "github.com/akash-network/provider/client"
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -49,11 +48,6 @@ func doLeaseEvents(cmd *cobra.Command) error {
 		return err
 	}
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
 	dseq, err := dseqFromFlags(cmd.Flags())
 	if err != nil {
 		return err
@@ -88,7 +82,7 @@ func doLeaseEvents(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {
