@@ -3,36 +3,35 @@ package rest
 import (
 	"bytes"
 	"context"
-	"crypto/ecdsa"
+	"crypto"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	atls "github.com/akash-network/akash-api/go/util/tls"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"github.com/pkg/errors"
 	"k8s.io/client-go/tools/remotecommand"
 
-	cosmosclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-
-	cutils "github.com/akash-network/node/x/cert/utils"
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
+	atls "github.com/akash-network/akash-api/go/util/tls"
 
 	"github.com/akash-network/provider"
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -41,6 +40,10 @@ import (
 const (
 	schemeWSS   = "wss"
 	schemeHTTPS = "https"
+)
+
+var (
+	ErrNotInitialized = errors.New("rest: not initialized")
 )
 
 // Client defines the methods available for connecting to the gateway server.
@@ -61,10 +64,6 @@ type Client interface {
 		tsq <-chan remotecommand.TerminalSize) error
 	MigrateHostnames(ctx context.Context, hostnames []string, dseq uint64, gseq uint32) error
 	MigrateEndpoints(ctx context.Context, endpoints []string, dseq uint64, gseq uint32) error
-}
-
-type JwtClient interface {
-	GetJWT(ctx context.Context) (*jwt.Token, error)
 }
 
 type LeaseKubeEvent struct {
@@ -92,10 +91,13 @@ type httpClient interface {
 }
 
 type client struct {
+	ctx     context.Context
 	host    *url.URL
 	addr    sdk.Address
 	cclient ctypes.QueryClient
+	tlsCfg  *tls.Config
 	certs   []tls.Certificate
+	signer  ajwt.SignerI
 }
 
 type reqClient struct {
@@ -107,8 +109,39 @@ type reqClient struct {
 	cclient  ctypes.QueryClient
 }
 
+type clientOptions struct {
+	certs  []tls.Certificate
+	signer ajwt.SignerI
+}
+
+type ClientOption func(options *clientOptions) error
+
+func WithCerts(certs []tls.Certificate) ClientOption {
+	return func(options *clientOptions) error {
+		options.certs = certs
+
+		return nil
+	}
+}
+
+func WithJWTSigner(val ajwt.SignerI) ClientOption {
+	return func(options *clientOptions) error {
+		options.signer = val
+		return nil
+	}
+}
+
 // NewClient returns a new Client
-func NewClient(ctx context.Context, qclient aclient.QueryClient, addr sdk.Address, certs []tls.Certificate) (Client, error) {
+func NewClient(ctx context.Context, qclient aclient.QueryClient, addr sdk.Address, opts ...ClientOption) (Client, error) {
+	cOpts := &clientOptions{}
+
+	for _, opt := range opts {
+		err := opt(cOpts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	res, err := qclient.Provider(ctx, &ptypes.QueryProviderRequest{Owner: addr.String()})
 	if err != nil {
 		return nil, err
@@ -119,12 +152,153 @@ func NewClient(ctx context.Context, qclient aclient.QueryClient, addr sdk.Addres
 		return nil, err
 	}
 
-	return &client{
+	certPool, err := x509.SystemCertPool()
+	if err != nil {
+		return nil, err
+	}
+
+	cl := &client{
+		ctx:     ctx,
 		host:    uri,
 		addr:    addr,
 		cclient: qclient,
-		certs:   certs,
-	}, nil
+	}
+
+	cl.tlsCfg = &tls.Config{
+		InsecureSkipVerify:    true, // nolint: gosec
+		VerifyPeerCertificate: cl.verifyPeerCertificate,
+		MinVersion:            tls.VersionTLS13,
+		RootCAs:               certPool,
+	}
+
+	if len(cOpts.certs) > 0 {
+		cl.tlsCfg.Certificates = cOpts.certs
+	} else if cOpts.signer != nil {
+		// must use Hostname rather than Host field as a certificate is issued for host without port
+		cl.tlsCfg.ServerName = uri.Host
+		cl.signer = cOpts.signer
+	}
+
+	return cl, nil
+}
+
+func (c *client) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certificate) error {
+	peerCerts := make([]*x509.Certificate, 0, len(certificates))
+
+	for idx := range certificates {
+		cert, err := x509.ParseCertificate(certificates[idx])
+		if err != nil {
+			return err
+		}
+
+		peerCerts = append(peerCerts, cert)
+	}
+
+	if len(peerCerts) == 0 {
+		return atls.CertificateInvalidError{Reason: atls.EmptyPeerCertificate}
+	}
+
+	// if the server provides just 1 certificate, it is most likely then not it is mTLS
+	if len(peerCerts) == 1 {
+		cert := peerCerts[0]
+		// validation
+		var owner sdk.Address
+		var err error
+
+		if owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
+			return fmt.Errorf("%w: (%w)", atls.CertificateInvalidError{Cert: cert, Reason: atls.EmptyPeerCertificate}, err)
+		}
+
+		// 1. CommonName in issuer and Subject must match and be as Bech32 format
+		if cert.Subject.CommonName != cert.Issuer.CommonName {
+			return fmt.Errorf("%w: (%w)", atls.CertificateInvalidError{Cert: cert, Reason: atls.InvalidCN}, err)
+		}
+
+		// 2. serial number must be in
+		if cert.SerialNumber == nil {
+			return fmt.Errorf("%w: (%w)", atls.CertificateInvalidError{Cert: cert, Reason: atls.InvalidSN}, err)
+		}
+
+		// 3. look up the certificate on the chain
+		onChainCert, _, err := c.GetAccountCertificate(c.ctx, owner, cert.SerialNumber)
+		if err != nil {
+			return fmt.Errorf("%w: (%w)", atls.CertificateInvalidError{Cert: cert, Reason: atls.Expired}, err)
+		}
+
+		c.tlsCfg.RootCAs.AddCert(onChainCert)
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:                     c.tlsCfg.RootCAs,
+		CurrentTime:               time.Now(),
+		KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		MaxConstraintComparisions: 0,
+	}
+
+	for _, cert := range peerCerts {
+		if _, err := cert.Verify(opts); err != nil {
+			return fmt.Errorf("%w: (%w)", atls.CertificateInvalidError{Cert: cert, Reason: atls.Verify}, err)
+		}
+	}
+
+	return nil
+}
+
+func (c *client) GetAccountCertificate(ctx context.Context, owner sdk.Address, serial *big.Int) (*x509.Certificate, crypto.PublicKey, error) {
+	cresp, err := c.cclient.Certificates(ctx, &ctypes.QueryCertificatesRequest{
+		Filter: ctypes.CertificateFilter{
+			Owner:  owner.String(),
+			Serial: serial.String(),
+			State:  ctypes.CertificateValid.String(),
+		},
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	certData := cresp.Certificates[0]
+
+	blk, rest := pem.Decode(certData.Certificate.Cert)
+	if blk == nil || len(rest) > 0 {
+		return nil, nil, ctypes.ErrInvalidCertificateValue
+	} else if blk.Type != ctypes.PemBlkTypeCertificate {
+		return nil, nil, fmt.Errorf("%w: invalid pem block type", ctypes.ErrInvalidCertificateValue)
+	}
+
+	cert, err := x509.ParseCertificate(blk.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	blk, rest = pem.Decode(certData.Certificate.Pubkey)
+	if blk == nil || len(rest) > 0 {
+		return nil, nil, ctypes.ErrInvalidPubkeyValue
+	} else if blk.Type != ctypes.PemBlkTypeECPublicKey {
+		return nil, nil, fmt.Errorf("%w: invalid pem block type", ctypes.ErrInvalidPubkeyValue)
+	}
+
+	pubkey, err := x509.ParsePKIXPublicKey(blk.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return cert, pubkey, nil
+}
+
+func (c *client) newJWT() (string, error) {
+	claims := ajwt.Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    c.signer.GetAddress().String(),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)),
+		},
+		Version: "v1",
+		Leases:  ajwt.Leases{Access: ajwt.AccessTypeFull},
+	}
+
+	tok := jwt.NewWithClaims(ajwt.SigningMethodES256K, &claims)
+
+	return tok.SignedString(c.signer)
 }
 
 func (c *client) newReqClient(ctx context.Context) *reqClient {
@@ -135,20 +309,11 @@ func (c *client) newReqClient(ctx context.Context) *reqClient {
 		cclient: c.cclient,
 	}
 
-	tlsConfig := &tls.Config{
-		// must use Hostname rather than Host field as certificate is issued for host without port
-		ServerName:            cl.host.Hostname(),
-		Certificates:          c.certs,
-		InsecureSkipVerify:    true, // nolint: gosec
-		VerifyPeerCertificate: cl.verifyPeerCertificate,
-		MinVersion:            tls.VersionTLS13,
-	}
-
 	httpClient := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: tlsConfig,
+			TLSClientConfig: c.tlsCfg,
 		},
-		// Never  follow redirects
+		// Never follow redirects
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -161,135 +326,10 @@ func (c *client) newReqClient(ctx context.Context) *reqClient {
 	cl.wsclient = &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: 45 * time.Second,
-		TLSClientConfig:  tlsConfig,
+		TLSClientConfig:  c.tlsCfg,
 	}
 
 	return cl
-}
-
-type ClientDirectory struct {
-	cosmosContext cosmosclient.Context
-	clients       map[string]Client
-	clientCert    tls.Certificate
-
-	lock sync.Mutex
-}
-
-func (cd *ClientDirectory) GetClientFromBech32(providerAddrBech32 string) (Client, error) {
-	id, err := sdk.AccAddressFromBech32(providerAddrBech32)
-	if err != nil {
-		return nil, err
-	}
-	return cd.GetClient(id)
-}
-
-func (cd *ClientDirectory) GetClient(providerAddr sdk.Address) (Client, error) {
-	cd.lock.Lock()
-	defer cd.lock.Unlock()
-
-	client, clientExists := cd.clients[providerAddr.String()]
-	if clientExists {
-		return client, nil
-	}
-
-	// client, err := NewClient(akashclient.NewQueryClientFromCtx(cd.cosmosContext), providerAddr, []tls.Certificate{cd.clientCert})
-	// if err != nil {
-	// 	return nil, err
-	// }
-	//
-	// cd.clients[providerAddr.String()] = client // Store the client
-
-	return client, nil
-}
-
-func NewClientDirectory(ctx context.Context, cctx cosmosclient.Context) (*ClientDirectory, error) {
-	cert, err := cutils.LoadAndQueryCertificateForAccount(ctx, cctx, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return &ClientDirectory{
-		cosmosContext: cctx,
-		clientCert:    cert,
-		clients:       make(map[string]Client),
-	}, nil
-}
-
-type ClientCustomClaims struct {
-	AkashNamespace *AkashNamespace `json:"https://akash.network/"`
-	jwt.RegisteredClaims
-}
-
-type AkashNamespace struct {
-	V1 *ClaimsV1 `json:"v1"`
-}
-
-type ClaimsV1 struct {
-	CertSerialNumber string `json:"cert_serial_number"`
-}
-
-var errRequiredCertSerialNum = errors.New("cert_serial_number must be present in claims")
-var errNonNumericCertSerialNum = errors.New("cert_serial_number must be numeric in claims")
-
-func (c *ClientCustomClaims) Valid() error {
-	_, err := sdk.AccAddressFromBech32(c.Subject)
-	if err != nil {
-		return err
-	}
-	_, err = sdk.AccAddressFromBech32(c.Issuer)
-	if err != nil {
-		return err
-	}
-	if c.AkashNamespace == nil || c.AkashNamespace.V1 == nil || c.AkashNamespace.V1.CertSerialNumber == "" {
-		return errRequiredCertSerialNum
-	}
-	if !sdk.IsNumeric(c.AkashNamespace.V1.CertSerialNumber) {
-		return errNonNumericCertSerialNum
-	}
-	return nil
-}
-
-func (c *client) GetJWT(ctx context.Context) (*jwt.Token, error) {
-	uri, err := makeURI(c.host, "jwt")
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	rCl := c.newReqClient(ctx)
-	resp, err := rCl.hclient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	responseBuf := &bytes.Buffer{}
-	_, err = io.Copy(responseBuf, resp.Body)
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = createClientResponseErrorIfNotOK(resp, responseBuf)
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := jwt.ParseWithClaims(responseBuf.String(), &ClientCustomClaims{}, func(_ *jwt.Token) (interface{}, error) {
-		// return the public key to be used for JWT verification
-		return resp.TLS.PeerCertificates[0].PublicKey.(*ecdsa.PublicKey), nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return token, nil
 }
 
 type ClientResponseError struct {
@@ -303,26 +343,6 @@ func (err ClientResponseError) Error() string {
 
 func (err ClientResponseError) ClientError() string {
 	return fmt.Sprintf("Remote Server returned %d\n%s", err.Status, err.Message)
-}
-
-func (c *reqClient) verifyPeerCertificate(certificates [][]byte, _ [][]*x509.Certificate) error {
-	peerCerts := make([]*x509.Certificate, 0, len(certificates))
-
-	for idx := range certificates {
-		cert, err := x509.ParseCertificate(certificates[idx])
-		if err != nil {
-			return err
-		}
-
-		peerCerts = append(peerCerts, cert)
-	}
-
-	_, _, err := atls.ValidatePeerCertificates(c.ctx, c.cclient, peerCerts, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (c *client) Status(ctx context.Context) (*provider.Status, error) {
@@ -359,6 +379,15 @@ func (c *client) Validate(ctx context.Context, gspec dtypes.GroupSpec) (provider
 		return provider.ValidateGroupSpecResult{}, err
 	}
 	req.Header.Set("Content-Type", contentTypeJSON)
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return provider.ValidateGroupSpecResult{}, err
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
 
 	rCl := c.newReqClient(ctx)
 	resp, err := rCl.hclient.Do(req)
@@ -405,6 +434,15 @@ func (c *client) SubmitManifest(ctx context.Context, dseq uint64, mani manifest.
 		return err
 	}
 
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
 	req.Header.Set("Content-Type", contentTypeJSON)
 
 	rCl := c.newReqClient(ctx)
@@ -435,6 +473,15 @@ func (c *client) GetManifest(ctx context.Context, lid mtypes.LeaseID) (manifest.
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	}
 
 	rCl := c.newReqClient(ctx)
@@ -487,6 +534,16 @@ func (c *client) MigrateEndpoints(ctx context.Context, endpoints []string, dseq 
 	if err != nil {
 		return err
 	}
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
 	req.Header.Set("Content-Type", contentTypeJSON)
 
 	rCl := c.newReqClient(ctx)
@@ -528,6 +585,16 @@ func (c *client) MigrateHostnames(ctx context.Context, hostnames []string, dseq 
 	if err != nil {
 		return err
 	}
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
 	req.Header.Set("Content-Type", contentTypeJSON)
 
 	rCl := c.newReqClient(ctx)
@@ -580,7 +647,20 @@ func (c *client) LeaseEvents(ctx context.Context, id mtypes.LeaseID, _ string, f
 
 	endpoint.RawQuery = query.Encode()
 	rCl := c.newReqClient(ctx)
-	conn, response, err := rCl.wsclient.DialContext(ctx, endpoint.String(), nil)
+
+	var hdr http.Header
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return nil, err
+		}
+
+		hdr = make(http.Header)
+		hdr.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
+	conn, response, err := rCl.wsclient.DialContext(ctx, endpoint.String(), hdr)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) {
 			buf := &bytes.Buffer{}
@@ -678,6 +758,16 @@ func (c *client) getStatus(ctx context.Context, uri string, obj interface{}) err
 	if err != nil {
 		return err
 	}
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return err
+		}
+
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
 	req.Header.Set("Content-Type", contentTypeJSON)
 
 	rCl := c.newReqClient(ctx)
@@ -756,7 +846,20 @@ func (c *client) LeaseLogs(ctx context.Context,
 	endpoint.RawQuery = query.Encode()
 
 	rCl := c.newReqClient(ctx)
-	conn, response, err := rCl.wsclient.DialContext(ctx, endpoint.String(), nil)
+
+	var hdr http.Header
+
+	if len(c.certs) == 0 && c.signer != nil {
+		token, err := c.newJWT()
+		if err != nil {
+			return nil, err
+		}
+
+		hdr = make(http.Header)
+		hdr.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
+	conn, response, err := rCl.wsclient.DialContext(ctx, endpoint.String(), hdr)
 	if err != nil {
 		if errors.Is(err, websocket.ErrBadHandshake) {
 			buf := &bytes.Buffer{}

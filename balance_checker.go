@@ -72,7 +72,6 @@ func newBalanceChecker(
 	bus pubsub.Bus,
 	cfg BalanceCheckerConfig,
 ) (*balanceChecker, error) {
-
 	bc := &balanceChecker{
 		ctx:     ctx,
 		session: clientSession,
@@ -147,7 +146,7 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 		Filters: mtypes.LeaseFilters{
 			Owner: lid.Owner,
 			DSeq:  lid.DSeq,
-			State: "active",
+			State: mtypes.LeaseActive.String(),
 		},
 	})
 

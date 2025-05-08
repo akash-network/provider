@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
-	"crypto/tls"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -25,14 +22,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	"github.com/akash-network/node/cmd/common"
 	"github.com/akash-network/node/events"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/sdl"
-	cutils "github.com/akash-network/node/x/cert/utils"
 	config2 "github.com/akash-network/node/x/provider/config"
 
 	"github.com/akash-network/provider"
@@ -55,10 +50,12 @@ import (
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/pconfig"
+	"github.com/akash-network/provider/tools/pconfig/bbolt"
 )
 
 const (
-	// FlagClusterK8s informs the provider to scan and utilize localized kubernetes client configuration
+	// FlagClusterK8s informs the provider to scan and use localized kubernetes client configuration
 	FlagClusterK8s = "cluster-k8s"
 
 	// FlagGatewayListenAddress determines listening address for Manifests
@@ -106,6 +103,8 @@ const (
 	FlagMonitorRetryPeriodJitter         = "monitor-retry-period-jitter"
 	FlagMonitorHealthcheckPeriod         = "monitor-healthcheck-period"
 	FlagMonitorHealthcheckPeriodJitter   = "monitor-healthcheck-period-jitter"
+	FlagPersistentConfigBackend          = "persistent-config-backend"
+	FlagPersistentConfigPath             = "persistent-config-path"
 )
 
 const (
@@ -124,6 +123,8 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			pctx := cmd.Context()
+
 			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
 
@@ -143,14 +144,39 @@ func RunCmd() *cobra.Command {
 				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
 			}
 
-			group, ctx := errgroup.WithContext(cmd.Context())
+			pconfigBackend := viper.GetString(FlagPersistentConfigBackend)
+			pconfigPath := viper.GetString(FlagPersistentConfigPath)
+
+			cctx, err := sdkclient.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			var pstorage pconfig.Storage
+
+			switch pconfigBackend {
+			case "bbolt":
+				if pconfigPath == "" {
+					pconfigPath = fmt.Sprintf("%s/pconfig.db", cctx.HomeDir)
+				}
+
+				var err error
+				pstorage, err = bbolt.NewBBolt(pconfigPath)
+				if err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("unsupport persistent-config backend \"%s\"", pconfigBackend)
+			}
+
+			group, ctx := errgroup.WithContext(pctx)
 			cmd.SetContext(ctx)
 
 			if err := clientcommon.SetKubeConfigToCmd(cmd); err != nil {
 				return err
 			}
 
-			kubecfg := fromctx.MustKubeConfigFromCtx(cmd.Context())
+			kubecfg := fromctx.MustKubeConfigFromCtx(pctx)
 
 			kc, err := kubernetes.NewForConfig(kubecfg)
 			if err != nil {
@@ -169,6 +195,7 @@ func RunCmd() *cobra.Command {
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, cmdutil.OpenLogger().With("cmp", "provider"))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPersistentConfig, pstorage)
 
 			pctx, pcancel := context.WithCancel(context.Background())
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, tpubsub.New(pctx, 1000))
@@ -185,8 +212,15 @@ func RunCmd() *cobra.Command {
 				_ = group.Wait()
 			}()
 
+			go func() {
+				<-ctx.Done()
+
+				_ = pstorage.Close()
+			}()
+
 			return nil
 		},
+
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return common.RunForeverWithContext(cmd.Context(), func(ctx context.Context) error {
 				return doRunCmd(ctx, cmd, args)
@@ -434,6 +468,16 @@ func RunCmd() *cobra.Command {
 		panic(err)
 	}
 
+	cmd.Flags().String(FlagPersistentConfigBackend, "bbolt", "backend storage for persistent config. defaults to bbolt. available options: bbolt")
+	if err := viper.BindPFlag(FlagPersistentConfigBackend, cmd.Flags().Lookup(FlagPersistentConfigBackend)); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String(FlagPersistentConfigPath, "", "path to backend storage for persistent config")
+	if err := viper.BindPFlag(FlagPersistentConfigPath, cmd.Flags().Lookup(FlagPersistentConfigPath)); err != nil {
+		panic(err)
+	}
+
 	if err := providerflags.AddServiceEndpointFlag(cmd, serviceHostnameOperator); err != nil {
 		panic(err)
 	}
@@ -457,9 +501,9 @@ var allowedBidPricingStrategies = [...]string{
 	bidPricingStrategyShellScript,
 }
 
-var errNoSuchBidPricingStrategy = fmt.Errorf("No such bid pricing strategy. Allowed: %v", allowedBidPricingStrategies)
+var errNoSuchBidPricingStrategy = fmt.Errorf("no such bid pricing strategy. Allowed: %v", allowedBidPricingStrategies)
 var errInvalidValueForBidPrice = errors.New("not a valid bid price")
-var errBidPriceNegative = errors.New("Bid price cannot be a negative number")
+var errBidPriceNegative = errors.New("bid price cannot be a negative number")
 
 func strToBidPriceScale(val string) (decimal.Decimal, error) {
 	v, err := decimal.NewFromString(val)
@@ -599,37 +643,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
 	grpcaddr := viper.GetString(FlagGatewayGRPCListenAddress)
 
-	var certFromFlag io.Reader
-	if val := cmd.Flag(FlagAuthPem).Value.String(); val != "" {
-		certFromFlag = bytes.NewBufferString(val)
-	}
-
-	kpm, err := cutils.NewKeyPairManager(cl.ClientContext(), cctx.FromAddress)
-	if err != nil {
-		return err
-	}
-
-	x509cert, tlsCert, err := kpm.ReadX509KeyPair(certFromFlag)
-	if err != nil {
-		return err
-	}
-
-	// Check that the certificate exists on chain and is not revoked
-	cresp, err := cl.Query().Certificates(cmd.Context(), &ctypes.QueryCertificatesRequest{
-		Filter: ctypes.CertificateFilter{
-			Owner:  cctx.FromAddress.String(),
-			Serial: x509cert.SerialNumber.String(),
-			State:  "valid",
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	if len(cresp.Certificates) == 0 {
-		return errors.Errorf("no valid found on chain certificate for account %s", cctx.FromAddress)
-	}
-
 	res, err := cl.Query().Provider(
 		cmd.Context(),
 		&ptypes.QueryProviderRequest{Owner: cctx.FromAddress.String()},
@@ -662,12 +675,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		builder.SettingsKey: kubeSettings,
 	}
 
-	cclient, err := createClusterClient(cmd.Context(), logger, cmd)
+	cclient, err := createClusterClient(ctx, logger, cmd)
 	if err != nil {
 		return err
 	}
 
-	statusResult, err := cctx.Client.Status(cmd.Context())
+	statusResult, err := cctx.Client.Status(ctx)
 	if err != nil {
 		return err
 	}
@@ -680,8 +693,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	bus := pubsub.NewBus()
 	defer bus.Close()
-
-	// group, ctx := errgroup.WithContext(clCtx)
 
 	// Provider service creation
 	config := provider.NewDefaultConfig()
@@ -770,7 +781,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		ctx = context.WithValue(ctx, clfromctx.CtxKeyClientIP, ipOperatorClient)
 	}
 
-	operatorWaiter := waiter.NewOperatorWaiter(cmd.Context(), logger, waitClients...)
+	operatorWaiter := waiter.NewOperatorWaiter(ctx, logger, waitClients...)
 
 	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, session, bus, cclient, operatorWaiter, config)
 	if err != nil {
@@ -779,21 +790,26 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
+	accQuerier, err := newAccountQuerier(ctx, cctx, bus, cl, cmd.Flag(FlagAuthPem).Value.String())
+	if err != nil {
+		return err
+	}
+
 	gwRest, err := gwrest.NewServer(
 		ctx,
 		logger,
 		service,
-		cl.Query(),
+		accQuerier,
+		clusterPublicHostname,
 		gwaddr,
 		cctx.FromAddress,
-		[]tls.Certificate{tlsCert},
 		clusterSettings,
 	)
 	if err != nil {
 		return err
 	}
 
-	err = gwgrpc.NewServer(ctx, grpcaddr, []tls.Certificate{tlsCert}, service)
+	err = gwgrpc.NewServer(ctx, grpcaddr, accQuerier, service)
 	if err != nil {
 		return err
 	}

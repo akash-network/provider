@@ -16,6 +16,7 @@ import (
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/tools/pconfig"
 )
 
 type Key string
@@ -31,6 +32,7 @@ const (
 	CtxKeyLogc               = Key("logc")
 	CtxKeyStartupCh          = Key("startup-ch")
 	CtxKeyInventoryUnderTest = Key("inventory-under-test")
+	CtxKeyPersistentConfig   = Key("persistent-config")
 )
 
 var (
@@ -268,6 +270,48 @@ func MustPubSubFromCtx(ctx context.Context) pubsub.PubSub {
 	}
 
 	return val
+}
+
+func PersistentConfigReaderFromCtx(ctx context.Context) (pconfig.StorageR, error) {
+	val := ctx.Value(CtxKeyPersistentConfig)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+	}
+
+	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func PersistentConfigWriterFromCtx(ctx context.Context) (pconfig.StorageW, error) {
+	val := ctx.Value(CtxKeyPersistentConfig)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+	}
+
+	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func PersistentConfigFromCtx(ctx context.Context) (pconfig.Storage, error) {
+	val := ctx.Value(CtxKeyPersistentConfig)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+	}
+
+	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
 }
 
 func IsInventoryUnderTestFromCtx(ctx context.Context) bool {

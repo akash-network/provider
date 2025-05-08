@@ -66,7 +66,6 @@ ifeq (-1, $(__is_local_go_satisfies))
 $(error "unsupported local go$(__local_go) version . min required go1.21.0")
 endif
 
-GOWORK                       ?= on
 GO_MOD                       ?= readonly
 export GO                    := GO111MODULE=$(GO111MODULE) go
 GO_BUILD                     := $(GO) build -mod=$(GO_MOD)

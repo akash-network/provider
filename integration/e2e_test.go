@@ -125,6 +125,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	cfg.NumValidators = 1
 	cfg.MinGasPrices = fmt.Sprintf("0%s", testutil.CoinDenom)
 	s.cfg = cfg
+
 	s.network = network.New(s.T(), cfg)
 
 	kb := s.network.Validators[0].ClientCtx.Keyring
@@ -166,7 +167,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.keyTenant, err = s.validator.ClientCtx.Keyring.Key("keyBar")
 	s.Require().NoError(err)
 
-	// give tenant some coins too
+	// give the tenant some coins too
 	res, err = bankcli.MsgSendExec(
 		s.validator.ClientCtx,
 		s.validator.Address,
@@ -178,9 +179,9 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(s.network.WaitForNextBlock())
 	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
 
-	numPorts := 3
+	numPorts := 5
 	if s.ipMarketplace {
-		numPorts++
+		numPorts += 2
 	}
 
 	ports, err := network.GetFreePorts(numPorts)
@@ -350,7 +351,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.ctx = ctx
 	s.group = group
 
-	// all command use viper which is meant for use by a single goroutine only
+	// all commands use Viper which is meant for use by a single goroutine only
 	// so wait for the provider to start before running the hostname operator
 	extraArgs := []string{
 		fmt.Sprintf("--%s=%s", flags.FlagFees, sdk.NewCoins(sdk.NewCoin(s.cfg.BondDenom, sdk.NewInt(20))).String()),
@@ -387,21 +388,6 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// Wait for the provider gateway to be up and running
 	s.T().Log("waiting for provider gateway")
 	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
-
-	// --- Start JWT Server
-	s.group.Go(func() error {
-		s.T().Logf("starting JWT server for test on %v", jwtURL.Host)
-		_, err := ptestutil.RunProviderJWTServer(s.ctx,
-			cctx,
-			keyName,
-			jwtURL.Host,
-		)
-		s.Assert().NoError(err)
-		return err
-	})
-
-	s.T().Log("waiting for JWT server")
-	waitForTCPSocket(s.ctx, dialer, jwtHost, s.T())
 
 	// --- Start hostname operator
 	s.group.Go(func() error {
@@ -581,7 +567,6 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
 	suite.Run(t, new(E2EStorageClassRam))
 	suite.Run(t, new(E2EMigrateHostname))
-	suite.Run(t, new(E2EJWTServer))
 	suite.Run(t, new(E2ECustomCurrency))
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }

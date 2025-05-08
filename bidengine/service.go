@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 
-	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	"github.com/boz/go-lifecycle"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
+	"golang.org/x/sync/errgroup"
 
+	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/node/pubsub"
@@ -72,6 +73,9 @@ func NewService(
 		return nil, err
 	}
 
+	ctx, cancel := context.WithCancel(pctx)
+	group, _ := errgroup.WithContext(ctx)
+
 	s := &service{
 		session:  session,
 		cluster:  cluster,
@@ -80,7 +84,9 @@ func NewService(
 		statusch: make(chan chan<- *Status),
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
-		ordersch: make(chan []mtypes.OrderID, 100),
+		ordersch: make(chan []mtypes.OrderID, 1000),
+		group:    group,
+		cancel:   cancel,
 		lc:       lifecycle.New(),
 		cfg:      cfg,
 		pass:     providerAttrService,
@@ -89,6 +95,10 @@ func NewService(
 
 	go s.lc.WatchContext(pctx)
 	go s.run(pctx)
+
+	group.Go(func() error {
+		return s.ordersFetcher(ctx, aqc)
+	})
 
 	return s, nil
 }
@@ -106,8 +116,10 @@ type service struct {
 	drainch  chan *order
 	ordersch chan []mtypes.OrderID
 
-	lc   lifecycle.Lifecycle
-	pass *providerAttrSignatureService
+	group  *errgroup.Group
+	cancel context.CancelFunc
+	lc     lifecycle.Lifecycle
+	pass   *providerAttrSignatureService
 
 	waiter waiter.OperatorWaiter
 }
@@ -210,7 +222,7 @@ func (s *service) run(ctx context.Context) {
 	defer s.sub.Close()
 	s.updateOrderManagerGauge()
 
-	// wait for configured operators to be online & responsive before proceeding
+	// wait for configured operators to be online and responsive before proceeding
 	err := s.waiter.WaitForAll(ctx)
 	if err != nil {
 		s.lc.ShutdownInitiated(err)

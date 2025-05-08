@@ -3,7 +3,6 @@ package rest
 import (
 	"bufio"
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -51,13 +50,13 @@ type CtxAuthKey string
 const (
 	contentTypeJSON = "application/json; charset=UTF-8"
 
-	// Time allowed to write the file to the client.
+	// Time allowed writing the file to the client.
 	pingWait = 15 * time.Second
 
-	// Time allowed to read the next pong message from the client.
+	// Time allowed reading the next pong message from the client.
 	pongWait = 15 * time.Second
 
-	// Send pings to client with this period. Must be less than pongWait.
+	// Send pings to a client with this period. Must be less than pongWait.
 	pingPeriod = 10 * time.Second
 )
 
@@ -81,7 +80,7 @@ type wsStreamConfig struct {
 func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, middlewares ...mux.MiddlewareFunc) *mux.Router {
 	router := mux.NewRouter()
 
-	// store provider address in context as lease endpoints below need it
+	// store provider address in context as a lease's endpoints below need it
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gcontext.Set(r, providerContextKey, addr)
@@ -89,6 +88,8 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 			next.ServeHTTP(w, r)
 		})
 	})
+
+	router.Use(prepareAuthMiddleware)
 
 	router.Use(middlewares...)
 
@@ -110,76 +111,82 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
 
-	vrouter := router.NewRoute().Subrouter()
-	vrouter.Use(requireOwner())
+	authedRouter := router.NewRoute().Subrouter()
+	authedRouter.Use(
+		authorizeProviderMiddleware,
+		requireOwner,
+	)
 
 	// GET /validate
 	// validate endpoint checks if provider will bid on given groupspec
-	vrouter.HandleFunc("/validate",
+	authedRouter.HandleFunc("/validate",
 		validateHandler(log, pclient)).
 		Methods("GET")
 
 	// GET /wiboy (aka would I bid on you)
-	// validate endpoint checks if provider will bid on given groupspec
-	vrouter.HandleFunc("/wiboy",
+	// validate endpoint checks if the provider will bid on a given groupspec
+	authedRouter.HandleFunc("/wiboy",
 		validateHandler(log, pclient)).
 		Methods("GET")
 
-	hostnameRouter := router.PathPrefix(hostnamePrefix).Subrouter()
-	hostnameRouter.Use(requireOwner())
+	hostnameRouter := authedRouter.PathPrefix(hostnamePrefix).Subrouter()
 	hostnameRouter.HandleFunc(migratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
 		Methods(http.MethodPost)
 
-	endpointRouter := router.PathPrefix(endpointPrefix).Subrouter()
-	endpointRouter.Use(requireOwner())
+	endpointRouter := authedRouter.PathPrefix(endpointPrefix).Subrouter()
 	endpointRouter.HandleFunc(migratePathPrefix,
 		migrateEndpointHandler(log, pclient.ClusterService(), pclient.Cluster())).
 		Methods(http.MethodPost)
 
-	drouter := router.PathPrefix(deploymentPathPrefix).Subrouter()
-	drouter.Use(
-		requireOwner(),
-		requireDeploymentID(),
-	)
+	drouter := authedRouter.PathPrefix(deploymentPathPrefix).Subrouter()
+	drouter.Use(requireDeploymentID)
+
+	mrouter := drouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForDeploymentID(ajwt.PermissionScopeSendManifest))
 
 	// PUT /deployment/manifest
-	drouter.HandleFunc("/manifest",
+	mrouter.HandleFunc("/manifest",
 		createManifestHandler(log, pclient.Manifest())).
 		Methods(http.MethodPut)
 
-	lrouter := router.PathPrefix(leasePathPrefix).Subrouter()
+	lrouter := authedRouter.PathPrefix(leasePathPrefix).Subrouter()
 	lrouter.Use(
-		requireOwner(),
-		requireLeaseID(),
+		requireLeaseID,
 	)
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeGetManifest))
+
 	// GET /lease/<lease-id>/manifest
-	lrouter.HandleFunc("/manifest",
+	mrouter.HandleFunc("/manifest",
 		getManifestHandler(log, pclient.Cluster())).
 		Methods(http.MethodGet)
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeStatus))
+
 	// GET /lease/<lease-id>/status
-	lrouter.HandleFunc("/status",
+	mrouter.HandleFunc("/status",
 		leaseStatusHandler(log, pclient.Cluster(), ctxConfig)).
 		Methods(http.MethodGet)
 
+	streamRouter := lrouter.NewRoute().Subrouter()
+	streamRouter.Use(requestStreamParams)
+
+	mrouter = streamRouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeEvents))
+
 	// GET /lease/<lease-id>/kubeevents
-	eventsRouter := lrouter.PathPrefix("/kubeevents").Subrouter()
-	eventsRouter.Use(
-		requestStreamParams(),
-	)
-	eventsRouter.HandleFunc("",
+	mrouter.HandleFunc("/kubeevents",
 		leaseKubeEventsHandler(log, pclient.Cluster())).
 		Methods("GET")
 
-	logRouter := lrouter.PathPrefix("/logs").Subrouter()
-	logRouter.Use(
-		requestStreamParams(),
-	)
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeLogs))
 
 	// GET /lease/<lease-id>/logs
-	logRouter.HandleFunc("",
+	mrouter.HandleFunc("/logs",
 		leaseLogsHandler(log, pclient.Cluster())).
 		Methods("GET")
 
@@ -193,34 +200,12 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		leaseServiceStatusHandler(log, pclient.Cluster())).
 		Methods("GET")
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeShell))
+
 	// POST /lease/<lease-id>/shell
-	lrouter.HandleFunc("/shell",
+	mrouter.HandleFunc("/shell",
 		leaseShellHandler(log, pclient.Cluster()))
-
-	return router
-}
-
-func newJwtServerRouter(addr sdk.Address, privateKey interface{}, jwtExpiresAfter time.Duration, certSerialNumber string) *mux.Router {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/jwt",
-		jwtServiceHandler(addr, privateKey, jwtExpiresAfter, certSerialNumber)).
-		Methods("GET")
-
-	return router
-}
-
-func newResourceServerRouter(log log.Logger, providerAddr sdk.Address, publicKey *ecdsa.PublicKey, lokiGwAddr string) *mux.Router {
-	router := mux.NewRouter()
-
-	// add a middleware to verify the JWT provided in Authorization header
-	router.Use(resourceServerAuth(log, providerAddr, publicKey))
-
-	lrouter := router.PathPrefix(leasePathPrefix).Subrouter()
-	lrouter.Use(requireLeaseID())
-
-	lokiServiceRouter := lrouter.PathPrefix("/loki-service").Subrouter()
-	lokiServiceRouter.NewRoute().Handler(lokiServiceHandler(log, lokiGwAddr))
 
 	return router
 }
@@ -261,39 +246,6 @@ func lokiServiceHandler(log log.Logger, lokiGwAddr string) http.HandlerFunc {
 		// serve the request using the reverse proxy
 		log.Info("Forwarding request to loki", "HTTP_API", pathSplits[6])
 		reverseProxy.ServeHTTP(w, r)
-	}
-}
-
-func jwtServiceHandler(paddr sdk.Address, privateKey interface{}, jwtExpiresAfter time.Duration, certSerialNumber string) http.HandlerFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		now := time.Now()
-		claim := ClientCustomClaims{
-			AkashNamespace: &AkashNamespace{
-				V1: &ClaimsV1{
-					CertSerialNumber: certSerialNumber,
-				},
-			},
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(jwtExpiresAfter)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				// account address of the tenant: trustable as it has already been verified by mTLS
-				Subject: request.TLS.PeerCertificates[0].Subject.CommonName,
-				Issuer:  paddr.String(),
-			},
-		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodES256, &claim)
-		jwtString, err := token.SignedString(privateKey)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		_, err = io.WriteString(writer, jwtString)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
 	}
 }
 
@@ -580,9 +532,11 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 			return
 		}
 
+		did := requestDeploymentID(req)
+
 		subctx, cancel := context.WithTimeout(req.Context(), manifestSubmitTimeout)
 		defer cancel()
-		if err := mclient.Submit(subctx, requestDeploymentID(req), mani); err != nil {
+		if err := mclient.Submit(subctx, did, mani); err != nil {
 			if errors.Is(err, manifestValidation.ErrInvalidManifest) {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return

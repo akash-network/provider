@@ -258,6 +258,9 @@ func (s *E2EPersistentStorageDeploymentUpdate) TestPersistentStorageDeploymentUp
 	s.Require().NoError(s.waitForBlocksCommitted(3))
 	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
 
+	s.Require().NoError(err)
+	s.Require().NoError(s.waitForBlocksCommitted(2))
+
 	bidID := mtypes.MakeBidID(
 		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
 		s.keyProvider.GetAddress(),

@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	tpubsub "github.com/troian/pubsub"
 
+	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/cosmos/cosmos-sdk/client"
@@ -59,7 +60,7 @@ type Service interface {
 	Done() <-chan struct{}
 }
 
-// NewService creates and returns new Service instance
+// NewService creates and returns a new Service instance
 // Simple wrapper around various services needed for running a provider.
 func NewService(ctx context.Context,
 	cctx client.Context,
@@ -130,6 +131,7 @@ func NewService(ctx context.Context,
 		session:   session,
 		bus:       bus,
 		cluster:   clusterSvc,
+		aqc:       cl,
 		cclient:   cclient,
 		bidengine: bidengineSvc,
 		manifest:  manifestSvc,
@@ -152,6 +154,7 @@ type service struct {
 	session session.Session
 	bus     pubsub.Bus
 	cclient cluster.Client
+	aqc     sclient.QueryClient
 
 	cluster   cluster.Service
 	bidengine bidengine.Service
@@ -189,43 +192,43 @@ func (s *service) Cluster() cluster.Client {
 }
 
 func (s *service) Status(ctx context.Context) (*Status, error) {
-	cluster, err := s.cluster.Status(ctx)
+	clusterSt, err := s.cluster.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	bidengine, err := s.bidengine.Status(ctx)
+	bidengineSt, err := s.bidengine.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := s.manifest.Status(ctx)
+	manifestSt, err := s.manifest.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &Status{
-		Cluster:               cluster,
-		Bidengine:             bidengine,
-		Manifest:              manifest,
+		Cluster:               clusterSt,
+		Bidengine:             bidengineSt,
+		Manifest:              manifestSt,
 		ClusterPublicHostname: s.config.ClusterPublicHostname,
 	}, nil
 }
 
 func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
-	cluster, err := s.cluster.StatusV1(ctx)
+	clusterSt, err := s.cluster.StatusV1(ctx)
 	if err != nil {
 		return nil, err
 	}
-	bidengine, err := s.bidengine.StatusV1(ctx)
+	bidengineSt, err := s.bidengine.StatusV1(ctx)
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := s.manifest.StatusV1(ctx)
+	manifestSt, err := s.manifest.StatusV1(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &provider.Status{
-		Cluster:   cluster,
-		BidEngine: bidengine,
-		Manifest:  manifest,
+		Cluster:   clusterSt,
+		BidEngine: bidengineSt,
+		Manifest:  manifestSt,
 		PublicHostnames: []string{
 			s.config.ClusterPublicHostname,
 		},
@@ -234,7 +237,6 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 }
 
 func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (ValidateGroupSpecResult, error) {
-	// FUTURE - pass owner here
 	req := bidengine.Request{
 		Owner: owner.String(),
 		GSpec: &gspec,

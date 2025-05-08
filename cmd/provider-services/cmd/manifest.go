@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -15,7 +15,6 @@ import (
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	"github.com/akash-network/node/sdl"
-	cutils "github.com/akash-network/node/x/cert/utils"
 
 	aclient "github.com/akash-network/provider/client"
 	gwrest "github.com/akash-network/provider/gateway/rest"
@@ -52,7 +51,7 @@ func SendManifestCmd() *cobra.Command {
 	return cmd
 }
 
-// GetManifestCmd reads current manifest from the provider
+// GetManifestCmd reads the current manifest from the provider
 func GetManifestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "get-manifest",
@@ -72,18 +71,13 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-			if err != nil {
-				return markRPCServerError(err)
-			}
-
 			lid, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
 			if err != nil {
 				return err
 			}
 
 			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-			gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+			gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 			if err != nil {
 				return err
 			}
@@ -146,17 +140,12 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
 	dseq, err := dseqFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	// owner address in FlagFrom has already been validated thus save to just pull its value as string
+	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
 	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
 		Owner: cctx.GetFromAddress().String(),
 		DSeq:  dseq,
@@ -178,7 +167,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+		gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 		if err != nil {
 			return err
 		}

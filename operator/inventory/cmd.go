@@ -129,10 +129,12 @@ func Cmd() *cobra.Command {
 
 			ctx = cmd.Context()
 
+			listenAddress := viper.GetString(common.FlagRESTAddress)
 			apiTimeout := viper.GetDuration(FlagAPITimeout)
 			queryTimeout := viper.GetDuration(FlagQueryTimeout)
-			restEndpoint := fmt.Sprintf(":%d", restPort)
-			grpcEndpoint := fmt.Sprintf(":%d", grpcPort)
+
+			restEndpoint := fmt.Sprintf("%s:%d", listenAddress, restPort)
+			grpcEndpoint := fmt.Sprintf("%s:%d", listenAddress, grpcPort)
 
 			restSrv := &http.Server{
 				Addr:    restEndpoint,

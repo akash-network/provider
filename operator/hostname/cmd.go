@@ -34,7 +34,8 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			restAddr := fmt.Sprintf(":%d", restPort)
+			listenAddress := viper.GetString(common.FlagRESTAddress)
+			restAddr := fmt.Sprintf("%s:%d", listenAddress, restPort)
 
 			op, err := newHostnameOperator(ctx, logger, ns, config, common.IgnoreListConfigFromViper())
 			if err != nil {

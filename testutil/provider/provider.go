@@ -104,8 +104,12 @@ func TestMigrateHostname(clientCtx client.Context, leaseID mtypes.LeaseID, dseq 
 // RunLocalProvider wraps up the Provider cobra command for testing and supplies
 // new default values to the flags.
 // prev: akash provider run --from=foo --cluster-k8s --gateway-listen-address=localhost:39729 --home=/tmp/akash_integration_TestE2EApp_324892307/.akash --node=tcp://0.0.0.0:41863 --keyring-backend test
-func RunLocalProvider(ctx context.Context, clientCtx cosmosclient.Context, chainID, nodeRPC, akashHome, from, gatewayListenAddress string, extraArgs ...string) (sdktest.BufferWriter,
-	error) {
+func RunLocalProvider(
+	ctx context.Context,
+	clientCtx cosmosclient.Context,
+	chainID, nodeRPC, akashHome, from, gatewayListenAddress string,
+	extraArgs ...string,
+) (sdktest.BufferWriter, error) {
 	takeCmdLock()
 	cmd := pcmd.RunCmd()
 	releaseCmdLock()
@@ -131,28 +135,13 @@ func RunLocalProvider(ctx context.Context, clientCtx cosmosclient.Context, chain
 	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)
 }
 
-func RunProviderJWTServer(ctx context.Context, clientCtx cosmosclient.Context, from, jwtGatewayListenAddress string, extraArgs ...string) (sdktest.BufferWriter,
-	error) {
-	takeCmdLock()
-	cmd := pcmd.AuthServerCmd()
-	releaseCmdLock()
-
-	args := []string{
-		fmt.Sprintf("--from=%s", from),
-		fmt.Sprintf("--%s=%s", pcmd.FlagJwtAuthListenAddress, jwtGatewayListenAddress),
-	}
-
-	args = append(args, extraArgs...)
-
-	return testutilcli.ExecTestCLICmd(ctx, clientCtx, cmd, args...)
-}
-
 func RunLocalHostnameOperator(ctx context.Context, clientCtx cosmosclient.Context, listenPort int) (sdktest.BufferWriter, error) {
 	takeCmdLock()
 	cmd := operator.OperatorsCmd()
 	releaseCmdLock()
 	args := []string{
 		"hostname",
+		fmt.Sprintf("--%s=127.0.0.1", operatorcommon.FlagRESTAddress),
 		fmt.Sprintf("--%s=%d", operatorcommon.FlagRESTPort, listenPort),
 	}
 
@@ -166,6 +155,7 @@ func RunLocalIPOperator(ctx context.Context, clientCtx cosmosclient.Context, lis
 
 	args := []string{
 		"ip",
+		fmt.Sprintf("--%s=127.0.0.1", operatorcommon.FlagRESTAddress),
 		fmt.Sprintf("--%s=%d", operatorcommon.FlagRESTPort, listenPort),
 		fmt.Sprintf("--provider=%s", providerAddress.String()),
 	}
