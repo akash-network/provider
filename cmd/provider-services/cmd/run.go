@@ -8,8 +8,6 @@ import (
 	"strings"
 	"time"
 
-	cltypes "github.com/akash-network/akash-api/go/node/client/types"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -19,16 +17,19 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	"github.com/akash-network/node/cmd/common"
 	"github.com/akash-network/node/events"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/sdl"
 	config2 "github.com/akash-network/node/x/provider/config"
+
+	cltypes "github.com/akash-network/akash-api/go/node/client/types"
+	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
@@ -105,6 +106,8 @@ const (
 	FlagMonitorHealthcheckPeriodJitter   = "monitor-healthcheck-period-jitter"
 	FlagPersistentConfigBackend          = "persistent-config-backend"
 	FlagPersistentConfigPath             = "persistent-config-path"
+	FlagGatewayTLSCert                   = "gateway-tls-cert"
+	FlagGatewayTLSKey                    = "gateway-tls-key"
 )
 
 const (
@@ -790,7 +793,14 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
-	accQuerier, err := newAccountQuerier(ctx, cctx, bus, cl, cmd.Flag(FlagAuthPem).Value.String())
+	var acQuerierOpts []accountQuerierOption
+
+	if certFile := viper.GetString(FlagGatewayTLSCert); certFile != "" {
+		keyFile := viper.GetString(FlagGatewayTLSKey)
+		acQuerierOpts = append(acQuerierOpts, WithTLSCert(certFile, keyFile))
+	}
+
+	accQuerier, err := newAccountQuerier(ctx, cctx, logger, bus, cl, acQuerierOpts...)
 	if err != nil {
 		return err
 	}
