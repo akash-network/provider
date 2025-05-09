@@ -126,8 +126,6 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
-			pctx := cmd.Context()
-
 			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
 
@@ -172,12 +170,14 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf("unsupport persistent-config backend \"%s\"", pconfigBackend)
 			}
 
-			group, ctx := errgroup.WithContext(pctx)
-			cmd.SetContext(ctx)
-
 			if err := clientcommon.SetKubeConfigToCmd(cmd); err != nil {
 				return err
 			}
+
+			pctx := cmd.Context()
+
+			group, ctx := errgroup.WithContext(pctx)
+			cmd.SetContext(ctx)
 
 			kubecfg := fromctx.MustKubeConfigFromCtx(pctx)
 
