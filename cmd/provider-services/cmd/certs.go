@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"os"
 
+	"github.com/tendermint/tendermint/libs/log"
 	"golang.org/x/sync/errgroup"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -51,24 +52,68 @@ type certResp struct {
 }
 
 type accountQuerier struct {
-	ctx          context.Context
-	group        *errgroup.Group
-	cancel       context.CancelFunc
-	bus          pubsub.Bus
-	pstorage     pconfig.Storage
-	qc           v1beta2.Client
-	peerCertCh   chan peerCertReq
-	mtlsCh       chan chan<- certResp
-	caCh         chan chan<- certResp
-	certReqCh    chan peerCertReq
-	watcher      *fsnotify.Watcher
-	mtlsFileName string
-	mtlsCerts    []tls.Certificate
-	caCerts      []tls.Certificate
-	paddr        sdk.Address
+	ctx        context.Context
+	group      *errgroup.Group
+	log        log.Logger
+	cancel     context.CancelFunc
+	bus        pubsub.Bus
+	pstorage   pconfig.Storage
+	qc         v1beta2.Client
+	peerCertCh chan peerCertReq
+	mtlsCh     chan chan<- certResp
+	caCh       chan chan<- certResp
+	certReqCh  chan peerCertReq
+	watcher    *fsnotify.Watcher
+	mtlsCerts  []tls.Certificate
+	caCerts    []tls.Certificate
+	cOpts      *accountQuerierOptions
+	paddr      sdk.Address
 }
 
-func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, bus pubsub.Bus, qc v1beta2.Client, mtlsCert string) (*accountQuerier, error) {
+type accountQuerierOptions struct {
+	tlsCertFile string
+	tlsKeyFile  string
+	mtlsPemFile string
+}
+
+func aqParseOpts(opts ...accountQuerierOption) (*accountQuerierOptions, error) {
+	ac := &accountQuerierOptions{}
+
+	for _, opt := range opts {
+		err := opt(ac)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return ac, nil
+}
+
+type accountQuerierOption func(options *accountQuerierOptions) error
+
+func WithTLSCert(cert, key string) accountQuerierOption {
+	return func(options *accountQuerierOptions) error {
+		options.tlsCertFile = cert
+		options.tlsKeyFile = key
+
+		return nil
+	}
+}
+
+func WithMTLSPem(val string) accountQuerierOption {
+	return func(options *accountQuerierOptions) error {
+		options.mtlsPemFile = val
+
+		return nil
+	}
+}
+
+func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logger, bus pubsub.Bus, qc v1beta2.Client, opts ...accountQuerierOption) (*accountQuerier, error) {
+	cOpts, err := aqParseOpts(opts...)
+	if err != nil {
+		return nil, err
+	}
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -86,6 +131,7 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, bus pubsub.B
 		ctx:        ctx,
 		group:      group,
 		cancel:     cancel,
+		log:        log.With("module", "account-querier"),
 		bus:        bus,
 		pstorage:   pstorage,
 		qc:         qc,
@@ -95,6 +141,21 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, bus pubsub.B
 		certReqCh:  make(chan peerCertReq, 1),
 		watcher:    watcher,
 		paddr:      cctx.FromAddress,
+		cOpts:      cOpts,
+	}
+
+	if cOpts.tlsCertFile != "" {
+		cert, err := tls.LoadX509KeyPair(cOpts.tlsCertFile, cOpts.tlsKeyFile)
+		if err != nil {
+			return nil, err
+		}
+
+		q.caCerts = []tls.Certificate{cert}
+		err = watcher.Add(cOpts.tlsCertFile)
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
@@ -110,15 +171,6 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, bus pubsub.B
 	q.mtlsCerts = []tls.Certificate{
 		mtlscert,
 	}
-
-	// if mtlsCert != "" {
-	// err = watcher.Add(filepath.Dir(mtlsCert))
-	// if err != nil {
-	// 	return nil, err
-	// }
-	//
-	// q.mtlsFileName = mtlsCert
-	// }
 
 	group.Go(q.run)
 
@@ -260,7 +312,7 @@ func (c *accountQuerier) run() error {
 		case acc := <-accountRespCh:
 			err := pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
 			if err != nil {
-				// log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+				c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
 			}
 		case req := <-c.peerCertCh:
 			c.certReqCh <- peerCertReq{
@@ -288,7 +340,7 @@ func (c *accountQuerier) run() error {
 				// todo retry query
 			}
 		case evt := <-c.watcher.Events:
-			if c.mtlsFileName != "" && evt.Name == c.mtlsFileName {
+			if c.cOpts.mtlsPemFile != "" && evt.Name == c.cOpts.mtlsPemFile {
 				if evt.Has(fsnotify.Create) || evt.Has(fsnotify.Rename) {
 					cctx := c.qc.ClientContext()
 					kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
@@ -315,6 +367,13 @@ func (c *accountQuerier) run() error {
 					}
 				} else if evt.Has(fsnotify.Remove) {
 					c.mtlsCerts = []tls.Certificate{}
+				}
+			} else if c.cOpts.tlsCertFile != "" && evt.Name == c.cOpts.tlsCertFile {
+				cert, err := tls.LoadX509KeyPair(c.cOpts.tlsCertFile, c.cOpts.tlsKeyFile)
+				if err != nil {
+					c.log.Error("unable to load tls certificate", "err", err)
+				} else {
+					c.caCerts = []tls.Certificate{cert}
 				}
 			}
 		}
