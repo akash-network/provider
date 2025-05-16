@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -43,11 +44,11 @@ var _ Client = (*nullClient)(nil)
 
 //go:generate mockery --name ReadClient
 type ReadClient interface {
-	LeaseStatus(context.Context, mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error)
-	ForwardedPortStatus(context.Context, mtypes.LeaseID) (map[string][]ctypes.ForwardedPortStatus, error)
+	LeaseStatus(context.Context, mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error)
+	ForwardedPortStatus(context.Context, mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
 	LeaseEvents(context.Context, mtypes.LeaseID, string, bool) (ctypes.EventsWatcher, error)
 	LeaseLogs(context.Context, mtypes.LeaseID, string, bool, *int64) ([]*ctypes.ServiceLog, error)
-	ServiceStatus(context.Context, mtypes.LeaseID, string) (*ctypes.ServiceStatus, error)
+	ServiceStatus(context.Context, mtypes.LeaseID, string) (*apclient.ServiceStatus, error)
 
 	AllHostnames(context.Context) ([]chostname.ActiveHostname, error)
 	GetManifestGroup(context.Context, mtypes.LeaseID) (bool, crd.ManifestGroup, error)
@@ -178,11 +179,11 @@ func (c *nullClient) Deploy(ctx context.Context, deployment ctypes.IDeployment) 
 	return nil
 }
 
-func (*nullClient) ForwardedPortStatus(context.Context, mtypes.LeaseID) (map[string][]ctypes.ForwardedPortStatus, error) {
+func (*nullClient) ForwardedPortStatus(_ context.Context, _ mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {
 	return nil, errNotImplemented
 }
 
-func (c *nullClient) LeaseStatus(_ context.Context, lid mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error) {
+func (c *nullClient) LeaseStatus(_ context.Context, lid mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 
@@ -191,9 +192,9 @@ func (c *nullClient) LeaseStatus(_ context.Context, lid mtypes.LeaseID) (map[str
 		return nil, nil
 	}
 
-	resp := make(map[string]*ctypes.ServiceStatus)
+	resp := make(map[string]*apclient.ServiceStatus)
 	for _, svc := range lease.group.Services {
-		resp[svc.Name] = &ctypes.ServiceStatus{
+		resp[svc.Name] = &apclient.ServiceStatus{
 			Name:      svc.Name,
 			Available: int32(svc.Count), // nolint: gosec
 			Total:     int32(svc.Count), // nolint: gosec
@@ -264,7 +265,7 @@ func (c *nullClient) LeaseEvents(ctx context.Context, lid mtypes.LeaseID, _ stri
 	return feed, nil
 }
 
-func (c *nullClient) ServiceStatus(_ context.Context, _ mtypes.LeaseID, _ string) (*ctypes.ServiceStatus, error) {
+func (c *nullClient) ServiceStatus(_ context.Context, _ mtypes.LeaseID, _ string) (*apclient.ServiceStatus, error) {
 	return nil, nil
 }
 

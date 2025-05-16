@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -46,7 +47,7 @@ var (
 //
 //go:generate mockery --name StatusClient
 type StatusClient interface {
-	Status(context.Context) (*Status, error)
+	Status(context.Context) (*apclient.ManifestStatus, error)
 	StatusV1(context.Context) (*provider.ManifestStatus, error)
 }
 
@@ -80,7 +81,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, ho
 		session:         session,
 		bus:             bus,
 		sub:             sub,
-		statusch:        make(chan chan<- *Status),
+		statusch:        make(chan chan<- *apclient.ManifestStatus),
 		mreqch:          make(chan manifestRequest),
 		activeCheckCh:   make(chan isActiveCheck),
 		managers:        make(map[string]*manager),
@@ -107,7 +108,7 @@ type service struct {
 	sub     pubsub.Subscriber
 	lc      lifecycle.Lifecycle
 
-	statusch      chan chan<- *Status
+	statusch      chan chan<- *apclient.ManifestStatus
 	mreqch        chan manifestRequest
 	activeCheckCh chan isActiveCheck
 
@@ -201,8 +202,8 @@ func (s *service) Done() <-chan struct{} {
 	return s.lc.Done()
 }
 
-func (s *service) Status(ctx context.Context) (*Status, error) {
-	ch := make(chan *Status, 1)
+func (s *service) Status(ctx context.Context) (*apclient.ManifestStatus, error) {
+	ch := make(chan *apclient.ManifestStatus, 1)
 
 	select {
 	case <-s.lc.Done():
@@ -299,7 +300,7 @@ loop:
 			manager.handleManifest(req)
 			trySignal()
 		case ch := <-s.statusch:
-			ch <- &Status{
+			ch <- &apclient.ManifestStatus{
 				Deployments: uint32(len(s.managers)), // nolint: gosec
 			}
 		case <-signalch:

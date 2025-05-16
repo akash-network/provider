@@ -8,8 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/desertbit/timer"
@@ -18,9 +16,11 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tpubsub "github.com/troian/pubsub"
 
+	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	provider "github.com/akash-network/akash-api/go/provider/v1"
 
 	"github.com/akash-network/node/pubsub"
 	sdlutil "github.com/akash-network/node/sdl/util"

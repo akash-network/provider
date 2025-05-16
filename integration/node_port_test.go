@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -20,7 +21,6 @@ import (
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
@@ -105,7 +105,7 @@ func (s *E2EAppNodePort) TestE2EAppNodePort() {
 		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
 	)
 	assert.NoError(s.T(), err)
-	data := ctypes.LeaseStatus{}
+	data := apclient.LeaseStatus{}
 	err = json.Unmarshal(cmdResult.Bytes(), &data)
 	assert.NoError(s.T(), err)
 

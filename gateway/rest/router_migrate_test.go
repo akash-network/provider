@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -28,8 +29,8 @@ func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
 		defer cancel()
 		err := test.gwclient.MigrateHostnames(ctx, []string{"foobar.com"}, dseq, gseq)
 		require.Error(t, err)
-		require.IsType(t, ClientResponseError{}, err)
-		require.Regexp(t, `(?s)^.*destination deployment does not exist.*$`, err.(ClientResponseError).ClientError())
+		require.IsType(t, apclient.ClientResponseError{}, err)
+		require.Regexp(t, `(?s)^.*destination deployment does not exist.*$`, err.(apclient.ClientResponseError).ClientError())
 	}
 
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
@@ -52,8 +53,8 @@ func TestRouteMigrateHostnameDeploymentDoesNotUse(t *testing.T) {
 		defer cancel()
 		err := test.gwclient.MigrateHostnames(ctx, []string{"foobar.org"}, dseq, gseq)
 		require.Error(t, err)
-		require.IsType(t, ClientResponseError{}, err)
-		require.Regexp(t, `(?s)^.*the hostname "foobar.org" is not used by this deployment.*$`, err.(ClientResponseError).ClientError())
+		require.IsType(t, apclient.ClientResponseError{}, err)
+		require.Regexp(t, `(?s)^.*the hostname "foobar.org" is not used by this deployment.*$`, err.(apclient.ClientResponseError).ClientError())
 	}
 
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)

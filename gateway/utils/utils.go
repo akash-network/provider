@@ -107,10 +107,12 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 
 	if !owner.Empty() {
 		// authentication via mTLS does not provider granular access
+		now := time.Now()
 		claims.Issuer = owner.String()
 		claims.Version = "v1"
-		claims.IssuedAt = jwt.NewNumericDate(time.Now())
-		claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(15 * time.Minute))
+		claims.IssuedAt = jwt.NewNumericDate(now)
+		claims.NotBefore = jwt.NewNumericDate(now)
+		claims.ExpiresAt = jwt.NewNumericDate(now.Add(15 * time.Minute))
 		claims.Leases.Access = ajwt.AccessTypeFull
 
 		err := claims.Validate()

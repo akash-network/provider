@@ -13,6 +13,7 @@ import (
 	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -801,7 +802,7 @@ func (c *client) LeaseLogs(ctx context.Context, lid mtypes.LeaseID,
 	return streams, nil
 }
 
-func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]ctypes.ForwardedPortStatus, error) {
+func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error) {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
 		return nil, kubeclienterrors.ErrNotConfiguredWithSettings
@@ -819,7 +820,7 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 		return nil, fmt.Errorf("%s: %w", kubeclienterrors.ErrInternalError.Error(), err)
 	}
 
-	forwardedPorts := make(map[string][]ctypes.ForwardedPortStatus)
+	forwardedPorts := make(map[string][]apclient.ForwardedPortStatus)
 
 	// Search for a Kubernetes service declared as nodeport
 	for _, service := range services.Items {
@@ -828,14 +829,14 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 			deploymentName := serviceName[0 : len(serviceName)-len(builder.SuffixForNodePortServiceName)]
 
 			if 0 != len(service.Spec.Ports) {
-				portsForDeployment := make([]ctypes.ForwardedPortStatus, 0, len(service.Spec.Ports))
+				portsForDeployment := make([]apclient.ForwardedPortStatus, 0, len(service.Spec.Ports))
 				for _, port := range service.Spec.Ports {
 					// Check if the service is exposed via NodePort mechanism in the cluster
 					// This is a random port chosen by the cluster when the deployment is created
 					nodePort := port.NodePort
 					if nodePort > 0 {
 						// Record the actual port inside the container that is exposed
-						v := ctypes.ForwardedPortStatus{
+						v := apclient.ForwardedPortStatus{
 							Host:         settings.ClusterPublicHostname,
 							Port:         uint16(port.TargetPort.IntVal), // nolint: gosec
 							ExternalPort: uint16(nodePort),               // nolint: gosec
@@ -865,7 +866,7 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 }
 
 // LeaseStatus todo: limit number of results and do pagination / streaming
-func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error) {
+func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error) {
 	settingsI := ctx.Value(builder.SettingsKey)
 	if nil == settingsI {
 		return nil, kubeclienterrors.ErrNotConfiguredWithSettings
@@ -904,7 +905,7 @@ func (c *client) LeaseStatus(ctx context.Context, lid mtypes.LeaseID) (map[strin
 	return serviceStatus, nil
 }
 
-func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name string) (*ctypes.ServiceStatus, error) {
+func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name string) (*apclient.ServiceStatus, error) {
 	if err := c.leaseExists(ctx, lid); err != nil {
 		return nil, err
 	}
@@ -919,7 +920,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 		return nil, kubeclienterrors.ErrNoManifestForLease
 	}
 
-	var result *ctypes.ServiceStatus
+	var result *apclient.ServiceStatus
 
 	var svc *crd.ManifestService
 
@@ -959,7 +960,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 			return nil, kubeclienterrors.ErrNoDeploymentForLease
 		}
 
-		result = &ctypes.ServiceStatus{
+		result = &apclient.ServiceStatus{
 			Name:               deployment.Name,
 			Available:          deployment.Status.AvailableReplicas,
 			Total:              deployment.Status.Replicas,
@@ -984,7 +985,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 			return nil, kubeclienterrors.ErrNoDeploymentForLease
 		}
 
-		result = &ctypes.ServiceStatus{
+		result = &apclient.ServiceStatus{
 			Name:               statefulset.Name,
 			Available:          statefulset.Status.CurrentReplicas,
 			Total:              statefulset.Status.Replicas,
@@ -1073,7 +1074,7 @@ func (c *client) leaseExists(ctx context.Context, lid mtypes.LeaseID) error {
 	return nil
 }
 
-func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (map[string]*ctypes.ServiceStatus, error) {
+func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error) {
 	if err := c.leaseExists(ctx, lid); err != nil {
 		return nil, err
 	}
@@ -1096,11 +1097,11 @@ func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (m
 		return nil, fmt.Errorf("%s: %w", kubeclienterrors.ErrInternalError.Error(), err)
 	}
 
-	serviceStatus := make(map[string]*ctypes.ServiceStatus)
+	serviceStatus := make(map[string]*apclient.ServiceStatus)
 
 	if deployments != nil {
 		for _, deployment := range deployments.Items {
-			serviceStatus[deployment.Name] = &ctypes.ServiceStatus{
+			serviceStatus[deployment.Name] = &apclient.ServiceStatus{
 				Name:               deployment.Name,
 				Available:          deployment.Status.AvailableReplicas,
 				Total:              deployment.Status.Replicas,
@@ -1115,7 +1116,7 @@ func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (m
 
 	if statefulsets != nil {
 		for _, statefulset := range statefulsets.Items {
-			serviceStatus[statefulset.Name] = &ctypes.ServiceStatus{
+			serviceStatus[statefulset.Name] = &apclient.ServiceStatus{
 				Name:               statefulset.Name,
 				Available:          statefulset.Status.CurrentReplicas,
 				Total:              statefulset.Status.Replicas,

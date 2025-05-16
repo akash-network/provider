@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -892,7 +893,7 @@ func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command) 
 
 func showErrorToUser(err error) error {
 	// If the error has a complete message associated with it then show it
-	terr := &gwrest.ClientResponseError{}
+	terr := &apclient.ClientResponseError{}
 
 	if errors.As(err, terr) && len(terr.Message) != 0 {
 		_, _ = fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", terr.Message)
