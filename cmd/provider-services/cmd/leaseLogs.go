@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -15,7 +16,6 @@ import (
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
 	aclient "github.com/akash-network/provider/client"
-	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 func leaseLogsCmd() *cobra.Command {
@@ -100,7 +100,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	type result struct {
 		lid    mtypes.LeaseID
 		error  error
-		stream *gwrest.ServiceLogs
+		stream *apclient.ServiceLogs
 	}
 
 	streams := make([]result, 0, len(leases))
@@ -108,7 +108,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+		gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {
@@ -121,8 +121,8 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	var wgStreams sync.WaitGroup
 
 	type logEntry struct {
-		gwrest.ServiceLogMessage `json:",inline"`
-		Lid                      mtypes.LeaseID `json:"lease_id"`
+		apclient.ServiceLogMessage `json:",inline"`
+		Lid                        mtypes.LeaseID `json:"lease_id"`
 	}
 
 	outch := make(chan logEntry)

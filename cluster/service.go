@@ -3,6 +3,7 @@ package cluster
 import (
 	"context"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 	tpubsub "github.com/troian/pubsub"
 
@@ -54,7 +55,7 @@ type service struct {
 	hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
-	statusch                       chan chan<- *ctypes.Status
+	statusch                       chan chan<- *apclient.ClusterStatus
 	statusV1ch                     chan chan<- uint32
 	managers                       map[mtypes.LeaseID]*deploymentManager
 
@@ -86,7 +87,7 @@ type Cluster interface {
 
 // StatusClient is the interface which includes status of service
 type StatusClient interface {
-	Status(context.Context) (*ctypes.Status, error)
+	Status(context.Context) (*apclient.ClusterStatus, error)
 	StatusV1(context.Context) (*provider.ClusterStatus, error)
 	FindActiveLease(ctx context.Context, owner sdktypes.Address, dseq uint64, gseq uint32) (bool, mtypes.LeaseID, crd.ManifestGroup, error)
 }
@@ -159,7 +160,7 @@ func NewService(
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
-		statusch:                       make(chan chan<- *ctypes.Status),
+		statusch:                       make(chan chan<- *apclient.ClusterStatus),
 		statusV1ch:                     make(chan chan<- uint32),
 		managers:                       make(map[mtypes.LeaseID]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
@@ -243,13 +244,13 @@ func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, 
 	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort)
 }
 
-func (s *service) Status(ctx context.Context) (*ctypes.Status, error) {
+func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {
 	istatus, err := s.inventory.status(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ch := make(chan *ctypes.Status, 1)
+	ch := make(chan *apclient.ClusterStatus, 1)
 
 	select {
 	case <-s.lc.Done():
@@ -387,7 +388,7 @@ loop:
 				s.teardownLease(ev.ID)
 			}
 		case ch := <-s.statusch:
-			ch <- &ctypes.Status{
+			ch <- &apclient.ClusterStatus{
 				Leases: uint32(len(s.managers)), // nolint: gosec
 			}
 		case ch := <-s.statusV1ch:

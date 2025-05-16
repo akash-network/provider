@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
@@ -129,17 +130,17 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		validateHandler(log, pclient)).
 		Methods("GET")
 
-	hostnameRouter := authedRouter.PathPrefix(hostnamePrefix).Subrouter()
-	hostnameRouter.HandleFunc(migratePathPrefix,
+	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
+	hostnameRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
 		Methods(http.MethodPost)
 
-	endpointRouter := authedRouter.PathPrefix(endpointPrefix).Subrouter()
-	endpointRouter.HandleFunc(migratePathPrefix,
+	endpointRouter := authedRouter.PathPrefix(apclient.EndpointPrefix).Subrouter()
+	endpointRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateEndpointHandler(log, pclient.ClusterService(), pclient.Cluster())).
 		Methods(http.MethodPost)
 
-	drouter := authedRouter.PathPrefix(deploymentPathPrefix).Subrouter()
+	drouter := authedRouter.PathPrefix(apclient.DeploymentPathPrefix).Subrouter()
 	drouter.Use(requireDeploymentID)
 
 	mrouter := drouter.NewRoute().Subrouter()
@@ -150,7 +151,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		createManifestHandler(log, pclient.Manifest())).
 		Methods(http.MethodPut)
 
-	lrouter := authedRouter.PathPrefix(leasePathPrefix).Subrouter()
+	lrouter := authedRouter.PathPrefix(apclient.LeasePathPrefix).Subrouter()
 	lrouter.Use(
 		requireLeaseID,
 	)
@@ -478,11 +479,12 @@ func createStatusHandler(log log.Logger, sclient provider.StatusClient, provider
 			return
 		}
 		data := struct {
-			provider.Status
+			// provider.Status
+			apclient.ProviderStatus
 			Address string `json:"address"`
 		}{
-			Status:  *status,
-			Address: providerAddr.String(),
+			ProviderStatus: *status,
+			Address:        providerAddr.String(),
 		}
 		writeJSON(log, w, data)
 	}
@@ -604,7 +606,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 		ctx := fromctx.ApplyToContext(req.Context(), clusterSettings)
 
 		leaseID := requestLeaseID(req)
-		result := LeaseStatus{}
+		result := apclient.LeaseStatus{}
 
 		found, manifestGroup, err := cclient.GetManifestGroup(req.Context(), leaseID)
 		if err != nil {
@@ -639,15 +641,15 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				result.IPs = make(map[string][]LeasedIPStatus)
+				result.IPs = make(map[string][]apclient.LeasedIPStatus)
 
 				for _, ipLease := range ipLeaseStatus {
 					entries := result.IPs[ipLease.ServiceName]
 					if entries == nil {
-						entries = make([]LeasedIPStatus, 0)
+						entries = make([]apclient.LeasedIPStatus, 0)
 					}
 
-					entries = append(entries, LeasedIPStatus{
+					entries = append(entries, apclient.LeasedIPStatus{
 						Port:         ipLease.Port,
 						ExternalPort: ipLease.ExternalPort,
 						Protocol:     ipLease.Protocol,
@@ -813,7 +815,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 
 	var scanners sync.WaitGroup
 
-	logch := make(chan ServiceLogMessage)
+	logch := make(chan apclient.ServiceLogMessage)
 
 	scanners.Add(len(logs))
 
@@ -822,7 +824,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 			defer scanners.Done()
 
 			for scan.Scan() && ctx.Err() == nil {
-				logch <- ServiceLogMessage{
+				logch <- apclient.ServiceLogMessage{
 					Name:    name,
 					Message: scan.Text(),
 				}

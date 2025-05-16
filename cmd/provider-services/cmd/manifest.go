@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -17,7 +18,6 @@ import (
 	"github.com/akash-network/node/sdl"
 
 	aclient "github.com/akash-network/provider/client"
-	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 var (
@@ -77,7 +77,7 @@ func GetManifestCmd() *cobra.Command {
 			}
 
 			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-			gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+			gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 			if err != nil {
 				return err
 			}
@@ -167,7 +167,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+		gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 		if err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		}
 		if err != nil {
 			res.Error = err.Error()
-			if e, valid := err.(gwrest.ClientResponseError); valid {
+			if e, valid := err.(apclient.ClientResponseError); valid {
 				res.ErrorMessage = e.Message
 			}
 			res.Status = "FAIL"

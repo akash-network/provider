@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,7 +35,7 @@ var ErrNotRunning = errors.New("not running")
 
 // StatusClient interface predefined with Status method
 type StatusClient interface {
-	Status(context.Context) (*Status, error)
+	Status(context.Context) (*apclient.BidEngineStatus, error)
 	StatusV1(ctx context.Context) (*provider.BidEngineStatus, error)
 }
 
@@ -81,7 +82,7 @@ func NewService(
 		cluster:  cluster,
 		bus:      bus,
 		sub:      sub,
-		statusch: make(chan chan<- *Status),
+		statusch: make(chan chan<- *apclient.BidEngineStatus),
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
 		ordersch: make(chan []mtypes.OrderID, 1000),
@@ -111,7 +112,7 @@ type service struct {
 	bus pubsub.Bus
 	sub pubsub.Subscriber
 
-	statusch chan chan<- *Status
+	statusch chan chan<- *apclient.BidEngineStatus
 	orders   map[string]*order
 	drainch  chan *order
 	ordersch chan []mtypes.OrderID
@@ -133,8 +134,8 @@ func (s *service) Done() <-chan struct{} {
 	return s.lc.Done()
 }
 
-func (s *service) Status(ctx context.Context) (*Status, error) {
-	ch := make(chan *Status, 1)
+func (s *service) Status(ctx context.Context) (*apclient.BidEngineStatus, error) {
+	ch := make(chan *apclient.BidEngineStatus, 1)
 
 	select {
 	case <-s.lc.Done():
@@ -286,7 +287,7 @@ loop:
 				trySignal()
 			}
 		case ch := <-s.statusch:
-			ch <- &Status{
+			ch <- &apclient.BidEngineStatus{
 				Orders: uint32(len(s.orders)), // nolint: gosec
 			}
 		case order := <-s.drainch:

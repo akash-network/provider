@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -18,7 +19,6 @@ import (
 	deploycli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
@@ -225,7 +225,7 @@ func (s *E2EMigrateHostname) TestE2EMigrateHostname() {
 		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
 	)
 	assert.NoError(s.T(), err)
-	leaseStatusData := ctypes.LeaseStatus{}
+	leaseStatusData := apclient.LeaseStatus{}
 	err = json.Unmarshal(cmdResult.Bytes(), &leaseStatusData)
 	assert.NoError(s.T(), err)
 

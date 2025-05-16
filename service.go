@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 
 	"github.com/pkg/errors"
@@ -30,14 +31,14 @@ import (
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
 type ValidateClient interface {
-	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (ValidateGroupSpecResult, error)
+	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error)
 }
 
 // StatusClient is the interface which includes status of service
 //
 //go:generate mockery --name StatusClient
 type StatusClient interface {
-	Status(context.Context) (*Status, error)
+	Status(context.Context) (*apclient.ProviderStatus, error)
 	StatusV1(ctx context.Context) (*provider.Status, error)
 }
 
@@ -191,7 +192,7 @@ func (s *service) Cluster() cluster.Client {
 	return s.cclient
 }
 
-func (s *service) Status(ctx context.Context) (*Status, error) {
+func (s *service) Status(ctx context.Context) (*apclient.ProviderStatus, error) {
 	clusterSt, err := s.cluster.Status(ctx)
 	if err != nil {
 		return nil, err
@@ -204,7 +205,7 @@ func (s *service) Status(ctx context.Context) (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Status{
+	return &apclient.ProviderStatus{
 		Cluster:               clusterSt,
 		Bidengine:             bidengineSt,
 		Manifest:              manifestSt,
@@ -236,7 +237,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	}, nil
 }
 
-func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (ValidateGroupSpecResult, error) {
+func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error) {
 	req := bidengine.Request{
 		Owner: owner.String(),
 		GSpec: &gspec,
@@ -258,10 +259,10 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dt
 
 	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
 	if err != nil {
-		return ValidateGroupSpecResult{}, err
+		return apclient.ValidateGroupSpecResult{}, err
 	}
 
-	return ValidateGroupSpecResult{
+	return apclient.ValidateGroupSpecResult{
 		MinBidPrice: price,
 	}, nil
 }

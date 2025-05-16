@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -22,7 +23,6 @@ import (
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
-	gwrest "github.com/akash-network/provider/gateway/rest"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
 
@@ -162,7 +162,7 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 	)
 
 	require.NoError(s.T(), err)
-	leaseStatusData := gwrest.LeaseStatus{}
+	leaseStatusData := apclient.LeaseStatus{}
 	err = json.Unmarshal(cmdResult.Bytes(), &leaseStatusData)
 	require.NoError(s.T(), err)
 	s.Require().Len(leaseStatusData.IPs, 1)

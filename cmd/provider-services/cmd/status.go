@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
@@ -8,7 +9,6 @@ import (
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
 	aclient "github.com/akash-network/provider/client"
-	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 func statusCmd() *cobra.Command {
@@ -43,7 +43,7 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return err
 	}
 
-	gclient, err := gwrest.NewClient(ctx, cl, addr)
+	gclient, err := apclient.NewClient(ctx, cl, addr)
 	if err != nil {
 		return err
 	}

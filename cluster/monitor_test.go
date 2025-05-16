@@ -3,6 +3,7 @@ package cluster
 import (
 	"testing"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func TestMonitorInstantiate(t *testing.T) {
 		MGroup: &manifest.Group{},
 	}
 
-	statusResult := &ctypes.LeaseStatus{}
+	statusResult := &apclient.LeaseStatus{}
 	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
@@ -65,7 +66,7 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 		MGroup: group,
 	}
 
-	statusResult := make(map[string]*ctypes.ServiceStatus)
+	statusResult := make(map[string]*apclient.ServiceStatus)
 	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
@@ -111,8 +112,8 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 		MGroup: group,
 	}
 
-	statusResult := make(map[string]*ctypes.ServiceStatus)
-	statusResult[serviceName] = &ctypes.ServiceStatus{
+	statusResult := make(map[string]*apclient.ServiceStatus)
+	statusResult[serviceName] = &apclient.ServiceStatus{
 		Name:               serviceName,
 		Available:          3,
 		Total:              3,

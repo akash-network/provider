@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
@@ -24,7 +25,6 @@ import (
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
 	aclient "github.com/akash-network/provider/client"
-	gwrest "github.com/akash-network/provider/gateway/rest"
 )
 
 const (
@@ -123,7 +123,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 	lID := bidID.LeaseID()
 
-	gclient, err := gwrest.NewClient(ctx, cl, prov, gwrest.WithJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+	gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
 	if err != nil {
 		return err
 	}
