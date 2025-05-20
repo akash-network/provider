@@ -24,8 +24,8 @@ var (
 )
 
 type CertGetter interface {
-	GetMTLS(context.Context) ([]tls.Certificate, error)
-	GetCACerts(context.Context) ([]tls.Certificate, error)
+	GetMTLS(ctx context.Context) ([]tls.Certificate, error)
+	GetCACerts(ctx context.Context, domain string) ([]tls.Certificate, error)
 	atls.CertificateQuerier
 }
 
@@ -36,8 +36,8 @@ func NewServerTLSConfig(ctx context.Context, cquery CertGetter, sni string) (*tl
 			var rcfg *tls.Config
 
 			mtls := true
-			if info.ServerName != sni {
-				currCerts, err := cquery.GetCACerts(info.Context())
+			if info.ServerName == sni {
+				currCerts, err := cquery.GetCACerts(info.Context(), sni)
 				if err == nil && len(currCerts) > 0 {
 					mtls = false
 					rcfg = &tls.Config{
@@ -89,23 +89,20 @@ func NewServerTLSConfig(ctx context.Context, cquery CertGetter, sni string) (*tl
 }
 
 func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token string) (*ajwt.Claims, error) {
-	var err error
-	var owner sdk.AccAddress
-
-	for _, cert := range peerCerts {
-		owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName)
-		if err != nil {
-			continue
-		}
-	}
-
 	claims := &ajwt.Claims{
 		Leases: ajwt.Leases{
 			Access: ajwt.AccessTypeNone,
 		},
 	}
 
-	if !owner.Empty() {
+	// if a client provides certificate it is mTLS authentication
+	// and the certificate has been verified during TLS handshake
+	if len(peerCerts) == 1 {
+		owner, err := sdk.AccAddressFromBech32(peerCerts[0].Subject.CommonName)
+		if err != nil {
+			return nil, err
+		}
+
 		// authentication via mTLS does not provider granular access
 		now := time.Now()
 		claims.Issuer = owner.String()
@@ -115,13 +112,13 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 		claims.ExpiresAt = jwt.NewNumericDate(now.Add(15 * time.Minute))
 		claims.Leases.Access = ajwt.AccessTypeFull
 
-		err := claims.Validate()
+		err = claims.Validate()
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if !owner.Empty() && (token != "") {
+	if (claims.Leases.Access != ajwt.AccessTypeNone) && (token != "") {
 		return nil, ErrAuthAmbiguous
 	}
 
