@@ -311,7 +311,7 @@ func (c *accountQuerier) run() error {
 			}
 		case acc := <-accountRespCh:
 			err := pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
-			if err != nil {
+			if err != nil && !errors.Is(err, pconfig.ErrExists) {
 				c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
 			}
 		case req := <-c.peerCertCh:
@@ -466,12 +466,14 @@ func (c *accountQuerier) accountQuerier(reqch <-chan sdk.Address, respch chan<- 
 
 			res, err := c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: addr.String()})
 			if err != nil {
+				c.log.Error("fetching account info", "err", err.Error(), "account", addr.String())
 				requests = append(requests, addr)
 				continue
 			}
 
 			var acc authtypes.AccountI
 			if err := cctx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
+				c.log.Error("unpacking account info", "err", err.Error(), "account", addr.String())
 				requests = append(requests, addr)
 				continue
 			}
