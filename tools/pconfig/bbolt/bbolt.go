@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
 
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
@@ -50,7 +49,7 @@ type account struct {
 }
 
 func NewBBolt(path string) (pconfig.Storage, error) {
-	db, err := bbolt.Open(path, os.ModeType, nil)
+	db, err := bbolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, err
 	}

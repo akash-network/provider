@@ -16,10 +16,10 @@ var (
 	ErrInvalidArgs          = errors.New("pstorage: invalid arguments")
 	ErrNotExists            = errors.New("pstorage: not exists")
 	ErrExists               = errors.New("pstorage: exists")
-	ErrAccountNotExists     = fmt.Errorf("%w account", ErrNotExists)
-	ErrAccountExists        = fmt.Errorf("%w account", ErrExists)
-	ErrCertificateNotExists = fmt.Errorf("%w certificate", ErrNotExists)
-	ErrCertificateExists    = fmt.Errorf("%w certificate", ErrExists)
+	ErrAccountNotExists     = fmt.Errorf("%w: account", ErrNotExists)
+	ErrAccountExists        = fmt.Errorf("%w: account", ErrExists)
+	ErrCertificateNotExists = fmt.Errorf("%w: certificate", ErrNotExists)
+	ErrCertificateExists    = fmt.Errorf("%w: certificate", ErrExists)
 )
 
 type StorageR interface {
