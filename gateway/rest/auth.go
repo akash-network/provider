@@ -79,7 +79,7 @@ func DefaultErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		_, _ = w.Write([]byte(`{"message":"invalid request"}`))
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"message":"Something went wrong while checking the JWT"}`))
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"message":"unknown error while processing JWT. %s"}`, err.Error())))
 	}
 }
 
