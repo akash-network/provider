@@ -354,6 +354,10 @@ func isPodAllocated(status corev1.PodStatus) bool {
 	return false
 }
 
+func isPodRunningAndAllocated(pod *corev1.Pod) bool {
+	return isPodAllocated(pod.Status) && pod.Status.Phase == corev1.PodRunning
+}
+
 func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
@@ -456,7 +460,7 @@ func (dp *nodeDiscovery) monitor() error {
 		for idx := range pods.Items {
 			pod := pods.Items[idx].DeepCopy()
 
-			if !isPodAllocated(pod.Status) {
+			if !isPodRunningAndAllocated(pod) {
 				continue
 			}
 
