@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"golang.org/x/sync/errgroup"
@@ -89,7 +90,7 @@ func aqParseOpts(opts ...accountQuerierOption) (*accountQuerierOptions, error) {
 	return ac, nil
 }
 
-type accountQuerierOption func(options *accountQuerierOptions) error
+type accountQuerierOption func(*accountQuerierOptions) error
 
 func WithTLSCert(cert, key string) accountQuerierOption {
 	return func(options *accountQuerierOptions) error {
@@ -127,11 +128,13 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 	ctx, cancel := context.WithCancel(ctx)
 	group, ctx := errgroup.WithContext(ctx)
 
+	log = log.With("module", "account-querier")
+
 	q := &accountQuerier{
 		ctx:        ctx,
 		group:      group,
 		cancel:     cancel,
-		log:        log.With("module", "account-querier"),
+		log:        log,
 		bus:        bus,
 		pstorage:   pstorage,
 		qc:         qc,
@@ -145,17 +148,25 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 	}
 
 	if cOpts.tlsCertFile != "" {
-		cert, err := tls.LoadX509KeyPair(cOpts.tlsCertFile, cOpts.tlsKeyFile)
+		// key-cert pair may not yet be created. don't fail,
+		// rather add a directory to watch for a new cert
+
+		_, err := os.Stat(cOpts.tlsCertFile)
+		if err == nil {
+			cert, err := tls.LoadX509KeyPair(cOpts.tlsCertFile, cOpts.tlsKeyFile)
+			if err != nil {
+				return nil, err
+			}
+
+			q.caCerts = []tls.Certificate{cert}
+		}
+
+		dir := filepath.Dir(cOpts.tlsCertFile)
+		log.Info(fmt.Sprintf("watching dir '%s' for cert changes", dir))
+		err = watcher.Add(dir)
 		if err != nil {
 			return nil, err
 		}
-
-		q.caCerts = []tls.Certificate{cert}
-		err = watcher.Add(cOpts.tlsCertFile)
-		if err != nil {
-			return nil, err
-		}
-
 	}
 
 	kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
@@ -369,6 +380,7 @@ func (c *accountQuerier) run() error {
 					c.mtlsCerts = []tls.Certificate{}
 				}
 			} else if c.cOpts.tlsCertFile != "" && evt.Name == c.cOpts.tlsCertFile {
+				c.log.Info(fmt.Sprintf("detected certificate change, reloading"))
 				cert, err := tls.LoadX509KeyPair(c.cOpts.tlsCertFile, c.cOpts.tlsKeyFile)
 				if err != nil {
 					c.log.Error("unable to load tls certificate", "err", err)
