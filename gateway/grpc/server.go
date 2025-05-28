@@ -19,6 +19,7 @@ import (
 	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 
 	"github.com/akash-network/provider"
+	"github.com/akash-network/provider/bidengine"
 	gwutils "github.com/akash-network/provider/gateway/utils"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
@@ -33,6 +34,7 @@ const (
 type grpcProviderV1 struct {
 	ctx    context.Context
 	client provider.StatusClient
+	config *provider.Config
 }
 
 var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
@@ -50,7 +52,7 @@ func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
 	return val.(*ajwt.Claims)
 }
 
-func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient, config *provider.Config) error {
 	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
 	if err != nil {
 		return err
@@ -71,6 +73,7 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 	pRPC := &grpcProviderV1{
 		ctx:    ctx,
 		client: client,
+		config: config,
 	}
 
 	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
@@ -152,4 +155,26 @@ func (gm *grpcProviderV1) StreamStatus(_ *emptypb.Empty, stream providerv1.Provi
 			}
 		}
 	}
+}
+
+func (gm *grpcProviderV1) BidPreCheck(ctx context.Context, req *providerv1.BidPreCheckRequest) (*providerv1.BidPreCheckResponse, error) {
+	bidReq := bidengine.Request{
+		GSpec:          &req.GetGroups()[0],
+		PricePrecision: bidengine.DefaultPricePrecision,
+	}
+
+	// Calculate price using the bidengine's pricing strategy
+	price, err := gm.config.BidPricingStrategy.CalculatePrice(ctx, bidReq)
+	if err != nil {
+		return &providerv1.BidPreCheckResponse{
+			CanBid: false,
+			Reason: fmt.Sprintf("Failed to calculate price: %v", err),
+		}, nil
+	}
+
+	return &providerv1.BidPreCheckResponse{
+		CanBid: true,
+		Reason: "Price calculated successfully",
+		Price:  price.String(),
+	}, nil
 }

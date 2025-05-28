@@ -56,6 +56,10 @@ provider-update:
 provider-status:
 	$(PROVIDER_SERVICES) status $(PROVIDER_ADDRESS)
 
+.PHONY: provider-bid-check
+provider-bid-check:
+	$(PROVIDER_SERVICES) bid-pre-check $(SDL_PATH)
+
 .PHONY: authenticate
 authenticate:
 	$(PROVIDER_SERVICES) authenticate \

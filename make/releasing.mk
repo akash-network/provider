@@ -76,6 +76,7 @@ docker-image:
 		-v $(GOPATH):/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
+		-v $(shell pwd)/../akash-api:/go/src/$(GO_MOD_NAME)/../akash-api \
 		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
 		-f .goreleaser-docker.yaml \
