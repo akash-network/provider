@@ -32,7 +32,7 @@ type order struct {
 	// orderID is the unique identifier for this order from the blockchain
 	orderID mtypes.OrderID
 
-	// cfg holds configuraiton parameters for bid engine (pricing, deposits, timeouts etc).
+	// cfg holds configuration parameters for bid engine (pricing, deposits, timeouts etc).
 	cfg Config
 
 	// session provides blockchain client and provider info.
