@@ -1,0 +1,71 @@
+---
+version: "2.0"
+
+services:
+  web:
+    image: quay.io/ovrclk/demo-app
+    expose:
+      - port: 80
+        as: 80
+        http_options:
+          max_body_size: 2097152
+          next_cases:
+            - off
+        accept:
+          - hello.localhost
+        to:
+          - global: true
+  bew:
+    image: quay.io/ovrclk/demo-app
+    expose:
+      - port: 80
+        as: 80
+        accept:
+          - hello1.localhost
+        to:
+          - global: true
+
+profiles:
+  compute:
+    small:
+      resources:
+        cpu:
+          units: 0.1
+        memory:
+          size: 16Mi
+        storage:
+          size: 128Mi
+    big:
+      resources:
+        cpu:
+          units: 2
+        memory:
+          size: 256Mi
+        storage:
+          size: 1Gi
+  placement:
+    westcoast:
+      attributes:
+        region: us-west
+      pricing:
+        small: 
+          denom: uakt
+          amount: 1000
+    eastcoast:
+      attributes:
+        region: us-east
+      pricing:
+        big: 
+          denom: uakt
+          amount: 1000
+
+
+deployment:
+  web:
+    westcoast:
+      profile: small
+      count: 1
+  bew:
+    eastcoast:
+      profile: big
+      count: 1
