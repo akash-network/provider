@@ -31,7 +31,7 @@ import (
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
 type ValidateClient interface {
-	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error)
+	Validate(context.Context, sdktypes.Address, dtypes.GroupSpecs) (apclient.ValidateGroupSpecsResult, error)
 }
 
 // StatusClient is the interface which includes status of service
@@ -70,7 +70,8 @@ func NewService(ctx context.Context,
 	bus pubsub.Bus,
 	cclient cluster.Client,
 	waiter waiter.OperatorWaiter,
-	cfg Config) (Service, error) {
+	cfg Config,
+) (Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
 	session = session.ForModule("provider-service")
@@ -237,12 +238,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	}, nil
 }
 
-func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error) {
-	req := bidengine.Request{
-		Owner: owner.String(),
-		GSpec: &gspec,
-	}
-
+func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups dtypes.GroupSpecs) (apclient.ValidateGroupSpecsResult, error) {
 	// inv, err := s.cclient.Inventory(ctx)
 	// if err != nil {
 	// 	return ValidateGroupSpecResult{}, err
@@ -257,14 +253,31 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dt
 	// 	return ValidateGroupSpecResult{}, err
 	// }
 
-	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
-	if err != nil {
-		return apclient.ValidateGroupSpecResult{}, err
+	results := apclient.ValidateGroupSpecsResult{
+		GroupSpecs:       make([]apclient.ValidateGroupSpec, len(groups)),
+		TotalMinBidPrice: sdktypes.NewDecCoin("uakt", sdktypes.NewInt(0)), // TODO: Suppport different coins
 	}
 
-	return apclient.ValidateGroupSpecResult{
-		MinBidPrice: price,
-	}, nil
+	for i, gspec := range groups {
+		req := bidengine.Request{
+			// Owner: owner.String(),
+			GSpec:          gspec,
+			PricePrecision: bidengine.DefaultPricePrecision,
+		}
+
+		price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
+		if err != nil {
+			return apclient.ValidateGroupSpecsResult{}, err
+		}
+
+		results.GroupSpecs[i] = apclient.ValidateGroupSpec{
+			Name:        gspec.Name,
+			MinBidPrice: price,
+		}
+		results.TotalMinBidPrice = results.TotalMinBidPrice.Add(price)
+	}
+
+	return results, nil
 }
 
 func (s *service) run() {

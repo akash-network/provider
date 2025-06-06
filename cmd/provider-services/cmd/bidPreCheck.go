@@ -1,36 +1,44 @@
 package cmd
 
 import (
-	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
+	"github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/node/sdl"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
+	aclient "github.com/akash-network/provider/client"
 )
 
 func bidPreCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:          "bid-pre-check <manifest-file>",
+		Use:          "bid-pre-check <address> <manifest-file>",
 		Short:        "perform a pre-bid check using a manifest file",
 		SilenceUsage: true,
-		Args:         cobra.ExactArgs(1),
+		Args:         cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return doPreBidCheck(cmd, args[0])
+			return doPreBidCheck(cmd, args[0], args[1])
 		},
 	}
 
 	return cmd
 }
 
-func doPreBidCheck(cmd *cobra.Command, manifestPath string) error {
-	ctx := context.Background()
+func doPreBidCheck(cmd *cobra.Command, addr, manifestPath string) error {
+	ctx := cmd.Context()
+
+	cctx, err := client.GetClientTxContext(cmd)
+	if err != nil {
+		return err
+	}
+
+	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	if err != nil {
+		return err
+	}
 
 	// Load the manifest file
 	sdlFile, err := sdl.ReadFile(manifestPath)
@@ -42,38 +50,23 @@ func doPreBidCheck(cmd *cobra.Command, manifestPath string) error {
 		return fmt.Errorf("failed to parse manifest: %w", err)
 	}
 
-	groupPointers := make([]dtypes.GroupSpec, 0, len(groups))
-
-	for _, group := range groups {
-		groupPointers = append(groupPointers, *group)
-	}
-
-	// Set up TLS config
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true, // For development only
-	}
-	creds := credentials.NewTLS(tlsConfig)
-
-	// Set up gRPC connection with TLS
-	conn, err := grpc.DialContext(ctx, "localhost:8444", grpc.WithTransportCredentials(creds))
+	prov, err := sdk.AccAddressFromBech32(addr)
 	if err != nil {
-		return fmt.Errorf("failed to connect to provider gRPC: %w", err)
+		return fmt.Errorf("invalid provider address: %w", err)
 	}
-	defer conn.Close()
 
-	client := providerv1.NewProviderRPCClient(conn)
-
-	// Build and send the request
-	req := &providerv1.BidPreCheckRequest{
-		Groups: groupPointers,
-	}
-	resp, err := client.BidPreCheck(ctx, req)
+	// Create provider client with authentication
+	gclient, err := apclient.NewClient(ctx, cl, prov)
 	if err != nil {
-		return fmt.Errorf("PreBidCheck RPC failed: %w", err)
+		return fmt.Errorf("failed to create provider client: %w", err)
 	}
 
-	// Print the response as JSON
+	result, err := gclient.Validate(ctx, groups)
+	if err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
 	enc := json.NewEncoder(cmd.OutOrStdout())
 	enc.SetIndent("", "  ")
-	return enc.Encode(resp)
+	return enc.Encode(result)
 }

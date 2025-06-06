@@ -58,7 +58,7 @@ provider-status:
 
 .PHONY: provider-bid-check
 provider-bid-check:
-	$(PROVIDER_SERVICES) bid-pre-check $(SDL_PATH)
+	$(PROVIDER_SERVICES) bid-pre-check $(PROVIDER_ADDRESS) $(SDL_PATH)
 
 .PHONY: authenticate
 authenticate:
