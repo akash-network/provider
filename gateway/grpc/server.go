@@ -6,6 +6,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -32,7 +33,7 @@ const (
 
 type grpcProviderV1 struct {
 	ctx    context.Context
-	client provider.StatusClient
+	client provider.Client
 	config *provider.Config
 }
 
@@ -51,7 +52,7 @@ func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
 	return val.(*ajwt.Claims)
 }
 
-func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient, config *provider.Config) error {
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.Client, config *provider.Config) error {
 	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
 	if err != nil {
 		return err
@@ -154,4 +155,28 @@ func (gm *grpcProviderV1) StreamStatus(_ *emptypb.Empty, stream providerv1.Provi
 			}
 		}
 	}
+}
+
+func (gm *grpcProviderV1) BidPreCheck(ctx context.Context, req *providerv1.BidPreCheckRequest) (*providerv1.BidPreCheckResponse, error) {
+	claims := ClaimsFromCtx(ctx)
+	if claims == nil || claims.Issuer == "" {
+		return nil, fmt.Errorf("no claims found in context")
+	}
+	if len(req.Groups) == 0 {
+		return nil, fmt.Errorf("no groups provided")
+	}
+	specs := make(v1beta3.GroupSpecs, len(req.Groups))
+	for i, group := range req.Groups {
+		specs[i] = &v1beta3.GroupSpec{
+			Name:         group.Name,
+			Requirements: group.Requirements,
+			Resources:    group.Resources,
+		}
+	}
+	results, err := gm.client.Validate(ctx, claims.IssuerAddress(), specs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &results, nil
 }

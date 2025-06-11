@@ -2,19 +2,19 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
-
-	"github.com/pkg/errors"
-	tpubsub "github.com/troian/pubsub"
 
 	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/cosmos/cosmos-sdk/client"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
+	"github.com/pkg/errors"
+	tpubsub "github.com/troian/pubsub"
 
 	"github.com/akash-network/node/pubsub"
 
@@ -31,7 +31,7 @@ import (
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
 type ValidateClient interface {
-	Validate(context.Context, sdktypes.Address, dtypes.GroupSpecs) (apclient.ValidateGroupSpecsResult, error)
+	Validate(context.Context, sdktypes.Address, dtypes.GroupSpecs) (provider.BidPreCheckResponse, error)
 }
 
 // StatusClient is the interface which includes status of service
@@ -238,7 +238,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	}, nil
 }
 
-func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups dtypes.GroupSpecs) (apclient.ValidateGroupSpecsResult, error) {
+func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups dtypes.GroupSpecs) (provider.BidPreCheckResponse, error) {
 	// inv, err := s.cclient.Inventory(ctx)
 	// if err != nil {
 	// 	return ValidateGroupSpecResult{}, err
@@ -253,9 +253,9 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups d
 	// 	return ValidateGroupSpecResult{}, err
 	// }
 
-	results := apclient.ValidateGroupSpecsResult{
-		GroupSpecs:       make([]apclient.ValidateGroupSpec, len(groups)),
-		TotalMinBidPrice: sdktypes.NewDecCoin("uakt", sdktypes.NewInt(0)), // TODO: Suppport different coins
+	results := provider.BidPreCheckResponse{
+		GroupBidPreChecks: make([]*provider.GroupBidPreCheck, len(groups)),
+		TotalPrice:        sdktypes.NewDecCoin("uakt", sdktypes.NewInt(0)), // TODO: Suppport different coins
 	}
 
 	for i, gspec := range groups {
@@ -267,14 +267,18 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups d
 
 		price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
 		if err != nil {
-			return apclient.ValidateGroupSpecsResult{}, err
+			return provider.BidPreCheckResponse{}, err
 		}
 
-		results.GroupSpecs[i] = apclient.ValidateGroupSpec{
+		fmt.Printf("%+v, %+v\n", price, gspec)
+
+		results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
 			Name:        gspec.Name,
 			MinBidPrice: price,
+			CanBid:      true,
+			Reason:      "price calculated successfully",
 		}
-		results.TotalMinBidPrice = results.TotalMinBidPrice.Add(price)
+		results.TotalPrice = results.TotalPrice.Add(price)
 	}
 
 	return results, nil

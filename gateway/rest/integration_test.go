@@ -25,6 +25,7 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/akash-network/akash-api/go/testutil"
 
+	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/akash-network/provider"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
 	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
@@ -119,8 +120,16 @@ func Test_router_Status(t *testing.T) {
 
 func Test_router_Validate(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		expected := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
+		expected := providerv1.BidPreCheckResponse{
+			GroupBidPreChecks: []*providerv1.GroupBidPreCheck{
+				{
+					MinBidPrice: testutil.AkashDecCoin(t, 200),
+					Name:        testutil.GroupSpecs(t)[0].Name,
+					CanBid:      true,
+					Reason:      "",
+				},
+			},
+			TotalPrice: testutil.AkashDecCoin(t, 200),
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -143,7 +152,7 @@ func Test_router_Validate(t *testing.T) {
 
 			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
 			assert.NoError(t, err)
-			result, err := client.Validate(context.Background(), testutil.GroupSpec(t))
+			result, err := client.Validate(context.Background(), testutil.GroupSpecs(t))
 			assert.NoError(t, err)
 			assert.Equal(t, expected, result)
 
@@ -152,7 +161,7 @@ func Test_router_Validate(t *testing.T) {
 				addr: caddr,
 			}))
 			assert.NoError(t, err)
-			result, err = client.Validate(context.Background(), testutil.GroupSpec(t))
+			result, err = client.Validate(context.Background(), testutil.GroupSpecs(t))
 			assert.NoError(t, err)
 			assert.Equal(t, expected, result)
 		})
@@ -174,15 +183,15 @@ func Test_router_Validate(t *testing.T) {
 
 		mocks := createMocks()
 
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errors.New("oops"))
+		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(providerv1.BidPreCheckResponse{}, errors.New("oops"))
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
 			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
 			assert.NoError(t, err)
-			_, err = client.Validate(context.Background(), dtypes.GroupSpec{})
+			_, err = client.Validate(context.Background(), dtypes.GroupSpecs{})
 			assert.Error(t, err)
-			_, err = client.Validate(context.Background(), testutil.GroupSpec(t))
+			_, err = client.Validate(context.Background(), testutil.GroupSpecs(t))
 			assert.Error(t, err)
 
 			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
@@ -190,9 +199,9 @@ func Test_router_Validate(t *testing.T) {
 				addr: caddr,
 			}))
 			assert.NoError(t, err)
-			_, err = client.Validate(context.Background(), dtypes.GroupSpec{})
+			_, err = client.Validate(context.Background(), dtypes.GroupSpecs{})
 			assert.Error(t, err)
-			_, err = client.Validate(context.Background(), testutil.GroupSpec(t))
+			_, err = client.Validate(context.Background(), testutil.GroupSpecs(t))
 			assert.Error(t, err)
 		})
 		mocks.pclient.AssertExpectations(t)
@@ -271,9 +280,11 @@ func Test_router_Manifest(t *testing.T) {
 	})
 }
 
-const testGroupName = "thegroup"
-const testImageName = "theimage"
-const testServiceName = "theservice"
+const (
+	testGroupName   = "thegroup"
+	testImageName   = "theimage"
+	testServiceName = "theservice"
+)
 
 func mockManifestGroups(m integrationMocks, leaseID mtypes.LeaseID) {
 	status := make(map[string]*apclient.ServiceStatus)
@@ -589,7 +600,7 @@ func withServer(
 	pclient provider.Client,
 	qclient *qmock.QueryClient,
 	certs []tls.Certificate,
-	fn func(string, *certQuerier, ),
+	fn func(string, *certQuerier),
 ) {
 	t.Helper()
 
