@@ -2,7 +2,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
@@ -270,14 +269,22 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups d
 			return provider.BidPreCheckResponse{}, err
 		}
 
-		fmt.Printf("%+v, %+v\n", price, gspec)
-
-		results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
-			Name:        gspec.Name,
-			MinBidPrice: price,
-			CanBid:      true,
-			Reason:      "price calculated successfully",
+		if gspec.Resources[0].Price.IsGTE(price) {
+			results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+				Name:        gspec.Name,
+				MinBidPrice: price,
+				CanBid:      true,
+				Reason:      "price calculated successfully",
+			}
+		} else {
+			results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+				Name:        gspec.Name,
+				MinBidPrice: price,
+				CanBid:      false,
+				Reason:      "price above minimum",
+			}
 		}
+
 		results.TotalPrice = results.TotalPrice.Add(price)
 	}
 

@@ -57,7 +57,7 @@ profiles:
       pricing:
         big: 
           denom: uakt
-          amount: 1000
+          amount: 1
 
 
 deployment:
