@@ -69,7 +69,7 @@ func NewService(
 		return nil, err
 	}
 
-	providerAttrService, err := newProviderAttrSignatureService(session, bus)
+	providerAttrService, err := NewProviderAttrSignatureService(session, bus)
 	if err != nil {
 		return nil, err
 	}

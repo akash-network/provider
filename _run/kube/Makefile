@@ -28,6 +28,7 @@ provider-run:
 		--deployment-ingress-domain "$(GATEWAY_HOSTNAME)" \
 		--cluster-node-port-quantity 100 \
 		--cluster-public-hostname "$(GATEWAY_HOSTNAME)" \
+		--provider-config "$(PROVIDER_CONFIG_PATH)" \
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none" \
 		--ip-operator=true

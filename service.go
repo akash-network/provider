@@ -2,11 +2,13 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 
+	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
 	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
@@ -111,6 +113,17 @@ func NewService(ctx context.Context,
 		return nil, errors.Wrap(err, errmsg)
 	}
 
+	providerAttrService, err := bidengine.NewProviderAttrSignatureService(session, bus)
+	if err != nil {
+		errmsg := "creating provider attribute service"
+		session.Log().Error(errmsg, "err", err)
+		cancel()
+		<-clusterSvc.Done()
+		<-bidengineSvc.Done()
+		<-bcSvc.lc.Done()
+		return nil, errors.Wrap(err, errmsg)
+	}
+
 	manifestConfig := manifest.ServiceConfig{
 		HTTPServicesRequireAtLeastOneHost: !cfg.DeploymentIngressStaticHosts,
 		ManifestTimeout:                   cfg.ManifestTimeout,
@@ -141,6 +154,7 @@ func NewService(ctx context.Context,
 		bc:        bcSvc,
 		lc:        lifecycle.New(),
 		config:    cfg,
+		pass:      providerAttrService,
 	}
 
 	go svc.lc.WatchContext(ctx)
@@ -161,6 +175,7 @@ type service struct {
 	bidengine bidengine.Service
 	manifest  manifest.Service
 	bc        *balanceChecker
+	pass      bidengine.ProviderAttrSignatureService
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -238,28 +253,102 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 }
 
 func (s *service) Validate(ctx context.Context, owner sdktypes.Address, groups dtypes.GroupSpecs) (provider.BidPreCheckResponse, error) {
-	// inv, err := s.cclient.Inventory(ctx)
-	// if err != nil {
-	// 	return ValidateGroupSpecResult{}, err
-	// }
-	//
-	// res := &reservation{
-	// 	resources:     nil,
-	// 	clusterParams: nil,
-	// }
-	//
-	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-	// 	return ValidateGroupSpecResult{}, err
-	// }
-
 	results := provider.BidPreCheckResponse{
 		GroupBidPreChecks: make([]*provider.GroupBidPreCheck, len(groups)),
 		TotalPrice:        sdktypes.NewDecCoin("uakt", sdktypes.NewInt(0)), // TODO: Suppport different coins
 	}
 
+	// Get provider attributes
+	attr, err := s.pass.GetAttributes()
+	if err != nil {
+		return provider.BidPreCheckResponse{}, err
+	}
+
 	for i, gspec := range groups {
+		// Check provider attributes match
+		if !gspec.MatchAttributes(s.config.Attributes) {
+			s.session.Log().Info("incompatible provider attributes", "group_spec_attributes", gspec.Requirements.Attributes, "provider_attributes", s.config.Attributes)
+			results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+				Name:   gspec.Name,
+				CanBid: false,
+				Reason: "incompatible provider attributes",
+			}
+			continue
+		}
+
+		// Check resource requirements
+		if !gspec.MatchResourcesRequirements(attr) {
+			results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+				Name:   gspec.Name,
+				CanBid: false,
+				Reason: "incompatible attributes for resources requirements",
+			}
+			continue
+		}
+
+		// Check volume limits
+		for _, resources := range gspec.GetResourceUnits() {
+			if len(resources.Resources.Storage) > s.config.MaxGroupVolumes {
+				results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+					Name:   gspec.Name,
+					CanBid: false,
+					Reason: fmt.Sprintf("group volumes count exceeds (%d > %d)", len(resources.Resources.Storage), s.config.MaxGroupVolumes),
+				}
+				continue
+			}
+		}
+
+		// Check signature requirements if any
+		if gspec.Requirements.SignedBy.Size() != 0 {
+			// Get auditor signatures
+			auditors := make([]string, 0)
+			auditors = append(auditors, gspec.Requirements.SignedBy.AllOf...)
+			auditors = append(auditors, gspec.Requirements.SignedBy.AnyOf...)
+
+			provAttr := []atypes.Provider{
+				{
+					Owner:      s.session.Provider().Owner,
+					Auditor:    "",
+					Attributes: s.session.Provider().Attributes,
+				},
+			}
+
+			gotten := make(map[string]struct{})
+			for _, auditor := range auditors {
+				_, done := gotten[auditor]
+				if done {
+					continue
+				}
+				result, err := s.pass.GetAuditorAttributeSignatures(auditor)
+				if err != nil {
+					return provider.BidPreCheckResponse{}, err
+				}
+				provAttr = append(provAttr, result...)
+				gotten[auditor] = struct{}{}
+			}
+
+			if !gspec.MatchRequirements(provAttr) {
+				results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+					Name:   gspec.Name,
+					CanBid: false,
+					Reason: "attribute signature requirements not met",
+				}
+				continue
+			}
+		}
+
+		// Validate basic group spec
+		if err := gspec.ValidateBasic(); err != nil {
+			results.GroupBidPreChecks[i] = &provider.GroupBidPreCheck{
+				Name:   gspec.Name,
+				CanBid: false,
+				Reason: fmt.Sprintf("group validation error: %v", err),
+			}
+			continue
+		}
+
+		// Calculate price if all checks pass
 		req := bidengine.Request{
-			// Owner: owner.String(),
 			GSpec:          gspec,
 			PricePrecision: bidengine.DefaultPricePrecision,
 		}
