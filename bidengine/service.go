@@ -104,24 +104,38 @@ func NewService(
 	return s, nil
 }
 
+// service manages the lifecycle and coordination of order processing and bid creation.
 type service struct {
+	// session provides blockchain client and provider info.
 	session session.Session
+	// cluster interface to the provider's compute cluster for resource management.
 	cluster cluster.Cluster
-	cfg     Config
+	// cfg holds configuration parameters for bid engine (pricing, deposits, timeouts etc).
+	cfg Config
 
+	// bus is the event bus for publishing lease events.
 	bus pubsub.Bus
+	// sub is the subscriber for receiving blockchain events.
 	sub pubsub.Subscriber
 
+	// statusch receives requests for bid engine status.
 	statusch chan chan<- *apclient.BidEngineStatus
-	orders   map[string]*order
-	drainch  chan *order
+	// orders tracks all active order processing.
+	orders map[string]*order
+	// drainch receives completed orders for cleanup.
+	drainch chan *order
+	// ordersch receives new orders to process from the blockchain.
 	ordersch chan []mtypes.OrderID
 
-	group  *errgroup.Group
+	group *errgroup.Group
+	// cancel holds the cancel function of the service context.
 	cancel context.CancelFunc
-	lc     lifecycle.Lifecycle
-	pass   *providerAttrSignatureService
+	// lc manages graceful startup/shutdown.
+	lc lifecycle.Lifecycle
+	// pass validates provider attributes and signatures.
+	pass *providerAttrSignatureService
 
+	// waiter coordinates operator startup dependencies.
 	waiter waiter.OperatorWaiter
 }
 
@@ -247,7 +261,7 @@ loop:
 	for {
 		select {
 		case shutdownErr := <-s.lc.ShutdownRequest():
-			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
+			s.session.Log().Debug("received shutdown request", "error", shutdownErr)
 			s.lc.ShutdownInitiated(nil)
 			break loop
 		case orders := <-s.ordersch:
@@ -256,7 +270,7 @@ loop:
 				s.session.Log().Debug("creating catchup order", "order", key)
 				order, err := newOrder(s, orderID, s.cfg, s.pass, true)
 				if err != nil {
-					s.session.Log().Error("creating catchup order", "order", key, "err", err)
+					s.session.Log().Error("creating catchup order", "order", key, "error", err)
 					continue
 				}
 				s.orders[key] = order
@@ -278,7 +292,7 @@ loop:
 				// create an order object for managing the bid process and order lifecycle
 				order, err := newOrder(s, ev.ID, s.cfg, s.pass, false)
 				if err != nil {
-					s.session.Log().Error("handling order", "order", key, "err", err)
+					s.session.Log().Error("handling order", "order", key, "error", err)
 					break
 				}
 
