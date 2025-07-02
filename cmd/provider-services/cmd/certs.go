@@ -11,15 +11,17 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
+
+	"github.com/fsnotify/fsnotify"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/tendermint/tendermint/libs/log"
-	"golang.org/x/sync/errgroup"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	"github.com/fsnotify/fsnotify"
 
 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
 	"github.com/akash-network/akash-api/go/node/client/v1beta2"
@@ -28,6 +30,7 @@ import (
 	cutils "github.com/akash-network/node/x/cert/utils"
 
 	"github.com/akash-network/provider/event"
+	"github.com/akash-network/provider/tools/certissuer"
 	"github.com/akash-network/provider/tools/fromctx"
 	"github.com/akash-network/provider/tools/pconfig"
 )
@@ -46,6 +49,11 @@ type peerCertResp struct {
 	err      error
 }
 
+type certReq struct {
+	domain string
+	resp   chan<- certResp
+}
+
 type certResp struct {
 	certs []tls.Certificate
 	err   error
@@ -61,7 +69,7 @@ type accountQuerier struct {
 	qc         v1beta2.Client
 	peerCertCh chan peerCertReq
 	mtlsCh     chan chan<- certResp
-	caCh       chan chan<- certResp
+	caCh       chan certReq
 	certReqCh  chan peerCertReq
 	watcher    *fsnotify.Watcher
 	mtlsCerts  []tls.Certificate
@@ -71,6 +79,7 @@ type accountQuerier struct {
 }
 
 type accountQuerierOptions struct {
+	tlsDomain   string
 	tlsCertFile string
 	tlsKeyFile  string
 	mtlsPemFile string
@@ -89,7 +98,14 @@ func aqParseOpts(opts ...accountQuerierOption) (*accountQuerierOptions, error) {
 	return ac, nil
 }
 
-type accountQuerierOption func(options *accountQuerierOptions) error
+type accountQuerierOption func(*accountQuerierOptions) error
+
+func WithTLSDomainWatch(domain string) accountQuerierOption {
+	return func(options *accountQuerierOptions) error {
+		options.tlsDomain = domain
+		return nil
+	}
+}
 
 func WithTLSCert(cert, key string) accountQuerierOption {
 	return func(options *accountQuerierOptions) error {
@@ -127,17 +143,19 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 	ctx, cancel := context.WithCancel(ctx)
 	group, ctx := errgroup.WithContext(ctx)
 
+	log = log.With("module", "account-querier")
+
 	q := &accountQuerier{
 		ctx:        ctx,
 		group:      group,
 		cancel:     cancel,
-		log:        log.With("module", "account-querier"),
+		log:        log,
 		bus:        bus,
 		pstorage:   pstorage,
 		qc:         qc,
 		peerCertCh: make(chan peerCertReq, 1),
 		mtlsCh:     make(chan chan<- certResp, 1),
-		caCh:       make(chan chan<- certResp, 1),
+		caCh:       make(chan certReq, 1),
 		certReqCh:  make(chan peerCertReq, 1),
 		watcher:    watcher,
 		paddr:      cctx.FromAddress,
@@ -145,17 +163,25 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 	}
 
 	if cOpts.tlsCertFile != "" {
-		cert, err := tls.LoadX509KeyPair(cOpts.tlsCertFile, cOpts.tlsKeyFile)
+		// key-cert pair may not yet be created. don't fail,
+		// rather add a directory to watch for a new cert
+
+		_, err := os.Stat(cOpts.tlsCertFile)
+		if err == nil {
+			cert, err := tls.LoadX509KeyPair(cOpts.tlsCertFile, cOpts.tlsKeyFile)
+			if err != nil {
+				return nil, err
+			}
+
+			q.caCerts = []tls.Certificate{cert}
+		}
+
+		dir := filepath.Dir(cOpts.tlsCertFile)
+		log.Info(fmt.Sprintf("watching dir '%s' for cert changes", dir))
+		err = watcher.Add(dir)
 		if err != nil {
 			return nil, err
 		}
-
-		q.caCerts = []tls.Certificate{cert}
-		err = watcher.Add(cOpts.tlsCertFile)
-		if err != nil {
-			return nil, err
-		}
-
 	}
 
 	kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
@@ -245,7 +271,7 @@ func (c *accountQuerier) GetMTLS(ctx context.Context) ([]tls.Certificate, error)
 	}
 }
 
-func (c *accountQuerier) GetCACerts(ctx context.Context) ([]tls.Certificate, error) {
+func (c *accountQuerier) GetCACerts(ctx context.Context, domain string) ([]tls.Certificate, error) {
 	respch := make(chan certResp, 1)
 
 	select {
@@ -253,7 +279,10 @@ func (c *accountQuerier) GetCACerts(ctx context.Context) ([]tls.Certificate, err
 		return nil, ctx.Err()
 	case <-c.ctx.Done():
 		return nil, ctx.Err()
-	case c.caCh <- respch:
+	case c.caCh <- certReq{
+		domain: domain,
+		resp:   respch,
+	}:
 	}
 
 	select {
@@ -273,6 +302,13 @@ func (c *accountQuerier) run() error {
 		c.cancel()
 		sub.Close()
 	}()
+
+	var tsub <-chan interface{}
+
+	if c.cOpts.tlsCertFile == "" {
+		tbus := fromctx.MustPubSubFromCtx(c.ctx)
+		tsub = tbus.Sub(fmt.Sprintf("domain-cert-%s", c.cOpts.tlsDomain))
+	}
 
 	pstorage, _ := fromctx.PersistentConfigFromCtx(c.ctx)
 
@@ -298,6 +334,45 @@ func (c *accountQuerier) run() error {
 		select {
 		case <-c.ctx.Done():
 			return c.ctx.Err()
+		case data := <-tsub:
+			info, valid := data.(certissuer.ResourcesInfo)
+			if !valid {
+				c.log.Error("received invalid cert issuer data", "type", fmt.Sprintf("%T", data))
+				continue
+			}
+
+			c.cOpts.tlsCertFile = info.CertFile
+			c.cOpts.tlsKeyFile = info.KeyFile
+
+			_, err := os.Stat(c.cOpts.tlsCertFile)
+			if err == nil {
+				cert, err := tls.LoadX509KeyPair(c.cOpts.tlsCertFile, c.cOpts.tlsKeyFile)
+				if err != nil {
+					c.log.Error("loading cert/key pair", "err", err.Error())
+					continue
+				}
+
+				c.caCerts = []tls.Certificate{cert}
+			}
+
+			dir := filepath.Dir(c.cOpts.tlsCertFile)
+			c.log.Info(fmt.Sprintf("watching dir '%s' for cert changes", dir))
+
+			watching := false
+
+			for _, wdir := range c.watcher.WatchList() {
+				if wdir == dir {
+					watching = true
+					break
+				}
+			}
+
+			if !watching {
+				err = c.watcher.Add(dir)
+				if err != nil {
+					c.log.Error("watching cert dir", "err", err.Error())
+				}
+			}
 		case evt := <-eventsch:
 			switch ev := evt.(type) {
 			case event.LeaseWon:
@@ -326,8 +401,8 @@ func (c *accountQuerier) run() error {
 				err:   nil,
 			}
 		case req := <-c.caCh:
-			req <- certResp{
-				certs: nil,
+			req.resp <- certResp{
+				certs: c.caCerts,
 				err:   nil,
 			}
 		case resp := <-mtlsRespCh:
@@ -369,6 +444,7 @@ func (c *accountQuerier) run() error {
 					c.mtlsCerts = []tls.Certificate{}
 				}
 			} else if c.cOpts.tlsCertFile != "" && evt.Name == c.cOpts.tlsCertFile {
+				c.log.Info(fmt.Sprintf("detected certificate change, reloading"))
 				cert, err := tls.LoadX509KeyPair(c.cOpts.tlsCertFile, c.cOpts.tlsKeyFile)
 				if err != nil {
 					c.log.Error("unable to load tls certificate", "err", err)
