@@ -68,7 +68,7 @@ export GCE_SERVICE_ACCOUNT_FILE="/path/to/service-account.json"
 ### Basic Setup with Let's Encrypt Production
 
 ```bash
-./akash-provider \
+./provider-services ... \
   --cert-issuer-enabled=true \
   --cert-issuer-email="admin@yourdomain.com" \
   --cert-issuer-ca-dir-url="https://acme-v02.api.letsencrypt.org/directory" \
@@ -80,9 +80,10 @@ export GCE_SERVICE_ACCOUNT_FILE="/path/to/service-account.json"
 ```bash
 export GCE_SERVICE_ACCOUNT_FILE="/path/to/service-account.json"
 
-./akash-provider \
+./provider-services ...\
   --cert-issuer-enabled=true \
   --cert-issuer-email="admin@yourdomain.com" \
+  --cert-issuer-ca-dir-url="https://acme-v02.api.letsencrypt.org/directory" \
   --cert-issuer-dns-providers="gcloud"
 ```
 
