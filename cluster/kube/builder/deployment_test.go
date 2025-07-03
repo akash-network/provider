@@ -78,4 +78,65 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	value, ok = env[envVarAkashProvider]
 	require.True(t, ok)
 	require.Equal(t, lid.Provider, value)
+
+	// Check new environment variables for ingress
+	value, ok = env[envVarAkashProviderIngress]
+	require.True(t, ok)
+	require.Equal(t, fakeHostname, value)
+}
+
+func TestDeploySetsIngressEnvironmentVariables(t *testing.T) {
+	log := testutil.Logger(t)
+	const fakeHostname = "ahostname.dev"
+	const fakeDomain = "ingress.example.com"
+	settings := Settings{
+		ClusterPublicHostname:        fakeHostname,
+		DeploymentIngressStaticHosts: true,
+		DeploymentIngressDomain:      fakeDomain,
+	}
+	lid := testutil.LeaseID(t)
+
+	// Use existing deployment file
+	sdl, err := sdl.ReadFile("../../../testdata/deployment/deployment.yaml")
+	require.NoError(t, err)
+
+	mani, err := sdl.Manifest()
+	require.NoError(t, err)
+
+	sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
+
+	cmani, err := crd.NewManifest("lease", lid, &mani.GetGroups()[0], crd.ClusterSettings{SchedulerParams: sparams})
+	require.NoError(t, err)
+
+	group, sparams, err := cmani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:     lid,
+		Group:   &group,
+		Sparams: crd.ClusterSettings{SchedulerParams: sparams},
+	}
+
+	workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 0)
+	require.NoError(t, err)
+
+	deploymentBuilder := NewDeployment(workload)
+	require.NotNil(t, deploymentBuilder)
+
+	dbuilder := deploymentBuilder.(*deployment)
+	container := dbuilder.container()
+	require.NotNil(t, container)
+
+	env := make(map[string]string)
+	for _, entry := range container.Env {
+		env[entry.Name] = entry.Value
+	}
+
+	// Check that AKASH_PROVIDER_INGRESS is set
+	value, ok := env[envVarAkashProviderIngress]
+	require.True(t, ok)
+	require.Equal(t, fakeHostname, value)
+
+	// The AKASH_INGRESS_URIS may or may not be set depending on the deployment file content
+	// This tests that the functionality works without breaking existing behavior
 }

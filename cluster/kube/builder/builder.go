@@ -57,6 +57,8 @@ const (
 	envVarAkashOwner                 = "AKASH_OWNER"
 	envVarAkashProvider              = "AKASH_PROVIDER"
 	envVarAkashClusterPublicHostname = "AKASH_CLUSTER_PUBLIC_HOSTNAME"
+	envVarAkashIngressURIs           = "AKASH_INGRESS_URIS"
+	envVarAkashProviderIngress       = "AKASH_PROVIDER_INGRESS"
 )
 
 var (
