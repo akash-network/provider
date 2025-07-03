@@ -172,11 +172,8 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		leaseStatusHandler(log, pclient.Cluster(), ctxConfig)).
 		Methods(http.MethodGet)
 
-	streamRouter := lrouter.NewRoute().Subrouter()
-	streamRouter.Use(requestStreamParams)
-
-	mrouter = streamRouter.NewRoute().Subrouter()
-	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeEvents))
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requestStreamParams, requireEndpointScopeForLeaseID(ajwt.PermissionScopeEvents))
 
 	// GET /lease/<lease-id>/kubeevents
 	mrouter.HandleFunc("/kubeevents",
@@ -184,7 +181,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		Methods("GET")
 
 	mrouter = lrouter.NewRoute().Subrouter()
-	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeLogs))
+	mrouter.Use(requestStreamParams, requireEndpointScopeForLeaseID(ajwt.PermissionScopeLogs))
 
 	// GET /lease/<lease-id>/logs
 	mrouter.HandleFunc("/logs",
