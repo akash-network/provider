@@ -5,12 +5,13 @@ package integration
 import (
 	"context"
 	"fmt"
-	"golang.org/x/sync/errgroup"
 	"net"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
@@ -135,12 +136,6 @@ func (s *E2EDeploymentCreate) TestE2EDeploymentCreateProviderShutdown() {
 		Host:   provHost,
 		Scheme: "https",
 	}
-	// address for JWT server to listen on
-	jwtHost := fmt.Sprintf("localhost:%d", ports[1])
-	jwtURL := url.URL{
-		Host:   jwtHost,
-		Scheme: "https",
-	}
 
 	hostnameOperatorPort := ports[2]
 	hostnameOperatorHost := fmt.Sprintf("localhost:%d", hostnameOperatorPort)
@@ -188,21 +183,6 @@ func (s *E2EDeploymentCreate) TestE2EDeploymentCreateProviderShutdown() {
 	// Wait for the provider gateway to be up and running
 	s.T().Log("waiting for provider gateway")
 	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
-
-	// --- Start JWT Server
-	s.group.Go(func() error {
-		s.T().Logf("starting JWT server for test on %v", jwtURL.Host)
-		_, err := ptestutil.RunProviderJWTServer(s.ctx,
-			s.validator.ClientCtx,
-			s.keyProvider.GetName(),
-			jwtURL.Host,
-		)
-		s.Assert().NoError(err)
-		return err
-	})
-
-	s.T().Log("waiting for JWT server")
-	waitForTCPSocket(s.ctx, dialer, jwtHost, s.T())
 
 	// --- Start hostname operator
 	s.group.Go(func() error {
