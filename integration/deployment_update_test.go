@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"time"
 
-	cutil "github.com/akash-network/provider/cluster/util"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -24,6 +22,7 @@ import (
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 
 	"github.com/akash-network/provider/tools/fromctx"
+	cutil "github.com/akash-network/provider/cluster/util"
 )
 
 type E2EDeploymentUpdate struct {
