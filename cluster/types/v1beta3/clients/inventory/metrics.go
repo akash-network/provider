@@ -24,6 +24,12 @@ type StorageAttributes struct {
 	Class      string `json:"class,omitempty"`
 }
 
+type CPUArchitectureAttributes struct {
+	Architectures []string
+}
+
+type CPUAttributes map[string]*CPUArchitectureAttributes
+
 func (m GPUModels) ExistsOrWildcard(model string) (*GPUModelAttributes, bool) {
 	attr, exists := m[model]
 	if exists {
@@ -132,4 +138,125 @@ func ParseStorageAttributes(attrs types.Attributes) (StorageAttributes, error) {
 	}
 
 	return res, nil
+}
+
+func ParseCPUAttributes(attrs types.Attributes) (CPUAttributes, error) {
+	cpuAttrs := make(CPUAttributes)
+
+	for _, attr := range attrs {
+		tokens := strings.Split(attr.Key, "/")
+		if len(tokens) < 3 {
+			return CPUAttributes{}, fmt.Errorf("invalid CPU attribute") // nolint: err113
+		}
+
+		switch tokens[0] {
+		case "capabilities":
+		default:
+			return CPUAttributes{}, fmt.Errorf("unexpected CPU attribute type (%s)", tokens[0]) // nolint: err113
+		}
+
+		switch tokens[1] {
+		case "cpu":
+		default:
+			return CPUAttributes{}, fmt.Errorf("unexpected CPU attribute type (%s)", tokens[1]) // nolint: err113
+		}
+
+		switch tokens[2] {
+		case "arch":
+		default:
+			return CPUAttributes{}, fmt.Errorf("unexpected CPU attribute type (%s)", tokens[2]) // nolint: err113
+		}
+
+		if len(tokens) < 4 {
+			return CPUAttributes{}, fmt.Errorf("invalid CPU architecture attribute") // nolint: err113
+		}
+
+		architecture := tokens[3]
+
+		// Check if the attribute value is "true" to indicate support
+		if attr.Value == "true" {
+			if cpuAttrs["cpu"] == nil {
+				cpuAttrs["cpu"] = &CPUArchitectureAttributes{
+					Architectures: make([]string, 0),
+				}
+			}
+			cpuAttrs["cpu"].Architectures = append(cpuAttrs["cpu"].Architectures, architecture)
+		}
+	}
+
+	return cpuAttrs, nil
+}
+
+// ParseCPUAttributesFromSDL parses CPU architecture attributes from SDL format
+// This supports the format: attributes: arch: [arm64, amd64]
+func ParseCPUAttributesFromSDL(attrs map[string]interface{}) (CPUAttributes, error) {
+	cpuAttrs := make(CPUAttributes)
+
+	if archAttr, exists := attrs["arch"]; exists {
+		switch v := archAttr.(type) {
+		case []interface{}:
+			architectures := make([]string, 0, len(v))
+			for _, arch := range v {
+				if archStr, ok := arch.(string); ok {
+					architectures = append(architectures, archStr)
+				} else {
+					return CPUAttributes{}, fmt.Errorf("invalid architecture type in SDL") // nolint: err113
+				}
+			}
+			cpuAttrs["cpu"] = &CPUArchitectureAttributes{
+				Architectures: architectures,
+			}
+		case string:
+			// Single architecture as string
+			cpuAttrs["cpu"] = &CPUArchitectureAttributes{
+				Architectures: []string{v},
+			}
+		default:
+			return CPUAttributes{}, fmt.Errorf("invalid architecture format in SDL") // nolint: err113
+		}
+	}
+
+	return cpuAttrs, nil
+}
+
+func (c *CPUArchitectureAttributes) HasArchitecture(arch string) bool {
+	for _, supportedArch := range c.Architectures {
+		if supportedArch == arch || supportedArch == "*" {
+			return true
+		}
+	}
+	return false
+}
+
+// ConvertSDLCPUAttributesToKeyValue converts SDL format CPU attributes to key-value format
+// This function handles the conversion from: attributes: arch: [arm64, amd64]
+// To: attributes: [{key: "capabilities/cpu/arch/arm64", value: "true"}, {key: "capabilities/cpu/arch/amd64", value: "true"}]
+func ConvertSDLCPUAttributesToKeyValue(sdlAttrs map[string]interface{}) (types.Attributes, error) {
+	var attrs types.Attributes
+
+	if archAttr, exists := sdlAttrs["arch"]; exists {
+		switch v := archAttr.(type) {
+		case []interface{}:
+			for _, arch := range v {
+				if archStr, ok := arch.(string); ok {
+					attrs = append(attrs, types.Attribute{
+						Key:   fmt.Sprintf("capabilities/cpu/arch/%s", archStr),
+						Value: "true",
+					})
+				} else {
+					return nil, fmt.Errorf("invalid architecture type in SDL") // nolint: err113
+				}
+			}
+		case string:
+			// Single architecture as string
+			attrs = append(attrs, types.Attribute{
+				Key:   fmt.Sprintf("capabilities/cpu/arch/%s", v),
+				Value: "true",
+			})
+		default:
+			return nil, fmt.Errorf("invalid architecture format in SDL") // nolint: err113
+		}
+	}
+
+	return attrs, nil
 }

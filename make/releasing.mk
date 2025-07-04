@@ -75,6 +75,7 @@ docker-image:
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
 		-v $(GOPATH):/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(shell pwd)/../akash-api:/go/src/$(GO_MOD_NAME)/../akash-api \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
 		$(GORELEASER_IMAGE) \
@@ -105,6 +106,7 @@ release: gen-changelog
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
 		-e GOPATH=/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(shell pwd)/../akash-api:/go/src/$(GO_MOD_NAME)/../akash-api \
 		-v $(GOPATH):/go \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\

@@ -15,4 +15,5 @@ attributes:
     value: ram
   - key: capabilities/storage/3/persistent
     value: false
-
+  - key: capabilities/cpu/arch/arm64
+    value: true
