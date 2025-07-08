@@ -572,7 +572,7 @@ func (c certQuerier) GetMTLS(_ context.Context) ([]tls.Certificate, error) {
 	return c.mtls, nil
 }
 
-func (c certQuerier) GetCACerts(_ context.Context) ([]tls.Certificate, error) {
+func (c certQuerier) GetCACerts(_ context.Context, _ string) ([]tls.Certificate, error) {
 	return nil, nil
 }
 

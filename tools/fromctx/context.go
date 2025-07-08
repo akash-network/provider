@@ -16,6 +16,7 @@ import (
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/tools/certissuer"
 	"github.com/akash-network/provider/tools/pconfig"
 )
 
@@ -33,6 +34,7 @@ const (
 	CtxKeyStartupCh          = Key("startup-ch")
 	CtxKeyInventoryUnderTest = Key("inventory-under-test")
 	CtxKeyPersistentConfig   = Key("persistent-config")
+	CtxKeyCertIssuer         = Key("cert-issuer")
 )
 
 var (
@@ -275,7 +277,7 @@ func MustPubSubFromCtx(ctx context.Context) pubsub.PubSub {
 func PersistentConfigReaderFromCtx(ctx context.Context) (pconfig.StorageR, error) {
 	val := ctx.Value(CtxKeyPersistentConfig)
 	if val == nil {
-		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+		return nil, fmt.Errorf("%w: context does not have persistent config reader set", ErrNotFound)
 	}
 
 	res, valid := val.(pconfig.Storage)
@@ -289,7 +291,7 @@ func PersistentConfigReaderFromCtx(ctx context.Context) (pconfig.StorageR, error
 func PersistentConfigWriterFromCtx(ctx context.Context) (pconfig.StorageW, error) {
 	val := ctx.Value(CtxKeyPersistentConfig)
 	if val == nil {
-		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+		return nil, fmt.Errorf("%w: context does not have persistent config writer set", ErrNotFound)
 	}
 
 	res, valid := val.(pconfig.Storage)
@@ -303,10 +305,24 @@ func PersistentConfigWriterFromCtx(ctx context.Context) (pconfig.StorageW, error
 func PersistentConfigFromCtx(ctx context.Context) (pconfig.Storage, error) {
 	val := ctx.Value(CtxKeyPersistentConfig)
 	if val == nil {
-		return nil, fmt.Errorf("%w: context does not have pubsub set", ErrNotFound)
+		return nil, fmt.Errorf("%w: context does not have persistent config set", ErrNotFound)
 	}
 
 	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func CertIssuerFromCtx(ctx context.Context) (certissuer.CertIssuer, error) {
+	val := ctx.Value(CtxKeyCertIssuer)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have cert issuer set", ErrNotFound)
+	}
+
+	res, valid := val.(certissuer.CertIssuer)
 	if !valid {
 		return nil, ErrValueInvalidType
 	}
