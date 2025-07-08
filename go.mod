@@ -60,7 +60,6 @@ retract (
 replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
-	// github.com/akash-network/akash-api => ../akash-api
 
 	github.com/cosmos/cosmos-sdk => github.com/akash-network/cosmos-sdk v0.45.16-akash.3
 
