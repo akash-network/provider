@@ -224,7 +224,7 @@ func RunCmd() *cobra.Command {
 					DNSProviders: viper.GetStringSlice(FlagCertIssuerDNSProviders),
 					DNSResolvers: viper.GetStringSlice(FlagCertIssuerDNSResolvers),
 					Domains: []string{
-						viper.GetString(FlagDeploymentIngressDomain),
+						viper.GetString(FlagClusterPublicHostname),
 					},
 				}
 
@@ -594,7 +594,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
-	var acQuerierOpts []accountQuerierOption
+	var acQuerierOpts []AccountQuerierOption
 
 	if _, err := fromctx.CertIssuerFromCtx(ctx); err == nil {
 		acQuerierOpts = append(acQuerierOpts, WithTLSDomainWatch(clusterPublicHostname))

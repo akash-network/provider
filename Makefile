@@ -48,10 +48,14 @@ ifeq (,$(findstring nostrip,$(BUILD_OPTIONS)))
 	GORELEASER_STRIP_FLAGS += -s -w
 endif
 
+ifeq ($(UNAME_OS_LOWER), darwin)
+	ldflags += -extldflags=-Wl,-ld_classic
+endif
+
 ldflags += $(LDFLAGS)
 ldflags := $(strip $(ldflags))
 
-BUILD_FLAGS := -mod=$(GO_MOD) -tags='$(BUILD_TAGS)' -ldflags '$(ldflags)'
+BUILD_FLAGS := -mod=$(GO_MOD) -tags='$(BUILD_TAGS)' -ldflags='$(ldflags)'
 
 include make/releasing.mk
 include make/mod.mk
