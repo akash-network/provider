@@ -25,7 +25,7 @@ provider-run:
 	$(PROVIDER_SERVICES) run \
 		--from "$(PROVIDER_KEY_NAME)" \
 		--cluster-k8s \
-        --kubeconfig "$(AKASH_KUBECONFIG)" \
+		--kubeconfig "$(AKASH_KUBECONFIG)" \
 		--gateway-listen-address "$(GATEWAY_HOST)" \
 		--deployment-ingress-static-hosts true \
 		--deployment-ingress-domain "$(GATEWAY_HOSTNAME)" \
@@ -47,15 +47,15 @@ kind-deployments-rollout:
 
 .PHONY: kube-cluster-setup-gpu
 kube-cluster-setup-gpu: init \
-    $(KUBE_CREATE) \
-    kube-cluster-check-info \
-    kube-setup-ingress \
+	$(KUBE_CREATE) \
+	kube-cluster-check-info \
+	kube-setup-ingress \
 	kube-prepare-images \
 	kube-upload-images \
 	kustomize-init \
 	kustomize-deploy-services \
 	kube-deployments-rollout \
-    kube-install-helm-charts \
+	kube-install-helm-charts \
 	kube-setup-$(AP_RUN_NAME)
 
 .PHONY: kube-deployments-rollout
