@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
@@ -26,11 +25,12 @@ import (
 	"github.com/akash-network/node/events"
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/sdl"
-	config2 "github.com/akash-network/node/x/provider/config"
 
 	cltypes "github.com/akash-network/akash-api/go/node/client/types"
-	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	apclient "github.com/akash-network/akash-api/go/provider/client"
+
+	xpconfig "github.com/akash-network/node/x/provider/config"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
@@ -51,6 +51,7 @@ import (
 	"github.com/akash-network/provider/operator/waiter"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/certissuer"
 	"github.com/akash-network/provider/tools/fromctx"
 	"github.com/akash-network/provider/tools/pconfig"
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
@@ -109,6 +110,14 @@ const (
 	FlagPersistentConfigPath             = "persistent-config-path"
 	FlagGatewayTLSCert                   = "gateway-tls-cert"
 	FlagGatewayTLSKey                    = "gateway-tls-key"
+	FlagCertIssuerEnabled                = "cert-issuer-enabled"
+	FlagCertIssuerKID                    = "cert-issuer-kid"
+	FlagCertIssuerHMAC                   = "cert-issuer-hmac"
+	FlagCertIssuerStorageDir             = "cert-issuer-storage-dir"
+	FlagCertIssuerCADirURL               = "cert-issuer-ca-dir-url"
+	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
+	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
+	FlagCertIssuerEmail                  = "cert-issuer-email"
 )
 
 const (
@@ -192,18 +201,61 @@ func RunCmd() *cobra.Command {
 				return err
 			}
 
+			logger := cmdutil.OpenLogger().With("cmp", "provider")
+
+			bus := tpubsub.New(pctx, 1000)
+
+			if viper.GetBool(FlagCertIssuerEnabled) {
+				var certIssuer certissuer.CertIssuer
+
+				storageDir := viper.GetString(FlagCertIssuerStorageDir)
+				if storageDir == "" {
+					storageDir = fmt.Sprintf("%s/.certissuer", cctx.HomeDir)
+				}
+
+				ciCfg := certissuer.Config{
+					Bus:          bus,
+					Owner:        cctx.FromAddress,
+					KID:          viper.GetString(FlagCertIssuerKID),
+					HMAC:         viper.GetString(FlagCertIssuerHMAC),
+					StorageDir:   storageDir,
+					CADirURL:     viper.GetString(FlagCertIssuerCADirURL),
+					Email:        viper.GetString(FlagCertIssuerEmail),
+					DNSProviders: viper.GetStringSlice(FlagCertIssuerDNSProviders),
+					DNSResolvers: viper.GetStringSlice(FlagCertIssuerDNSResolvers),
+					Domains: []string{
+						viper.GetString(FlagClusterPublicHostname),
+					},
+				}
+
+				if err = ciCfg.Validate(); err != nil {
+					return err
+				}
+
+				certIssuer, err = certissuer.NewLego(ctx, logger, ciCfg)
+				if err != nil {
+					return err
+				}
+
+				go func() {
+					<-ctx.Done()
+					_ = certIssuer.Close()
+				}()
+
+				fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyCertIssuer, certIssuer)
+			}
+
 			startupch := make(chan struct{}, 1)
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, cmdutil.OpenLogger().With("cmp", "provider"))
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, logger)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPersistentConfig, pstorage)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, bus)
 
 			pctx, pcancel := context.WithCancel(context.Background())
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, tpubsub.New(pctx, 1000))
-
 			go func() {
 				defer pcancel()
 
@@ -232,261 +284,9 @@ func RunCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().String(flags.FlagChainID, "", "The network chain ID")
-	if err := viper.BindPFlag(flags.FlagChainID, cmd.Flags().Lookup(flags.FlagChainID)); err != nil {
-		panic(err)
-	}
-
 	flags.AddTxFlagsToCmd(cmd)
 
-	cfg := provider.NewDefaultConfig()
-
-	cmd.Flags().Bool(FlagClusterK8s, false, "Use Kubernetes cluster")
-	if err := viper.BindPFlag(FlagClusterK8s, cmd.Flags().Lookup(FlagClusterK8s)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(providerflags.FlagK8sManifestNS, "lease", "Cluster manifest namespace")
-	if err := viper.BindPFlag(providerflags.FlagK8sManifestNS, cmd.Flags().Lookup(providerflags.FlagK8sManifestNS)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagGatewayListenAddress, "0.0.0.0:8443", "Gateway listen address")
-	if err := viper.BindPFlag(FlagGatewayListenAddress, cmd.Flags().Lookup(FlagGatewayListenAddress)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8444", "Gateway listen address")
-	if err := viper.BindPFlag(FlagGatewayGRPCListenAddress, cmd.Flags().Lookup(FlagGatewayGRPCListenAddress)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPricingStrategy, "scale", "Pricing strategy to use")
-	if err := viper.BindPFlag(FlagBidPricingStrategy, cmd.Flags().Lookup(FlagBidPricingStrategy)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceCPUScale, "0", "cpu pricing scale in uakt per millicpu")
-	if err := viper.BindPFlag(FlagBidPriceCPUScale, cmd.Flags().Lookup(FlagBidPriceCPUScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceMemoryScale, "0", "memory pricing scale in uakt per megabyte")
-	if err := viper.BindPFlag(FlagBidPriceMemoryScale, cmd.Flags().Lookup(FlagBidPriceMemoryScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceStorageScale, "0", "storage pricing scale in uakt per megabyte")
-	if err := viper.BindPFlag(FlagBidPriceStorageScale, cmd.Flags().Lookup(FlagBidPriceStorageScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceEndpointScale, "0", "endpoint pricing scale in uakt")
-	if err := viper.BindPFlag(FlagBidPriceEndpointScale, cmd.Flags().Lookup(FlagBidPriceEndpointScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceIPScale, "0", "leased ip pricing scale in uakt")
-	if err := viper.BindPFlag(FlagBidPriceIPScale, cmd.Flags().Lookup(FlagBidPriceIPScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceScriptPath, "", "path to script to run for computing bid price")
-	if err := viper.BindPFlag(FlagBidPriceScriptPath, cmd.Flags().Lookup(FlagBidPriceScriptPath)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagBidPriceScriptProcessLimit, 32, "limit to the number of scripts run concurrently for bid pricing")
-	if err := viper.BindPFlag(FlagBidPriceScriptProcessLimit, cmd.Flags().Lookup(FlagBidPriceScriptProcessLimit)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagBidPriceScriptTimeout, time.Second*10, "execution timelimit for bid pricing as a duration")
-	if err := viper.BindPFlag(FlagBidPriceScriptTimeout, cmd.Flags().Lookup(FlagBidPriceScriptTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidDeposit, cfg.BidDeposit.String(), "Bid deposit amount")
-	if err := viper.BindPFlag(FlagBidDeposit, cmd.Flags().Lookup(FlagBidDeposit)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagClusterPublicHostname, "", "The public IP of the Kubernetes cluster")
-	if err := viper.BindPFlag(FlagClusterPublicHostname, cmd.Flags().Lookup(FlagClusterPublicHostname)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagClusterNodePortQuantity, 1, "The number of node ports available on the Kubernetes cluster")
-	if err := viper.BindPFlag(FlagClusterNodePortQuantity, cmd.Flags().Lookup(FlagClusterNodePortQuantity)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagClusterWaitReadyDuration, time.Second*5, "The time to wait for the cluster to be available")
-	if err := viper.BindPFlag(FlagClusterWaitReadyDuration, cmd.Flags().Lookup(FlagClusterWaitReadyDuration)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagInventoryResourcePollPeriod, time.Second*5, "The period to poll the cluster inventory")
-	if err := viper.BindPFlag(FlagInventoryResourcePollPeriod, cmd.Flags().Lookup(FlagInventoryResourcePollPeriod)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagInventoryResourceDebugFrequency, 10, "The rate at which to log all inventory resources")
-	if err := viper.BindPFlag(FlagInventoryResourceDebugFrequency, cmd.Flags().Lookup(FlagInventoryResourceDebugFrequency)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagDeploymentIngressStaticHosts, false, "")
-	if err := viper.BindPFlag(FlagDeploymentIngressStaticHosts, cmd.Flags().Lookup(FlagDeploymentIngressStaticHosts)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagDeploymentIngressDomain, "", "")
-	if err := viper.BindPFlag(FlagDeploymentIngressDomain, cmd.Flags().Lookup(FlagDeploymentIngressDomain)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagDeploymentIngressExposeLBHosts, false, "")
-	if err := viper.BindPFlag(FlagDeploymentIngressExposeLBHosts, cmd.Flags().Lookup(FlagDeploymentIngressExposeLBHosts)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagDeploymentNetworkPoliciesEnabled, true, "Enable network policies")
-	if err := viper.BindPFlag(FlagDeploymentNetworkPoliciesEnabled, cmd.Flags().Lookup(FlagDeploymentNetworkPoliciesEnabled)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagDockerImagePullSecretsName, "", "Name of the local image pull secret configured with kubectl")
-	if err := viper.BindPFlag(FlagDockerImagePullSecretsName, cmd.Flags().Lookup(FlagDockerImagePullSecretsName)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagOvercommitPercentMemory, 0, "Percentage of memory overcommit")
-	if err := viper.BindPFlag(FlagOvercommitPercentMemory, cmd.Flags().Lookup(FlagOvercommitPercentMemory)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagOvercommitPercentCPU, 0, "Percentage of CPU overcommit")
-	if err := viper.BindPFlag(FlagOvercommitPercentCPU, cmd.Flags().Lookup(FlagOvercommitPercentCPU)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagOvercommitPercentStorage, 0, "Percentage of storage overcommit")
-	if err := viper.BindPFlag(FlagOvercommitPercentStorage, cmd.Flags().Lookup(FlagOvercommitPercentStorage)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().StringSlice(FlagDeploymentBlockedHostnames, nil, "hostnames blocked for deployments")
-	if err := viper.BindPFlag(FlagDeploymentBlockedHostnames, cmd.Flags().Lookup(FlagDeploymentBlockedHostnames)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagAuthPem, "", "")
-
-	if err := providerflags.AddKubeConfigPathFlag(cmd); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagDeploymentRuntimeClass, "gvisor", "kubernetes runtime class for deployments, use none for no specification")
-	if err := viper.BindPFlag(FlagDeploymentRuntimeClass, cmd.Flags().Lookup(FlagDeploymentRuntimeClass)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagBidTimeout, 5*time.Minute, "time after which bids are cancelled if no lease is created")
-	if err := viper.BindPFlag(FlagBidTimeout, cmd.Flags().Lookup(FlagBidTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagManifestTimeout, 5*time.Minute, "time after which bids are cancelled if no manifest is received")
-	if err := viper.BindPFlag(FlagManifestTimeout, cmd.Flags().Lookup(FlagManifestTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagMetricsListener, "", "ip and port to start the metrics listener on")
-	if err := viper.BindPFlag(FlagMetricsListener, cmd.Flags().Lookup(FlagMetricsListener)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagWithdrawalPeriod, time.Hour*24, "period at which withdrawals are made from the escrow accounts")
-	if err := viper.BindPFlag(FlagWithdrawalPeriod, cmd.Flags().Lookup(FlagWithdrawalPeriod)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagLeaseFundsMonitorInterval, time.Minute*10, "interval at which lease is checked for funds available on the escrow accounts. >= 1m")
-	if err := viper.BindPFlag(FlagLeaseFundsMonitorInterval, cmd.Flags().Lookup(FlagLeaseFundsMonitorInterval)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagMinimumBalance, mparams.DefaultBidMinDeposit.Amount.Mul(sdk.NewIntFromUint64(2)).Uint64(), "minimum account balance at which withdrawal is started")
-	if err := viper.BindPFlag(FlagMinimumBalance, cmd.Flags().Lookup(FlagMinimumBalance)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagProviderConfig, "", "provider configuration file path")
-	if err := viper.BindPFlag(FlagProviderConfig, cmd.Flags().Lookup(FlagProviderConfig)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagRPCQueryTimeout, time.Minute, "timeout for requests made to the RPC node")
-	if err := viper.BindPFlag(FlagRPCQueryTimeout, cmd.Flags().Lookup(FlagRPCQueryTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagCachedResultMaxAge, 5*time.Second, "max. cache age for results from the RPC node")
-	if err := viper.BindPFlag(FlagCachedResultMaxAge, cmd.Flags().Lookup(FlagCachedResultMaxAge)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagEnableIPOperator, false, "enable usage of the IP operator to lease IP addresses")
-	if err := viper.BindPFlag(FlagEnableIPOperator, cmd.Flags().Lookup(FlagEnableIPOperator)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagTxBroadcastTimeout, 30*time.Second, "tx broadcast timeout. defaults to 30s")
-	if err := viper.BindPFlag(FlagTxBroadcastTimeout, cmd.Flags().Lookup(FlagTxBroadcastTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagMonitorMaxRetries, 40, "max count of status retries before closing the lease. defaults to 40")
-	if err := viper.BindPFlag(FlagMonitorMaxRetries, cmd.Flags().Lookup(FlagMonitorMaxRetries)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagMonitorRetryPeriod, 4*time.Second, "monitor status retry period. defaults to 4s (min value)")
-	if err := viper.BindPFlag(FlagMonitorRetryPeriod, cmd.Flags().Lookup(FlagMonitorRetryPeriod)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagMonitorRetryPeriodJitter, 15*time.Second, "monitor status retry window. defaults to 15s")
-	if err := viper.BindPFlag(FlagMonitorRetryPeriodJitter, cmd.Flags().Lookup(FlagMonitorRetryPeriodJitter)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagMonitorHealthcheckPeriod, 10*time.Second, "monitor healthcheck period. defaults to 10s")
-	if err := viper.BindPFlag(FlagMonitorHealthcheckPeriod, cmd.Flags().Lookup(FlagMonitorHealthcheckPeriod)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagMonitorHealthcheckPeriodJitter, 5*time.Second, "monitor healthcheck window. defaults to 5s")
-	if err := viper.BindPFlag(FlagMonitorHealthcheckPeriodJitter, cmd.Flags().Lookup(FlagMonitorHealthcheckPeriodJitter)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagPersistentConfigBackend, "bbolt", "backend storage for persistent config. defaults to bbolt. available options: bbolt")
-	if err := viper.BindPFlag(FlagPersistentConfigBackend, cmd.Flags().Lookup(FlagPersistentConfigBackend)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagPersistentConfigPath, "", "path to backend storage for persistent config")
-	if err := viper.BindPFlag(FlagPersistentConfigPath, cmd.Flags().Lookup(FlagPersistentConfigPath)); err != nil {
-		panic(err)
-	}
-
-	if err := providerflags.AddServiceEndpointFlag(cmd, serviceHostnameOperator); err != nil {
-		panic(err)
-	}
-
-	if err := providerflags.AddServiceEndpointFlag(cmd, serviceIPOperator); err != nil {
+	if err := addRunFlags(cmd); err != nil {
 		panic(err)
 	}
 
@@ -689,7 +489,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	currentBlockHeight := statusResult.SyncInfo.LatestBlockHeight
-	session := session.New(logger, cl, pinfo, currentBlockHeight)
+	sessionMgr := session.New(logger, cl, pinfo, currentBlockHeight)
 
 	if err := cctx.Client.Start(); err != nil {
 		return err
@@ -720,7 +520,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.MonitorHealthcheckPeriodJitter = monitorHealthcheckPeriodJitter
 
 	if len(providerConfig) != 0 {
-		pConf, err := config2.ReadConfigPath(providerConfig)
+		pConf, err := xpconfig.ReadConfigPath(providerConfig)
 		if err != nil {
 			return err
 		}
@@ -787,16 +587,18 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	operatorWaiter := waiter.NewOperatorWaiter(ctx, logger, waitClients...)
 
-	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, session, bus, cclient, operatorWaiter, config)
+	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, sessionMgr, bus, cclient, operatorWaiter, config)
 	if err != nil {
 		return err
 	}
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
-	var acQuerierOpts []accountQuerierOption
+	var acQuerierOpts []AccountQuerierOption
 
-	if certFile := viper.GetString(FlagGatewayTLSCert); certFile != "" {
+	if _, err := fromctx.CertIssuerFromCtx(ctx); err == nil {
+		acQuerierOpts = append(acQuerierOpts, WithTLSDomainWatch(clusterPublicHostname))
+	} else if certFile := viper.GetString(FlagGatewayTLSCert); certFile != "" {
 		keyFile := viper.GetString(FlagGatewayTLSKey)
 		acQuerierOpts = append(acQuerierOpts, WithTLSCert(certFile, keyFile))
 	}
