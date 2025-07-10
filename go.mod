@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/akash-network/akash-api v0.0.82
-	github.com/akash-network/node v0.38.3
+	github.com/akash-network/node v0.38.4
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1

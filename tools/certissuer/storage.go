@@ -350,7 +350,9 @@ func (s *storage) SaveResource(certRes *certificate.Resource) (ResourcesInfo, er
 		}
 	}()
 
-	info := ResourcesInfo{}
+	info := ResourcesInfo{
+		Domain: certRes.Domain,
+	}
 
 	// if we were given a CSR, we don't know the private key
 	if certRes.PrivateKey != nil {

@@ -3,6 +3,7 @@ package certissuer
 import (
 	"context"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -245,7 +246,8 @@ func (ci *certIssuer) run() error {
 			}
 		}
 
-		cert, err := x509.ParseCertificate(res.Certificate)
+		block, _ := pem.Decode(res.Certificate)
+		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to parse certificate %s: %w", domain, err))
 			continue
