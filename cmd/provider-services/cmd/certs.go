@@ -237,7 +237,7 @@ func (c *accountQuerier) GetAccountCertificate(ctx context.Context, acc sdk.Addr
 		return cert, pubkey, nil
 	}
 
-	if !errors.Is(err, os.ErrNotExist) {
+	if !errors.Is(err, pconfig.ErrNotExists) {
 		return nil, nil, err
 	}
 
@@ -272,7 +272,7 @@ func (c *accountQuerier) GetAccountPublicKey(ctx context.Context, acc sdk.Addres
 		return pubkey, nil
 	}
 
-	if !errors.Is(err, os.ErrNotExist) {
+	if !errors.Is(err, pconfig.ErrNotExists) {
 		return nil, err
 	}
 
