@@ -2,12 +2,17 @@ package cmd
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 
 	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	apclient "github.com/akash-network/akash-api/go/provider/client"
+	ajwt "github.com/akash-network/akash-api/go/util/jwt"
+	cutils "github.com/akash-network/node/x/cert/utils"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
@@ -27,12 +32,16 @@ const (
 	flagOutput   = "output"
 	flagFollow   = "follow"
 	flagTail     = "tail"
+	flagAuthType = "auth-type"
 )
 
 const (
 	outputText = "text"
 	outputYAML = "yaml"
 	outputJSON = "json"
+
+	authTypeJWT  = "jwt"
+	authTypeMTLS = "mtls"
 )
 
 var (
@@ -53,6 +62,10 @@ func addCmdFlags(cmd *cobra.Command) {
 	if err := cmd.MarkFlagRequired(flags.FlagFrom); err != nil {
 		panic(err.Error())
 	}
+}
+
+func addAuthFlags(cmd *cobra.Command) {
+	cmd.Flags().String(flagAuthType, authTypeJWT, "gateway auth type. jwt|mtls. defaults to mtls")
 }
 
 func addManifestFlags(cmd *cobra.Command) {
@@ -184,4 +197,29 @@ func markRPCServerError(err error) error {
 	}
 
 	return err
+}
+
+func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) ([]apclient.ClientOption, error) {
+	authType, err := flags.GetString(flagAuthType)
+	if err != nil {
+		return nil, err
+	}
+
+	var opts []apclient.ClientOption
+	switch authType {
+	case authTypeJWT:
+		opt := apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress))
+		opts = append(opts, opt)
+	case authTypeMTLS:
+		cert, err := cutils.LoadAndQueryCertificateForAccount(ctx, cctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		opt := apclient.WithAuthCerts([]tls.Certificate{cert})
+		opts = append(opts, opt)
+	default:
+		return nil, fmt.Errorf("invalid gateway auth type %s. supported are jwt|mtls", authType)
+	}
+
+	return opts, nil
 }
