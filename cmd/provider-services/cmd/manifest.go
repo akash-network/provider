@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -45,6 +44,7 @@ func SendManifestCmd() *cobra.Command {
 	}
 
 	addManifestFlags(cmd)
+	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
 
@@ -77,7 +77,13 @@ func GetManifestCmd() *cobra.Command {
 			}
 
 			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-			gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+
+			opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+			if err != nil {
+				return err
+			}
+
+			gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
 			if err != nil {
 				return err
 			}
@@ -111,6 +117,7 @@ func GetManifestCmd() *cobra.Command {
 	}
 
 	addLeaseFlags(cmd)
+	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputYAML, "output format json|yaml. default yaml")
 
@@ -165,9 +172,14 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	submitFailed := false
 
+	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
 		if err != nil {
 			return err
 		}
