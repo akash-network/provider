@@ -2,7 +2,6 @@ package cmd
 
 import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
@@ -25,6 +24,7 @@ func leaseStatusCmd() *cobra.Command {
 	}
 
 	addLeaseFlags(cmd)
+	addAuthFlags(cmd)
 
 	return cmd
 }
@@ -52,12 +52,17 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	result, err := gclient.LeaseStatus(cmd.Context(), bid.LeaseID())
+	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	if err != nil {
+		return err
+	}
+
+	result, err := gclient.LeaseStatus(ctx, bid.LeaseID())
 	if err != nil {
 		return showErrorToUser(err)
 	}
