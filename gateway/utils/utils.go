@@ -30,6 +30,8 @@ type CertGetter interface {
 }
 
 func NewServerTLSConfig(ctx context.Context, cquery CertGetter, sni string) (*tls.Config, error) {
+	// todo ideally we want here configs to be cached to speed up tls handshake
+	// @troian to look at that
 	cfg := &tls.Config{
 		MinVersion: tls.VersionTLS13,
 		GetConfigForClient: func(info *tls.ClientHelloInfo) (*tls.Config, error) {

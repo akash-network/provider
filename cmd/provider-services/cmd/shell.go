@@ -11,7 +11,6 @@ import (
 	"syscall"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
@@ -47,6 +46,8 @@ func LeaseShellCmd() *cobra.Command {
 	}
 
 	addLeaseFlags(cmd)
+	addAuthFlags(cmd)
+
 	cmd.Flags().Bool(FlagStdin, false, "connect stdin")
 	if err := viper.BindPFlag(FlagStdin, cmd.Flags().Lookup(FlagStdin)); err != nil {
 		return nil
@@ -123,7 +124,12 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 	lID := bidID.LeaseID()
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
 	if err != nil {
 		return err
 	}
