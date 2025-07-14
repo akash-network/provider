@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/spf13/cobra"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -36,7 +35,12 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
 	if err != nil {
 		return err
 	}
@@ -68,6 +72,8 @@ func MigrateHostnamesCmd() *cobra.Command {
 	}
 
 	addCmdFlags(cmd)
+	addAuthFlags(cmd)
+
 	cmd.Flags().Uint32(FlagGSeq, 1, "group sequence")
 
 	return cmd
