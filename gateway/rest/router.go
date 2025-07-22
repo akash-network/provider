@@ -184,7 +184,10 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		Methods("GET")
 
 	mrouter = lrouter.NewRoute().Subrouter()
-	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeLogs))
+	mrouter.Use(
+		requestStreamParams,
+		requireEndpointScopeForLeaseID(ajwt.PermissionScopeLogs),
+	)
 
 	// GET /lease/<lease-id>/logs
 	mrouter.HandleFunc("/logs",
