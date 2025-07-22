@@ -679,11 +679,11 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 		case corev1.ResourceMemory:
 			node.Resources.Memory.Quantity.Allocatable.Set(r.Value())
 		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
+			node.Resources.EphemeralStorage.Allocated.Set(r.Value())
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
+			node.Resources.GPU.Quantity.Allocated.Set(r.Value())
 		}
 	}
 
@@ -883,6 +883,28 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 			} else {
 				res[key] = "1"
 			}
+		}
+	}
+
+	// Add CPU architecture labels
+	for _, info := range node.Resources.CPU.Info {
+		// Extract architecture from CPU model or use a default
+		// This is a simplified approach - you may need to enhance it
+		arch := "amd64" // Default architecture
+
+		// You could enhance this to extract actual architecture from CPU info
+		// For now, we'll use a simple mapping or default
+		if strings.Contains(strings.ToLower(info.Model), "arm") {
+			arch = "arm64"
+		}
+
+		key := fmt.Sprintf("%s.arch.%s", builder.AkashServiceCapabilityCPU, arch)
+		if val, exists := res[key]; exists {
+			nval, _ := strconv.ParseUint(val, 10, 32)
+			nval++
+			res[key] = strconv.FormatUint(nval, 10)
+		} else {
+			res[key] = "1"
 		}
 	}
 

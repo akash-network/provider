@@ -73,7 +73,7 @@ there may be a problem.
 
 | Option                                            | __t1 Step: 1__                                             | Explanation                                                                                                                                                        |
 |---------------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Map random local port to port 80 of your workload | `make kind-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
+| Map random local port to port 80 of your workload | `GOWORK=off make kind-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
 | Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kind-cluster-create` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
 
 ## Build Akash binaries and initialize network
