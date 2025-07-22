@@ -19,6 +19,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
@@ -49,6 +50,18 @@ type peerCertResp struct {
 	err      error
 }
 
+type accReq struct {
+	acc      sdk.Address
+	resp     chan<- accResp
+	userData any
+}
+
+type accResp struct {
+	pubkey   cryptotypes.PubKey
+	userData any
+	err      error
+}
+
 type certReq struct {
 	domain string
 	resp   chan<- certResp
@@ -67,10 +80,10 @@ type accountQuerier struct {
 	bus        pubsub.Bus
 	pstorage   pconfig.Storage
 	qc         v1beta2.Client
+	accCh      chan accReq
 	peerCertCh chan peerCertReq
 	mtlsCh     chan chan<- certResp
 	caCh       chan certReq
-	certReqCh  chan peerCertReq
 	watcher    *fsnotify.Watcher
 	mtlsCerts  []tls.Certificate
 	caCerts    []tls.Certificate
@@ -85,7 +98,7 @@ type accountQuerierOptions struct {
 	mtlsPemFile string
 }
 
-func aqParseOpts(opts ...accountQuerierOption) (*accountQuerierOptions, error) {
+func aqParseOpts(opts ...AccountQuerierOption) (*accountQuerierOptions, error) {
 	ac := &accountQuerierOptions{}
 
 	for _, opt := range opts {
@@ -98,16 +111,16 @@ func aqParseOpts(opts ...accountQuerierOption) (*accountQuerierOptions, error) {
 	return ac, nil
 }
 
-type accountQuerierOption func(*accountQuerierOptions) error
+type AccountQuerierOption func(*accountQuerierOptions) error
 
-func WithTLSDomainWatch(domain string) accountQuerierOption {
+func WithTLSDomainWatch(domain string) AccountQuerierOption {
 	return func(options *accountQuerierOptions) error {
 		options.tlsDomain = domain
 		return nil
 	}
 }
 
-func WithTLSCert(cert, key string) accountQuerierOption {
+func WithTLSCert(cert, key string) AccountQuerierOption {
 	return func(options *accountQuerierOptions) error {
 		options.tlsCertFile = cert
 		options.tlsKeyFile = key
@@ -116,7 +129,7 @@ func WithTLSCert(cert, key string) accountQuerierOption {
 	}
 }
 
-func WithMTLSPem(val string) accountQuerierOption {
+func WithMTLSPem(val string) AccountQuerierOption {
 	return func(options *accountQuerierOptions) error {
 		options.mtlsPemFile = val
 
@@ -124,7 +137,7 @@ func WithMTLSPem(val string) accountQuerierOption {
 	}
 }
 
-func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logger, bus pubsub.Bus, qc v1beta2.Client, opts ...accountQuerierOption) (*accountQuerier, error) {
+func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logger, bus pubsub.Bus, qc v1beta2.Client, opts ...AccountQuerierOption) (*accountQuerier, error) {
 	cOpts, err := aqParseOpts(opts...)
 	if err != nil {
 		return nil, err
@@ -153,10 +166,10 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 		bus:        bus,
 		pstorage:   pstorage,
 		qc:         qc,
+		accCh:      make(chan accReq, 1),
 		peerCertCh: make(chan peerCertReq, 1),
 		mtlsCh:     make(chan chan<- certResp, 1),
 		caCh:       make(chan certReq, 1),
-		certReqCh:  make(chan peerCertReq, 1),
 		watcher:    watcher,
 		paddr:      cctx.FromAddress,
 		cOpts:      cOpts,
@@ -199,6 +212,9 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 	}
 
 	group.Go(q.run)
+	group.Go(q.accountQuerier)
+	group.Go(q.certsQuerier)
+	group.Go(q.leasesQuerier)
 
 	return q, nil
 }
@@ -221,7 +237,7 @@ func (c *accountQuerier) GetAccountCertificate(ctx context.Context, acc sdk.Addr
 		return cert, pubkey, nil
 	}
 
-	if !errors.Is(err, os.ErrNotExist) {
+	if !errors.Is(err, pconfig.ErrNotExists) {
 		return nil, nil, err
 	}
 
@@ -247,6 +263,40 @@ func (c *accountQuerier) GetAccountCertificate(ctx context.Context, acc sdk.Addr
 		return nil, nil, ctx.Err()
 	case resp := <-respch:
 		return resp.cert, resp.pubkey, resp.err
+	}
+}
+
+func (c *accountQuerier) GetAccountPublicKey(ctx context.Context, acc sdk.Address) (cryptotypes.PubKey, error) {
+	pubkey, err := c.pstorage.GetAccountPublicKey(ctx, acc)
+	if err == nil {
+		return pubkey, nil
+	}
+
+	if !errors.Is(err, pconfig.ErrNotExists) {
+		return nil, err
+	}
+
+	respch := make(chan accResp, 1)
+	req := accReq{
+		acc:  acc,
+		resp: respch,
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.ctx.Done():
+		return nil, ctx.Err()
+	case c.accCh <- req:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.ctx.Done():
+		return nil, ctx.Err()
+	case resp := <-respch:
+		return resp.pubkey, resp.err
 	}
 }
 
@@ -310,25 +360,9 @@ func (c *accountQuerier) run() error {
 		tsub = tbus.Sub(fmt.Sprintf("domain-cert-%s", c.cOpts.tlsDomain))
 	}
 
-	pstorage, _ := fromctx.PersistentConfigFromCtx(c.ctx)
-
-	leasesch := make(chan mtypes.LeaseID, 100)
-
 	eventsch := sub.Events()
 
 	var mtlsRespCh <-chan peerCertResp
-	accountReqCh := make(chan sdk.Address, 1)
-	accountRespCh := make(chan authtypes.AccountI, 1)
-
-	c.group.Go(func() error {
-		return c.accountQuerier(accountReqCh, accountRespCh)
-	})
-
-	c.group.Go(func() error {
-		return c.leasesQuerier(c.paddr, leasesch)
-	})
-
-	c.group.Go(c.certsQuerier)
 
 	for {
 		select {
@@ -376,24 +410,10 @@ func (c *accountQuerier) run() error {
 		case evt := <-eventsch:
 			switch ev := evt.(type) {
 			case event.LeaseWon:
-				leasesch <- ev.LeaseID
-			}
-		case lid := <-leasesch:
-			owner, _ := sdk.AccAddressFromBech32(lid.Owner)
-			_, err := pstorage.GetAccountPublicKey(c.ctx, owner)
-			if err != nil {
-				accountReqCh <- owner
-			}
-		case acc := <-accountRespCh:
-			err := pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
-			if err != nil && !errors.Is(err, pconfig.ErrExists) {
-				c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
-			}
-		case req := <-c.peerCertCh:
-			c.certReqCh <- peerCertReq{
-				acc:    req.acc,
-				serial: req.serial,
-				resp:   req.resp,
+				owner, _ := sdk.AccAddressFromBech32(ev.LeaseID.Owner)
+				c.accCh <- accReq{
+					acc: owner,
+				}
 			}
 		case req := <-c.mtlsCh:
 			req <- certResp{
@@ -420,19 +440,21 @@ func (c *accountQuerier) run() error {
 					cctx := c.qc.ClientContext()
 					kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
 					if err != nil {
-						// return err
+						c.log.Error("couldn't load mtls key manager", "err", err)
+						continue
 					}
 
 					certFromFlag := bytes.NewBufferString(evt.Name)
 					x509cert, tlsCert, err := kpm.ReadX509KeyPair(certFromFlag)
 					if err != nil {
-						// return err
+						c.log.Error("couldn't read mtls key", "err", err)
+						continue
 					}
 
 					respCh := make(chan peerCertResp, 1)
 					mtlsRespCh = respCh
 
-					c.certReqCh <- peerCertReq{
+					c.peerCertCh <- peerCertReq{
 						acc:    cctx.FromAddress,
 						serial: x509cert.SerialNumber,
 						resp:   respCh,
@@ -461,7 +483,7 @@ func (c *accountQuerier) certsQuerier() error {
 		select {
 		case <-c.ctx.Done():
 			return c.ctx.Err()
-		case req := <-c.certReqCh:
+		case req := <-c.peerCertCh:
 			// Check that the certificate exists on the chain and is not revoked
 			cresp, err := c.qc.Query().Certificates(c.ctx, &ctypes.QueryCertificatesRequest{
 				Filter: ctypes.CertificateFilter{
@@ -508,13 +530,15 @@ func (c *accountQuerier) certsQuerier() error {
 				}
 			}
 
-			req.resp <- resp
+			if req.resp != nil {
+				req.resp <- resp
+			}
 		}
 	}
 }
 
-func (c *accountQuerier) accountQuerier(reqch <-chan sdk.Address, respch chan<- authtypes.AccountI) error {
-	requests := make([]sdk.Address, 0)
+func (c *accountQuerier) accountQuerier() error {
+	requests := make([]accReq, 0)
 
 	signalch := make(chan struct{}, 1)
 
@@ -533,47 +557,65 @@ func (c *accountQuerier) accountQuerier(reqch <-chan sdk.Address, respch chan<- 
 		select {
 		case <-c.ctx.Done():
 			return c.ctx.Err()
-		case addr := <-reqch:
-			requests = append(requests, addr)
+		case req := <-c.accCh:
+			requests = append(requests, req)
 			trySignal()
 		case <-signalch:
-			addr := requests[0]
+			req := requests[0]
 			requests = requests[1:]
 
-			res, err := c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: addr.String()})
-			if err != nil {
-				c.log.Error("fetching account info", "err", err.Error(), "account", addr.String())
-				requests = append(requests, addr)
-				continue
+			var pubkey cryptotypes.PubKey
+			var err error
+
+			// could be a duplicate request
+			if pubkey, err = c.pstorage.GetAccountPublicKey(c.ctx, req.acc); err != nil {
+				res, err := c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
+				if err != nil {
+					c.log.Error("fetching account info", "err", err.Error(), "account", req.acc.String())
+					requests = append(requests, req)
+					continue
+				}
+
+				var acc authtypes.AccountI
+				if err := cctx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
+					c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
+					requests = append(requests, req)
+					continue
+				}
+
+				pubkey = acc.GetPubKey()
+
+				err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
+				if err != nil && !errors.Is(err, pconfig.ErrExists) {
+					c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+				}
 			}
 
-			var acc authtypes.AccountI
-			if err := cctx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
-				c.log.Error("unpacking account info", "err", err.Error(), "account", addr.String())
-				requests = append(requests, addr)
-				continue
+			if req.resp != nil {
+				req.resp <- accResp{
+					pubkey:   pubkey,
+					userData: nil,
+					err:      nil,
+				}
 			}
-
-			respch <- acc
 		}
 	}
 }
 
-func (c *accountQuerier) leasesQuerier(paddr sdk.Address, leasesch chan<- mtypes.LeaseID) error {
+func (c *accountQuerier) leasesQuerier() error {
 	var nextKey []byte
-	limit := cap(leasesch)
 
 loop:
 	for {
 		preq := &sdkquery.PageRequest{
 			Key:   nextKey,
-			Limit: uint64(limit),
+			Limit: uint64(100),
 		}
 
 		resp, err := c.qc.Query().Leases(c.ctx, &mtypes.QueryLeasesRequest{
 			Filters: mtypes.LeaseFilters{
 				State:    mtypes.LeaseActive.String(),
-				Provider: paddr.String(),
+				Provider: c.paddr.String(),
 			},
 			Pagination: preq,
 		})
@@ -590,8 +632,12 @@ loop:
 		}
 
 		for _, lease := range resp.Leases {
+			owner, _ := sdk.AccAddressFromBech32(lease.Lease.LeaseID.Owner)
+
 			select {
-			case leasesch <- lease.Lease.LeaseID:
+			case c.accCh <- accReq{
+				acc: owner,
+			}:
 			case <-c.ctx.Done():
 				break loop
 			}
@@ -611,147 +657,3 @@ loop:
 
 	return nil
 }
-
-// func (s *accountQuerier) accountWatcherRun() error {
-//
-// 	log := s.session.Log().With("module", "provider-session", "cmp", "account-watcher")
-//
-// 	log.Info("ensuring leases owner's public keys and certificates cached")
-//
-// 	for {
-// 		select {
-// 		case <-s.ctx.Done():
-// 			return s.ctx.Err()
-// 		case evt := <-eventsch:
-// 			switch ev := evt.(type) {
-// 			case event.LeaseWon:
-// 				leasesch <- ev.LeaseID
-// 			}
-// 		case lid := <-leasesch:
-// 			owner, _ := sdk.AccAddressFromBech32(lid.Owner)
-// 			_, err := pstorage.GetAccountPublicKey(s.ctx, owner)
-// 			if err != nil {
-// 				accountReqCh <- owner
-// 			}
-// 		case acc := <-accountRespCh:
-// 			err := pstorage.AddAccount(s.ctx, acc.GetAddress(), acc.GetPubKey())
-// 			if err != nil {
-// 				log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
-// 			}
-// 		}
-// 	}
-// }
-
-// type certQuerier struct {
-// 	ctx          context.Context
-// 	qc           v1beta2.Client
-// 	peerCertCh   chan peerCertReq
-// 	mtlsCh       chan chan<- certResp
-// 	caCh         chan chan<- certResp
-// 	certReqCh    chan peerCertReq
-// 	watcher      *fsnotify.Watcher
-// 	mtlsFileName string
-// 	mtlsCerts    []tls.Certificate
-// 	caCerts      []tls.Certificate
-// }
-//
-// func setupCertQuerier(ctx context.Context, qc v1beta2.Client, mtlsCert string) (gwutils.CertGetter, error) {
-// 	watcher, err := fsnotify.NewWatcher()
-// 	if err != nil {
-// 		return nil, err
-// 	}
-//
-// 	q := &certQuerier{
-// 		ctx:        ctx,
-// 		qc:         qc,
-// 		peerCertCh: make(chan peerCertReq, 1),
-// 		mtlsCh:     make(chan chan<- certResp, 1),
-// 		caCh:       make(chan chan<- certResp, 1),
-// 		certReqCh:  make(chan peerCertReq, 1),
-// 		watcher:    watcher,
-// 	}
-//
-// 	if mtlsCert != "" {
-// 		err = watcher.Add(filepath.Dir(mtlsCert))
-// 		if err != nil {
-// 			return nil, err
-// 		}
-//
-// 		q.mtlsFileName = mtlsCert
-// 	}
-//
-// 	go q.run()
-// 	go q.runQuerier()
-//
-// 	return q, nil
-// }
-//
-// func (c *accountQuerier) certQuerier() {
-// 	defer func() {
-// 		_ = c.watcher.Close()
-// 	}()
-//
-// 	var mtlsRespCh <-chan peerCertResp
-//
-// 	for {
-// 		select {
-// 		case <-c.ctx.Done():
-// 			return
-// 		case req := <-c.peerCertCh:
-// 			c.certReqCh <- peerCertReq{
-// 				acc:    req.acc,
-// 				serial: req.serial,
-// 				resp:   req.resp,
-// 			}
-// 		case req := <-c.mtlsCh:
-// 			req <- certResp{
-// 				certs: c.mtlsCerts,
-// 				err:   nil,
-// 			}
-// 		case req := <-c.caCh:
-// 			req <- certResp{
-// 				certs: nil,
-// 				err:   nil,
-// 			}
-// 		case resp := <-mtlsRespCh:
-// 			mtlsRespCh = nil
-//
-// 			if resp.err == nil {
-// 				tlsCerts := resp.userData.([]tls.Certificate)
-// 				c.mtlsCerts = tlsCerts
-// 			} else {
-// 				// todo retry query
-// 			}
-// 		case evt := <-c.watcher.Events:
-// 			if c.mtlsFileName != "" && evt.Name == c.mtlsFileName {
-// 				if evt.Has(fsnotify.Create) || evt.Has(fsnotify.Rename) {
-// 					cctx := c.qc.ClientContext()
-// 					kpm, err := cutils.NewKeyPairManager(cctx, cctx.FromAddress)
-// 					if err != nil {
-// 						// return err
-// 					}
-//
-// 					certFromFlag := bytes.NewBufferString(evt.Name)
-// 					x509cert, tlsCert, err := kpm.ReadX509KeyPair(certFromFlag)
-// 					if err != nil {
-// 						// return err
-// 					}
-//
-// 					respCh := make(chan peerCertResp, 1)
-// 					mtlsRespCh = respCh
-//
-// 					c.certReqCh <- peerCertReq{
-// 						acc:    cctx.FromAddress,
-// 						serial: x509cert.SerialNumber,
-// 						resp:   respCh,
-// 						userData: []tls.Certificate{
-// 							tlsCert,
-// 						},
-// 					}
-// 				} else if evt.Has(fsnotify.Remove) {
-// 					c.mtlsCerts = []tls.Certificate{}
-// 				}
-// 			}
-// 		}
-// 	}
-// }

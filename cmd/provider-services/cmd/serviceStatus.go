@@ -2,7 +2,6 @@ package cmd
 
 import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
@@ -25,6 +24,8 @@ func serviceStatusCmd() *cobra.Command {
 	}
 
 	addServiceFlags(cmd)
+	addAuthFlags(cmd)
+
 	if err := cmd.MarkFlagRequired(FlagService); err != nil {
 		panic(err.Error())
 	}
@@ -60,7 +61,12 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, apclient.WithAuthJWTSigner(ajwt.NewSigner(cctx.Keyring, cctx.FromAddress)))
+	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
 	if err != nil {
 		return err
 	}

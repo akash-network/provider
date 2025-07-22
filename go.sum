@@ -1437,8 +1437,8 @@ github.com/akash-network/ledger-go v0.14.3 h1:LCEFkTfgGA2xFMN2CtiKvXKE7dh0QSM77P
 github.com/akash-network/ledger-go v0.14.3/go.mod h1:NfsjfFvno9Kaq6mfpsKz4sqjnAVVEsVsnBJfKB4ueAs=
 github.com/akash-network/ledger-go/cosmos v0.14.4 h1:h3WiXmoKKs9wkj1LHcJ12cLjXXg6nG1fp+UQ5+wu/+o=
 github.com/akash-network/ledger-go/cosmos v0.14.4/go.mod h1:SjAfheQTE4rWk0ir+wjbOWxwj8nc8E4AZ08NdsvYG24=
-github.com/akash-network/node v0.38.3 h1:g7zP+q5WK1XD2er9fQeUr3fc9umrCoUUPcEcxAhPj+w=
-github.com/akash-network/node v0.38.3/go.mod h1:D3/lDnKppSlczZ3rmm77Mao6nwdfYUXF2WLNSvALHQk=
+github.com/akash-network/node v0.38.4 h1:e9+RKjsbl6bHpYbCuKKsltY+HGsoTNxYukfmRva2Hm0=
+github.com/akash-network/node v0.38.4/go.mod h1:D3/lDnKppSlczZ3rmm77Mao6nwdfYUXF2WLNSvALHQk=
 github.com/alecthomas/assert/v2 v2.2.2/go.mod h1:pXcQ2Asjp247dahGEmsZ6ru0UVwnkhktn7S0bBDLxvQ=
 github.com/alecthomas/assert/v2 v2.3.0/go.mod h1:pXcQ2Asjp247dahGEmsZ6ru0UVwnkhktn7S0bBDLxvQ=
 github.com/alecthomas/participle/v2 v2.0.0/go.mod h1:rAKZdJldHu8084ojcWevWAL8KmEU+AT+Olodb+WoN2Y=
