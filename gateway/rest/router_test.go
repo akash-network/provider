@@ -31,6 +31,8 @@ import (
 
 	"github.com/akash-network/node/sdl"
 
+	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
 	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
@@ -452,8 +454,16 @@ func TestRouteStatusFails(t *testing.T) {
 
 func TestRouteValidateOK(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		validate := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
+		validate := providerv1.BidPreCheckResponse{
+			GroupBidPreChecks: []*providerv1.GroupBidPreCheck{
+				{
+					MinBidPrice: testutil.AkashDecCoin(t, 200),
+					Name:        testutil.GroupSpecs(t)[0].Name,
+					CanBid:      true,
+					Reason:      "",
+				},
+			},
+			TotalPrice: testutil.AkashDecCoin(t, 200),
 		}
 
 		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(validate, nil)
@@ -461,8 +471,8 @@ func TestRouteValidateOK(t *testing.T) {
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
-		gspec := testutil.GroupSpec(t)
-		bgspec, err := json.Marshal(&gspec)
+		gspecs := testutil.GroupSpecs(t)
+		bgspec, err := json.Marshal(&gspecs)
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, bytes.NewReader(bgspec))
@@ -484,8 +494,16 @@ func TestRouteValidateOK(t *testing.T) {
 
 func TestRouteValidateUnauthorized(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
-		validate := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
+		validate := providerv1.BidPreCheckResponse{
+			GroupBidPreChecks: []*providerv1.GroupBidPreCheck{
+				{
+					MinBidPrice: testutil.AkashDecCoin(t, 200),
+					Name:        testutil.GroupSpecs(t)[0].Name,
+					CanBid:      true,
+					Reason:      "",
+				},
+			},
+			TotalPrice: testutil.AkashDecCoin(t, 200),
 		}
 
 		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(validate, nil)
@@ -493,8 +511,8 @@ func TestRouteValidateUnauthorized(t *testing.T) {
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
-		gspec := testutil.GroupSpec(t)
-		bgspec, err := json.Marshal(&gspec)
+		gspecs := testutil.GroupSpecs(t)
+		bgspec, err := json.Marshal(&gspecs)
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, bytes.NewReader(bgspec))
@@ -512,13 +530,13 @@ func TestRouteValidateUnauthorized(t *testing.T) {
 
 func TestRouteValidateFails(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errGeneric)
+		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(providerv1.BidPreCheckResponse{}, errGeneric)
 
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
-		gspec := testutil.GroupSpec(t)
-		bgspec, err := json.Marshal(&gspec)
+		gspecs := testutil.GroupSpecs(t)
+		bgspec, err := json.Marshal(&gspecs)
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, bytes.NewReader(bgspec))
@@ -539,7 +557,7 @@ func TestRouteValidateFails(t *testing.T) {
 
 func TestRouteValidateFailsEmptyBody(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		test.pclient.On("Validate", mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errGeneric)
+		test.pclient.On("Validate", mock.Anything, mock.Anything).Return(providerv1.BidPreCheckResponse{}, errGeneric)
 
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
