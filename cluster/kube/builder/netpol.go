@@ -37,9 +37,11 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 	const ingressLabelName = "app.kubernetes.io/name"
 	const ingressLabelValue = "ingress-nginx"
 
+	//extract ownerID from LeaseID
+	ownerID := b.deployment.LeaseID().Owner
+
 	result := []*netv1.NetworkPolicy{
 		{
-
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      akashDeploymentPolicyName,
 				Labels:    b.labels(),
@@ -138,6 +140,50 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 			},
 		},
 	}
+
+	//allow-same-owner: enable cross-namespace traffic between namespaces owned by same owner
+	allowSameOwner := &netv1.NetworkPolicy{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      akashAllowSameOwner,
+			Labels:    b.labels(),
+			Namespace: LidNS(b.deployment.LeaseID()),
+		},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: metav1.LabelSelector{},
+			PolicyTypes: []netv1.PolicyType{
+				netv1.PolicyTypeIngress,
+				netv1.PolicyTypeEgress,
+			},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					From: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									AkashLeaseOwnerLabelName: ownerID,
+								},
+							},
+						},
+					},
+				},
+			},
+			Egress: []netv1.NetworkPolicyEgressRule{
+				{
+					To: []netv1.NetworkPolicyPeer{
+						{
+							NamespaceSelector: &metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									AkashLeaseOwnerLabelName: ownerID,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	result = append(result, allowSameOwner)
 
 	for _, service := range b.deployment.ManifestGroup().Services {
 		// find all the ports that are exposed directly
