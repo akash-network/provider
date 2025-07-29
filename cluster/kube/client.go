@@ -935,13 +935,15 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 		return nil, kubeclienterrors.ErrNoServiceForLease
 	}
 
+	// Check if this service uses persistent storage (should be StatefulSet)
+	// This logic must match the deployment creation logic in Deploy()
 	isDeployment := true
-	if params := svc.Params; params != nil {
-		for _, param := range params.Storage {
-			if param.Mount != "" {
-				isDeployment = false
-				break
-			}
+	persistent := false
+	for i := range svc.Resources.Storage {
+		attrVal := svc.Resources.Storage[i].Attributes.Find(sdl.StorageAttributePersistent)
+		if persistent, _ = attrVal.AsBool(); persistent {
+			isDeployment = false
+			break
 		}
 	}
 
