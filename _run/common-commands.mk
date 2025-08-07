@@ -299,7 +299,7 @@ provider-lease-events:
 		--provider "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
-PHONY: provider-lease-status
+.PHONY: provider-lease-status
 provider-lease-status:
 	$(PROVIDER_SERVICES) lease-status \
 		--dseq      "$(DSEQ)"        \
