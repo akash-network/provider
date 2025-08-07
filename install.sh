@@ -126,10 +126,6 @@ echoerr() {
     echo "$@" 1>&2
 }
 
-#shellcheck disable=SC2317
-log_prefix() {
-    echo "$0"
-}
 _logp=6
 log_set_priority() {
     _logp="$1"
