@@ -296,10 +296,10 @@ provider-lease-events:
 		-f \
 		--dseq "$(DSEQ)"     \
 		--from "$(KEY_NAME)" \
-		--provider"$(PROVIDER_ADDRESS)" \
+		--provider "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
-PHONY: provider-lease-status
+.PHONY: provider-lease-status
 provider-lease-status:
 	$(PROVIDER_SERVICES) lease-status \
 		--dseq      "$(DSEQ)"        \
