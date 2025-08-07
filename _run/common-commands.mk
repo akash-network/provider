@@ -296,7 +296,7 @@ provider-lease-events:
 		-f \
 		--dseq "$(DSEQ)"     \
 		--from "$(KEY_NAME)" \
-		--provider"$(PROVIDER_ADDRESS)" \
+		--provider "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
 PHONY: provider-lease-status
