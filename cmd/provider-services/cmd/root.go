@@ -54,6 +54,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(SDL2ManifestCmd())
 	cmd.AddCommand(MigrateHostnamesCmd())
 	cmd.AddCommand(MigrateEndpointsCmd())
+	cmd.AddCommand(bidPreCheckCmd())
 
 	cmd.AddCommand(operator.OperatorsCmd())
 	cmd.AddCommand(operator.ToolsCmd())

@@ -85,7 +85,7 @@ type providerAttrSignatureService struct {
 	attr types.Attributes
 }
 
-func newProviderAttrSignatureService(s session.Session, bus pubsub.Bus) (*providerAttrSignatureService, error) {
+func NewProviderAttrSignatureService(s session.Session, bus pubsub.Bus) (*providerAttrSignatureService, error) {
 	return newProviderAttrSignatureServiceInternal(s, bus, 18*time.Hour)
 }
 
