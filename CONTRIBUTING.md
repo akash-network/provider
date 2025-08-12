@@ -109,19 +109,11 @@ The Akash Network Provider is a Go-based implementation that enables providers t
    git clone https://github.com/akash-network/provider.git
    cd provider
    ```
-3. Install required tools:
+3. Activate direnv:
    ```bash
-   make cache
+   direnv allow
    ```
-4. Set up your development environment:
-   ```bash
-   make setup
-   ```
-5. Configure your environment variables:
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
+   Some packages may be installed after this
 
 ## Project Structure
 
