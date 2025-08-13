@@ -2,23 +2,20 @@ package cluster
 
 import (
 	"context"
+	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
-	tpubsub "github.com/troian/pubsub"
-
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tpubsub "github.com/troian/pubsub"
 
-	"github.com/tendermint/tendermint/libs/log"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
+	"cosmossdk.io/log"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
-	"github.com/akash-network/node/pubsub"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -29,7 +26,7 @@ import (
 	ptypes "github.com/akash-network/provider/types"
 )
 
-// ErrNotRunning is the error when service is not running
+// ErrNotRunning is an error when service is not running
 var (
 	ErrNotRunning      = errors.New("not running")
 	ErrInvalidResource = errors.New("invalid resource")
@@ -383,7 +380,7 @@ loop:
 				s.managers[key] = newDeploymentManager(s, deployment, true)
 
 				trySignal()
-			case mtypes.EventLeaseClosed:
+			case *mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
 			}

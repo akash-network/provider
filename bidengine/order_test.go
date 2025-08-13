@@ -7,34 +7,35 @@ import (
 	"testing"
 	"time"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	tpubsub "github.com/troian/pubsub"
 
-	"github.com/akash-network/provider/operator/waiter"
-	"github.com/akash-network/provider/tools/fromctx"
-
+	sdkmath "cosmossdk.io/math"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/akash-network/akash-api/go/node/types/constants"
-	"github.com/akash-network/akash-api/go/sdkutil"
+	clientmocks "pkg.akt.dev/go/mocks/node/client"
+	deploymentmocks "pkg.akt.dev/go/mocks/node/client/deployment"
+	marketmocks "pkg.akt.dev/go/mocks/node/client/market"
+	providermocks "pkg.akt.dev/go/mocks/node/client/provider"
+	audittypes "pkg.akt.dev/go/node/audit/v1"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/node/types/constants"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/testutil"
+	"pkg.akt.dev/go/util/pubsub"
 
-	"github.com/stretchr/testify/mock"
-
-	"github.com/stretchr/testify/require"
-
-	audittypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
-	clientmocks "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
-
-	clustermocks "github.com/akash-network/provider/cluster/mocks"
-	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
+	cmocks "github.com/akash-network/provider/mocks/cluster"
+	clmocks "github.com/akash-network/provider/mocks/cluster/types"
+	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
 type orderTestScaffold struct {
@@ -46,8 +47,11 @@ type orderTestScaffold struct {
 	bidID             *mtypes.BidID
 	client            *clientmocks.Client
 	queryClient       *clientmocks.QueryClient
+	deplMocks         *deploymentmocks.QueryClient
+	marketMocks       *marketmocks.QueryClient
+	providerMocks     *providermocks.QueryClient
 	txClient          *clientmocks.TxClient
-	cluster           *clustermocks.Cluster
+	cluster           *cmocks.Cluster
 	broadcasts        chan []sdk.Msg
 	reserveCallNotify chan int
 }
@@ -62,26 +66,26 @@ var _ BidPricingStrategy = (*testBidPricingStrategy)(nil)
 var _ BidPricingStrategy = (*alwaysFailsBidPricingStrategy)(nil)
 
 func makeMocks(s *orderTestScaffold) {
-	groupResult := &dtypes.QueryGroupResponse{}
+	groupResult := &dvbeta.QueryGroupResponse{}
 	groupResult.Group.GroupSpec.Name = "testGroupName"
-	groupResult.Group.GroupSpec.Resources = make(dtypes.ResourceUnits, 1)
+	groupResult.Group.GroupSpec.Resources = make(dvbeta.ResourceUnits, 1)
 
-	cpu := atypes.CPU{}
-	cpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().Unit.Min.CPU))
+	cpu := rtypes.CPU{}
+	cpu.Units = rtypes.NewResourceValue(uint64(dvbeta.GetValidationConfig().Unit.Min.CPU))
 
-	gpu := atypes.GPU{}
-	gpu.Units = atypes.NewResourceValue(uint64(dtypes.GetValidationConfig().Unit.Min.GPU))
+	gpu := rtypes.GPU{}
+	gpu.Units = rtypes.NewResourceValue(uint64(dvbeta.GetValidationConfig().Unit.Min.GPU))
 
-	memory := atypes.Memory{}
-	memory.Quantity = atypes.NewResourceValue(dtypes.GetValidationConfig().Unit.Min.Memory)
+	memory := rtypes.Memory{}
+	memory.Quantity = rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Memory)
 
-	storage := atypes.Volumes{
-		atypes.Storage{
-			Quantity: atypes.NewResourceValue(dtypes.GetValidationConfig().Unit.Min.Storage),
+	storage := rtypes.Volumes{
+		rtypes.Storage{
+			Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage),
 		},
 	}
 
-	clusterResources := atypes.Resources{
+	clusterResources := rtypes.Resources{
 		ID:      1,
 		CPU:     &cpu,
 		GPU:     &gpu,
@@ -89,7 +93,7 @@ func makeMocks(s *orderTestScaffold) {
 		Storage: storage,
 	}
 	price := sdk.NewInt64DecCoin(testutil.CoinDenom, 23)
-	resource := dtypes.ResourceUnit{
+	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     2,
 		Price:     price,
@@ -99,25 +103,37 @@ func makeMocks(s *orderTestScaffold) {
 
 	homeDir, _ := os.MkdirTemp("", "akash-network-test-*")
 
-	queryClientMock := &clientmocks.QueryClient{}
-	queryClientMock.On("Group", mock.Anything, mock.Anything).Return(groupResult, nil)
-	queryClientMock.On("Orders", mock.Anything, mock.Anything).Return(&mtypes.QueryOrdersResponse{}, nil)
-	queryClientMock.On("Provider", mock.Anything, mock.Anything).Return(&ptypes.QueryProviderResponse{}, nil)
-	queryClientMock.On("ClientContext").Return(sdkclient.Context{HomeDir: homeDir}, nil)
+	queryMocks := &clientmocks.QueryClient{}
+	deplMocks := &deploymentmocks.QueryClient{}
+	marketMocks := &marketmocks.QueryClient{}
+	providerMocks := &providermocks.QueryClient{}
+
+	deplMocks.On("Group", mock.Anything, mock.Anything).Return(groupResult, nil)
+	marketMocks.On("Orders", mock.Anything, mock.Anything).Return(&mvbeta.QueryOrdersResponse{}, nil)
+	providerMocks.On("Provider", mock.Anything, mock.Anything).Return(&ptypes.QueryProviderResponse{}, nil)
+
+	queryMocks.On("ClientContext").Return(sdkclient.Context{HomeDir: homeDir}, nil)
+	queryMocks.On("Deployment").Return(deplMocks, nil)
+	queryMocks.On("Market").Return(marketMocks, nil)
+	queryMocks.On("Provider").Return(providerMocks, nil)
 
 	txMocks := &clientmocks.TxClient{}
 	s.broadcasts = make(chan []sdk.Msg, 1)
 
-	txMocks.On("Broadcast", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	txMocks.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		s.broadcasts <- args.Get(1).([]sdk.Msg)
 	}).Return(&sdk.Result{}, nil)
 
 	clientMocks := &clientmocks.Client{}
-	clientMocks.On("Query").Return(queryClientMock)
+	clientMocks.On("Query").Return(queryMocks)
 	clientMocks.On("Tx").Return(txMocks)
 
 	s.client = clientMocks
-	s.queryClient = queryClientMock
+	s.queryClient = queryMocks
+	s.deplMocks = deplMocks
+	s.marketMocks = marketMocks
+	s.providerMocks = providerMocks
+
 	s.txClient = txMocks
 
 	mockReservation := &clmocks.Reservation{}
@@ -125,7 +141,7 @@ func makeMocks(s *orderTestScaffold) {
 	mockReservation.On("Resources").Return(groupResult.Group)
 	mockReservation.On("GetAllocatedResources").Return(groupResult.Group.GroupSpec.Resources)
 
-	s.cluster = &clustermocks.Cluster{}
+	s.cluster = &cmocks.Cluster{}
 	s.reserveCallNotify = make(chan int, 1)
 	s.cluster.On("Reserve", s.orderID, &(groupResult.Group)).Run(func(_ mock.Arguments) {
 		s.reserveCallNotify <- 0
@@ -137,11 +153,11 @@ func makeMocks(s *orderTestScaffold) {
 
 type nullProviderAttrSignatureService struct{}
 
-func (nullProviderAttrSignatureService) GetAuditorAttributeSignatures(_ string) ([]audittypes.Provider, error) {
+func (nullProviderAttrSignatureService) GetAuditorAttributeSignatures(_ string) (audittypes.AuditedProviders, error) {
 	return nil, nil // Return no attributes & no error
 }
 
-func (nullProviderAttrSignatureService) GetAttributes() (atypes.Attributes, error) {
+func (nullProviderAttrSignatureService) GetAttributes() (attrtypes.Attributes, error) {
 	return nil, nil // Return no attributes & no error
 }
 
@@ -150,7 +166,7 @@ const testBidCreatedAt = 1234556789
 func makeOrderForTest(
 	t *testing.T,
 	checkForExistingBid bool,
-	bidState mtypes.Bid_State,
+	bidState mvbeta.Bid_State,
 	pricing BidPricingStrategy,
 	callerConfig *Config,
 	sessionHeight int64,
@@ -162,9 +178,7 @@ func makeOrderForTest(
 
 	var scaffold orderTestScaffold
 	scaffold.deploymentID = testutil.DeploymentID(t)
-
 	scaffold.groupID = dtypes.MakeGroupID(scaffold.deploymentID, 2)
-
 	scaffold.orderID = mtypes.MakeOrderID(scaffold.groupID, 1356326)
 
 	myLog := testutil.Logger(t)
@@ -187,7 +201,7 @@ func makeOrderForTest(
 	}
 	// Overwrite some with stuff built-in this function
 	cfg.PricingStrategy = pricing
-	cfg.Deposit = mtypes.DefaultBidMinDeposit
+	cfg.Deposit = mvbeta.DefaultBidMinDeposit
 	cfg.MaxGroupVolumes = constants.DefaultMaxGroupVolumes
 
 	ctx := context.Background()
@@ -201,18 +215,18 @@ func makeOrderForTest(
 	if checkForExistingBid {
 		bidID := mtypes.MakeBidID(scaffold.orderID, mySession.Provider().Address())
 		scaffold.bidID = &bidID
-		queryBidRequest := &mtypes.QueryBidRequest{
+		queryBidRequest := &mvbeta.QueryBidRequest{
 			ID: bidID,
 		}
-		response := &mtypes.QueryBidResponse{
-			Bid: mtypes.Bid{
-				BidID:     bidID,
+		response := &mvbeta.QueryBidResponse{
+			Bid: mvbeta.Bid{
+				ID:        bidID,
 				State:     bidState,
 				Price:     sdk.NewInt64DecCoin(testutil.CoinDenom, int64(testutil.RandRangeInt(100, 1000))),
 				CreatedAt: testBidCreatedAt,
 			},
 		}
-		scaffold.queryClient.On("Bid", mock.Anything, queryBidRequest).Return(response, nil)
+		scaffold.marketMocks.On("Bid", mock.Anything, queryBidRequest).Return(response, nil)
 	}
 
 	reservationFulfilledNotify := make(chan int, 1)
@@ -237,15 +251,15 @@ func requireMsgType[T any](t *testing.T, res interface{}) T {
 }
 
 func Test_BidOrderAndUnreserve(t *testing.T) {
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
 
 	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
 	// Should have called reserve once
 	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
 
-	createBidMsg := requireMsgType[*mtypes.MsgCreateBid](t, broadcast)
+	createBidMsg := requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
 
-	require.Equal(t, createBidMsg.Order, scaffold.orderID)
+	require.Equal(t, createBidMsg.OrderID, scaffold.orderID)
 
 	priceDenom := createBidMsg.Price.Denom
 	require.Equal(t, testutil.CoinDenom, priceDenom)
@@ -263,7 +277,7 @@ func Test_BidOrderAndUnreserve(t *testing.T) {
 }
 
 func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, &Config{
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
 		BidTimeout: 5 * time.Second,
 	}, testBidCreatedAt)
 
@@ -271,22 +285,22 @@ func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
 	// Should have called reserve once
 	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
 
-	createBidMsg := requireMsgType[*mtypes.MsgCreateBid](t, broadcast)
+	createBidMsg := requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
 
-	require.Equal(t, createBidMsg.Order, scaffold.orderID)
+	require.Equal(t, createBidMsg.OrderID, scaffold.orderID)
 
 	priceDenom := createBidMsg.Price.Denom
 	require.Equal(t, testutil.CoinDenom, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
 
-	require.True(t, priceAmount.GT(sdk.NewDec(0)))
-	require.True(t, priceAmount.LT(sdk.NewDec(100)))
+	require.True(t, priceAmount.GT(sdkmath.LegacyNewDec(0)))
+	require.True(t, priceAmount.LT(sdkmath.LegacyNewDec(100)))
 
-	// After the broadcast call the timeout should take effect
+	// After the broadcast call, the timeout should take effect
 	// and then close the bid, unreserving capacity in the process
 	broadcast = testutil.ChannelWaitForValue(t, scaffold.broadcasts)
 
-	_ = requireMsgType[*mtypes.MsgCloseBid](t, broadcast)
+	_ = requireMsgType[*mvbeta.MsgCloseBid](t, broadcast)
 
 	// After the broadcast call shut down happens automatically
 	order.lc.Shutdown(nil)
@@ -303,7 +317,7 @@ func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
 
 func Test_BidOrderPriceTooHigh(t *testing.T) {
 	pricing := testBidPricingStrategy(9999999999)
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, pricing, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, pricing, nil, testBidCreatedAt)
 
 	select {
 	case <-order.lc.Done(): // Should stop on its own
@@ -326,15 +340,14 @@ func Test_BidOrderPriceTooHigh(t *testing.T) {
 }
 
 func Test_BidOrderAndThenClosedUnreserve(t *testing.T) {
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
 
 	testutil.ChannelWaitForValue(t, scaffold.broadcasts)
 	// Should have called reserve once at this point
 	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
 
-	ev := mtypes.EventOrderClosed{
-		Context: sdkutil.BaseModuleEvent{},
-		ID:      scaffold.orderID,
+	ev := &mtypes.EventOrderClosed{
+		ID: scaffold.orderID,
 	}
 	err := scaffold.testBus.Publish(ev)
 	require.NoError(t, err)
@@ -348,7 +361,7 @@ func Test_BidOrderAndThenClosedUnreserve(t *testing.T) {
 }
 
 func Test_OrderCloseBeforeReserveReturn(t *testing.T) {
-	order, scaffold, reservationFulfilledNotify := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, nil, testBidCreatedAt)
+	order, scaffold, reservationFulfilledNotify := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
 
 	testutil.ChannelWaitForValue(t, scaffold.reserveCallNotify)
 	// Should have called reserve once at this point
@@ -363,9 +376,8 @@ func Test_OrderCloseBeforeReserveReturn(t *testing.T) {
 	}
 
 	// close the order before Reserve call returns
-	ev := mtypes.EventOrderClosed{
-		Context: sdkutil.BaseModuleEvent{},
-		ID:      scaffold.orderID,
+	ev := &mtypes.EventOrderClosed{
+		ID: scaffold.orderID,
 	}
 	err := scaffold.testBus.Publish(ev)
 	require.NoError(t, err)
@@ -387,13 +399,13 @@ func Test_OrderCloseBeforeReserveReturn(t *testing.T) {
 }
 
 func Test_BidOrderAndThenLeaseCreated(t *testing.T) {
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
 
-	// Wait for first broadcast
+	// Wait for the first broadcast
 	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
-	createBidMsg := requireMsgType[*mtypes.MsgCreateBid](t, broadcast)
+	createBidMsg := requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
 
-	require.Equal(t, createBidMsg.Order, scaffold.orderID)
+	require.Equal(t, createBidMsg.OrderID, scaffold.orderID)
 	priceDenom := createBidMsg.Price.Denom
 	require.Equal(t, testutil.CoinDenom, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
@@ -403,10 +415,9 @@ func Test_BidOrderAndThenLeaseCreated(t *testing.T) {
 
 	leaseID := mtypes.MakeLeaseID(mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr))
 
-	ev := mtypes.EventLeaseCreated{
-		Context: sdkutil.BaseModuleEvent{},
-		ID:      leaseID,
-		Price:   testutil.AkashDecCoin(t, 1),
+	ev := &mtypes.EventLeaseCreated{
+		ID:    leaseID,
+		Price: testutil.AkashDecCoin(t, 1),
 	}
 
 	require.Equal(t, order.orderID.GroupID(), ev.ID.GroupID())
@@ -426,26 +437,25 @@ func Test_BidOrderAndThenLeaseCreated(t *testing.T) {
 }
 
 func Test_BidOrderAndThenLeaseCreatedForDifferentDeployment(t *testing.T) {
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
 
-	// Wait for first broadcast
+	// Wait for the first broadcast
 	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
 
 	// Should have called reserve once
 	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
 
-	createBidMsg := requireMsgType[*mtypes.MsgCreateBid](t, broadcast)
+	createBidMsg := requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
 
-	require.Equal(t, createBidMsg.Order, scaffold.orderID)
+	require.Equal(t, createBidMsg.OrderID, scaffold.orderID)
 
 	otherOrderID := scaffold.orderID
 	otherOrderID.GSeq++
 	leaseID := mtypes.MakeLeaseID(mtypes.MakeBidID(otherOrderID, scaffold.testAddr))
 
-	ev := mtypes.EventLeaseCreated{
-		Context: sdkutil.BaseModuleEvent{},
-		ID:      leaseID,
-		Price:   testutil.AkashDecCoin(t, 1),
+	ev := &mtypes.EventLeaseCreated{
+		ID:    leaseID,
+		Price: testutil.AkashDecCoin(t, 1),
 	}
 
 	subscriber, err := scaffold.testBus.Subscribe()
@@ -469,22 +479,22 @@ func Test_BidOrderAndThenLeaseCreatedForDifferentDeployment(t *testing.T) {
 	txCalls := scaffold.txClient.Calls
 	require.NotEqual(t, 0, len(txCalls))
 	lastBroadcast := txCalls[len(txCalls)-1]
-	require.Equal(t, "Broadcast", lastBroadcast.Method)
+	require.Equal(t, "BroadcastMsgs", lastBroadcast.Method)
 
-	closeBidMsg := requireMsgType[*mtypes.MsgCloseBid](t, lastBroadcast.Arguments[1])
+	closeBidMsg := requireMsgType[*mvbeta.MsgCloseBid](t, lastBroadcast.Arguments[1])
 
 	expectedBidID := mtypes.MakeBidID(order.orderID, scaffold.testAddr)
-	require.Equal(t, closeBidMsg.BidID, expectedBidID)
+	require.Equal(t, closeBidMsg.ID, expectedBidID)
 }
 
 func Test_ShouldNotBidWhenAlreadySet(t *testing.T) {
-	order, scaffold, reservationFulfilledNotify := makeOrderForTest(t, true, mtypes.BidOpen, nil, nil, testBidCreatedAt)
+	order, scaffold, reservationFulfilledNotify := makeOrderForTest(t, true, mvbeta.BidOpen, nil, nil, testBidCreatedAt)
 
 	// Wait for a reserve call
 	testutil.ChannelWaitForValue(t, scaffold.reserveCallNotify)
 
 	// Should have queried for the bid
-	scaffold.queryClient.AssertCalled(t, "Bid", mock.Anything, &mtypes.QueryBidRequest{ID: *scaffold.bidID})
+	scaffold.marketMocks.AssertCalled(t, "Bid", mock.Anything, &mvbeta.QueryBidRequest{ID: *scaffold.bidID})
 
 	// Should have called reserve once
 	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
@@ -493,9 +503,8 @@ func Test_ShouldNotBidWhenAlreadySet(t *testing.T) {
 	testutil.ChannelWaitForValue(t, reservationFulfilledNotify)
 
 	// Close the order
-	ev := mtypes.EventOrderClosed{
-		Context: sdkutil.BaseModuleEvent{},
-		ID:      scaffold.orderID,
+	ev := &mtypes.EventOrderClosed{
+		ID: scaffold.orderID,
 	}
 
 	err := scaffold.testBus.Publish(ev)
@@ -513,9 +522,9 @@ func Test_ShouldNotBidWhenAlreadySet(t *testing.T) {
 	default:
 	}
 
-	closeBid := requireMsgType[*mtypes.MsgCloseBid](t, broadcast)
+	closeBid := requireMsgType[*mvbeta.MsgCloseBid](t, broadcast)
 
-	require.Equal(t, closeBid.BidID, *scaffold.bidID)
+	require.Equal(t, closeBid.ID, *scaffold.bidID)
 }
 
 func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
@@ -528,7 +537,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 		Attributes:      nil,
 	}
 
-	order, scaffold, _ := makeOrderForTest(t, true, mtypes.BidOpen, nil, &cfg, 1)
+	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, &cfg, 1)
 
 	testutil.ChannelWaitForClose(t, order.lc.Done())
 
@@ -536,11 +545,11 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 	scaffold.cluster.AssertNotCalled(t, "Reserve", scaffold.orderID, mock.Anything)
 
 	// Should have closed the bid
-	expMsgs := []sdk.Msg{&mtypes.MsgCloseBid{
-		BidID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+	expMsgs := []sdk.Msg{&mvbeta.MsgCloseBid{
+		ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
 	}}
 
-	scaffold.txClient.AssertCalled(t, "Broadcast", mock.Anything, expMsgs, mock.Anything)
+	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
 }
 
 func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
@@ -553,7 +562,7 @@ func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 		Attributes:      nil,
 	}
 
-	order, scaffold, _ := makeOrderForTest(t, true, mtypes.BidLost, nil, &cfg, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidLost, nil, &cfg, testBidCreatedAt)
 
 	testutil.ChannelWaitForClose(t, order.lc.Done())
 
@@ -561,12 +570,13 @@ func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 	scaffold.cluster.AssertNotCalled(t, "Reserve", scaffold.orderID, mock.Anything)
 
 	// Should not have closed the bid
-	expMsgs := &mtypes.MsgCloseBid{
-		BidID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+	expMsgs := &mvbeta.MsgCloseBid{
+		ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
 	}
 
-	scaffold.txClient.AssertNotCalled(t, "Broadcast", mock.Anything, expMsgs, mock.Anything)
+	scaffold.txClient.AssertNotCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
 }
+
 func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 	pricing, err := MakeRandomRangePricing()
 	require.NoError(t, err)
@@ -577,7 +587,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 		Attributes:      nil,
 	}
 
-	order, scaffold, _ := makeOrderForTest(t, true, mtypes.BidOpen, nil, &cfg, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, &cfg, testBidCreatedAt)
 
 	testutil.ChannelWaitForClose(t, order.lc.Done())
 
@@ -586,18 +596,18 @@ func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 
 	// Should have closed the bid
 	expMsgs := []sdk.Msg{
-		&mtypes.MsgCloseBid{
-			BidID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+		&mvbeta.MsgCloseBid{
+			ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
 		},
 	}
-	scaffold.txClient.AssertCalled(t, "Broadcast", mock.Anything, expMsgs, mock.Anything)
+	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
 
 	// Should have called unreserve
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID)
 }
 
 func Test_ShouldRecognizeLeaseCreatedIfBiddingIsSkipped(t *testing.T) {
-	order, scaffold, _ := makeOrderForTest(t, true, mtypes.BidOpen, nil, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, nil, testBidCreatedAt)
 
 	// Wait for a reserve call
 	testutil.ChannelWaitForValue(t, scaffold.reserveCallNotify)
@@ -610,10 +620,9 @@ func Test_ShouldRecognizeLeaseCreatedIfBiddingIsSkipped(t *testing.T) {
 
 	leaseID := mtypes.MakeLeaseID(mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr))
 
-	ev := mtypes.EventLeaseCreated{
-		Context: sdkutil.BaseModuleEvent{},
-		ID:      leaseID,
-		Price:   testutil.AkashDecCoin(t, 1),
+	ev := &mtypes.EventLeaseCreated{
+		ID:    leaseID,
+		Price: testutil.AkashDecCoin(t, 1),
 	}
 
 	err := scaffold.testBus.Publish(ev)
@@ -643,18 +652,18 @@ func Test_BidOrderUsesBidPricingStrategy(t *testing.T) {
 	expectedBid := int64(37)
 	// Create a test strategy that gives a fixed price
 	pricing := testBidPricingStrategy(expectedBid)
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, pricing, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, pricing, nil, testBidCreatedAt)
 
 	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
-	createBidMsg := requireMsgType[*mtypes.MsgCreateBid](t, broadcast)
+	createBidMsg := requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
 
-	require.Equal(t, createBidMsg.Order, scaffold.orderID)
+	require.Equal(t, createBidMsg.OrderID, scaffold.orderID)
 
 	priceDenom := createBidMsg.Price.Denom
 	require.Equal(t, testutil.CoinDenom, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
 
-	require.Equal(t, priceAmount, sdk.NewDec(expectedBid))
+	require.Equal(t, priceAmount, sdkmath.LegacyNewDec(expectedBid))
 
 	// After the broadcast call shut the thing down
 	// and then check what was broadcast
@@ -673,7 +682,7 @@ var errBidPricingAlwaysFails = errors.New("bid pricing fail in test")
 func Test_BidOrderFailsAndAborts(t *testing.T) {
 	// Create a test strategy that gives a fixed price
 	pricing := alwaysFailsBidPricingStrategy{failure: errBidPricingAlwaysFails}
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, pricing, nil, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, pricing, nil, testBidCreatedAt)
 
 	<-order.lc.Done() // Stops whenever the bid pricing is called and returns an errro
 
@@ -695,13 +704,13 @@ func Test_BidOrderFailsAndAborts(t *testing.T) {
 
 func Test_ShouldntBidIfOrderAttrsDontMatch(t *testing.T) {
 	// Create a config that only bids on orders with given attributes
-	cfg := &Config{Attributes: atypes.Attributes{
+	cfg := &Config{Attributes: attrtypes.Attributes{
 		{
 			Key:   "owner",
 			Value: "me",
 		},
 	}}
-	order, scaffold, _ := makeOrderForTest(t, false, mtypes.BidStateInvalid, nil, cfg, testBidCreatedAt)
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, cfg, testBidCreatedAt)
 
 	<-order.lc.Done() // Stops whenever it figures it shouldn't bid
 

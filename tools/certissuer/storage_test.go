@@ -1,18 +1,24 @@
 package certissuer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"testing"
 
-	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"pkg.akt.dev/go/testutil"
+)
+
+const (
+	exampleDomain = "example.org"
 )
 
 func TestCertificatesStorage_MoveToArchive(t *testing.T) {
-	domain := "example.com"
+	domain := exampleDomain
 
 	cfg := StorageConfig{
 		RootPath: filepath.Join(t.TempDir(), ".certissuer"),
@@ -70,7 +76,7 @@ func TestCertificatesStorage_MoveToArchive_noFileRelatedToDomain(t *testing.T) {
 	certsDir := filepath.Join(cfg.RootPath, baseCertificatesRootFolderName)
 	archiveDir := filepath.Join(cfg.RootPath, baseArchivesRootFolderName)
 
-	domainFiles := generateTestFiles(t, certsDir, "example.org")
+	domainFiles := generateTestFiles(t, certsDir, exampleDomain)
 
 	err = storage.ArchiveDomain(domain)
 	require.NoError(t, err)
@@ -109,7 +115,7 @@ func TestCertificatesStorage_MoveToArchive_ambiguousDomain(t *testing.T) {
 	archiveDir := filepath.Join(cfg.RootPath, baseArchivesRootFolderName)
 
 	domainFiles := generateTestFiles(t, certsDir, domain)
-	otherDomainFiles := generateTestFiles(t, certsDir, domain+".example.org")
+	otherDomainFiles := generateTestFiles(t, certsDir, fmt.Sprintf("%s.%s", domain, exampleDomain))
 
 	err = storage.ArchiveDomain(domain)
 	require.NoError(t, err)
@@ -136,9 +142,11 @@ func TestCertificatesStorage_MoveToArchive_ambiguousDomain(t *testing.T) {
 func generateTestFiles(t *testing.T, dir, domain string) []string {
 	t.Helper()
 
-	var filenames []string
+	var ext = []string{extIssuer, extCert, extKey, extPem, extPfx, extResource}
 
-	for _, ext := range []string{extIssuer, extCert, extKey, extPem, extPfx, extResource} {
+	filenames := make([]string, 0, len(ext))
+
+	for _, ext := range ext {
 		filename := filepath.Join(dir, domain+ext)
 		err := os.WriteFile(filename, []byte("test"), filePerm)
 		require.NoError(t, err)

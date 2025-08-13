@@ -3,14 +3,16 @@ package v1beta3
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"strings"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
+
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
 type ProviderResourceEvent string
@@ -146,7 +148,6 @@ type ExecResult interface {
 // 	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
 // }
 
-//go:generate mockery --name HostnameServiceClient --output ./mocks
 type HostnameServiceClient interface {
 	ReserveHostnames(ctx context.Context, hostnames []string, leaseID mtypes.LeaseID) ([]string, error)
 	ReleaseHostnames(leaseID mtypes.LeaseID) error
