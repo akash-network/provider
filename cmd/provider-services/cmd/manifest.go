@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -13,10 +12,11 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	"github.com/akash-network/node/sdl"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	sdltypes "pkg.akt.dev/go/sdl"
 
-	aclient "github.com/akash-network/provider/client"
+	aclient "pkg.akt.dev/go/node/client/discovery"
 )
 
 var (
@@ -58,7 +58,7 @@ func GetManifestCmd() *cobra.Command {
 		Args:         cobra.ExactArgs(0),
 		Short:        "Read manifest from provider",
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			cctx, err := sdkclient.GetClientTxContext(cmd)
 			if err != nil {
 				return err
@@ -137,7 +137,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 
-	sdl, err := sdl.ReadFile(sdlpath)
+	sdl, err := sdltypes.ReadFile(sdlpath)
 	if err != nil {
 		return err
 	}
@@ -153,7 +153,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	}
 
 	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
+	leases, err := leasesForDeployment(ctx, cl, cmd.Flags(), dtypes.DeploymentID{
 		Owner: cctx.GetFromAddress().String(),
 		DSeq:  dseq,
 	})

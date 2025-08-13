@@ -45,7 +45,8 @@ builds:
       - "-linkmode={{ .Env.LINKMODE }}"
       - -extldflags "-lc -lrt -lpthread --static"
 archives:
-  - format: binary
+  - formats:
+      - binary
 dockers:
   - dockerfile: Dockerfile
     use: buildx

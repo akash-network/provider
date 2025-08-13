@@ -21,7 +21,6 @@ package externalversions
 import (
 	fmt "fmt"
 
-	v2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	cache "k8s.io/client-go/tools/cache"
@@ -53,19 +52,7 @@ func (f *genericInformer) Lister() cache.GenericLister {
 // TODO extend this to unknown resources with a client pool
 func (f *sharedInformerFactory) ForResource(resource schema.GroupVersionResource) (GenericInformer, error) {
 	switch resource {
-	// Group=akash.network, Version=v2beta1
-	case v2beta1.SchemeGroupVersion.WithResource("inventories"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Akash().V2beta1().Inventories().Informer()}, nil
-	case v2beta1.SchemeGroupVersion.WithResource("inventoryrequests"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Akash().V2beta1().InventoryRequests().Informer()}, nil
-	case v2beta1.SchemeGroupVersion.WithResource("manifests"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Akash().V2beta1().Manifests().Informer()}, nil
-	case v2beta1.SchemeGroupVersion.WithResource("providerhosts"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Akash().V2beta1().ProviderHosts().Informer()}, nil
-	case v2beta1.SchemeGroupVersion.WithResource("providerleasedips"):
-		return &genericInformer{resource: resource.GroupResource(), informer: f.Akash().V2beta1().ProviderLeasedIPs().Informer()}, nil
-
-		// Group=akash.network, Version=v2beta2
+	// Group=akash.network, Version=v2beta2
 	case v2beta2.SchemeGroupVersion.WithResource("inventories"):
 		return &genericInformer{resource: resource.GroupResource(), informer: f.Akash().V2beta2().Inventories().Informer()}, nil
 	case v2beta2.SchemeGroupVersion.WithResource("inventoryrequests"):

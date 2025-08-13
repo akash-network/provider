@@ -10,10 +10,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/akash-network/akash-api/go/testutil"
+	"github.com/stretchr/testify/require"
+
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/stretchr/testify/require"
+
+	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/tools/pconfig"
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
@@ -59,18 +61,6 @@ func initTestBackends(t *testing.T) []testBackend {
 			},
 		},
 	}
-}
-
-func setupTestDB(t *testing.T) (string, func()) {
-	dir, err := os.MkdirTemp("", "bbolt-test-*")
-	require.NoError(t, err)
-
-	dbPath := filepath.Join(dir, "test.db")
-	cleanup := func() {
-		err = os.RemoveAll(dir)
-	}
-
-	return dbPath, cleanup
 }
 
 func TestNewDB(t *testing.T) {
@@ -148,7 +138,7 @@ func TestStorage_CertificateOperations(t *testing.T) {
 		err := db.AddAccount(ctx, addr, pubKey)
 		require.NoError(t, err)
 
-		cert := testutil.Certificate(t, privKey, testutil.CertificateOptionCache(db))
+		cert := testutil.Certificate(t, addr, testutil.CertificateOptionCache(db))
 
 		xCert := cert.Cert[0].Leaf
 
