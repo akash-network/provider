@@ -13,8 +13,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/pager"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	metricsutils "github.com/akash-network/node/util/metrics"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	metricsutils "pkg.akt.dev/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
@@ -204,10 +204,10 @@ func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]chostn
 			}
 			rule := ingress.Spec.Rules[0]
 
-			if len(rule.IngressRuleValue.HTTP.Paths) != 1 {
-				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.IngressRuleValue.HTTP.Paths))
+			if len(rule.HTTP.Paths) != 1 {
+				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.HTTP.Paths))
 			}
-			rulePath := rule.IngressRuleValue.HTTP.Paths[0]
+			rulePath := rule.HTTP.Paths[0]
 			results = append(results, leaseIDHostnameConnection{
 				leaseID:      ingressLeaseID,
 				hostname:     rule.Host,

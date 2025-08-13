@@ -8,19 +8,21 @@ import (
 	"fmt"
 	"net/url"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
-	cutils "github.com/akash-network/node/x/cert/utils"
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/app"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	ajwt "pkg.akt.dev/go/util/jwt"
+	"pkg.akt.dev/node/app"
+	cutils "pkg.akt.dev/node/x/cert/utils"
 )
 
 const (
@@ -165,7 +167,7 @@ func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pfl
 		filter.OSeq = val
 	}
 
-	resp, err := cl.Leases(ctx, &mtypes.QueryLeasesRequest{
+	resp, err := cl.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
 		Filters: filter,
 	})
 	if err != nil {
@@ -179,7 +181,7 @@ func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pfl
 	leases := make([]mtypes.LeaseID, 0, len(resp.Leases))
 
 	for _, lease := range resp.Leases {
-		leases = append(leases, lease.Lease.LeaseID)
+		leases = append(leases, lease.Lease.ID)
 	}
 
 	return leases, nil

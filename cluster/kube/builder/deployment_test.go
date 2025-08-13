@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
+
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
