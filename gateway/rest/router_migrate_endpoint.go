@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
 
 	"github.com/akash-network/provider/cluster"
 	clusterutil "github.com/akash-network/provider/cluster/util"

@@ -4,17 +4,15 @@ import (
 	"fmt"
 	"sync"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	cmdcommon "github.com/akash-network/node/cmd/common"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	aclient "github.com/akash-network/provider/client"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func leaseLogsCmd() *cobra.Command {
@@ -23,6 +21,7 @@ func leaseLogsCmd() *cobra.Command {
 		Short:        "get lease logs",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
+		PreRunE:      cli.TxPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseLogs(cmd)
 		},
@@ -39,24 +38,16 @@ func leaseLogsCmd() *cobra.Command {
 }
 
 func doLeaseLogs(cmd *cobra.Command) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
 	dseq, err := dseqFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
+	leases, err := leasesForDeployment(cmd.Context(), cl.Query(), cmd.Flags(), dtypes.DeploymentID{
 		Owner: cctx.GetFromAddress().String(),
 		DSeq:  dseq,
 	})
@@ -108,7 +99,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+		gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {
@@ -133,7 +124,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	if outputFormat == "json" {
 		printFn = func(evt logEntry) {
-			_ = cmdcommon.PrintJSON(cctx, evt)
+			_ = cli.PrintJSON(cctx, evt)
 		}
 	}
 

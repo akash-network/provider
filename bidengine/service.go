@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
-	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 
-	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
-	"github.com/akash-network/node/pubsub"
-	mquery "github.com/akash-network/node/x/market/query"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
+	sclient "pkg.akt.dev/go/node/client/v1beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
+	mquery "pkg.akt.dev/node/x/market/query"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/operator/waiter"
@@ -180,9 +181,9 @@ loop:
 			Limit: uint64(limit),
 		}
 
-		resp, err := aqc.Orders(ctx, &mtypes.QueryOrdersRequest{
-			Filters: mtypes.OrderFilters{
-				State: mtypes.OrderOpen.String(),
+		resp, err := aqc.Market().Orders(ctx, &mvbeta.QueryOrdersRequest{
+			Filters: mvbeta.OrderFilters{
+				State: mvbeta.OrderOpen.String(),
 			},
 			Pagination: preq,
 		})
@@ -201,7 +202,7 @@ loop:
 		var orders []mtypes.OrderID
 
 		for _, order := range resp.Orders {
-			orders = append(orders, order.OrderID)
+			orders = append(orders, order.ID)
 		}
 
 		select {
@@ -264,7 +265,7 @@ loop:
 			}
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) { // nolint: gocritic
-			case mtypes.EventOrderCreated:
+			case *mtypes.EventOrderCreated:
 				// new order
 				key := mquery.OrderPath(ev.ID)
 

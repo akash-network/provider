@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
 
-	cmdcommon "github.com/akash-network/node/cmd/common"
-	dcli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
-
-	aclient "github.com/akash-network/provider/client"
+	cflags "pkg.akt.dev/go/cli/flags"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func leaseStatusCmd() *cobra.Command {
@@ -18,6 +14,7 @@ func leaseStatusCmd() *cobra.Command {
 		Short:        "get lease status",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
+		PreRunE:      cli.TxPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseStatus(cmd)
 		},
@@ -30,24 +27,16 @@ func leaseStatusCmd() *cobra.Command {
 }
 
 func doLeaseStatus(cmd *cobra.Command) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+	bid, err := cflags.BidIDFromFlags(cmd.Flags(), cflags.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}
@@ -57,7 +46,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 	if err != nil {
 		return err
 	}
@@ -67,5 +56,5 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return showErrorToUser(err)
 	}
 
-	return cmdcommon.PrintJSON(cctx, result)
+	return cli.PrintJSON(cctx, result)
 }

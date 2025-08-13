@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/sdl"
+	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/sdl"
 
 	"github.com/akash-network/provider/cluster/util"
 )
@@ -51,15 +52,15 @@ func MakeShellScriptPricing(path string, processLimit uint, runtimeLimit time.Du
 	return result, nil
 }
 
-func parseCPU(res *atypes.CPU) uint64 {
+func parseCPU(res *rtypes.CPU) uint64 {
 	return res.Units.Val.Uint64()
 }
 
-func parseMemory(res *atypes.Memory) uint64 {
+func parseMemory(res *rtypes.Memory) uint64 {
 	return res.Quantity.Val.Uint64()
 }
 
-func parseGPU(resource *atypes.GPU) gpuElement {
+func parseGPU(resource *rtypes.GPU) gpuElement {
 	res := gpuElement{
 		Units: resource.Units.Value(),
 		Attributes: gpuAttributes{
@@ -106,7 +107,7 @@ func parseGPU(resource *atypes.GPU) gpuElement {
 	return res
 }
 
-func parseStorage(resource atypes.Volumes) []storageElement {
+func parseStorage(resource rtypes.Volumes) []storageElement {
 	res := make([]storageElement, 0, len(resource))
 
 	for _, storage := range resource {
@@ -173,7 +174,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, r Request) (sd
 		return sdk.DecCoin{}, fmt.Errorf("bid script must return amount:%w%w", io.EOF, ErrBidQuantityInvalid)
 	}
 
-	price, err := sdk.NewDecFromStr(valueStr)
+	price, err := sdkmath.LegacyNewDecFromStr(valueStr)
 	if err != nil {
 		return sdk.DecCoin{}, fmt.Errorf("%w%w", err, ErrBidQuantityInvalid)
 	}
@@ -221,7 +222,7 @@ func newDataForScript(r Request) dataForScript {
 			Storage:          storageQuantity,
 			Count:            groupCount,
 			EndpointQuantity: endpointQuantity,
-			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, atypes.Endpoint_LEASED_IP),
+			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, rtypes.Endpoint_LEASED_IP),
 		}
 	}
 
