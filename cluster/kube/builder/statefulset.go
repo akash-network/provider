@@ -24,12 +24,12 @@ func BuildStatefulSet(workload *Workload) StatefulSet {
 		Workload: workload,
 	}
 
-	ss.Workload.log = ss.Workload.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
 
-func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,unparam
+func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:unparam
 	falseValue := false
 
 	revisionHistoryLimit := int32(1)
@@ -78,7 +78,7 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 	return kdeployment, nil
 }
 
-func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:golint,unparam
+func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:unparam
 	uobj := obj.DeepCopy()
 
 	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())

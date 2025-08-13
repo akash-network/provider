@@ -5,8 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
-
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 )
 
 func TestResourcePairAvailable(t *testing.T) {
@@ -35,19 +34,19 @@ func TestResourcePairSubNLZ(t *testing.T) {
 		allocated:   *resource.NewQuantity(0, resource.DecimalSI),
 	}
 
-	adjusted := rp.subNLZ(types.NewResourceValue(0))
+	adjusted := rp.subNLZ(rtypes.NewResourceValue(0))
 	require.True(t, adjusted)
 
 	avail := rp.available()
 	require.Equal(t, int64(100), avail.Value())
 
-	adjusted = rp.subNLZ(types.NewResourceValue(9))
+	adjusted = rp.subNLZ(rtypes.NewResourceValue(9))
 	require.True(t, adjusted)
 
 	avail = rp.available()
 	require.Equal(t, int64(91), avail.Value())
 
-	adjusted = rp.subNLZ(types.NewResourceValue(92))
+	adjusted = rp.subNLZ(rtypes.NewResourceValue(92))
 	require.False(t, adjusted)
 }
 
@@ -57,13 +56,13 @@ func TestResourcePairSubMilliNLZ(t *testing.T) {
 		allocated:   *resource.NewQuantity(0, resource.DecimalSI),
 	}
 
-	adjusted := rp.subMilliNLZ(types.NewResourceValue(0))
+	adjusted := rp.subMilliNLZ(rtypes.NewResourceValue(0))
 	require.True(t, adjusted)
 
 	avail := rp.available()
 	require.Equal(t, int64(10000), avail.Value())
 
-	adjusted = rp.subNLZ(types.NewResourceValue(9))
+	adjusted = rp.subNLZ(rtypes.NewResourceValue(9))
 	require.True(t, adjusted)
 
 	avail = rp.available()

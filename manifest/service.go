@@ -5,19 +5,19 @@ import (
 	"errors"
 	"time"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
 
 	"github.com/boz/go-lifecycle"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	dquery "github.com/akash-network/node/x/deployment/query"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
+	dquery "pkg.akt.dev/node/x/deployment/query"
 
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -44,16 +44,12 @@ var (
 )
 
 // StatusClient is the interface which includes status of service
-//
-//go:generate mockery --name StatusClient
 type StatusClient interface {
 	Status(context.Context) (*apclient.ManifestStatus, error)
 	StatusV1(context.Context) (*provider.ManifestStatus, error)
 }
 
 // Client is the interface that wraps HandleManifest method
-//
-//go:generate mockery --name Client
 type Client interface {
 	Submit(context.Context, dtypes.DeploymentID, manifest.Manifest) error
 	IsActive(context.Context, dtypes.DeploymentID) (bool, error)
@@ -263,21 +259,21 @@ loop:
 				}
 				s.session.Log().Info("lease won", "lease", ev.LeaseID)
 				s.handleLease(ev, true)
-			case dtypes.EventDeploymentUpdated:
-				s.session.Log().Info("update received", "deployment", ev.ID, "version", ev.Version)
+			case *dtypes.EventDeploymentUpdated:
+				s.session.Log().Info("update received", "deployment", ev.ID, "version", ev.Hash)
 
 				key := dquery.DeploymentPath(ev.ID)
 				if manager := s.managers[key]; manager != nil {
-					s.session.Log().Info("deployment updated", "deployment", ev.ID, "version", ev.Version)
-					manager.handleUpdate(ev.Version)
+					s.session.Log().Info("deployment updated", "deployment", ev.ID, "version", ev.Hash)
+					manager.handleUpdate(ev.Hash)
 				}
-			case dtypes.EventDeploymentClosed:
+			case *dtypes.EventDeploymentClosed:
 				key := dquery.DeploymentPath(ev.ID)
 				if manager := s.managers[key]; manager != nil {
 					s.session.Log().Info("deployment closed", "deployment", ev.ID)
 					manager.stop()
 				}
-			case mtypes.EventLeaseClosed:
+			case *mtypes.EventLeaseClosed:
 				if ev.ID.GetProvider() != s.session.Provider().Address().String() {
 					continue
 				}

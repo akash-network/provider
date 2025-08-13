@@ -10,14 +10,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/sdl"
-	clitestutil "github.com/akash-network/node/testutil/cli"
-	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
+	"pkg.akt.dev/go/cli"
+	clitestutil "pkg.akt.dev/go/cli/testutil"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	"pkg.akt.dev/go/sdl"
 
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
@@ -32,113 +30,123 @@ func (s *E2EApp) TestE2EApp() {
 	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2.yaml")
 	s.Require().NoError(err)
 
-	cctxJSON := s.validator.ClientCtx.WithOutputFormat("json")
+	cctx := s.cctx
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(103),
 	}
 
-	// Create Deployments and assert query to assert
-	tenantAddr := s.keyTenant.GetAddress().String()
-	res, err := deploycli.TxCreateDeploymentExec(
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+	// Create Deployments and assert a query to assert
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	// Test query deployments ---------------------------------------------
-	res, err = deploycli.QueryDeploymentsExec(cctxJSON)
+	res, err = clitestutil.ExecQueryDeployments(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 
-	deployResp := &dtypes.QueryDeploymentsResponse{}
+	deployResp := &dvbeta.QueryDeploymentsResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), deployResp)
 	s.Require().NoError(err)
 	s.Require().Len(deployResp.Deployments, 1, "Deployment Create Failed")
 	deployments := deployResp.Deployments
-	s.Require().Equal(tenantAddr, deployments[0].Deployment.DeploymentID.Owner)
+	s.Require().Equal(s.addrTenant.String(), deployments[0].Deployment.ID.Owner)
 
 	// test query deployment
 	createdDep := deployments[0]
-	res, err = deploycli.QueryDeploymentExec(cctxJSON, createdDep.Deployment.DeploymentID)
+	res, err = clitestutil.ExecQueryDeployment(s.ctx, cctx, cli.TestFlags().WithOutputJSON().WithDeploymentID(createdDep.Deployment.ID)...)
 	s.Require().NoError(err)
 
-	deploymentResp := dtypes.QueryDeploymentResponse{}
+	deploymentResp := dvbeta.QueryDeploymentResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), &deploymentResp)
 	s.Require().NoError(err)
 	s.Require().Equal(createdDep, deploymentResp)
-	s.Require().NotEmpty(deploymentResp.Deployment.Version)
+	s.Require().NotEmpty(deploymentResp.Deployment.Hash)
 
 	// test query deployments with filters -----------------------------------
-	res, err = deploycli.QueryDeploymentsExec(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		fmt.Sprintf("--owner=%s", tenantAddr),
-		fmt.Sprintf("--dseq=%v", createdDep.Deployment.DeploymentID.DSeq),
+	res, err = clitestutil.ExecQueryDeployments(
+		s.ctx,
+		cctx,
+		cli.TestFlags().WithOutputJSON().
+			WithOwner(s.addrTenant.String()).
+			WithDSeq(createdDep.Deployment.ID.DSeq)...,
 	)
 	s.Require().NoError(err, "Error when fetching deployments with owner filter")
 
-	deployResp = &dtypes.QueryDeploymentsResponse{}
+	deployResp = &dvbeta.QueryDeploymentsResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), deployResp)
 	s.Require().NoError(err)
 	s.Require().Len(deployResp.Deployments, 1)
 
 	// Assert orders created by provider
 	// test query orders
-	res, err = mcli.QueryOrdersExec(cctxJSON)
+	res, err = clitestutil.ExecQueryOrders(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 
-	result := &mtypes.QueryOrdersResponse{}
+	result := &mvbeta.QueryOrdersResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), result)
 	s.Require().NoError(err)
 	s.Require().Len(result.Orders, 1)
 	orders := result.Orders
-	s.Require().Equal(tenantAddr, orders[0].OrderID.Owner)
+	s.Require().Equal(s.addrTenant.String(), orders[0].ID.Owner)
 
 	// Wait for then EndBlock to handle bidding and creating lease
 	s.Require().NoError(s.waitForBlocksCommitted(15))
 
 	// Assert provider made bid and created lease; test query leases
 	// Assert provider made bid and created lease; test query leases
-	res, err = mcli.QueryBidsExec(cctxJSON)
+	res, err = clitestutil.ExecQueryBids(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
-	bidsRes := &mtypes.QueryBidsResponse{}
+	bidsRes := &mvbeta.QueryBidsResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), bidsRes)
 	s.Require().NoError(err)
 	s.Require().Len(bidsRes.Bids, 1)
 
-	res, err = mcli.TxCreateLeaseExec(
-		cctxJSON,
-		bidsRes.Bids[0].Bid.BidID,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+	res, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithGasAuto().
+			WithOutputJSON().
+			WithFrom(s.addrTenant.String()).
+			WithBidID(bidsRes.Bids[0].Bid.ID)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(6))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	res, err = mcli.QueryLeasesExec(cctxJSON)
+	res, err = clitestutil.ExecQueryLeases(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 
-	leaseRes := &mtypes.QueryLeasesResponse{}
+	leaseRes := &mvbeta.QueryLeasesResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), leaseRes)
 	s.Require().NoError(err)
 	s.Require().Len(leaseRes.Leases, 1)
 
 	lease := newestLease(leaseRes.Leases)
-	lid := lease.LeaseID
-	s.Require().Equal(s.keyProvider.GetAddress().String(), lid.Provider)
+	lid := lease.ID
+	s.Require().Equal(s.addrProvider.String(), lid.Provider)
 
 	// Send Manifest to Provider ----------------------------------------------
-	_, err = ptestutil.TestSendManifest(
-		cctxJSON,
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(20))
@@ -146,7 +154,7 @@ func (s *E2EApp) TestE2EApp() {
 	appURL := fmt.Sprintf("http://%s:%s/", s.appHost, s.appPort)
 	queryApp(s.T(), appURL, 50)
 
-	cmdResult, err := providerCmd.ProviderStatusExec(s.validator.ClientCtx, lid.Provider)
+	cmdResult, err := providerCmd.ExecProviderStatus(s.ctx, cctx, lid.Provider)
 	assert.NoError(s.T(), err)
 	data := make(map[string]interface{})
 	err = json.Unmarshal(cmdResult.Bytes(), &data)
@@ -161,14 +169,16 @@ func (s *E2EApp) TestE2EApp() {
 	mani, err := deploymentSdl.Manifest()
 	require.NoError(s.T(), err)
 
-	cmdResult, err = providerCmd.ProviderLeaseStatusExec(
-		s.validator.ClientCtx,
-		fmt.Sprintf("--%s=%v", "dseq", lid.DSeq),
-		fmt.Sprintf("--%s=%v", "gseq", lid.GSeq),
-		fmt.Sprintf("--%s=%v", "oseq", lid.OSeq),
-		fmt.Sprintf("--%s=%v", "provider", lid.Provider),
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	cmdResult, err = providerCmd.ExecProviderLeaseStatus(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithGSeq(lid.GSeq).
+			WithOSeq(lid.OSeq).
+			WithProvider(lid.Provider)...,
 	)
 	assert.NoError(s.T(), err)
 	err = json.Unmarshal(cmdResult.Bytes(), &data)
@@ -183,15 +193,17 @@ func (s *E2EApp) TestE2EApp() {
 
 	for _, group := range mani.GetGroups() {
 		for _, service := range group.Services {
-			cmdResult, err = providerCmd.ProviderServiceStatusExec(
-				s.validator.ClientCtx,
-				fmt.Sprintf("--%s=%v", "dseq", lid.DSeq),
-				fmt.Sprintf("--%s=%v", "gseq", lid.GSeq),
-				fmt.Sprintf("--%s=%v", "oseq", lid.OSeq),
-				fmt.Sprintf("--%s=%v", "provider", lid.Provider),
-				fmt.Sprintf("--%s=%v", "service", service.Name),
-				fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-				fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+			cmdResult, err = providerCmd.ExecProviderServiceStatus(
+				s.ctx,
+				cctx,
+				cli.TestFlags().
+					WithHome(s.validator.ClientCtx.HomeDir).
+					WithFrom(s.addrTenant.String()).
+					WithDSeq(lid.DSeq).
+					WithGSeq(lid.GSeq).
+					WithOSeq(lid.OSeq).
+					WithProvider(lid.Provider).
+					WithFlag("service", service.Name)...,
 			)
 			assert.NoError(s.T(), err)
 			err = json.Unmarshal(cmdResult.Bytes(), &data)
