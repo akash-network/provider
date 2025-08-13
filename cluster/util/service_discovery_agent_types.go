@@ -6,7 +6,8 @@ import (
 	"net/http"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/tendermint/tendermint/libs/log"
+
+	"cosmossdk.io/log"
 )
 
 type ServiceDiscoveryAgent interface {

@@ -10,20 +10,16 @@ import (
 	"sync"
 	"syscall"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
+	"pkg.akt.dev/go/cli"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	dcli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
-
-	aclient "github.com/akash-network/provider/client"
+	cflags "pkg.akt.dev/go/cli/flags"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 const (
@@ -42,6 +38,7 @@ func LeaseShellCmd() *cobra.Command {
 		Use:          "lease-shell",
 		Short:        "do lease shell",
 		SilenceUsage: true,
+		PreRunE:      cli.TxPersistentPreRunE,
 		RunE:         doLeaseShell,
 	}
 
@@ -101,24 +98,16 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 		tty.Raw = true
 	}
 
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+	bidID, err := cflags.BidIDFromFlags(cmd.Flags(), cflags.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}
@@ -129,7 +118,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 	if err != nil {
 		return err
 	}

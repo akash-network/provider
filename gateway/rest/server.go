@@ -4,10 +4,12 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	gcontext "github.com/gorilla/context"
-	"github.com/tendermint/tendermint/libs/log"
+
+	"cosmossdk.io/log"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/provider"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
@@ -48,8 +50,9 @@ func NewServer(
 	}
 
 	srv := &http.Server{
-		Addr:    address,
-		Handler: newRouter(log, pid, pclient, clusterConfig, restMiddleware),
+		Addr:              address,
+		ReadHeaderTimeout: 3 * time.Second,
+		Handler:           newRouter(log, pid, pclient, clusterConfig, restMiddleware),
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},

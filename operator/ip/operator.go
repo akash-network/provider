@@ -13,20 +13,19 @@ import (
 	"sync"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/gorilla/mux"
-	"github.com/tendermint/tendermint/libs/log"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
+	"cosmossdk.io/log"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
@@ -540,7 +539,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	}
 
 	owner := vars["owner"]
-	_, err = sdk.AccAddressFromBech32(owner) // Validate this is a bech32 address
+	_, err = sdktypes.AccAddressFromBech32(owner) // Validate this is a bech32 address
 	if err != nil {
 		op.log.Error("could not parse owner address as bech32", "onwer", owner, "error", err)
 		rw.WriteHeader(http.StatusNotFound)
@@ -706,7 +705,7 @@ func (op *ipOperator) DeclareIP(ctx context.Context, lID mtypes.LeaseID, service
 		"exists", exists)
 	// Create or update the entry
 	if exists {
-		obj.ObjectMeta.ResourceVersion = foundEntry.ResourceVersion
+		obj.ResourceVersion = foundEntry.ResourceVersion
 		_, err = op.ac.AkashV2beta2().ProviderLeasedIPs(op.ns).Update(ctx, &obj, metav1.UpdateOptions{})
 	} else {
 		_, err = op.ac.AkashV2beta2().ProviderLeasedIPs(op.ns).Create(ctx, &obj, metav1.CreateOptions{})

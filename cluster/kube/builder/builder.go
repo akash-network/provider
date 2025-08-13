@@ -9,11 +9,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clusterUtil "github.com/akash-network/provider/cluster/util"

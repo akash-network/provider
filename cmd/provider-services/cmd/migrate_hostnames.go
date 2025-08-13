@@ -3,12 +3,11 @@ package cmd
 import (
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	aclient "github.com/akash-network/provider/client"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 var errEmptyHostnames = errors.New("hostnames cannot be empty")
@@ -18,17 +17,10 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 	if len(hostnames) == 0 {
 		return errEmptyHostnames
 	}
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
 
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
@@ -40,7 +32,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 	if err != nil {
 		return err
 	}
@@ -68,13 +60,14 @@ func MigrateHostnamesCmd() *cobra.Command {
 		Use:          "migrate-hostnames",
 		Short:        "migrate hostnames between deployments on the same provider",
 		SilenceUsage: true,
+		PreRunE:      cli.TxPersistentPreRunE,
 		RunE:         migrateHostnames,
 	}
 
 	addCmdFlags(cmd)
 	addAuthFlags(cmd)
 
-	cmd.Flags().Uint32(FlagGSeq, 1, "group sequence")
+	cmd.Flags().Uint32(cflags.FlagGSeq, 1, "group sequence")
 
 	return cmd
 }

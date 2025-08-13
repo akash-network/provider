@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
-	ktypes "github.com/akash-network/provider/cluster/kube/types/v1beta2"
+	ktypes "github.com/akash-network/provider/cluster/kube/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
@@ -245,7 +245,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 	}
 
 	if ms.Credentials != nil {
-		ams.Credentials = &mani.ServiceImageCredentials{
+		ams.Credentials = &mani.ImageCredentials{
 			Host:     ms.Credentials.Host,
 			Email:    ms.Credentials.Email,
 			Username: ms.Credentials.Username,
@@ -261,8 +261,8 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 		ams.Expose = append(ams.Expose, value)
 
 		if len(value.IP) != 0 {
-			res.Endpoints = append(res.Endpoints, types.Endpoint{
-				Kind:           types.Endpoint_LEASED_IP,
+			res.Endpoints = append(res.Endpoints, rtypes.Endpoint{
+				Kind:           rtypes.Endpoint_LEASED_IP,
 				SequenceNumber: value.EndpointSequenceNumber,
 			})
 		}
