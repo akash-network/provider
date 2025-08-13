@@ -8,13 +8,13 @@ import (
 	"net"
 	"time"
 
+	"cosmossdk.io/log"
 	"github.com/boz/go-lifecycle"
-	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 
-	"github.com/akash-network/node/util/runner"
+	"pkg.akt.dev/node/util/runner"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
 	"github.com/akash-network/provider/tools/fromctx"

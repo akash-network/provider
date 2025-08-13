@@ -6,7 +6,7 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	vutil "github.com/akash-network/node/util/validation"
+	vutil "pkg.akt.dev/node/util/validation"
 )
 
 // Settings configures k8s object generation such that it is customized to the

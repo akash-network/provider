@@ -6,20 +6,22 @@ import (
 	"regexp"
 	"time"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/boz/go-lifecycle"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	metricsutils "github.com/akash-network/node/util/metrics"
-	"github.com/akash-network/node/util/runner"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	atypes "pkg.akt.dev/go/node/audit/v1"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	metricsutils "pkg.akt.dev/go/util/metrics"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/go/util/runner"
 
 	"github.com/akash-network/provider/cluster"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -136,7 +138,7 @@ func (o *order) getBidTimeout() <-chan time.Time {
 	return nil
 }
 
-func (o *order) isStaleBid(bid mtypes.Bid) bool {
+func (o *order) isStaleBid(bid mvbeta.Bid) bool {
 	if !o.bidTimeoutEnabled() {
 		return false
 	}
@@ -170,21 +172,21 @@ func (o *order) run(checkForExistingBid bool) {
 		reservation ctypes.Reservation
 
 		won bool
-		msg *mtypes.MsgCreateBid
+		msg *mvbeta.MsgCreateBid
 	)
 
 	// Begin fetching group details immediately.
 	groupch = runner.Do(func() runner.Result {
-		res, err := o.session.Client().Query().Group(ctx, &dtypes.QueryGroupRequest{ID: o.orderID.GroupID()})
+		res, err := o.session.Client().Query().Deployment().Group(ctx, &dtypes.QueryGroupRequest{ID: o.orderID.GroupID()})
 		return runner.NewResult(res.GetGroup(), err)
 	})
 
 	// Load existing bid if needed
 	if checkForExistingBid {
 		queryBidCh = runner.Do(func() runner.Result {
-			return runner.NewResult(o.session.Client().Query().Bid(
+			return runner.NewResult(o.session.Client().Query().Market().Bid(
 				ctx,
-				&mtypes.QueryBidRequest{
+				&mvbeta.QueryBidRequest{
 					ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
 				},
 			))
@@ -216,10 +218,10 @@ loop:
 
 			if bidFound {
 				o.session.Log().Info("found existing bid")
-				bidResponse := queryBid.Value().(*mtypes.QueryBidResponse)
+				bidResponse := queryBid.Value().(*mvbeta.QueryBidResponse)
 				bid := bidResponse.GetBid()
 				bidState := bid.GetState()
-				if bidState != mtypes.BidOpen {
+				if bidState != mvbeta.BidOpen {
 					o.session.Log().Error("bid in unexpected state", "bid-state", bidState)
 					break loop
 				}
@@ -237,8 +239,7 @@ loop:
 
 		case ev := <-o.sub.Events():
 			switch ev := ev.(type) {
-			case mtypes.EventLeaseCreated:
-
+			case *mtypes.EventLeaseCreated:
 				// different group
 				if !o.orderID.GroupID().Equals(ev.ID.GroupID()) {
 					o.log.Debug("ignoring group", "group", ev.ID.GroupID())
@@ -267,8 +268,7 @@ loop:
 				won = true
 
 				break loop
-
-			case mtypes.EventOrderClosed:
+			case *mtypes.EventOrderClosed:
 				// different deployment
 				if !ev.ID.Equals(o.orderID) {
 					break
@@ -277,8 +277,7 @@ loop:
 				o.log.Info("order closed")
 				orderCompleteCounter.WithLabelValues("order-closed").Inc()
 				break loop
-
-			case mtypes.EventBidClosed:
+			case *mtypes.EventBidClosed:
 				if won {
 					// Ignore any event after LeaseCreated
 					continue
@@ -299,7 +298,6 @@ loop:
 				orderCompleteCounter.WithLabelValues("bid-closed-external").Inc()
 				break loop
 			}
-
 		case result := <-groupch:
 			// Group details fetched.
 
@@ -372,7 +370,7 @@ loop:
 			pricech = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
 				// Calculate price & bid
 				priceReq := Request{
-					Owner:              group.GroupID.Owner,
+					Owner:              group.ID.Owner,
 					GSpec:              &group.GroupSpec,
 					PricePrecision:     DefaultPricePrecision,
 					AllocatedResources: reservation.GetAllocatedResources(),
@@ -401,12 +399,12 @@ loop:
 
 			o.log.Debug("submitting fulfillment", "price", price)
 
-			offer := mtypes.ResourceOfferFromRU(reservation.GetAllocatedResources())
+			offer := mvbeta.ResourceOfferFromRU(reservation.GetAllocatedResources())
 
 			// Begin submitting fulfillment
-			msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
+			msg = mvbeta.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
 			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 			})
 
 		case result := <-bidch:
@@ -458,11 +456,11 @@ loop:
 		if bidPlaced {
 			o.log.Debug("closing bid", "order-id", o.orderID)
 
-			msg := &mtypes.MsgCloseBid{
-				BidID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+			msg := &mvbeta.MsgCloseBid{
+				ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
 			}
 
-			_, err := o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 			if err != nil {
 				o.log.Error("closing bid", "err", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
@@ -514,16 +512,16 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 	}
 
 	for _, resources := range group.GroupSpec.GetResourceUnits() {
-		if len(resources.Resources.Storage) > o.cfg.MaxGroupVolumes {
-			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Resources.Storage), o.cfg.MaxGroupVolumes))
+		if len(resources.Storage) > o.cfg.MaxGroupVolumes {
+			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Storage), o.cfg.MaxGroupVolumes))
 			return false, nil
 		}
 	}
 	signatureRequirements := group.GroupSpec.Requirements.SignedBy
 	if signatureRequirements.Size() != 0 {
 		// Check that the signature requirements are met for each attribute
-		var provAttr []atypes.Provider
-		ownAttrs := atypes.Provider{
+		var provAttr atypes.AuditedProviders
+		ownAttrs := atypes.AuditedProvider{
 			Owner:      o.session.Provider().Owner,
 			Auditor:    "",
 			Attributes: o.session.Provider().Attributes,

@@ -1,35 +1,44 @@
 ---
-issues:
-  exclude:
-    - comment on exported (method|function|type|const|var)
-  exclude-use-default: true
-# Skip generated k8s code
-  skip-dirs:
-    - pkg/client
-    - ".*/mocks"
-    - ".*/kubernetes_mock"
-
-  # Skip vendor/ etc
-  skip-dirs-use-default: true
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
-    - unused
-    - misspell
-    - err113
-    - gofmt
-    - gocritic
+    - copyloopvar
     - goconst
+    - gocritic
+    - gosec
     - govet
     - ineffassign
-    - unparam
-    - staticcheck
-    - revive
-    - gosec
-    - copyloopvar
+    - misspell
     - prealloc
-linters-settings:
-  gocritic:
-    disabled-checks:
-      - ifElseChain
-      - singleCaseSwitch
+    - staticcheck
+    - unparam
+    - unused
+  settings:
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+        - singleCaseSwitch
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: (.+)\.go$
+        text: comment on exported (method|function|type|const|var)
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
