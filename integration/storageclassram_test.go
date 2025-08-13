@@ -4,19 +4,16 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdktest "github.com/cosmos/cosmos-sdk/testutil"
 	"github.com/gyuho/linux-inspect/df"
+	"pkg.akt.dev/go/cli"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	clitestutil "github.com/akash-network/node/testutil/cli"
-	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
+	clitestutil "pkg.akt.dev/go/cli/testutil"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
 
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
@@ -30,56 +27,70 @@ func (s *E2EStorageClassRam) TestRAM() {
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(100),
 	}
 
+	cctx := s.cctx
+
 	// Create Deployments
-	res, err := deploycli.TxCreateDeploymentExec(
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
-	)
-	s.Require().NoError(err)
-	s.Require().NoError(s.waitForBlocksCommitted(7))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
-
-	bidID := mtypes.MakeBidID(
-		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
-		s.keyProvider.GetAddress(),
-	)
-
-	_, err = mcli.QueryBidExec(s.validator.ClientCtx, bidID)
-	s.Require().NoError(err)
-
-	_, err = mcli.TxCreateLeaseExec(
-		s.validator.ClientCtx,
-		bidID,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
+
+	bidID := mtypes.MakeBidID(
+		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
+		s.addrProvider,
+	)
+
+	err = s.waitForBlockchainEvent(&mtypes.EventBidCreated{ID: bidID})
+	s.Require().NoError(err)
+
+	_, err = clitestutil.ExecQueryBid(s.ctx, cctx, cli.TestFlags().WithBidID(bidID)...)
+	s.Require().NoError(err)
+
+	_, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithBidID(bidID).
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(s.waitForBlocksCommitted(2))
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	lid := bidID.LeaseID()
 
 	// Send Manifest to Provider ----------------------------------------------
-	_, err = ptestutil.TestSendManifest(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
 
-	extraArgs := []string{
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
-	}
+	extraArgs := cli.TestFlags().
+		WithLeaseID(lid).
+		WithHome(s.validator.ClientCtx.HomeDir).
+		WithFrom(s.addrTenant.String()).
+		WithOutputJSON()
 
 	logged := make(map[string]struct{})
 
@@ -96,7 +107,15 @@ func (s *E2EStorageClassRam) TestRAM() {
 			return
 		default:
 		}
-		out, err = ptestutil.TestLeaseShell(leaseShellCtx, s.validator.ClientCtx.WithOutputFormat("json"), extraArgs, lid, 0, false, false, "web", cmd)
+		out, err = ptestutil.ExecLeaseShell(
+			leaseShellCtx,
+			cctx,
+			extraArgs.
+				WithFlag("replica-index", 0).
+				WithFlag("tty", false).
+				WithFlag("stdin", false).
+				With("web", cmd)...,
+		)
 		if err != nil {
 			_, hasBeenLogged := logged[err.Error()]
 			if !hasBeenLogged {

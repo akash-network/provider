@@ -19,7 +19,6 @@ limitations under the License.
 package fake
 
 import (
-	akashv2beta1 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta1"
 	akashv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
@@ -32,7 +31,6 @@ var scheme = runtime.NewScheme()
 var codecs = serializer.NewCodecFactory(scheme)
 
 var localSchemeBuilder = runtime.SchemeBuilder{
-	akashv2beta1.AddToScheme,
 	akashv2beta2.AddToScheme,
 }
 

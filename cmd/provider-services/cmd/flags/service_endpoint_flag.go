@@ -3,12 +3,14 @@ package flags
 import (
 	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
-	"github.com/tendermint/tendermint/libs/log"
 	"net"
 	"strconv"
 	"strings"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"cosmossdk.io/log"
 )
 
 var (

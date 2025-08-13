@@ -3,20 +3,16 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	acmd "pkg.akt.dev/node/cmd/akash/cmd"
 
+	tmcli "github.com/cometbft/cometbft/libs/cli"
 	"github.com/cosmos/cosmos-sdk/client/debug"
 	"github.com/cosmos/cosmos-sdk/client/flags"
-	"github.com/cosmos/cosmos-sdk/client/keys"
-	"github.com/cosmos/cosmos-sdk/client/rpc"
-	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	genutilcli "github.com/cosmos/cosmos-sdk/x/genutil/client/cli"
-	tmcli "github.com/tendermint/tendermint/libs/cli"
 
-	// init default cosmos-sdk config
-	_ "github.com/akash-network/akash-api/go/sdkutil"
-	"github.com/akash-network/node/app"
-	acmd "github.com/akash-network/node/cmd/akash/cmd"
-	ecmd "github.com/akash-network/node/events/cmd"
+	"pkg.akt.dev/go/cli"
+	"pkg.akt.dev/go/sdkutil"
+	"pkg.akt.dev/node/app"
 
 	"github.com/akash-network/provider/operator"
 	"github.com/akash-network/provider/operator/hostname"
@@ -25,13 +21,13 @@ import (
 )
 
 func NewRootCmd() *cobra.Command {
-	encodingConfig := app.MakeEncodingConfig()
+	encodingConfig := sdkutil.MakeEncodingConfig()
 
 	cmd := &cobra.Command{
 		Use:               "provider-services",
 		Short:             "Provider services commands",
 		SilenceUsage:      true,
-		PersistentPreRunE: acmd.GetPersistentPreRunE(encodingConfig, []string{"AP", "AKASH"}),
+		PersistentPreRunE: cli.GetPersistentPreRunE(encodingConfig, []string{"AP", "AKASH"}, cli.DefaultHome),
 	}
 
 	cmd.PersistentFlags().String(flags.FlagNode, "http://localhost:26657", "The node address")
@@ -60,16 +56,16 @@ func NewRootCmd() *cobra.Command {
 
 	cmd.AddCommand(version.NewVersionCommand())
 
-	cmd.AddCommand(acmd.QueryCmd())
-	cmd.AddCommand(acmd.TxCmd())
+	cmd.AddCommand(cli.QueryCmd())
+	cmd.AddCommand(cli.TxCmd())
 
 	cmd.AddCommand(nodeCmd())
 
-	cmd.AddCommand(ecmd.EventCmd())
-	cmd.AddCommand(keys.Commands(app.DefaultHome))
+	cmd.AddCommand(cli.EventsCmd())
+	cmd.AddCommand(cli.KeysCmds())
 	cmd.AddCommand(genutilcli.InitCmd(app.ModuleBasics(), app.DefaultHome))
-	cmd.AddCommand(genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultHome))
-	cmd.AddCommand(genutilcli.GenTxCmd(app.ModuleBasics(), encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{}, app.DefaultHome))
+	// cmd.AddCommand(genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultHome))
+	// cmd.AddCommand(genutilcli.GenTxCmd(app.ModuleBasics(), encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{}, app.DefaultHome))
 	cmd.AddCommand(genutilcli.ValidateGenesisCmd(app.ModuleBasics()))
 	cmd.AddCommand(acmd.AddGenesisAccountCmd(app.DefaultHome))
 	cmd.AddCommand(tmcli.NewCompletionCmd(cmd, true))
@@ -84,8 +80,8 @@ func nodeCmd() *cobra.Command {
 		Short: "operations with akash RPC node",
 	}
 
-	cmd.AddCommand(rpc.StatusCommand())
-	cmd.AddCommand(genutilcli.MigrateGenesisCmd())
+	// cmd.AddCommand(rpc.StatusCommand())
+	// cmd.AddCommand(genutilcli.MigrateGenesisCmd())
 
 	return cmd
 }
