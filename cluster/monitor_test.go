@@ -3,16 +3,17 @@ package cluster
 import (
 	"testing"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	apclient "pkg.akt.dev/go/provider/client"
+	"pkg.akt.dev/go/testutil"
+	"pkg.akt.dev/go/util/pubsub"
 
-	"github.com/akash-network/provider/cluster/mocks"
+	cmocks "github.com/akash-network/provider/mocks/cluster"
+
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
@@ -22,7 +23,7 @@ func TestMonitorInstantiate(t *testing.T) {
 	myLog := testutil.Logger(t)
 	bus := pubsub.NewBus()
 
-	client := &mocks.Client{}
+	client := &cmocks.Client{}
 	deployment := &ctypes.Deployment{
 		Lid:    testutil.LeaseID(t),
 		MGroup: &manifest.Group{},
@@ -60,7 +61,7 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 	group.Services[0].Expose[0].ExternalPort = 2000
 	group.Services[0].Expose[0].Proto = manifest.TCP
 	group.Services[0].Expose[0].Port = 40000
-	client := &mocks.Client{}
+	client := &cmocks.Client{}
 	deployment := &ctypes.Deployment{
 		Lid:    testutil.LeaseID(t),
 		MGroup: group,
@@ -106,7 +107,7 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 	group.Services[0].Expose[0].Proto = manifest.TCP
 	group.Services[0].Expose[0].Port = 40000
 	group.Services[0].Count = 3
-	client := &mocks.Client{}
+	client := &cmocks.Client{}
 	deployment := &ctypes.Deployment{
 		Lid:    testutil.LeaseID(t),
 		MGroup: group,

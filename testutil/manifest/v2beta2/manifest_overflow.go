@@ -4,9 +4,9 @@ import (
 	"math"
 	"testing"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	atestutil "github.com/akash-network/node/testutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	atestutil "pkg.akt.dev/go/testutil"
 )
 
 // OverflowManifestGenerator generates a manifest maximum integer values
@@ -38,20 +38,20 @@ func (mg manifestGeneratorOverflow) Service(t testing.TB) manifest.Service {
 		Image: "quay.io/ovrclk/demo-app",
 		Args:  []string{"run"},
 		Env:   []string{"AKASH_TEST_SERVICE=true"},
-		Resources: types.Resources{
+		Resources: rtypes.Resources{
 			ID: 1,
-			CPU: &types.CPU{
-				Units: types.NewResourceValue(math.MaxUint32),
+			CPU: &rtypes.CPU{
+				Units: rtypes.NewResourceValue(math.MaxUint32),
 			},
-			Memory: &types.Memory{
-				Quantity: types.NewResourceValue(math.MaxUint64),
+			Memory: &rtypes.Memory{
+				Quantity: rtypes.NewResourceValue(math.MaxUint64),
 			},
-			GPU: &types.GPU{
-				Units: types.NewResourceValue(math.MaxUint32),
+			GPU: &rtypes.GPU{
+				Units: rtypes.NewResourceValue(math.MaxUint32),
 			},
-			Storage: types.Volumes{
-				types.Storage{
-					Quantity: types.NewResourceValue(math.MaxUint64),
+			Storage: rtypes.Volumes{
+				rtypes.Storage{
+					Quantity: rtypes.NewResourceValue(math.MaxUint64),
 				},
 			},
 		},

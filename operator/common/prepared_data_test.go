@@ -1,9 +1,10 @@
 package common
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPreparedData(t *testing.T) {
@@ -24,7 +25,7 @@ func TestPreparedData(t *testing.T) {
 	require.Greater(t, pr.get().preparedAt.UnixNano(), start.UnixNano())
 }
 
-func TestPrepraedDataTruncates(t *testing.T) {
+func TestPreparedDataTruncates(t *testing.T) {
 	pr := newPreparedResult()
 
 	const l = 10000000

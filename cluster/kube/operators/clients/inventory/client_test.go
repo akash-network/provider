@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -26,10 +24,13 @@ import (
 	kfake "k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
 
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -38,8 +39,8 @@ import (
 )
 
 type testReservation struct {
-	resources         dtypes.GroupSpec
-	adjustedResources dtypes.ResourceUnits
+	resources         dvbeta.GroupSpec
+	adjustedResources dvbeta.ResourceUnits
 	cparams           interface{}
 }
 
@@ -64,15 +65,15 @@ func (r *testReservation) OrderID() mtypes.OrderID {
 	return mtypes.OrderID{}
 }
 
-func (r *testReservation) Resources() dtypes.ResourceGroup {
+func (r *testReservation) Resources() dvbeta.ResourceGroup {
 	return r.resources
 }
 
-func (r *testReservation) SetAllocatedResources(val dtypes.ResourceUnits) {
+func (r *testReservation) SetAllocatedResources(val dvbeta.ResourceUnits) {
 	r.adjustedResources = val
 }
 
-func (r *testReservation) GetAllocatedResources() dtypes.ResourceUnits {
+func (r *testReservation) GetAllocatedResources() dvbeta.ResourceUnits {
 	return r.adjustedResources
 }
 
@@ -207,7 +208,7 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 
 	group, ctx := errgroup.WithContext(context.Background())
 
-	kc := kfake.NewSimpleClientset()
+	kc := kfake.NewClientset()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyInventoryUnderTest, true)
 
@@ -703,35 +704,35 @@ func multipleReplicasGenNodes() inventoryV1.Nodes {
 }
 
 func multipleReplicasGenReservations(cpuUnits, gpuUnits uint64, count uint32) *testReservation {
-	var gpuAttributes atypes.Attributes
+	var gpuAttributes attrtypes.Attributes
 	if gpuUnits > 0 {
-		gpuAttributes = append(gpuAttributes, atypes.Attribute{
+		gpuAttributes = append(gpuAttributes, attrtypes.Attribute{
 			Key:   "vendor/nvidia/model/a100",
 			Value: "true",
 		})
 	}
 	return &testReservation{
-		resources: dtypes.GroupSpec{
+		resources: dvbeta.GroupSpec{
 			Name:         "bla",
-			Requirements: atypes.PlacementRequirements{},
-			Resources: dtypes.ResourceUnits{
+			Requirements: attrtypes.PlacementRequirements{},
+			Resources: dvbeta.ResourceUnits{
 				{
-					Resources: atypes.Resources{
+					Resources: rtypes.Resources{
 						ID: 1,
-						CPU: &atypes.CPU{
-							Units: atypes.NewResourceValue(cpuUnits),
+						CPU: &rtypes.CPU{
+							Units: rtypes.NewResourceValue(cpuUnits),
 						},
-						GPU: &atypes.GPU{
-							Units:      atypes.NewResourceValue(gpuUnits),
+						GPU: &rtypes.GPU{
+							Units:      rtypes.NewResourceValue(gpuUnits),
 							Attributes: gpuAttributes,
 						},
-						Memory: &atypes.Memory{
-							Quantity: atypes.NewResourceValue(16 * unit.Gi),
+						Memory: &rtypes.Memory{
+							Quantity: rtypes.NewResourceValue(16 * unit.Gi),
 						},
-						Storage: []atypes.Storage{
+						Storage: []rtypes.Storage{
 							{
 								Name:     "default",
-								Quantity: atypes.NewResourceValue(8 * unit.Gi),
+								Quantity: rtypes.NewResourceValue(8 * unit.Gi),
 							},
 						},
 					},
@@ -743,56 +744,56 @@ func multipleReplicasGenReservations(cpuUnits, gpuUnits uint64, count uint32) *t
 }
 
 func multipleSvcReplicasGenReservations(cpuUnits, gpuUnits uint64, count uint32) *testReservation {
-	var gpuAttributes atypes.Attributes
+	var gpuAttributes attrtypes.Attributes
 	if gpuUnits > 0 {
-		gpuAttributes = append(gpuAttributes, atypes.Attribute{
+		gpuAttributes = append(gpuAttributes, attrtypes.Attribute{
 			Key:   "vendor/nvidia/model/a100",
 			Value: "true",
 		})
 	}
 	return &testReservation{
-		resources: dtypes.GroupSpec{
+		resources: dvbeta.GroupSpec{
 			Name:         "bla",
-			Requirements: atypes.PlacementRequirements{},
-			Resources: dtypes.ResourceUnits{
+			Requirements: attrtypes.PlacementRequirements{},
+			Resources: dvbeta.ResourceUnits{
 				{
-					Resources: atypes.Resources{
+					Resources: rtypes.Resources{
 						ID: 1,
-						CPU: &atypes.CPU{
-							Units: atypes.NewResourceValue(cpuUnits),
+						CPU: &rtypes.CPU{
+							Units: rtypes.NewResourceValue(cpuUnits),
 						},
-						GPU: &atypes.GPU{
-							Units: atypes.NewResourceValue(0),
+						GPU: &rtypes.GPU{
+							Units: rtypes.NewResourceValue(0),
 						},
-						Memory: &atypes.Memory{
-							Quantity: atypes.NewResourceValue(16 * unit.Gi),
+						Memory: &rtypes.Memory{
+							Quantity: rtypes.NewResourceValue(16 * unit.Gi),
 						},
-						Storage: []atypes.Storage{
+						Storage: []rtypes.Storage{
 							{
 								Name:     "default",
-								Quantity: atypes.NewResourceValue(8 * unit.Gi),
+								Quantity: rtypes.NewResourceValue(8 * unit.Gi),
 							},
 						},
 					},
 					Count: count,
 				},
 				{
-					Resources: atypes.Resources{
+					Resources: rtypes.Resources{
 						ID: 2,
-						CPU: &atypes.CPU{
-							Units: atypes.NewResourceValue(cpuUnits),
+						CPU: &rtypes.CPU{
+							Units: rtypes.NewResourceValue(cpuUnits),
 						},
-						GPU: &atypes.GPU{
-							Units:      atypes.NewResourceValue(gpuUnits),
+						GPU: &rtypes.GPU{
+							Units:      rtypes.NewResourceValue(gpuUnits),
 							Attributes: gpuAttributes,
 						},
-						Memory: &atypes.Memory{
-							Quantity: atypes.NewResourceValue(16 * unit.Gi),
+						Memory: &rtypes.Memory{
+							Quantity: rtypes.NewResourceValue(16 * unit.Gi),
 						},
-						Storage: []atypes.Storage{
+						Storage: []rtypes.Storage{
 							{
 								Name:     "default",
-								Quantity: atypes.NewResourceValue(8 * unit.Gi),
+								Quantity: rtypes.NewResourceValue(8 * unit.Gi),
 							},
 						},
 					},

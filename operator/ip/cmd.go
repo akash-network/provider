@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
-
 	"github.com/spf13/viper"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	clusterClient "github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/operators/clients/metallb"
