@@ -7,8 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
+
+	"pkg.akt.dev/go/testutil"
 )
 
 func TestIgnoreList(t *testing.T) {

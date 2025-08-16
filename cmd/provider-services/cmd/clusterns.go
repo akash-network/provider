@@ -3,8 +3,9 @@ package cmd
 import (
 	"fmt"
 
-	mcli "github.com/akash-network/node/x/market/client/cli"
 	"github.com/spf13/cobra"
+
+	cflags "pkg.akt.dev/go/cli/flags"
 
 	cutil "github.com/akash-network/provider/cluster/util"
 )
@@ -17,7 +18,7 @@ func clusterNSCmd() *cobra.Command {
 		Args:         cobra.ExactArgs(0),
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			lid, err := mcli.LeaseIDFromFlags(cmd.Flags())
+			lid, err := cflags.LeaseIDFromFlags(cmd.Flags())
 			if err != nil {
 				return err
 			}
@@ -25,7 +26,9 @@ func clusterNSCmd() *cobra.Command {
 			return nil
 		},
 	}
-	mcli.AddLeaseIDFlags(cmd.Flags())
-	mcli.MarkReqLeaseIDFlags(cmd)
+
+	cflags.AddLeaseIDFlags(cmd.Flags())
+	cflags.MarkReqLeaseIDFlags(cmd)
+
 	return cmd
 }

@@ -11,23 +11,22 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kfake "k8s.io/client-go/kubernetes/fake"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
+	"pkg.akt.dev/go/testutil"
+	"pkg.akt.dev/go/util/pubsub"
 
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
-
-	"github.com/akash-network/provider/cluster/mocks"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
-	cipmocks "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip/mocks"
 	cfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
-	cmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
 	"github.com/akash-network/provider/event"
+	cmocks "github.com/akash-network/provider/mocks/cluster"
+	cmockstypes "github.com/akash-network/provider/mocks/cluster/types"
+	cipmocks "github.com/akash-network/provider/mocks/cluster/types/clients/ip"
 	"github.com/akash-network/provider/operator/waiter"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	aclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
@@ -36,23 +35,23 @@ import (
 )
 
 func TestInventory_reservationAllocatable(t *testing.T) {
-	mkrg := func(cpu uint64, gpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dtypes.ResourceUnit {
-		endpoints := make([]types.Endpoint, endpointsCount)
-		return dtypes.ResourceUnit{
-			Resources: types.Resources{
+	mkrg := func(cpu uint64, gpu uint64, memory uint64, storage uint64, endpointsCount uint, count uint32) dvbeta.ResourceUnit {
+		endpoints := make(rtypes.Endpoints, endpointsCount)
+		return dvbeta.ResourceUnit{
+			Resources: rtypes.Resources{
 				ID: 1,
-				CPU: &types.CPU{
-					Units: types.NewResourceValue(cpu),
+				CPU: &rtypes.CPU{
+					Units: rtypes.NewResourceValue(cpu),
 				},
-				GPU: &types.GPU{
-					Units: types.NewResourceValue(gpu),
+				GPU: &rtypes.GPU{
+					Units: rtypes.NewResourceValue(gpu),
 				},
-				Memory: &types.Memory{
-					Quantity: types.NewResourceValue(memory),
+				Memory: &rtypes.Memory{
+					Quantity: rtypes.NewResourceValue(memory),
 				},
-				Storage: []types.Storage{
+				Storage: []rtypes.Storage{
 					{
-						Quantity: types.NewResourceValue(storage),
+						Quantity: rtypes.NewResourceValue(storage),
 					},
 				},
 				Endpoints: endpoints,
@@ -61,10 +60,10 @@ func TestInventory_reservationAllocatable(t *testing.T) {
 		}
 	}
 
-	mkres := func(allocated bool, res ...dtypes.ResourceUnit) *reservation {
+	mkres := func(allocated bool, res ...dvbeta.ResourceUnit) *reservation {
 		return &reservation{
 			allocated: allocated,
-			resources: &dtypes.GroupSpec{Resources: res},
+			resources: &dvbeta.GroupSpec{Resources: res},
 		}
 	}
 
@@ -100,13 +99,13 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 
 	deployments := make([]ctypes.IDeployment, 0)
 
-	clusterClient := &mocks.Client{}
+	clusterClient := &cmocks.Client{}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset()
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
@@ -143,40 +142,40 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	require.NoError(t, err)
 
 	deployments := make([]ctypes.IDeployment, 1)
-	deployment := &cmocks.IDeployment{}
+	deployment := &cmockstypes.IDeployment{}
 	deployment.On("LeaseID").Return(lid)
 
 	groupServices := make(manifest.Services, 1)
 
 	serviceCount := testutil.RandRangeInt(1, 10)
-	serviceEndpoints := make([]types.Endpoint, serviceCount)
+	serviceEndpoints := make(rtypes.Endpoints, serviceCount)
 
 	countOfRandomPortService := testutil.RandRangeInt(0, serviceCount)
 	for i := range serviceEndpoints {
 		if i < countOfRandomPortService {
-			serviceEndpoints[i].Kind = types.Endpoint_RANDOM_PORT
+			serviceEndpoints[i].Kind = rtypes.Endpoint_RANDOM_PORT
 		} else {
-			serviceEndpoints[i].Kind = types.Endpoint_SHARED_HTTP
+			serviceEndpoints[i].Kind = rtypes.Endpoint_SHARED_HTTP
 		}
 	}
 
 	groupServices[0] = manifest.Service{
 		Count: 1,
-		Resources: types.Resources{
+		Resources: rtypes.Resources{
 			ID: 1,
-			CPU: &types.CPU{
-				Units: types.NewResourceValue(1),
+			CPU: &rtypes.CPU{
+				Units: rtypes.NewResourceValue(1),
 			},
-			GPU: &types.GPU{
-				Units: types.NewResourceValue(0),
+			GPU: &rtypes.GPU{
+				Units: rtypes.NewResourceValue(0),
 			},
-			Memory: &types.Memory{
-				Quantity: types.NewResourceValue(1 * unit.Gi),
+			Memory: &rtypes.Memory{
+				Quantity: rtypes.NewResourceValue(1 * unit.Gi),
 			},
-			Storage: []types.Storage{
+			Storage: []rtypes.Storage{
 				{
 					Name:     "default",
-					Quantity: types.NewResourceValue(1 * unit.Gi),
+					Quantity: rtypes.NewResourceValue(1 * unit.Gi),
 				},
 			},
 			Endpoints: serviceEndpoints,
@@ -192,7 +191,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 
 	deployments[0] = deployment
 
-	clusterClient := &mocks.Client{}
+	clusterClient := &cmocks.Client{}
 
 	// clusterInv := newInventory("nodeA")
 	//
@@ -201,8 +200,8 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 	// 	inventoryCalled <- 0 // Value does not matter
 	// }).Return(clusterInv, nil)
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
@@ -280,7 +279,7 @@ type inventoryScaffold struct {
 	donech   chan struct{}
 	// inventoryCalled chan struct{}
 	bus           pubsub.Bus
-	clusterClient *mocks.Client
+	clusterClient *cmocks.Client
 }
 
 func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
@@ -296,32 +295,32 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 
 	groupServices := make([]manifest.Service, 1)
 	serviceCount := testutil.RandRangeInt(1, 50)
-	serviceEndpoints := make([]types.Endpoint, serviceCount)
+	serviceEndpoints := make(rtypes.Endpoints, serviceCount)
 
 	countOfRandomPortService := testutil.RandRangeInt(0, serviceCount)
 	for i := range serviceEndpoints {
 		if i < countOfRandomPortService {
-			serviceEndpoints[i].Kind = types.Endpoint_RANDOM_PORT
+			serviceEndpoints[i].Kind = rtypes.Endpoint_RANDOM_PORT
 		} else {
-			serviceEndpoints[i].Kind = types.Endpoint_SHARED_HTTP
+			serviceEndpoints[i].Kind = rtypes.Endpoint_SHARED_HTTP
 		}
 	}
 
-	deploymentRequirements := types.Resources{
+	deploymentRequirements := rtypes.Resources{
 		ID: 1,
-		CPU: &types.CPU{
-			Units: types.NewResourceValue(4000),
+		CPU: &rtypes.CPU{
+			Units: rtypes.NewResourceValue(4000),
 		},
-		GPU: &types.GPU{
-			Units: types.NewResourceValue(0),
+		GPU: &rtypes.GPU{
+			Units: rtypes.NewResourceValue(0),
 		},
-		Memory: &types.Memory{
-			Quantity: types.NewResourceValue(30 * unit.Gi),
+		Memory: &rtypes.Memory{
+			Quantity: rtypes.NewResourceValue(30 * unit.Gi),
 		},
-		Storage: types.Volumes{
-			types.Storage{
+		Storage: rtypes.Volumes{
+			rtypes.Storage{
 				Name:     "default",
-				Quantity: types.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
+				Quantity: rtypes.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
 			},
 		},
 	}
@@ -333,7 +332,7 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 		Resources: deploymentRequirements,
 	}
 
-	cclient := &mocks.Client{}
+	cclient := &cmocks.Client{}
 
 	scaffold.clusterClient = cclient
 
@@ -343,47 +342,47 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Group {
 	groupServices := make([]manifest.Service, 1)
 
-	serviceEndpoints := make([]types.Endpoint, 0)
+	serviceEndpoints := make(rtypes.Endpoints, 0)
 	seqno := uint32(0)
 	if sharedHTTP {
-		serviceEndpoint := types.Endpoint{
-			Kind:           types.Endpoint_SHARED_HTTP,
+		serviceEndpoint := rtypes.Endpoint{
+			Kind:           rtypes.Endpoint_SHARED_HTTP,
 			SequenceNumber: seqno,
 		}
 		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
 	}
 
 	if nodePort {
-		serviceEndpoint := types.Endpoint{
-			Kind:           types.Endpoint_RANDOM_PORT,
+		serviceEndpoint := rtypes.Endpoint{
+			Kind:           rtypes.Endpoint_RANDOM_PORT,
 			SequenceNumber: seqno,
 		}
 		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
 	}
 
 	if leasedIP {
-		serviceEndpoint := types.Endpoint{
-			Kind:           types.Endpoint_LEASED_IP,
+		serviceEndpoint := rtypes.Endpoint{
+			Kind:           rtypes.Endpoint_LEASED_IP,
 			SequenceNumber: seqno,
 		}
 		serviceEndpoints = append(serviceEndpoints, serviceEndpoint)
 	}
 
-	deploymentRequirements := types.Resources{
+	deploymentRequirements := rtypes.Resources{
 		ID: 1,
-		CPU: &types.CPU{
-			Units: types.NewResourceValue(4000),
+		CPU: &rtypes.CPU{
+			Units: rtypes.NewResourceValue(4000),
 		},
-		GPU: &types.GPU{
-			Units: types.NewResourceValue(0),
+		GPU: &rtypes.GPU{
+			Units: rtypes.NewResourceValue(0),
 		},
-		Memory: &types.Memory{
-			Quantity: types.NewResourceValue(30 * unit.Gi),
+		Memory: &rtypes.Memory{
+			Quantity: rtypes.NewResourceValue(30 * unit.Gi),
 		},
-		Storage: types.Volumes{
-			types.Storage{
+		Storage: rtypes.Volumes{
+			rtypes.Storage{
 				Name:     "default",
-				Quantity: types.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
+				Quantity: rtypes.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
 			},
 		},
 	}
@@ -415,8 +414,8 @@ func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 	subscriber, err := scaffold.bus.Subscribe()
 	require.NoError(t, err)
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
@@ -469,8 +468,8 @@ func TestInventory_ReserveIPUnavailableWithIPOperator(t *testing.T) {
 	}, nil)
 	mockIP.On("Stop")
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
@@ -544,8 +543,8 @@ func TestInventory_ReserveIPAvailableWithIPOperator(t *testing.T) {
 
 	mockIP.On("Stop")
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
@@ -614,31 +613,31 @@ func TestInventory_OverReservations(t *testing.T) {
 	groupServices := make([]manifest.Service, 1)
 
 	serviceCount := testutil.RandRangeInt(1, 50)
-	serviceEndpoints := make([]types.Endpoint, serviceCount)
+	serviceEndpoints := make(rtypes.Endpoints, serviceCount)
 
 	countOfRandomPortService := testutil.RandRangeInt(0, serviceCount)
 	for i := range serviceEndpoints {
 		if i < countOfRandomPortService {
-			serviceEndpoints[i].Kind = types.Endpoint_RANDOM_PORT
+			serviceEndpoints[i].Kind = rtypes.Endpoint_RANDOM_PORT
 		} else {
-			serviceEndpoints[i].Kind = types.Endpoint_SHARED_HTTP
+			serviceEndpoints[i].Kind = rtypes.Endpoint_SHARED_HTTP
 		}
 	}
 
-	deploymentRequirements := types.Resources{
-		CPU: &types.CPU{
-			Units: types.NewResourceValue(4000),
+	deploymentRequirements := rtypes.Resources{
+		CPU: &rtypes.CPU{
+			Units: rtypes.NewResourceValue(4000),
 		},
-		GPU: &types.GPU{
-			Units: types.NewResourceValue(0),
+		GPU: &rtypes.GPU{
+			Units: rtypes.NewResourceValue(0),
 		},
-		Memory: &types.Memory{
-			Quantity: types.NewResourceValue(30 * unit.Gi),
+		Memory: &rtypes.Memory{
+			Quantity: rtypes.NewResourceValue(30 * unit.Gi),
 		},
-		Storage: types.Volumes{
-			types.Storage{
+		Storage: rtypes.Volumes{
+			rtypes.Storage{
 				Name:     "default",
-				Quantity: types.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
+				Quantity: rtypes.NewResourceValue((100 * unit.Gi) - 1*unit.Mi),
 			},
 		},
 	}
@@ -659,8 +658,8 @@ func TestInventory_OverReservations(t *testing.T) {
 		InventoryExternalPortQuantity:   1000,
 	}
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset()
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	nullInv := cinventory.NewNull(ctx, "nodeA")

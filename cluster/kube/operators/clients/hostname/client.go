@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	clusterutil "github.com/akash-network/provider/cluster/util"

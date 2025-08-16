@@ -4,17 +4,18 @@ import (
 	"fmt"
 	"sync"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	cmdcommon "github.com/akash-network/node/cmd/common"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	aclient "github.com/akash-network/provider/client"
+	cmdcommon "pkg.akt.dev/go/cli"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+
+	aclient "pkg.akt.dev/go/node/client/discovery"
 )
 
 func leaseLogsCmd() *cobra.Command {

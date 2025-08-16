@@ -1,15 +1,15 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 
-	cmdcommon "github.com/akash-network/node/cmd/common"
-	dcli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
-	aclient "github.com/akash-network/provider/client"
+	cmdcommon "pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
+	apclient "pkg.akt.dev/go/provider/client"
+
+	aclient "pkg.akt.dev/go/node/client/discovery"
 )
 
 func serviceStatusCmd() *cobra.Command {
@@ -56,7 +56,7 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+	bid, err := cflags.BidIDFromFlags(cmd.Flags(), cflags.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}

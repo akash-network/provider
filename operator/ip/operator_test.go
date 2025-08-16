@@ -14,29 +14,28 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kfake "k8s.io/client-go/kubernetes/fake"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/testutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/testutil"
 
-	"github.com/akash-network/provider/cluster/mocks"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	cutil "github.com/akash-network/provider/cluster/util"
+	cmocks "github.com/akash-network/provider/mocks/cluster"
+	mlbmocks "github.com/akash-network/provider/mocks/cluster/kube/operators/clients/metallb"
 	"github.com/akash-network/provider/operator/common"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	aclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	afake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 	"github.com/akash-network/provider/tools/fromctx"
-
-	mlbmocks "github.com/akash-network/provider/cluster/kube/operators/clients/metallb/mocks"
 )
 
 type ipOperatorScaffold struct {
 	op          *ipOperator
-	clusterMock *mocks.Client
-	metalMock   *mlbmocks.MetalLBClient
+	clusterMock *cmocks.Client
+	metalMock   *mlbmocks.Client
 	ilc         common.IgnoreListConfig
 }
 
@@ -44,8 +43,8 @@ func runIPOperator(t *testing.T, run bool, aobj []runtime.Object, prerun, fn fun
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	kc := kfake.NewSimpleClientset()
-	ac := afake.NewSimpleClientset(aobj...)
+	kc := kfake.NewClientset()
+	ac := afake.NewClientset(aobj...)
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))
@@ -54,12 +53,12 @@ func runIPOperator(t *testing.T, run bool, aobj []runtime.Object, prerun, fn fun
 	providerAddr := testutil.AccAddress(t)
 
 	l := testutil.Logger(t)
-	client := &mocks.Client{}
-	mllbc := &mlbmocks.MetalLBClient{}
+	client := &cmocks.Client{}
+	mllbc := &mlbmocks.Client{}
 	mllbc.On("Stop")
 
 	poolChangesMock := make(chan struct{})
-	// nolint: golint, gosimple
+	// nolint: staticcheck
 	var poolChangesInterface <-chan struct{}
 	poolChangesInterface = poolChangesMock
 	mllbc.On("DetectPoolChanges", mock.Anything).Return(poolChangesInterface, nil)

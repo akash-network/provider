@@ -1,14 +1,16 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
-	cmdcommon "github.com/akash-network/node/cmd/common"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	aclient "github.com/akash-network/provider/client"
+	apclient "pkg.akt.dev/go/provider/client"
+
+	cmdcommon "pkg.akt.dev/go/cli"
+
+	aclient "pkg.akt.dev/go/node/client/discovery"
 )
 
 func statusCmd() *cobra.Command {

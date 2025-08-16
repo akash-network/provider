@@ -3,12 +3,13 @@ package cmd
 import (
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/spf13/cobra"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
-	aclient "github.com/akash-network/provider/client"
+	apclient "pkg.akt.dev/go/provider/client"
+
+	aclient "pkg.akt.dev/go/node/client/discovery"
 )
 
 var errEmptyHostnames = errors.New("hostnames cannot be empty")

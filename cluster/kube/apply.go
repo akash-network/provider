@@ -1,6 +1,6 @@
 package kube
 
-// nolint:deadcode,golint
+// nolint:deadcode
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
-	metricsutils "github.com/akash-network/node/util/metrics"
+	metricsutils "pkg.akt.dev/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 )

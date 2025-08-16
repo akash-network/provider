@@ -3,12 +3,12 @@ package cmd
 import (
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/spf13/cobra"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
-	aclient "github.com/akash-network/provider/client"
+	aclient "pkg.akt.dev/go/node/client/discovery"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 var errEmptyEndpoints = errors.New("endpoints cannot be empty")

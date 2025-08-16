@@ -19,15 +19,12 @@ limitations under the License.
 package akash
 
 import (
-	v2beta1 "github.com/akash-network/provider/pkg/client/informers/externalversions/akash.network/v2beta1"
 	v2beta2 "github.com/akash-network/provider/pkg/client/informers/externalversions/akash.network/v2beta2"
 	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
 )
 
 // Interface provides access to each of this group's versions.
 type Interface interface {
-	// V2beta1 provides access to shared informers for resources in V2beta1.
-	V2beta1() v2beta1.Interface
 	// V2beta2 provides access to shared informers for resources in V2beta2.
 	V2beta2() v2beta2.Interface
 }
@@ -41,11 +38,6 @@ type group struct {
 // New returns a new Interface.
 func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakListOptions internalinterfaces.TweakListOptionsFunc) Interface {
 	return &group{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
-}
-
-// V2beta1 returns a new v2beta1.Interface.
-func (g *group) V2beta1() v2beta1.Interface {
-	return v2beta1.New(g.factory, g.namespace, g.tweakListOptions)
 }
 
 // V2beta2 returns a new v2beta2.Interface.

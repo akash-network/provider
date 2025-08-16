@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
 	"github.com/akash-network/provider/cluster"
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"

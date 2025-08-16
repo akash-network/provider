@@ -21,8 +21,6 @@ package fake
 import (
 	applyconfiguration "github.com/akash-network/provider/pkg/client/applyconfiguration"
 	clientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
-	akashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
-	fakeakashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1/fake"
 	akashv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
 	fakeakashv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2/fake"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -117,11 +115,6 @@ var (
 	_ clientset.Interface = &Clientset{}
 	_ testing.FakeClient  = &Clientset{}
 )
-
-// AkashV2beta1 retrieves the AkashV2beta1Client
-func (c *Clientset) AkashV2beta1() akashv2beta1.AkashV2beta1Interface {
-	return &fakeakashv2beta1.FakeAkashV2beta1{Fake: &c.Fake}
-}
 
 // AkashV2beta2 retrieves the AkashV2beta2Client
 func (c *Clientset) AkashV2beta2() akashv2beta2.AkashV2beta2Interface {

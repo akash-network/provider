@@ -2,14 +2,19 @@ package util
 
 import (
 	"os"
+	"time"
 
-	"github.com/go-kit/kit/log/term" // nolint: staticcheck
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
+	"github.com/rs/zerolog"
 )
 
 func OpenLogger() log.Logger {
+	cw := zerolog.ConsoleWriter{
+		NoColor:    true,
+		TimeFormat: time.Kitchen,
+		Out:        os.Stdout,
+	}
+
 	// logger with no color output - current debug colors are invisible for me.
-	return log.NewTMLoggerWithColorFn(log.NewSyncWriter(os.Stdout), func(_ ...interface{}) term.FgBgColor {
-		return term.FgBgColor{}
-	})
+	return log.NewCustomLogger(zerolog.New(cw))
 }

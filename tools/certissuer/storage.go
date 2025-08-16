@@ -22,7 +22,7 @@ import (
 	"golang.org/x/net/idna"
 	"software.sslmate.com/src/go-pkcs12"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 )
 
 const (

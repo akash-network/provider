@@ -3,38 +3,36 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"cosmossdk.io/log"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"github.com/tendermint/tendermint/libs/log"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+	kruntime "k8s.io/apimachinery/pkg/util/runtime"
+
 	"k8s.io/client-go/kubernetes"
-
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/flags"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	"github.com/akash-network/node/cmd/common"
-	"github.com/akash-network/node/events"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/sdl"
-
-	cltypes "github.com/akash-network/akash-api/go/node/client/types"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-
-	xpconfig "github.com/akash-network/node/x/provider/config"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	apclient "pkg.akt.dev/go/provider/client"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/util/ctxlog"
+	"pkg.akt.dev/go/util/events"
+	"pkg.akt.dev/go/util/pubsub"
+	xpconfig "pkg.akt.dev/node/x/provider/config"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
-	"github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -45,7 +43,6 @@ import (
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
 	gwgrpc "github.com/akash-network/provider/gateway/grpc"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 	"github.com/akash-network/provider/operator/waiter"
@@ -55,6 +52,7 @@ import (
 	"github.com/akash-network/provider/tools/fromctx"
 	"github.com/akash-network/provider/tools/pconfig"
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
+	"github.com/akash-network/provider/tools/pconfig/memory"
 )
 
 const (
@@ -129,13 +127,22 @@ var (
 	errInvalidConfig = errors.New("Invalid configuration")
 )
 
+func init() {
+
+}
+
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "run",
 		Short:        "run akash provider",
 		SilenceUsage: true,
-		PreRunE: func(cmd *cobra.Command, _ []string) error {
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			err := cli.TxPersistentPreRunE(cmd, args)
+			if err != nil {
+				return err
+			}
+
 			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
 
@@ -176,6 +183,12 @@ func RunCmd() *cobra.Command {
 				if err != nil {
 					return err
 				}
+			case "memory":
+				var err error
+				pstorage, err = memory.NewMemory()
+				if err != nil {
+					return err
+				}
 			default:
 				return fmt.Errorf("unsupport persistent-config backend \"%s\"", pconfigBackend)
 			}
@@ -201,7 +214,21 @@ func RunCmd() *cobra.Command {
 				return err
 			}
 
-			logger := cmdutil.OpenLogger().With("cmp", "provider")
+			logger := log.NewLogger(os.Stderr)
+
+			kubeLog := logger.With("component", "k8s")
+
+			// ideally following instantiation shall be placed within init function.
+			// however, the goal here to log under provider's context
+			kruntime.ErrorHandlers = []kruntime.ErrorHandler{
+				func(_ context.Context, err error, msg string, keysAndValues ...interface{}) {
+					if err != nil && (strings.Contains(err.Error(), "use of closed network connection") || errors.Is(err, io.EOF)) {
+						return
+					}
+
+					kubeLog.Error(msg, "err", err, keysAndValues)
+				},
+			}
 
 			bus := tpubsub.New(pctx, 1000)
 
@@ -255,7 +282,7 @@ func RunCmd() *cobra.Command {
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPersistentConfig, pstorage)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, bus)
 
-			pctx, pcancel := context.WithCancel(context.Background())
+			ctx, pcancel := context.WithCancel(context.Background())
 			go func() {
 				defer pcancel()
 
@@ -278,14 +305,13 @@ func RunCmd() *cobra.Command {
 		},
 
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.RunForeverWithContext(cmd.Context(), func(ctx context.Context) error {
+			return cli.RunForeverWithContext(cmd.Context(), func(ctx context.Context) error {
 				return doRunCmd(ctx, cmd, args)
 			})
 		},
 	}
 
-	flags.AddTxFlagsToCmd(cmd)
-
+	cflags.AddTxFlagsToCmd(cmd)
 	if err := addRunFlags(cmd); err != nil {
 		panic(err)
 	}
@@ -418,7 +444,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	logger := fromctx.LogcFromCtx(cmd.Context())
+	logger := ctxlog.LogcFromCtx(cmd.Context())
+
+	logger.Info("starting provider service")
 
 	var metricsRouter http.Handler
 	if len(metricsListener) != 0 {
@@ -427,27 +455,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group := fromctx.MustErrGroupFromCtx(ctx)
 
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
-	cctx = cctx.WithSkipConfirmation(true)
-
-	opts, err := cltypes.ClientOptionsFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	cl, err := client.DiscoverClient(ctx, cctx, opts...)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext().WithSkipConfirmation(true)
 
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
 	grpcaddr := viper.GetString(FlagGatewayGRPCListenAddress)
 
-	res, err := cl.Query().Provider(
+	res, err := cl.Query().Provider().Provider(
 		cmd.Context(),
 		&ptypes.QueryProviderRequest{Owner: cctx.FromAddress.String()},
 	)
@@ -490,10 +504,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 	currentBlockHeight := statusResult.SyncInfo.LatestBlockHeight
 	sessionMgr := session.New(logger, cl, pinfo, currentBlockHeight)
-
-	if err := cctx.Client.Start(); err != nil {
-		return err
-	}
 
 	bus := pubsub.NewBus()
 	defer bus.Close()

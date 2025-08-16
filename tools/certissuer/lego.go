@@ -18,9 +18,10 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/gcloud"
 	"github.com/go-acme/lego/v4/registration"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/tendermint/tendermint/libs/log"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+
+	"cosmossdk.io/log"
 )
 
 var (

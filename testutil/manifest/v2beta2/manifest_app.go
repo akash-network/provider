@@ -3,10 +3,10 @@ package v2beta2
 import (
 	"testing"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/akash-api/go/testutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
+	"pkg.akt.dev/go/testutil"
 )
 
 // AppManifestGenerator represents a real-world, deployable configuration.
@@ -36,20 +36,20 @@ func (mg manifestGeneratorApp) Service(t testing.TB) manifest.Service {
 	return manifest.Service{
 		Name:  "demo",
 		Image: "ropes/akash-app:v1",
-		Resources: types.Resources{
+		Resources: rtypes.Resources{
 			ID: 1,
-			CPU: &types.CPU{
-				Units: types.NewResourceValue(100),
+			CPU: &rtypes.CPU{
+				Units: rtypes.NewResourceValue(100),
 			},
-			Memory: &types.Memory{
-				Quantity: types.NewResourceValue(128 * unit.Mi),
+			Memory: &rtypes.Memory{
+				Quantity: rtypes.NewResourceValue(128 * unit.Mi),
 			},
-			GPU: &types.GPU{
-				Units: types.NewResourceValue(0),
+			GPU: &rtypes.GPU{
+				Units: rtypes.NewResourceValue(0),
 			},
-			Storage: types.Volumes{
-				types.Storage{
-					Quantity: types.NewResourceValue(256 * unit.Mi),
+			Storage: rtypes.Volumes{
+				rtypes.Storage{
+					Quantity: rtypes.NewResourceValue(256 * unit.Mi),
 				},
 			},
 		},
