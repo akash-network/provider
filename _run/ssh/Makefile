@@ -25,7 +25,6 @@ provider-run:
 	$(PROVIDER_SERVICES) run \
 		--from "$(PROVIDER_KEY_NAME)" \
 		--cluster-k8s \
-		--kubeconfig "$(AKASH_KUBECONFIG)" \
 		--gateway-listen-address "$(GATEWAY_HOST)" \
 		--deployment-ingress-static-hosts true \
 		--deployment-ingress-domain "$(GATEWAY_HOSTNAME)" \
