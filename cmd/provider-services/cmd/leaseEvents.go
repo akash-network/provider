@@ -6,12 +6,14 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
+	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -31,6 +33,7 @@ func leaseEventsCmd() *cobra.Command {
 
 	cmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P("tail", "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
+	cmd.Flags().String(FlagProviderURL, "", "Provider URL to connect to directly (bypasses provider discovery)")
 
 	return cmd
 }
@@ -43,22 +46,52 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
 	if err != nil {
 		return err
 	}
 
-	dseq, err := dseqFromFlags(cmd.Flags())
+	var leases []mtypes.LeaseID
+	var cl qclient.QueryClient
+
+	cl, err = aclient.DiscoverQueryClient(ctx, cctx)
 	if err != nil {
 		return err
 	}
 
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
-	if err != nil {
-		return markRPCServerError(err)
+	if providerURL != "" {
+		if !cmd.Flags().Changed(FlagProvider) {
+			return errors.Errorf("provider flag is required when using provider-url")
+		}
+		if !cmd.Flags().Changed(FlagDSeq) {
+			return errors.Errorf("dseq flag is required when using provider-url")
+		}
+		if !cmd.Flags().Changed(FlagGSeq) {
+			return errors.Errorf("gseq flag is required when using provider-url")
+		}
+		if !cmd.Flags().Changed(FlagOSeq) {
+			return errors.Errorf("oseq flag is required when using provider-url")
+		}
+
+		leaseID, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
+		if err != nil {
+			return err
+		}
+
+		leases = []mtypes.LeaseID{leaseID}
+	} else {
+		dseq, err := dseqFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		leases, err = leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
+			Owner: cctx.GetFromAddress().String(),
+			DSeq:  dseq,
+		})
+		if err != nil {
+			return markRPCServerError(err)
+		}
 	}
 
 	svcs, err := cmd.Flags().GetString(FlagService)
@@ -87,7 +120,14 @@ func doLeaseEvents(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+
+		var gclient apclient.Client
+		if providerURL != "" {
+			gclient, err = apclient.NewClientV2(ctx, cl, providerURL, prov, opts...)
+		} else {
+			gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
+		}
+
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {
