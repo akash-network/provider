@@ -1,22 +1,23 @@
 package grpc
 
 import (
+	"context"
 	"crypto/x509"
 	"fmt"
 	"net"
 	"time"
 
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"pkg.akt.dev/go/util/ctxlog"
 
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	providerv1 "pkg.akt.dev/go/provider/v1"
+	ajwt "pkg.akt.dev/go/util/jwt"
 
 	"github.com/akash-network/provider"
 	gwutils "github.com/akash-network/provider/gateway/utils"
@@ -61,7 +62,7 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 		return err
 	}
 
-	log := fromctx.LogcFromCtx(ctx)
+	log := ctxlog.LogcFromCtx(ctx)
 
 	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 		MinTime:             30 * time.Second,

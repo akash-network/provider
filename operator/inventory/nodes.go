@@ -14,7 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )

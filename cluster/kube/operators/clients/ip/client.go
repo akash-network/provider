@@ -11,9 +11,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clusterutil "github.com/akash-network/provider/cluster/util"
@@ -166,7 +166,7 @@ func extractRemoteError(response *http.Response) error {
 		return err
 	}
 
-	if 0 == len(body.Error) {
+	if len(body.Error) == 0 {
 		return io.EOF
 	}
 

@@ -5,7 +5,7 @@ import (
 
 	"github.com/troian/pubsub"
 
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )

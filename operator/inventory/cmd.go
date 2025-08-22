@@ -15,8 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/mux"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
@@ -30,6 +28,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
+
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -580,8 +581,6 @@ func (rt *serviceRouter) healthHandler(w http.ResponseWriter, req *http.Request)
 		err = ErrMetricsUnsupportedRequest
 		return
 	}
-
-	return
 }
 
 func (rt *serviceRouter) readyHandler(w http.ResponseWriter, req *http.Request) {
@@ -605,8 +604,6 @@ func (rt *serviceRouter) readyHandler(w http.ResponseWriter, req *http.Request) 
 		err = ErrMetricsUnsupportedRequest
 		return
 	}
-
-	return
 }
 
 func (rt *serviceRouter) inventoryHandler(w http.ResponseWriter, req *http.Request) {

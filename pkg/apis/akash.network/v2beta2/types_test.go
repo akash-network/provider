@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	atestutil "github.com/akash-network/node/testutil"
+	atestutil "pkg.akt.dev/go/testutil"
 
 	mtestutil "github.com/akash-network/provider/testutil/manifest/v2beta2"
 )

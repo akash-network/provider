@@ -17,16 +17,19 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
+	sdkmath "cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/cluster/util"
 )
@@ -58,68 +61,68 @@ func Test_ScalePricingAcceptsOneForASingleScale(t *testing.T) {
 	require.NotNil(t, pricing)
 }
 
-func defaultGroupSpecCPUMem() *dtypes.GroupSpec {
-	gspec := &dtypes.GroupSpec{
+func defaultGroupSpecCPUMem() *dvbeta.GroupSpec {
+	gspec := &dvbeta.GroupSpec{
 		Name:         "",
-		Requirements: atypes.PlacementRequirements{},
-		Resources:    make(dtypes.ResourceUnits, 1),
+		Requirements: attrtypes.PlacementRequirements{},
+		Resources:    make(dvbeta.ResourceUnits, 1),
 	}
 
-	cpu := atypes.CPU{}
-	cpu.Units = atypes.NewResourceValue(11)
+	cpu := rtypes.CPU{}
+	cpu.Units = rtypes.NewResourceValue(11)
 
-	memory := atypes.Memory{}
-	memory.Quantity = atypes.NewResourceValue(10000)
+	memory := rtypes.Memory{}
+	memory.Quantity = rtypes.NewResourceValue(10000)
 
-	clusterResources := atypes.Resources{
+	clusterResources := rtypes.Resources{
 		CPU:    &cpu,
 		Memory: &memory,
 	}
 
-	price := sdk.NewDecCoin("uakt", sdk.NewInt(23))
-	resource := dtypes.ResourceUnit{
+	price := sdk.NewDecCoin("uakt", sdkmath.NewInt(23))
+	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
 		Price:     price,
 	}
 
 	gspec.Resources[0] = resource
-	gspec.Resources[0].Resources.Endpoints = make([]atypes.Endpoint, testutil.RandRangeInt(1, 10))
+	gspec.Resources[0].Endpoints = make([]rtypes.Endpoint, testutil.RandRangeInt(1, 10))
 	return gspec
 }
 
-func defaultGroupSpec() *dtypes.GroupSpec {
-	gspec := &dtypes.GroupSpec{
+func defaultGroupSpec() *dvbeta.GroupSpec {
+	gspec := &dvbeta.GroupSpec{
 		Name:         "",
-		Requirements: atypes.PlacementRequirements{},
-		Resources:    make(dtypes.ResourceUnits, 1),
+		Requirements: attrtypes.PlacementRequirements{},
+		Resources:    make(dvbeta.ResourceUnits, 1),
 	}
 
-	clusterResources := atypes.Resources{
-		CPU: &atypes.CPU{
-			Units: atypes.NewResourceValue(11),
+	clusterResources := rtypes.Resources{
+		CPU: &rtypes.CPU{
+			Units: rtypes.NewResourceValue(11),
 		},
-		Memory: &atypes.Memory{
-			Quantity: atypes.NewResourceValue(10000),
+		Memory: &rtypes.Memory{
+			Quantity: rtypes.NewResourceValue(10000),
 		},
-		GPU: &atypes.GPU{
-			Units: atypes.NewResourceValue(0),
+		GPU: &rtypes.GPU{
+			Units: rtypes.NewResourceValue(0),
 		},
-		Storage: atypes.Volumes{
-			atypes.Storage{
-				Quantity: atypes.NewResourceValue(4096),
+		Storage: rtypes.Volumes{
+			rtypes.Storage{
+				Quantity: rtypes.NewResourceValue(4096),
 			},
 		},
 	}
-	price := sdk.NewDecCoin(testutil.CoinDenom, sdk.NewInt(23))
-	resource := dtypes.ResourceUnit{
+	price := sdk.NewDecCoin(testutil.CoinDenom, sdkmath.NewInt(23))
+	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
 		Price:     price,
 	}
 
 	gspec.Resources[0] = resource
-	gspec.Resources[0].Resources.Endpoints = make([]atypes.Endpoint, testutil.RandRangeInt(1, 10))
+	gspec.Resources[0].Endpoints = make([]rtypes.Endpoint, testutil.RandRangeInt(1, 10))
 	return gspec
 }
 
@@ -152,7 +155,7 @@ func Test_ScalePricingOnCpu(t *testing.T) {
 
 	gspec := defaultGroupSpecCPUMem()
 	cpuQuantity := uint64(13)
-	gspec.Resources[0].Resources.CPU.Units = atypes.NewResourceValue(cpuQuantity)
+	gspec.Resources[0].CPU.Units = rtypes.NewResourceValue(cpuQuantity)
 
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
@@ -176,7 +179,7 @@ func Test_ScalePricingOnMemory(t *testing.T) {
 
 	gspec := defaultGroupSpecCPUMem()
 	memoryQuantity := uint64(123456)
-	gspec.Resources[0].Resources.Memory.Quantity = atypes.NewResourceValue(memoryQuantity)
+	gspec.Resources[0].Memory.Quantity = rtypes.NewResourceValue(memoryQuantity)
 
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
@@ -200,7 +203,7 @@ func Test_ScalePricingOnMemoryLessThanOne(t *testing.T) {
 	gspec := defaultGroupSpecCPUMem()
 	// Make a resource exactly 1 byte
 	memoryQuantity := uint64(1)
-	gspec.Resources[0].Resources.Memory.Quantity = atypes.NewResourceValue(memoryQuantity)
+	gspec.Resources[0].Memory.Quantity = rtypes.NewResourceValue(memoryQuantity)
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
 		GSpec: gspec,
@@ -208,33 +211,33 @@ func Test_ScalePricingOnMemoryLessThanOne(t *testing.T) {
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 
-	expectedPrice, err := sdk.NewDecFromStr("0.0000009536743164")
+	expectedPrice, err := sdkmath.LegacyNewDecFromStr("0.0000009536743164")
 	require.NoError(t, err)
 	require.Equal(t, expectedPrice, price.Amount)
 
 	// Make a resource exactly 1 less byte less than two megabytes
 	memoryQuantity = uint64(2*unit.Mi - 1)
-	gspec.Resources[0].Resources.Memory.Quantity = atypes.NewResourceValue(memoryQuantity)
+	gspec.Resources[0].Memory.Quantity = rtypes.NewResourceValue(memoryQuantity)
 	price, err = pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 	require.NotNil(t, price)
 
-	expectedPrice, err = sdk.NewDecFromStr("1.9999990463256836")
+	expectedPrice, err = sdkmath.LegacyNewDecFromStr("1.9999990463256836")
 	require.NoError(t, err)
 	require.Equal(t, expectedPrice, price.Amount)
 
 	require.NoError(t, err)
 }
 
-func decNearly(t *testing.T, v sdk.Dec, expected int64) {
+func decNearly(t *testing.T, v sdkmath.LegacyDec, expected int64) {
 	t.Helper()
-	delta, err := sdk.NewDecFromStr("0.00001")
+	delta, err := sdkmath.LegacyNewDecFromStr("0.00001")
 	require.NoError(t, err)
 
-	expectedLow := sdk.NewDec(expected).Sub(delta)
+	expectedLow := sdkmath.LegacyNewDec(expected).Sub(delta)
 	require.True(t, v.GT(expectedLow), "%v should be greater than %v", v.String(), expectedLow.String())
 
-	expectedHigh := sdk.NewDec(expected).Add(delta)
+	expectedHigh := sdkmath.LegacyNewDec(expected).Add(delta)
 	require.True(t, v.LT(expectedHigh), "%v should be less than %v", v.String(), expectedHigh.String())
 }
 
@@ -250,7 +253,7 @@ func Test_ScalePricingOnStorage(t *testing.T) {
 
 	gspec := defaultGroupSpec()
 	storageQuantity := uint64(98765)
-	gspec.Resources[0].Resources.Storage[0].Quantity = atypes.NewResourceValue(storageQuantity)
+	gspec.Resources[0].Resources.Storage[0].Quantity = rtypes.NewResourceValue(storageQuantity)
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
 		GSpec: gspec,
@@ -273,7 +276,7 @@ func Test_ScalePricingByCountOfResources(t *testing.T) {
 
 	gspec := defaultGroupSpec()
 	storageQuantity := uint64(111)
-	gspec.Resources[0].Resources.Storage[0].Quantity = atypes.NewResourceValue(storageQuantity)
+	gspec.Resources[0].Resources.Storage[0].Quantity = rtypes.NewResourceValue(storageQuantity)
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
 		GSpec: gspec,
@@ -301,12 +304,12 @@ func Test_ScalePricingForIPs(t *testing.T) {
 	require.NotNil(t, pricing)
 
 	gspec := defaultGroupSpec()
-	gspec.Resources[0].Resources.Endpoints = append(gspec.Resources[0].Resources.Endpoints, atypes.Endpoint{
-		Kind:           atypes.Endpoint_LEASED_IP,
+	gspec.Resources[0].Endpoints = append(gspec.Resources[0].Endpoints, rtypes.Endpoint{
+		Kind:           rtypes.Endpoint_LEASED_IP,
 		SequenceNumber: 1367,
 	})
 
-	require.Equal(t, uint(1), util.GetEndpointQuantityOfResourceGroup(gspec, atypes.Endpoint_LEASED_IP))
+	require.Equal(t, uint(1), util.GetEndpointQuantityOfResourceGroup(gspec, rtypes.Endpoint_LEASED_IP))
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
 		GSpec: gspec,
@@ -317,11 +320,11 @@ func Test_ScalePricingForIPs(t *testing.T) {
 	require.NoError(t, err)
 	decNearly(t, price.Amount, ipPriceInt)
 
-	gspec.Resources[0].Resources.Endpoints = append(gspec.Resources[0].Resources.Endpoints, atypes.Endpoint{
-		Kind:           atypes.Endpoint_LEASED_IP,
+	gspec.Resources[0].Endpoints = append(gspec.Resources[0].Endpoints, rtypes.Endpoint{
+		Kind:           rtypes.Endpoint_LEASED_IP,
 		SequenceNumber: 1368,
 	})
-	require.Equal(t, uint(2), util.GetEndpointQuantityOfResourceGroup(gspec, atypes.Endpoint_LEASED_IP))
+	require.Equal(t, uint(2), util.GetEndpointQuantityOfResourceGroup(gspec, rtypes.Endpoint_LEASED_IP))
 	price, err = pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 
@@ -488,7 +491,7 @@ func Test_ScriptPricingWhenScriptWritesFractionalResult(t *testing.T) {
 
 	result, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	expectedPrice, err := sdk.NewDecFromStr("1.5")
+	expectedPrice, err := sdkmath.LegacyNewDecFromStr("1.5")
 	require.NoError(t, err)
 	require.Equal(t, result.Amount, expectedPrice)
 }
@@ -500,7 +503,7 @@ func Test_ScriptPricingFailsWhenScriptWritesOverflowResult(t *testing.T) {
 	fout, err := os.OpenFile(scriptPath, os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	require.NoError(t, err)
 	// Write the maximum value, followed by zero, so it is 10x
-	_, err = fmt.Fprintf(fout, "#!/bin/sh\necho %s0\nexit 0", sdk.MaxSortableDec.String())
+	_, err = fmt.Fprintf(fout, "#!/bin/sh\necho %s0\nexit 0", sdkmath.LegacyMaxSortableDec.String())
 	require.NoError(t, err)
 	err = fout.Close()
 	require.NoError(t, err)
@@ -542,7 +545,7 @@ func Test_ScriptPricingReturnsResultFromScript(t *testing.T) {
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 	require.Equal(t, "uakt", price.Denom)
-	require.Equal(t, sdk.NewDec(132), price.Amount)
+	require.Equal(t, sdkmath.LegacyNewDec(132), price.Amount)
 }
 
 func Test_ScriptPricingDoesNotExhaustSemaphore(t *testing.T) {
@@ -638,7 +641,7 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 	fout, err := os.OpenFile(scriptPath, os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	require.NoError(t, err)
 	// Use cat to dump stdin into a file
-	_, err = fout.WriteString(fmt.Sprintf("#!/bin/sh\ncat > %q\necho 1\nexit 0", jsonPath))
+	_, err = fmt.Fprintf(fout, "#!/bin/sh\ncat > %q\necho 1\nexit 0", jsonPath)
 	require.NoError(t, err)
 	err = fout.Close()
 	require.NoError(t, err)
@@ -656,7 +659,7 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 	require.Equal(t, "uakt", price.Denom)
-	require.Equal(t, sdk.NewDec(1), price.Amount)
+	require.Equal(t, sdkmath.LegacyNewDec(1), price.Amount)
 	// Open the file and make sure it has the JSON
 	fin, err := os.Open(jsonPath)
 	require.NoError(t, err)
@@ -671,12 +674,12 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 	require.Len(t, data.Resources, len(gspec.Resources))
 
 	for i, r := range gspec.Resources {
-		require.Equal(t, r.Resources.CPU.Units.Val.Uint64(), data.Resources[i].CPU)
-		require.Equal(t, r.Resources.Memory.Quantity.Val.Uint64(), data.Resources[i].Memory)
-		require.Equal(t, r.Resources.Storage[0].Quantity.Val.Uint64(), data.Resources[i].Storage[0].Size)
+		require.Equal(t, r.CPU.Units.Val.Uint64(), data.Resources[i].CPU)
+		require.Equal(t, r.Memory.Quantity.Val.Uint64(), data.Resources[i].Memory)
+		require.Equal(t, r.Storage[0].Quantity.Val.Uint64(), data.Resources[i].Storage[0].Size)
 		require.Equal(t, r.Count, data.Resources[i].Count)
-		require.Equal(t, len(r.Resources.Endpoints), data.Resources[i].EndpointQuantity)
-		require.Equal(t, util.GetEndpointQuantityOfResourceUnits(r.Resources, atypes.Endpoint_LEASED_IP), data.Resources[i].IPLeaseQuantity)
+		require.Equal(t, len(r.Endpoints), data.Resources[i].EndpointQuantity)
+		require.Equal(t, util.GetEndpointQuantityOfResourceUnits(r.Resources, rtypes.Endpoint_LEASED_IP), data.Resources[i].IPLeaseQuantity)
 	}
 }
 
@@ -705,7 +708,7 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 	require.NotNil(t, pricing)
 
 	gspec := defaultGroupSpec()
-	gspec.Resources[0].Resources.Endpoints = make(atypes.Endpoints, 7)
+	gspec.Resources[0].Endpoints = make(rtypes.Endpoints, 7)
 	req := Request{
 		Owner: testutil.AccAddress(t).String(),
 		GSpec: gspec,
@@ -713,7 +716,7 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	amount, err := sdk.NewDecFromStr(expectedPrice)
+	amount, err := sdkmath.LegacyNewDecFromStr(expectedPrice)
 	require.NoError(t, err)
 
 	require.Equal(t, sdk.NewDecCoinFromDec("uakt", amount).String(), price.String())
@@ -734,11 +737,11 @@ func TestRationalToIntConversion(t *testing.T) {
 }
 
 func Test_parseGPU_LastAttribute(t *testing.T) {
-	gpu := atypes.GPU{
-		Units: atypes.ResourceValue{
-			Val: sdk.NewInt(111),
+	gpu := rtypes.GPU{
+		Units: rtypes.ResourceValue{
+			Val: sdkmath.NewInt(111),
 		},
-		Attributes: atypes.Attributes{
+		Attributes: attrtypes.Attributes{
 			{
 				Key:   "vendor/nvidia/model/a100",
 				Value: "true",
@@ -771,26 +774,26 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 		{
 			desc: "wildcard and allocated resources",
 			r: Request{
-				GSpec: &dtypes.GroupSpec{
-					Resources: dtypes.ResourceUnits{
+				GSpec: &dvbeta.GroupSpec{
+					Resources: dvbeta.ResourceUnits{
 						{
-							Price: sdk.NewDecCoin("denom", sdk.NewInt(111)),
-							Resources: atypes.Resources{
-								CPU: &atypes.CPU{
-									Units: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+							Price: sdk.NewDecCoin("denom", sdkmath.NewInt(111)),
+							Resources: rtypes.Resources{
+								CPU: &rtypes.CPU{
+									Units: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
 								},
-								Memory: &atypes.Memory{
-									Quantity: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+								Memory: &rtypes.Memory{
+									Quantity: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
 								},
-								GPU: &atypes.GPU{
-									Units: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+								GPU: &rtypes.GPU{
+									Units: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
-									Attributes: atypes.Attributes{
+									Attributes: attrtypes.Attributes{
 										{
 											Key:   "vendor/nvidia/model/*",
 											Value: "true",
@@ -801,25 +804,25 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 						},
 					},
 				},
-				AllocatedResources: dtypes.ResourceUnits{
+				AllocatedResources: dvbeta.ResourceUnits{
 					{
-						Resources: atypes.Resources{
+						Resources: rtypes.Resources{
 							ID: 111,
-							CPU: &atypes.CPU{
-								Units: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
+							CPU: &rtypes.CPU{
+								Units: rtypes.ResourceValue{
+									Val: sdkmath.NewInt(111),
 								},
 							},
-							Memory: &atypes.Memory{
-								Quantity: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
+							Memory: &rtypes.Memory{
+								Quantity: rtypes.ResourceValue{
+									Val: sdkmath.NewInt(111),
 								},
 							},
-							GPU: &atypes.GPU{
-								Units: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
+							GPU: &rtypes.GPU{
+								Units: rtypes.ResourceValue{
+									Val: sdkmath.NewInt(111),
 								},
-								Attributes: atypes.Attributes{
+								Attributes: attrtypes.Attributes{
 									{
 										Key:   "vendor/nvidia/model/a100",
 										Value: "true",
@@ -842,26 +845,26 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 		{
 			desc: "wildcard and no reservation value",
 			r: Request{
-				GSpec: &dtypes.GroupSpec{
-					Resources: dtypes.ResourceUnits{
+				GSpec: &dvbeta.GroupSpec{
+					Resources: dvbeta.ResourceUnits{
 						{
-							Price: sdk.NewDecCoin("denom", sdk.NewInt(111)),
-							Resources: atypes.Resources{
-								CPU: &atypes.CPU{
-									Units: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+							Price: sdk.NewDecCoin("denom", sdkmath.NewInt(111)),
+							Resources: rtypes.Resources{
+								CPU: &rtypes.CPU{
+									Units: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
 								},
-								Memory: &atypes.Memory{
-									Quantity: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+								Memory: &rtypes.Memory{
+									Quantity: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
 								},
-								GPU: &atypes.GPU{
-									Units: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+								GPU: &rtypes.GPU{
+									Units: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
-									Attributes: atypes.Attributes{
+									Attributes: attrtypes.Attributes{
 										{
 											Key:   "vendor/nvidia/model/*",
 											Value: "true",
@@ -885,26 +888,26 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 		{
 			desc: "no wildcard and reservation value",
 			r: Request{
-				GSpec: &dtypes.GroupSpec{
-					Resources: dtypes.ResourceUnits{
+				GSpec: &dvbeta.GroupSpec{
+					Resources: dvbeta.ResourceUnits{
 						{
-							Price: sdk.NewDecCoin("denom", sdk.NewInt(111)),
-							Resources: atypes.Resources{
-								CPU: &atypes.CPU{
-									Units: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+							Price: sdk.NewDecCoin("denom", sdkmath.NewInt(111)),
+							Resources: rtypes.Resources{
+								CPU: &rtypes.CPU{
+									Units: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
 								},
-								Memory: &atypes.Memory{
-									Quantity: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+								Memory: &rtypes.Memory{
+									Quantity: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
 								},
-								GPU: &atypes.GPU{
-									Units: atypes.ResourceValue{
-										Val: sdk.NewInt(111),
+								GPU: &rtypes.GPU{
+									Units: rtypes.ResourceValue{
+										Val: sdkmath.NewInt(111),
 									},
-									Attributes: atypes.Attributes{
+									Attributes: attrtypes.Attributes{
 										{
 											Key:   "vendor/nvidia/model/h100",
 											Value: "true",
@@ -915,25 +918,25 @@ func Test_newDataForScript_GPUWildcard(t *testing.T) {
 						},
 					},
 				},
-				AllocatedResources: dtypes.ResourceUnits{
+				AllocatedResources: dvbeta.ResourceUnits{
 					{
-						Resources: atypes.Resources{
+						Resources: rtypes.Resources{
 							ID: 111,
-							CPU: &atypes.CPU{
-								Units: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
+							CPU: &rtypes.CPU{
+								Units: rtypes.ResourceValue{
+									Val: sdkmath.NewInt(111),
 								},
 							},
-							Memory: &atypes.Memory{
-								Quantity: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
+							Memory: &rtypes.Memory{
+								Quantity: rtypes.ResourceValue{
+									Val: sdkmath.NewInt(111),
 								},
 							},
-							GPU: &atypes.GPU{
-								Units: atypes.ResourceValue{
-									Val: sdk.NewInt(111),
+							GPU: &rtypes.GPU{
+								Units: rtypes.ResourceValue{
+									Val: sdkmath.NewInt(111),
 								},
-								Attributes: atypes.Attributes{
+								Attributes: attrtypes.Attributes{
 									{
 										Key:   "vendor/nvidia/model/a100",
 										Value: "true",

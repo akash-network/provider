@@ -95,7 +95,8 @@ archives:
       - provider-services-linux-amd64
     name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
   - id: provider-services
@@ -105,7 +106,8 @@ archives:
       - provider-services-linux-amd64
     name_template: "provider-services_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
 checksum:

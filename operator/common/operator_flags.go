@@ -1,12 +1,12 @@
 package common
 
 import (
+	"context"
 	"time"
 
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
 	"github.com/spf13/viper"
-	"golang.org/x/net/context"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"

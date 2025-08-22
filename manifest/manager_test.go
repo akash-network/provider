@@ -9,16 +9,16 @@ package manifest
 // 	"github.com/stretchr/testify/mock"
 // 	"github.com/stretchr/testify/require"
 //
-// 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-// 	types "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-// 	escrowtypes "github.com/akash-network/akash-api/go/node/escrow/v1beta3"
-// 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-// 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-// 	"github.com/akash-network/akash-api/go/sdkutil"
-// 	clientMocks "github.com/akash-network/node/client/mocks"
-// 	"github.com/akash-network/node/pubsub"
-// 	"github.com/akash-network/node/sdl"
-// 	"github.com/akash-network/node/testutil"
+// 	dtypes "pkg.akt.dev/go/node/deployment/v1beta3"
+// 	types "pkg.akt.dev/go/node/deployment/v1beta3"
+// 	escrowtypes "pkg.akt.dev/go/node/escrow/v1beta3"
+// 	mtypes "pkg.akt.dev/go/node/market/v1beta4"
+// 	ptypes "pkg.akt.dev/go/node/provider/v1beta3"
+// 	"pkg.akt.dev/go/sdkutil"
+// 	clientMocks "pkg.akt.dev/node/client/mocks"
+// 	"pkg.akt.dev/go/util/pubsub"
+// 	"pkg.akt.dev/go/sdl"
+// 	"pkg.akt.dev/go/testutil"
 //
 // 	"github.com/akash-network/provider/cluster"
 // 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -221,7 +221,7 @@ package manifest
 // 		Group:   dgroup,
 // 		Price: sdk.DecCoin{
 // 			Denom:  testutil.CoinDenom,
-// 			Amount: sdk.NewDec(111),
+// 			Amount: sdkmath.LegacyNewDec(111),
 // 		},
 // 	}
 //
@@ -264,7 +264,7 @@ package manifest
 // 		State:   mtypes.LeaseActive,
 // 		Price: sdk.DecCoin{
 // 			Denom:  "uakt",
-// 			Amount: sdk.NewDec(111),
+// 			Amount: sdkmath.LegacyNewDec(111),
 // 		},
 // 		CreatedAt: 0,
 // 	}}
@@ -307,7 +307,7 @@ package manifest
 // 	ev := event.LeaseWon{
 // 		LeaseID: lid,
 // 		Group:   dgroup,
-// 		Price:   sdk.NewDecCoin("uakt", sdk.NewInt(111)),
+// 		Price:   sdk.NewDecCoin("uakt", sdkmath.NewInt(111)),
 // 	}
 // 	version, err := sdlManifest.Version()
 // 	require.NotNil(t, version)
@@ -365,7 +365,7 @@ package manifest
 // 	ev := event.LeaseWon{
 // 		LeaseID: lid,
 // 		Group:   dgroup,
-// 		Price:   sdk.NewDecCoinFromDec(testutil.CoinDenom, sdk.NewDec(111)),
+// 		Price:   sdk.NewDecCoinFromDec(testutil.CoinDenom, sdkmath.LegacyNewDec(111)),
 // 	}
 // 	version, err := sdlManifest.Version()
 // 	require.NotNil(t, version)

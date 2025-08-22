@@ -13,8 +13,8 @@ import (
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
@@ -110,7 +110,7 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 		"exists", exists)
 	// Create or update the entry
 	if exists {
-		obj.ObjectMeta.ResourceVersion = foundEntry.ResourceVersion
+		obj.ResourceVersion = foundEntry.ResourceVersion
 		_, err = c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
 	} else {
 		_, err = c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Create(ctx, &obj, metav1.CreateOptions{})

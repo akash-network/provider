@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 type ServiceCredentials interface {
@@ -19,10 +19,10 @@ type ServiceCredentials interface {
 
 type serviceCredentials struct {
 	*Workload
-	credentials *mani.ServiceImageCredentials
+	credentials *mani.ImageCredentials
 }
 
-func NewServiceCredentials(workload *Workload, credentials *mani.ServiceImageCredentials) ServiceCredentials {
+func NewServiceCredentials(workload *Workload, credentials *mani.ImageCredentials) ServiceCredentials {
 	return &serviceCredentials{
 		Workload:    workload,
 		credentials: credentials,

@@ -1,13 +1,11 @@
 package v1beta3
 
 import (
-	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	maniv2beta2 "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
 // IDeployment interface defined with LeaseID and ManifestGroup methods
-//
-//go:generate mockery --name IDeployment --output ./mocks
 type IDeployment interface {
 	LeaseID() mtypes.LeaseID
 	ManifestGroup() *maniv2beta2.Group
