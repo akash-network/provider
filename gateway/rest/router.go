@@ -372,7 +372,9 @@ func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc 
 			if cluster.ErrorIsOkToSendToClient(err) || errors.Is(err, kubeclienterrors.ErrNoServiceForLease) {
 				responseData.Message = err.Error()
 			} else {
-				http.Error(rw, err.Error(), http.StatusInternalServerError)
+				resultWriter = wsutil.NewWsWriterWrapper(shellWs, LeaseShellCodeFailure, l)
+				encodeData = false
+				localLog.Error("service status check failed", "err", err)
 			}
 		}
 
