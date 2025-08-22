@@ -290,6 +290,68 @@ provider-lease-logs:
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
+.PHONY: provider-url-lease-logs
+provider-url-lease-logs:
+	$(PROVIDER_SERVICES) lease-logs \
+		-f \
+		--service="$(LEASE_SERVICES)" \
+		--dseq      "$(DSEQ)"     \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)" \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--provider-url "https://localhost:8443" \
+		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: provider-url-lease-events
+provider-url-lease-events:
+	$(PROVIDER_SERVICES) lease-events \
+		-f \
+		--service="$(LEASE_SERVICES)" \
+		--dseq      "$(DSEQ)"     \
+		--gseq      "$(GSEQ)"     \
+		--oseq      "$(OSEQ)"     \
+		--from      "$(KEY_NAME)" \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--provider-url "https://localhost:8443" \
+		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: provider-url-lease-status
+provider-url-lease-status:
+	$(PROVIDER_SERVICES) lease-status \
+		--dseq      "$(DSEQ)"        \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)"    \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--provider-url "https://localhost:8443" \
+		--auth-type=$(GW_AUTH_TYPE)
+
+.PHONY: provider-url-lease-shell
+provider-url-lease-shell:
+	$(PROVIDER_SERVICES) lease-shell \
+		--dseq      "$(DSEQ)"        \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)"    \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--provider-url "https://localhost:8443" \
+		--auth-type=$(GW_AUTH_TYPE) \
+		${LEASE_SERVICES} \
+		date
+
+.PHONY: provider-lease-shell
+provider-lease-shell:
+	$(PROVIDER_SERVICES) lease-shell \
+		--dseq      "$(DSEQ)"        \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)"    \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type=$(GW_AUTH_TYPE) \
+		${LEASE_SERVICES} \
+		date
+
 .PHONY: provider-lease-events
 provider-lease-events:
 	$(PROVIDER_SERVICES) lease-events \

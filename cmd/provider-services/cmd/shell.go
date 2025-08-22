@@ -13,16 +13,20 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
+	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -62,6 +66,8 @@ func LeaseShellCmd() *cobra.Command {
 	if err := viper.BindPFlag(FlagReplicaIndex, cmd.Flags().Lookup(FlagReplicaIndex)); err != nil {
 		return nil
 	}
+
+	cmd.Flags().String(FlagProviderURL, "", "provider URL to connect to directly (bypasses provider discovery)")
 
 	return cmd
 }
@@ -108,28 +114,67 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
+	var cl qclient.QueryClient
+	var prov sdk.Address
+	var lID mtypes.LeaseID
+
+	cl, err = aclient.DiscoverQueryClient(ctx, cctx)
 	if err != nil {
 		return err
 	}
 
-	bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
-	if err != nil {
-		return err
+	if providerURL != "" {
+		if !cmd.Flags().Changed(FlagProvider) {
+			return pkgerrors.Errorf("provider flag is required when using provider-url")
+		}
+		if !cmd.Flags().Changed(FlagDSeq) {
+			return pkgerrors.Errorf("dseq flag is required when using provider-url")
+		}
+		if !cmd.Flags().Changed(FlagGSeq) {
+			return pkgerrors.Errorf("gseq flag is required when using provider-url")
+		}
+		if !cmd.Flags().Changed(FlagOSeq) {
+			return pkgerrors.Errorf("oseq flag is required when using provider-url")
+		}
+
+		prov, err = providerFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		lID, err = leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
+		if err != nil {
+			return err
+		}
+	} else {
+		prov, err = providerFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+		if err != nil {
+			return err
+		}
+		lID = bidID.LeaseID()
 	}
-	lID := bidID.LeaseID()
 
 	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	var gclient apclient.Client
+	if providerURL != "" {
+		gclient, err = apclient.NewClientV2(ctx, cl, providerURL, prov, opts...)
+	} else {
+		gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
+	}
 	if err != nil {
 		return err
 	}

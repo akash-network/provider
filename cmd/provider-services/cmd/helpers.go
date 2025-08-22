@@ -24,15 +24,16 @@ import (
 )
 
 const (
-	FlagService  = "service"
-	FlagProvider = "provider"
-	FlagDSeq     = "dseq"
-	FlagGSeq     = "gseq"
-	FlagOSeq     = "oseq"
-	flagOutput   = "output"
-	flagFollow   = "follow"
-	flagTail     = "tail"
-	flagAuthType = "auth-type"
+	FlagService     = "service"
+	FlagProvider    = "provider"
+	FlagProviderURL = "provider-url"
+	FlagDSeq        = "dseq"
+	FlagGSeq        = "gseq"
+	FlagOSeq        = "oseq"
+	flagOutput      = "output"
+	flagFollow      = "follow"
+	flagTail        = "tail"
+	flagAuthType    = "auth-type"
 )
 
 const (
