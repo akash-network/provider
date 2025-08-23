@@ -15,6 +15,7 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -223,4 +224,42 @@ func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.Flag
 	}
 
 	return opts, nil
+}
+
+// validateProviderURLFlags validates that all required flags are provided when using provider-url
+func validateProviderURLFlags(flags *pflag.FlagSet) error {
+	requiredFlags := []struct {
+		flag string
+		name string
+	}{
+		{FlagProvider, "provider"},
+		{FlagDSeq, "dseq"},
+		{FlagGSeq, "gseq"},
+		{FlagOSeq, "oseq"},
+	}
+
+	for _, req := range requiredFlags {
+		if !flags.Changed(req.flag) {
+			return pkgerrors.Errorf("%s flag is required when using provider-url", req.name)
+		}
+	}
+
+	return nil
+}
+
+// constructLeaseIDFromProviderURL constructs a lease ID from flags when using provider URL
+// This bypasses RPC discovery and constructs the lease ID directly from command line flags
+func constructLeaseIDFromProviderURL(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
+	// Validate all required flags are present
+	if err := validateProviderURLFlags(flags); err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	// Construct lease ID from flags
+	leaseID, err := leaseIDFromFlags(flags, owner)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	return leaseID, nil
 }
