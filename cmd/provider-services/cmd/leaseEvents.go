@@ -6,7 +6,6 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
@@ -60,20 +59,7 @@ func doLeaseEvents(cmd *cobra.Command) error {
 	}
 
 	if providerURL != "" {
-		if !cmd.Flags().Changed(FlagProvider) {
-			return errors.Errorf("provider flag is required when using provider-url")
-		}
-		if !cmd.Flags().Changed(FlagDSeq) {
-			return errors.Errorf("dseq flag is required when using provider-url")
-		}
-		if !cmd.Flags().Changed(FlagGSeq) {
-			return errors.Errorf("gseq flag is required when using provider-url")
-		}
-		if !cmd.Flags().Changed(FlagOSeq) {
-			return errors.Errorf("oseq flag is required when using provider-url")
-		}
-
-		leaseID, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
+		leaseID, err := constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
 			return err
 		}
