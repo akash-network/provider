@@ -13,7 +13,7 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
-	pkgerrors "github.com/pkg/errors"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
@@ -129,25 +129,12 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 
 	if providerURL != "" {
-		if !cmd.Flags().Changed(FlagProvider) {
-			return pkgerrors.Errorf("provider flag is required when using provider-url")
-		}
-		if !cmd.Flags().Changed(FlagDSeq) {
-			return pkgerrors.Errorf("dseq flag is required when using provider-url")
-		}
-		if !cmd.Flags().Changed(FlagGSeq) {
-			return pkgerrors.Errorf("gseq flag is required when using provider-url")
-		}
-		if !cmd.Flags().Changed(FlagOSeq) {
-			return pkgerrors.Errorf("oseq flag is required when using provider-url")
-		}
-
 		prov, err = providerFromFlags(cmd.Flags())
 		if err != nil {
 			return err
 		}
 
-		lID, err = leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
+		lID, err = constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
 			return err
 		}
