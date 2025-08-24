@@ -109,11 +109,14 @@ The Akash Network Provider is a Go-based implementation that enables providers t
    git clone https://github.com/akash-network/provider.git
    cd provider
    ```
-3. Activate direnv:
+3. Activate direnv in the repository:
    ```bash
+   # Review ./.envrc before allowing to understand what will run
    direnv allow
+   # If you update .envrc later, reload the environment:
+   direnv reload
    ```
-   Some packages may be installed after this
+   After allowing, direnv will load environment variables and may bootstrap tooling defined in ./.envrc (expect network activity).
 
 ## Project Structure
 
