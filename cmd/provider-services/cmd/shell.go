@@ -36,9 +36,7 @@ const (
 	FlagReplicaIndex = "replica-index"
 )
 
-var (
-	errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
-)
+var errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
 
 func LeaseShellCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -158,7 +156,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	var gclient apclient.Client
 	if providerURL != "" {
-		gclient, err = apclient.NewClientV2(ctx, cl, providerURL, prov, opts...)
+		gclient, err = apclient.NewClientOffChain(ctx, providerURL, prov, opts...)
 	} else {
 		gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
 	}
