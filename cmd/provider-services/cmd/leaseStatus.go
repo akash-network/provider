@@ -89,7 +89,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 
 	var gclient apclient.Client
 	if providerURL != "" {
-		gclient, err = apclient.NewClientV2(ctx, cl, providerURL, prov, opts...)
+		gclient, err = apclient.NewClientOffChain(ctx, providerURL, prov, opts...)
 	} else {
 		gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
 	}
