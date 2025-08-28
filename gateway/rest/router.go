@@ -120,14 +120,14 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 
 	// GET /validate
 	// validate endpoint checks if provider will bid on given groupspec
-	authedRouter.HandleFunc("/validate",
-		validateHandler(log, pclient)).
+	router.HandleFunc("/validate",
+		validateHandler(log, pclient, addr)).
 		Methods("GET")
 
 	// GET /wiboy (aka would I bid on you)
 	// validate endpoint checks if the provider will bid on a given groupspec
-	authedRouter.HandleFunc("/wiboy",
-		validateHandler(log, pclient)).
+	router.HandleFunc("/wiboy",
+		validateHandler(log, pclient, addr)).
 		Methods("GET")
 
 	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
@@ -493,7 +493,7 @@ func createStatusHandler(log log.Logger, sclient provider.StatusClient, provider
 	}
 }
 
-func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFunc {
+func validateHandler(log log.Logger, cl provider.ValidateClient, addr sdk.Address) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		data, err := io.ReadAll(req.Body)
 		if err != nil {
@@ -506,21 +506,19 @@ func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFun
 			return
 		}
 
-		owner := requestOwner(req)
+		var gspecs dtypes.GroupSpecs
 
-		var gspec dtypes.GroupSpec
-
-		if err := json.Unmarshal(data, &gspec); err != nil {
+		if err := json.Unmarshal(data, &gspecs); err != nil {
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 			return
 		}
 
-		validate, err := cl.Validate(req.Context(), owner, gspec)
+		results, err := cl.Validate(req.Context(), addr, gspecs)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(log, w, validate)
+		writeJSON(log, w, results)
 	}
 }
 

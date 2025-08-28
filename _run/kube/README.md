@@ -71,10 +71,10 @@ The counter on the left side of the messages is regularly in the 120 range.  If 
 there may be a problem.
 
 
-| Option                                            | __t1 Step: 1__                                             | Explanation                                                                                                                                                        |
-|---------------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Map random local port to port 80 of your workload | `make kind-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
-| Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kind-cluster-create` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
+| Option                                            | __t1 Step: 1__                                                  | Explanation                                                                                                                                                        |
+|---------------------------------------------------|-----------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Map random local port to port 80 of your workload | `make kind-cluster-setup`                                       | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
+| Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kube-cluster-create-kind` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
 
 ## Build Akash binaries and initialize network
 
@@ -288,3 +288,6 @@ __t1 teardown__
 ```sh
 make deployment-close
 ```
+
+## Iterate development
+
