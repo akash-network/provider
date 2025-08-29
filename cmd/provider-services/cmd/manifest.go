@@ -83,7 +83,8 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+			opts = append(opts, apclient.WithQueryClient(cl))
+			gclient, err := apclient.NewClient(ctx, prov, opts...)
 			if err != nil {
 				return err
 			}
@@ -179,7 +180,8 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+		opts = append(opts, apclient.WithQueryClient(cl))
+		gclient, err := apclient.NewClient(ctx, prov, opts...)
 		if err != nil {
 			return err
 		}

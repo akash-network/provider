@@ -1,14 +1,17 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
 	"github.com/spf13/cobra"
 
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
+	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -26,6 +29,8 @@ func leaseStatusCmd() *cobra.Command {
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
 
+	cmd.Flags().String(FlagProviderURL, "", "Provider URL to connect to directly (bypasses provider discovery)")
+
 	return cmd
 }
 
@@ -37,19 +42,43 @@ func doLeaseStatus(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
+	var cl qclient.QueryClient
+	var prov sdk.Address
+
+	cl, err = aclient.DiscoverQueryClient(ctx, cctx)
 	if err != nil {
 		return err
 	}
 
-	bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
-	if err != nil {
-		return err
+	var leaseID mtypes.LeaseID
+
+	if providerURL != "" {
+		prov, err = providerFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		leaseID, err = constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
+		if err != nil {
+			return err
+		}
+	} else {
+		prov, err = providerFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+		if err != nil {
+			return err
+		}
+
+		leaseID = bid.LeaseID()
 	}
 
 	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
@@ -57,12 +86,12 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	result, err := gclient.LeaseStatus(ctx, bid.LeaseID())
+	result, err := gclient.LeaseStatus(ctx, leaseID)
 	if err != nil {
 		return showErrorToUser(err)
 	}

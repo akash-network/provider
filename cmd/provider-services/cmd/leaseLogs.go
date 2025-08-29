@@ -14,6 +14,7 @@ import (
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
+	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -34,6 +35,7 @@ func leaseLogsCmd() *cobra.Command {
 	cmd.Flags().BoolP(flagFollow, "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P(flagTail, "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
 	cmd.Flags().StringP(flagOutput, "o", outputText, "Output format text|json. Defaults to text")
+	cmd.Flags().String(FlagProviderURL, "", "Provider URL to connect to directly (bypasses provider discovery)")
 
 	return cmd
 }
@@ -46,22 +48,39 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
 	if err != nil {
 		return err
 	}
 
-	dseq, err := dseqFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
+	var leases []mtypes.LeaseID
+	var cl qclient.QueryClient
 
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
-	if err != nil {
-		return markRPCServerError(err)
+	if providerURL != "" {
+		leaseID, err := constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
+		if err != nil {
+			return err
+		}
+
+		leases = []mtypes.LeaseID{leaseID}
+	} else {
+		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return err
+		}
+
+		dseq, err := dseqFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		leases, err = leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
+			Owner: cctx.GetFromAddress().String(),
+			DSeq:  dseq,
+		})
+		if err != nil {
+			return markRPCServerError(err)
+		}
 	}
 
 	svcs, err := cmd.Flags().GetString(FlagService)
@@ -108,7 +127,8 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+
+		gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {
@@ -145,6 +165,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	for _, stream := range streams {
 		if stream.error != nil {
+			fmt.Println(stream.error)
 			continue
 		}
 
