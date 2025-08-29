@@ -43,7 +43,7 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, addr)
+	gclient, err := apclient.NewClient(ctx, addr, apclient.WithQueryClient(cl))
 	if err != nil {
 		return err
 	}
