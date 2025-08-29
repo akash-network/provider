@@ -15,7 +15,7 @@ package builder
 // 	settings Settings,
 // 	lid mtypes.LeaseID,
 // 	group *mani.Group,
-// 	sparams crd.ParamsServices) PspRestricted { // nolint:golint,unparam
+// 	sparams crd.ParamsServices) PspRestricted { // nolint:unparam
 // 	return &pspRestricted{
 // 		builder: builder{
 // 			settings: settings,
@@ -30,7 +30,7 @@ package builder
 // 	return p.NS()
 // }
 //
-// func (p *pspRestricted) Create() (*v1beta1.PodSecurityPolicy, error) { // nolint:golint,unparam
+// func (p *pspRestricted) Create() (*v1beta1.PodSecurityPolicy, error) { // nolint:unparam
 // 	falseVal := false
 // 	return &v1beta1.PodSecurityPolicy{
 // 		ObjectMeta: metav1.ObjectMeta{
@@ -83,7 +83,7 @@ package builder
 // 	}, nil
 // }
 //
-// func (p *pspRestricted) Update(obj *v1beta1.PodSecurityPolicy) (*v1beta1.PodSecurityPolicy, error) { // nolint:golint,unparam
+// func (p *pspRestricted) Update(obj *v1beta1.PodSecurityPolicy) (*v1beta1.PodSecurityPolicy, error) { // nolint:unparam
 // 	obj.Name = p.Name()
 // 	obj.Labels = p.labels()
 // 	return obj, nil

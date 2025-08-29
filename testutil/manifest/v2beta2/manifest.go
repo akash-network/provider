@@ -3,7 +3,7 @@ package v2beta2
 import (
 	"testing"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 var (

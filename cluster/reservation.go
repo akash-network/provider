@@ -1,9 +1,9 @@
 package cluster
 
 import (
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/cluster/util"
@@ -13,7 +13,7 @@ func newReservation(order mtypes.OrderID, resources dtypes.ResourceGroup) *reser
 	return &reservation{
 		order:            order,
 		resources:        resources,
-		endpointQuantity: util.GetEndpointQuantityOfResourceGroup(resources, atypes.Endpoint_LEASED_IP)}
+		endpointQuantity: util.GetEndpointQuantityOfResourceGroup(resources, rtypes.Endpoint_LEASED_IP)}
 }
 
 type reservation struct {

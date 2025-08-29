@@ -1,19 +1,20 @@
 package rest
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	mquery "github.com/akash-network/node/x/market/query"
+	ajwt "pkg.akt.dev/go/util/jwt"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mquery "pkg.akt.dev/node/x/market/query"
 )
 
 type contextKey int
@@ -211,7 +212,7 @@ func requestStreamParams(next http.Handler) http.Handler {
 
 		services := vars.Get("service")
 		if strings.HasSuffix(services, ",") {
-			err = errors.Errorf("parameter \"service\" must not contain trailing comma")
+			err = fmt.Errorf("parameter \"service\" must not contain trailing comma")
 			return
 		}
 
@@ -232,7 +233,7 @@ func requestStreamParams(next http.Handler) http.Handler {
 			}
 
 			if *vl < -1 {
-				err = errors.Errorf("parameter \"tail\" contains invalid value")
+				err = fmt.Errorf("parameter \"tail\" contains invalid value")
 				return
 			}
 		} else {

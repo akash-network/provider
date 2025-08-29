@@ -8,7 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	manitypes "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 type NetPol interface {
@@ -29,7 +29,7 @@ func BuildNetPol(settings Settings, deployment IClusterDeployment) NetPol {
 
 // Create a set of NetworkPolicies to restrict the ingress traffic to a Tenant's
 // Deployment namespace.
-func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unparam
+func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 	if !b.settings.NetworkPoliciesEnabled {
 		return []*netv1.NetworkPolicy{}, nil
 	}
@@ -241,7 +241,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:golint,unp
 }
 
 // Update a single NetworkPolicy with correct labels.
-func (b *netPol) Update(obj *netv1.NetworkPolicy) (*netv1.NetworkPolicy, error) { // nolint:golint,unparam
+func (b *netPol) Update(obj *netv1.NetworkPolicy) (*netv1.NetworkPolicy, error) { // nolint:unparam
 	uobj := obj.DeepCopy()
 
 	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())

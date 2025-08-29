@@ -5,8 +5,8 @@ import (
 	"math/rand"
 	"testing"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	atestutil "github.com/akash-network/node/testutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	atestutil "pkg.akt.dev/go/testutil"
 )
 
 // RandManifestGenerator generates a manifest with random values

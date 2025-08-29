@@ -3,7 +3,7 @@ package hostname
 import (
 	"context"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )

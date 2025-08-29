@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
@@ -66,7 +66,6 @@ type ReservationDelete struct {
 	OrderID mtypes.OrderID
 }
 
-//go:generate mockery --name Client --output ./mocks
 type Client interface {
 	Check(context.Context) error
 	GetIPAddressUsage(context.Context) (AddressUsage, error)

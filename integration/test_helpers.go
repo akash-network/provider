@@ -16,7 +16,6 @@ import (
 
 const (
 	providerTemplate = `host: %s
-jwt-host: %s
 attributes:
   - key: region
     value: us-west

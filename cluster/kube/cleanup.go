@@ -3,13 +3,13 @@ package kube
 import (
 	"context"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/selection"
 	"k8s.io/client-go/kubernetes"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 )

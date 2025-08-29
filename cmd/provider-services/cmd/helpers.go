@@ -8,27 +8,25 @@ import (
 	"fmt"
 	"net/url"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
-	cutils "github.com/akash-network/node/x/cert/utils"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/flags"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/app"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	cflags "pkg.akt.dev/go/cli/flags"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	apclient "pkg.akt.dev/go/provider/client"
+	ajwt "pkg.akt.dev/go/util/jwt"
+	"pkg.akt.dev/node/app"
+	cutils "pkg.akt.dev/node/x/cert/utils"
 )
 
 const (
 	FlagService  = "service"
-	FlagProvider = "provider"
-	FlagDSeq     = "dseq"
-	FlagGSeq     = "gseq"
-	FlagOSeq     = "oseq"
 	flagOutput   = "output"
 	flagFollow   = "follow"
 	flagTail     = "tail"
@@ -49,19 +47,23 @@ var (
 )
 
 func addCmdFlags(cmd *cobra.Command) {
-	cmd.Flags().String(FlagProvider, "", "provider")
-	cmd.Flags().Uint64(FlagDSeq, 0, "deployment sequence")
-	cmd.Flags().String(flags.FlagHome, app.DefaultHome, "the application home directory")
-	cmd.Flags().String(flags.FlagFrom, "", "name or address of private key with which to sign")
-	cmd.Flags().String(flags.FlagKeyringBackend, flags.DefaultKeyringBackend, "select keyring's backend (os|file|kwallet|pass|test)")
+	cmd.Flags().String(cflags.FlagProvider, "", "provider")
+	cmd.Flags().String(cflags.FlagOwner, "", "deployment owner")
+	cmd.Flags().Uint64(cflags.FlagDSeq, 0, "deployment sequence")
+	cmd.Flags().String(cflags.FlagHome, app.DefaultHome, "the application home directory")
+	cmd.Flags().String(cflags.FlagFrom, "", "name or address of private key with which to sign")
+	cmd.Flags().String(cflags.FlagKeyringBackend, cflags.DefaultKeyringBackend, "select keyring's backend (os|file|kwallet|pass|test)")
+	cmd.Flags().String(cflags.FlagSignMode, cflags.SignModeDirect, "")
 
-	if err := cmd.MarkFlagRequired(FlagDSeq); err != nil {
+	if err := cmd.MarkFlagRequired(cflags.FlagDSeq); err != nil {
 		panic(err.Error())
 	}
 
-	if err := cmd.MarkFlagRequired(flags.FlagFrom); err != nil {
+	if err := cmd.MarkFlagRequired(cflags.FlagFrom); err != nil {
 		panic(err.Error())
 	}
+
+	_ = cmd.Flags().MarkHidden(cflags.FlagOwner)
 }
 
 func addAuthFlags(cmd *cobra.Command) {
@@ -71,14 +73,14 @@ func addAuthFlags(cmd *cobra.Command) {
 func addManifestFlags(cmd *cobra.Command) {
 	addCmdFlags(cmd)
 
-	cmd.Flags().Uint32(FlagGSeq, 1, "group sequence")
-	cmd.Flags().Uint32(FlagOSeq, 1, "order sequence")
+	cmd.Flags().Uint32(cflags.FlagGSeq, 1, "group sequence")
+	cmd.Flags().Uint32(cflags.FlagOSeq, 1, "order sequence")
 }
 
 func addLeaseFlags(cmd *cobra.Command) {
 	addManifestFlags(cmd)
 
-	if err := cmd.MarkFlagRequired(FlagProvider); err != nil {
+	if err := cmd.MarkFlagRequired(cflags.FlagProvider); err != nil {
 		panic(err.Error())
 	}
 }
@@ -90,11 +92,11 @@ func addServiceFlags(cmd *cobra.Command) {
 }
 
 func dseqFromFlags(flags *pflag.FlagSet) (uint64, error) {
-	return flags.GetUint64(FlagDSeq)
+	return flags.GetUint64(cflags.FlagDSeq)
 }
 
-func leaseIDFromFlags(cflags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
-	str, err := cflags.GetString(FlagProvider)
+func leaseIDFromFlags(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
+	str, err := flags.GetString(cflags.FlagProvider)
 	if err != nil {
 		return mtypes.LeaseID{}, err
 	}
@@ -104,17 +106,17 @@ func leaseIDFromFlags(cflags *pflag.FlagSet, owner string) (mtypes.LeaseID, erro
 		return mtypes.LeaseID{}, err
 	}
 
-	dseq, err := cflags.GetUint64(FlagDSeq)
+	dseq, err := flags.GetUint64(cflags.FlagDSeq)
 	if err != nil {
 		return mtypes.LeaseID{}, err
 	}
 
-	gseq, err := cflags.GetUint32(FlagGSeq)
+	gseq, err := flags.GetUint32(cflags.FlagGSeq)
 	if err != nil {
 		return mtypes.LeaseID{}, err
 	}
 
-	oseq, err := cflags.GetUint32(FlagOSeq)
+	oseq, err := flags.GetUint32(cflags.FlagOSeq)
 	if err != nil {
 		return mtypes.LeaseID{}, err
 	}
@@ -129,7 +131,7 @@ func leaseIDFromFlags(cflags *pflag.FlagSet, owner string) (mtypes.LeaseID, erro
 }
 
 func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
-	provider, err := flags.GetString(FlagProvider)
+	provider, err := flags.GetString(cflags.FlagProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +150,7 @@ func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pfl
 		State: mtypes.Lease_State_name[int32(mtypes.LeaseActive)],
 	}
 
-	if flags.Changed(FlagProvider) {
+	if flags.Changed(cflags.FlagProvider) {
 		prov, err := providerFromFlags(flags)
 		if err != nil {
 			return nil, err
@@ -157,15 +159,15 @@ func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pfl
 		filter.Provider = prov.String()
 	}
 
-	if val, err := flags.GetUint32(FlagGSeq); flags.Changed(FlagGSeq) && err == nil {
+	if val, err := flags.GetUint32(cflags.FlagGSeq); flags.Changed(cflags.FlagGSeq) && err == nil {
 		filter.GSeq = val
 	}
 
-	if val, err := flags.GetUint32(FlagOSeq); flags.Changed(FlagOSeq) && err == nil {
+	if val, err := flags.GetUint32(cflags.FlagOSeq); flags.Changed(cflags.FlagOSeq) && err == nil {
 		filter.OSeq = val
 	}
 
-	resp, err := cl.Leases(ctx, &mtypes.QueryLeasesRequest{
+	resp, err := cl.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
 		Filters: filter,
 	})
 	if err != nil {
@@ -179,7 +181,7 @@ func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pfl
 	leases := make([]mtypes.LeaseID, 0, len(resp.Leases))
 
 	for _, lease := range resp.Leases {
-		leases = append(leases, lease.Lease.LeaseID)
+		leases = append(leases, lease.Lease.ID)
 	}
 
 	return leases, nil

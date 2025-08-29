@@ -4,12 +4,13 @@ import (
 	"encoding/base32"
 	"strings"
 
-	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/google/uuid"
+
+	manitypes "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
-func AllHostnamesOfManifestGroup(mgroup maniv2beta1.Group) []string {
+func AllHostnamesOfManifestGroup(mgroup manitypes.Group) []string {
 	allHostnames := make([]string, 0)
 	for _, service := range mgroup.Services {
 		for _, expose := range service.Expose {

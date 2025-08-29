@@ -9,9 +9,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/crypto/keys/ed25519"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"

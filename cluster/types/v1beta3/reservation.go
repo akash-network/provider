@@ -1,11 +1,10 @@
 package v1beta3
 
 import (
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
-//go:generate mockery --name ReservationGroup --output ./mocks
 type ReservationGroup interface {
 	Resources() dtypes.ResourceGroup
 	SetAllocatedResources(dtypes.ResourceUnits)
@@ -15,8 +14,6 @@ type ReservationGroup interface {
 }
 
 // Reservation interface implements orders and resources
-//
-//go:generate mockery --name Reservation --output ./mocks
 type Reservation interface {
 	OrderID() mtypes.OrderID
 	Allocated() bool

@@ -5,18 +5,19 @@ import (
 	"testing"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	akashtypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-
-	clientmocks "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
+	clientmocks "pkg.akt.dev/go/mocks/node/client"
+	auditmocks "pkg.akt.dev/go/mocks/node/client/audit"
+	providermocks "pkg.akt.dev/go/mocks/node/client/provider"
+	atypes "pkg.akt.dev/go/node/audit/v1"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/testutil"
+	"pkg.akt.dev/go/util/pubsub"
 
 	"github.com/akash-network/provider/session"
 )
@@ -35,8 +36,8 @@ type providerAttributesTestScaffold struct {
 func setupProviderAttributesTestScaffold(
 	t *testing.T,
 	ttl time.Duration,
-	clientFactory func(scaffold *providerAttributesTestScaffold,
-	) *clientmocks.QueryClient) *providerAttributesTestScaffold {
+	clientFactory func(scaffold *providerAttributesTestScaffold) *clientmocks.QueryClient,
+) *providerAttributesTestScaffold {
 	retval := &providerAttributesTestScaffold{
 		auditorAddr:  testutil.AccAddress(t),
 		providerAddr: testutil.AccAddress(t),
@@ -45,7 +46,7 @@ func setupProviderAttributesTestScaffold(
 		Owner:      retval.providerAddr.String(),
 		HostURI:    "http://foo.localhost:8443",
 		Attributes: nil,
-		Info:       ptypes.ProviderInfo{},
+		Info:       ptypes.Info{},
 	}
 
 	retval.client = &clientmocks.Client{}
@@ -82,12 +83,18 @@ func TestProvAttrCachesValue(t *testing.T) {
 			Auditor: scaffold.auditorAddr.String(),
 		}
 		queryClient := &clientmocks.QueryClient{}
+		auditClient := &auditmocks.QueryClient{}
+		providerClient := &providermocks.QueryClient{}
+
+		queryClient.On("Audit").Return(auditClient, nil)
+		queryClient.On("Provider").Return(providerClient, nil)
+
 		response := &atypes.QueryProvidersResponse{
-			Providers: atypes.Providers{
-				atypes.Provider{
+			Providers: atypes.AuditedProviders{
+				atypes.AuditedProvider{
 					Owner: scaffold.providerAddr.String(),
-					Attributes: akashtypes.Attributes{
-						akashtypes.Attribute{
+					Attributes: attrtypes.Attributes{
+						attrtypes.Attribute{
 							Key:   "foo",
 							Value: "bar",
 						},
@@ -96,7 +103,8 @@ func TestProvAttrCachesValue(t *testing.T) {
 			},
 			Pagination: nil,
 		}
-		queryClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(response, nil)
+
+		auditClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(response, nil)
 
 		attrReq := &ptypes.QueryProviderRequest{
 			Owner: scaffold.provider.Owner,
@@ -106,15 +114,15 @@ func TestProvAttrCachesValue(t *testing.T) {
 			Provider: ptypes.Provider{
 				Owner:   scaffold.providerAddr.String(),
 				HostURI: "",
-				Attributes: akashtypes.Attributes{
-					akashtypes.Attribute{
+				Attributes: attrtypes.Attributes{
+					attrtypes.Attribute{
 						Key:   "foo",
 						Value: "bar",
 					},
 				},
 			},
 		}
-		queryClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
+		providerClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
 
 		return queryClient
 	})
@@ -144,7 +152,13 @@ func TestProvAttrReturnsEmpty(t *testing.T) {
 			Auditor: scaffold.auditorAddr.String(),
 		}
 		queryClient := &clientmocks.QueryClient{}
-		queryClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(nil, errWithExpectedText)
+		auditClient := &auditmocks.QueryClient{}
+		providerClient := &providermocks.QueryClient{}
+
+		queryClient.On("Audit").Return(auditClient, nil)
+		queryClient.On("Provider").Return(providerClient, nil)
+
+		auditClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(nil, errWithExpectedText)
 
 		attrReq := &ptypes.QueryProviderRequest{
 			Owner: scaffold.provider.Owner,
@@ -154,15 +168,15 @@ func TestProvAttrReturnsEmpty(t *testing.T) {
 			Provider: ptypes.Provider{
 				Owner:   scaffold.providerAddr.String(),
 				HostURI: "",
-				Attributes: akashtypes.Attributes{
-					akashtypes.Attribute{
+				Attributes: attrtypes.Attributes{
+					attrtypes.Attribute{
 						Key:   "foo",
 						Value: "bar",
 					},
 				},
 			},
 		}
-		queryClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
+		providerClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
 
 		return queryClient
 	})
@@ -188,12 +202,18 @@ func TestProvAttrObeysTTL(t *testing.T) {
 			Auditor: scaffold.auditorAddr.String(),
 		}
 		queryClient := &clientmocks.QueryClient{}
+		auditClient := &auditmocks.QueryClient{}
+		providerClient := &providermocks.QueryClient{}
+
+		queryClient.On("Audit").Return(auditClient, nil)
+		queryClient.On("Provider").Return(providerClient, nil)
+
 		response := &atypes.QueryProvidersResponse{
-			Providers: atypes.Providers{
-				atypes.Provider{
+			Providers: atypes.AuditedProviders{
+				atypes.AuditedProvider{
 					Owner: scaffold.providerAddr.String(),
-					Attributes: akashtypes.Attributes{
-						akashtypes.Attribute{
+					Attributes: attrtypes.Attributes{
+						attrtypes.Attribute{
 							Key:   "foo",
 							Value: "bar",
 						},
@@ -202,7 +222,7 @@ func TestProvAttrObeysTTL(t *testing.T) {
 			},
 			Pagination: nil,
 		}
-		queryClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(response, nil)
+		auditClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(response, nil)
 
 		attrReq := &ptypes.QueryProviderRequest{
 			Owner: scaffold.provider.Owner,
@@ -212,15 +232,15 @@ func TestProvAttrObeysTTL(t *testing.T) {
 			Provider: ptypes.Provider{
 				Owner:   scaffold.providerAddr.String(),
 				HostURI: "",
-				Attributes: akashtypes.Attributes{
-					akashtypes.Attribute{
+				Attributes: attrtypes.Attributes{
+					attrtypes.Attribute{
 						Key:   "foo",
 						Value: "bar",
 					},
 				},
 			},
 		}
-		queryClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
+		providerClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
 
 		return queryClient
 	})
@@ -245,23 +265,30 @@ func TestProvAttrTrimsCache(t *testing.T) {
 	const ttl = 1 * time.Hour
 	scaffold := setupProviderAttributesTestScaffold(t, ttl, func(scaffold *providerAttributesTestScaffold) *clientmocks.QueryClient {
 		queryClient := &clientmocks.QueryClient{}
-		attrs := make([]akashtypes.Attribute, 1001)
+
+		auditClient := &auditmocks.QueryClient{}
+		providerClient := &providermocks.QueryClient{}
+
+		queryClient.On("Audit").Return(auditClient, nil)
+		queryClient.On("Provider").Return(providerClient, nil)
+
+		attrs := make(attrtypes.Attributes, 1001)
 		for i := range attrs {
-			attrs[i] = akashtypes.Attribute{
+			attrs[i] = attrtypes.Attribute{
 				Key:   "foo",
 				Value: "bar",
 			}
 		}
 		response := &atypes.QueryProvidersResponse{
-			Providers: atypes.Providers{
-				atypes.Provider{
+			Providers: atypes.AuditedProviders{
+				atypes.AuditedProvider{
 					Owner:      scaffold.providerAddr.String(),
 					Attributes: attrs,
 				},
 			},
 			Pagination: nil,
 		}
-		queryClient.On("ProviderAuditorAttributes", mock.Anything, mock.Anything).Return(response, nil)
+		auditClient.On("ProviderAuditorAttributes", mock.Anything, mock.Anything).Return(response, nil)
 
 		attrReq := &ptypes.QueryProviderRequest{
 			Owner: scaffold.provider.Owner,
@@ -271,15 +298,15 @@ func TestProvAttrTrimsCache(t *testing.T) {
 			Provider: ptypes.Provider{
 				Owner:   scaffold.providerAddr.String(),
 				HostURI: "",
-				Attributes: akashtypes.Attributes{
-					akashtypes.Attribute{
+				Attributes: attrtypes.Attributes{
+					attrtypes.Attribute{
 						Key:   "foo",
 						Value: "bar",
 					},
 				},
 			},
 		}
-		queryClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
+		providerClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
 
 		return queryClient
 	})
@@ -315,7 +342,13 @@ func TestProvAttrReturnsErrors(t *testing.T) {
 	const ttl = 1 * time.Hour
 	scaffold := setupProviderAttributesTestScaffold(t, ttl, func(scaffold *providerAttributesTestScaffold) *clientmocks.QueryClient {
 		queryClient := &clientmocks.QueryClient{}
-		queryClient.On("ProviderAuditorAttributes", mock.Anything, mock.Anything).Return(nil, errForTest)
+		auditClient := &auditmocks.QueryClient{}
+		providerClient := &providermocks.QueryClient{}
+
+		queryClient.On("Audit").Return(auditClient, nil)
+		queryClient.On("Provider").Return(providerClient, nil)
+
+		auditClient.On("ProviderAuditorAttributes", mock.Anything, mock.Anything).Return(nil, errForTest)
 
 		attrReq := &ptypes.QueryProviderRequest{
 			Owner: scaffold.provider.Owner,
@@ -325,15 +358,15 @@ func TestProvAttrReturnsErrors(t *testing.T) {
 			Provider: ptypes.Provider{
 				Owner:   scaffold.providerAddr.String(),
 				HostURI: "",
-				Attributes: akashtypes.Attributes{
-					akashtypes.Attribute{
+				Attributes: attrtypes.Attributes{
+					attrtypes.Attribute{
 						Key:   "foo",
 						Value: "bar",
 					},
 				},
 			},
 		}
-		queryClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
+		providerClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
 
 		return queryClient
 	})
@@ -353,12 +386,18 @@ func TestProvAttrClearsCache(t *testing.T) {
 			Auditor: scaffold.auditorAddr.String(),
 		}
 		queryClient := &clientmocks.QueryClient{}
+		auditClient := &auditmocks.QueryClient{}
+		providerClient := &providermocks.QueryClient{}
+
+		queryClient.On("Audit").Return(auditClient, nil)
+		queryClient.On("Provider").Return(providerClient, nil)
+
 		response := &atypes.QueryProvidersResponse{
-			Providers: atypes.Providers{
-				atypes.Provider{
+			Providers: atypes.AuditedProviders{
+				atypes.AuditedProvider{
 					Owner: scaffold.providerAddr.String(),
-					Attributes: akashtypes.Attributes{
-						akashtypes.Attribute{
+					Attributes: attrtypes.Attributes{
+						attrtypes.Attribute{
 							Key:   "foo",
 							Value: "bar",
 						},
@@ -367,7 +406,7 @@ func TestProvAttrClearsCache(t *testing.T) {
 			},
 			Pagination: nil,
 		}
-		queryClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(response, nil)
+		auditClient.On("ProviderAuditorAttributes", mock.Anything, req).Return(response, nil)
 
 		attrReq := &ptypes.QueryProviderRequest{
 			Owner: scaffold.provider.Owner,
@@ -377,15 +416,15 @@ func TestProvAttrClearsCache(t *testing.T) {
 			Provider: ptypes.Provider{
 				Owner:   scaffold.providerAddr.String(),
 				HostURI: "",
-				Attributes: akashtypes.Attributes{
-					akashtypes.Attribute{
+				Attributes: attrtypes.Attributes{
+					attrtypes.Attribute{
 						Key:   "foo",
 						Value: "bar",
 					},
 				},
 			},
 		}
-		queryClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
+		providerClient.On("Provider", mock.Anything, attrReq).Return(attrResp, nil)
 
 		return queryClient
 	})
@@ -395,8 +434,8 @@ func TestProvAttrClearsCache(t *testing.T) {
 	require.Len(t, attrs, 1)
 
 	err = scaffold.bus.Publish(atypes.EventTrustedAuditorCreated{
-		Owner:   scaffold.providerAddr,
-		Auditor: scaffold.auditorAddr,
+		Owner:   scaffold.providerAddr.String(),
+		Auditor: scaffold.auditorAddr.String(),
 	})
 	require.NoError(t, err)
 	time.Sleep(5 * time.Second) // Allow event to be received
@@ -406,8 +445,8 @@ func TestProvAttrClearsCache(t *testing.T) {
 	require.Len(t, attrs, 1)
 
 	err = scaffold.bus.Publish(atypes.EventTrustedAuditorDeleted{
-		Owner:   scaffold.providerAddr,
-		Auditor: scaffold.auditorAddr,
+		Owner:   scaffold.providerAddr.String(),
+		Auditor: scaffold.auditorAddr.String(),
 	})
 	require.NoError(t, err)
 	time.Sleep(5 * time.Second) // Allow event to be received

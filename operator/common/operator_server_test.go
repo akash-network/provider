@@ -1,9 +1,10 @@
 package common
 
 import (
-	"github.com/stretchr/testify/require"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestOperatorServer(t *testing.T) {

@@ -7,19 +7,19 @@ import (
 	"testing"
 	"time"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/testutil"
+	"pkg.akt.dev/go/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
-	testFn := func(test *routerTest, hdr http.Header) {
+	testFn := func(test *routerTest, _ http.Header) {
 		const dseq = uint64(33)
 		const gseq = uint32(34)
 
@@ -38,7 +38,7 @@ func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
 }
 
 func TestRouteMigrateHostnameDeploymentDoesNotUse(t *testing.T) {
-	testFn := func(test *routerTest, hdr http.Header) {
+	testFn := func(test *routerTest, _ http.Header) {
 		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
 
 		const dseq = uint64(133)
@@ -68,7 +68,7 @@ func TestRouteMigrateHostname(t *testing.T) {
 	const serviceName = "hostly-service"
 	const serviceExternalPort = uint32(1111)
 
-	testFn := func(test *routerTest, hdr http.Header) {
+	testFn := func(test *routerTest, _ http.Header) {
 		mgroup := crd.ManifestGroup{
 			Name: "some-group",
 			Services: []crd.ManifestService{
@@ -119,7 +119,7 @@ func TestRouteMigrateHostnamePrepareFails(t *testing.T) {
 	const serviceName = "hostly-service"
 	const serviceExternalPort = uint32(999)
 
-	testFn := func(test *routerTest, hdr http.Header) {
+	testFn := func(test *routerTest, _ http.Header) {
 		mgroup := crd.ManifestGroup{
 			Name: "some-group",
 			Services: []crd.ManifestService{
@@ -168,7 +168,7 @@ func TestRouteMigrateHostnameTransferFails(t *testing.T) {
 	const serviceName = "decloud-thing"
 	const serviceExternalPort = uint32(1112)
 
-	testFn := func(test *routerTest, hdr http.Header) {
+	testFn := func(test *routerTest, _ http.Header) {
 
 		mgroup := crd.ManifestGroup{
 			Name: "some-group",

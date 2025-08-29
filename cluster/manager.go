@@ -7,16 +7,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-
 	"github.com/avast/retry-go/v4"
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
+	errorsmod "cosmossdk.io/errors"
+	"cosmossdk.io/log"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	mv1 "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/util/pubsub"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -35,8 +37,6 @@ const (
 	dsTeardownPending  deploymentState = "teardown-pending"
 	dsTeardownComplete deploymentState = "teardown-complete"
 )
-
-const uncleanShutdownGracePeriod = 30 * time.Second
 
 type deploymentState string
 
@@ -323,7 +323,7 @@ type serviceExposeWithServiceName struct {
 	name   string
 }
 
-func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, error) {
+func (dm *deploymentManager) doDeploy(pctx context.Context) ([]string, []string, error) {
 	cleanupHelper := newDeployCleanupHelper(dm.deployment.LeaseID(), dm.client, dm.log)
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
@@ -344,7 +344,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		cancel()
 	}()
 
-	if err = dm.checkLeaseActive(ctx); err != nil {
+	if err = dm.checkLeaseActive(pctx); err != nil {
 		return nil, nil, err
 	}
 
@@ -567,17 +567,19 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 }
 
 func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
-	var lease *mtypes.QueryLeaseResponse
+	var lease *mvbeta.QueryLeaseResponse
 
 	err := retry.Do(func() error {
 		var err error
-		lease, err = dm.session.Client().Query().Lease(ctx, &mtypes.QueryLeaseRequest{
+		lease, err = dm.session.Client().Query().Market().Lease(ctx, &mvbeta.QueryLeaseRequest{
 			ID: dm.deployment.LeaseID(),
 		})
-		if err != nil {
-			dm.log.Error("lease query failed", "err")
+		//
+		if err != nil && !errorsmod.IsOf(err, mv1.ErrLeaseNotFound) {
+			dm.log.Error("lease query failed", "err", err)
+			return err
 		}
-		return err
+		return nil
 	},
 		retry.Attempts(50),
 		retry.Delay(100*time.Millisecond),

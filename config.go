@@ -5,9 +5,9 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/akash-api/go/node/types/constants"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1beta5"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/node/types/constants"
 
 	"github.com/akash-network/provider/bidengine"
 	"github.com/akash-network/provider/cluster"
@@ -22,7 +22,7 @@ type Config struct {
 	BidTimeout                  time.Duration
 	ManifestTimeout             time.Duration
 	BalanceCheckerCfg           BalanceCheckerConfig
-	Attributes                  types.Attributes
+	Attributes                  attrtypes.Attributes
 	MaxGroupVolumes             int
 	RPCQueryTimeout             time.Duration
 	CachedResultMaxAge          time.Duration

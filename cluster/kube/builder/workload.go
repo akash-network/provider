@@ -8,10 +8,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	"github.com/akash-network/node/sdl"
-	sdlutil "github.com/akash-network/node/sdl/util"
+	"pkg.akt.dev/go/sdl"
+	sdlutil "pkg.akt.dev/go/sdl/util"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -137,12 +137,13 @@ func (b *Workload) container() corev1.Container {
 		class, _ := attr.AsString()
 
 		if !persistent {
-			if class == "" {
+			switch class {
+			case "ram":
+				requestedMem += ephemeral.Quantity.Value()
+			case "":
 				requestedStorage := sdlutil.ComputeCommittedResources(b.settings.StorageCommitLevel, ephemeral.Quantity)
 				kcontainer.Resources.Requests[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(requestedStorage.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
 				kcontainer.Resources.Limits[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(ephemeral.Quantity.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
-			} else if class == "ram" {
-				requestedMem += ephemeral.Quantity.Value()
 			}
 		}
 	}

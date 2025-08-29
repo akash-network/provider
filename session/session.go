@@ -1,10 +1,10 @@
 package session
 
 import (
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
 )
 
 // Session interface wraps Log, Client, Provider and ForModule methods

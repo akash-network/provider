@@ -24,12 +24,12 @@ func NewDeployment(workload *Workload) Deployment {
 		Workload: workload,
 	}
 
-	ss.Workload.log = ss.Workload.log.With("object", "deployment", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "deployment", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
 
-func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unparam
+func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:unparam
 	falseValue := false
 
 	revisionHistoryLimit := int32(10)
@@ -77,7 +77,7 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 	return kdeployment, nil
 }
 
-func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:golint,unparam
+func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:unparam
 	uobj := obj.DeepCopy()
 
 	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())

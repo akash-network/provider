@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 )
 
 type OperatorWaiter interface {

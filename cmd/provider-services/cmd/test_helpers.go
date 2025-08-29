@@ -6,21 +6,21 @@ import (
 	"github.com/cosmos/cosmos-sdk/client"
 	sdktest "github.com/cosmos/cosmos-sdk/testutil"
 
-	testutilcli "github.com/akash-network/node/testutil/cli"
+	testutilcli "pkg.akt.dev/go/cli/testutil"
 )
 
-func ProviderLeaseStatusExec(clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
-	return testutilcli.ExecTestCLICmd(context.Background(), clientCtx, leaseStatusCmd(), extraArgs...)
+func ExecProviderLeaseStatus(ctx context.Context, clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
+	return testutilcli.ExecTestCLICmd(ctx, clientCtx, leaseStatusCmd(), extraArgs...)
 }
 
-func ProviderServiceStatusExec(clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
-	return testutilcli.ExecTestCLICmd(context.Background(), clientCtx, serviceStatusCmd(), extraArgs...)
+func ExecProviderServiceStatus(ctx context.Context, clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
+	return testutilcli.ExecTestCLICmd(ctx, clientCtx, serviceStatusCmd(), extraArgs...)
 }
 
-func ProviderStatusExec(clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
-	return testutilcli.ExecTestCLICmd(context.Background(), clientCtx, statusCmd(), extraArgs...)
+func ExecProviderStatus(ctx context.Context, clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
+	return testutilcli.ExecTestCLICmd(ctx, clientCtx, statusCmd(), extraArgs...)
 }
 
-func ProviderServiceLogs(clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
-	return testutilcli.ExecTestCLICmd(context.Background(), clientCtx, leaseLogsCmd(), extraArgs...)
+func ExecProviderService(ctx context.Context, clientCtx client.Context, extraArgs ...string) (sdktest.BufferWriter, error) {
+	return testutilcli.ExecTestCLICmd(ctx, clientCtx, leaseLogsCmd(), extraArgs...)
 }

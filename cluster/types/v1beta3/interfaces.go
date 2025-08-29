@@ -1,7 +1,7 @@
 package v1beta3
 
 import (
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 type MGroup interface {

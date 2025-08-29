@@ -48,26 +48,26 @@ jobs:
         run: echo 'eval "$(direnv hook bash)"' >> $HOME/.bashrc
       - name: Direnv allow
         run: direnv allow ${{ env.GOPATH }}/src/github.com/akash-network/provider
-      - name: Checkout akash-api
+      - name: Checkout chain-sdk
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
-          AKASH_API_VERSION=$(go list -mod=readonly -m -f '{{ .Version }}' github.com/akash-network/akash-api)
+          AKASH_API_VERSION=$(go list -mod=readonly -m -f '{{ .Version }}' pkg.akt.dev/go)
           echo "AKASH_API_VERSION=$AKASH_API_VERSION" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
-          repository: "akash-network/akash-api"
+          repository: "akash-network/chain-sdk"
           fetch-depth: 0
           set-safe-directory: true
-          path: go/src/github.com/akash-network/akash-api
-          ref: ${{ env.AKASH_API_VERSION }}
-      - name: Setup akash-api
+          path: go/src/github.com/akash-network/chain-sdk
+          ref: go/${{ env.AKASH_API_VERSION }}
+      - name: Setup chain-sdk
         run: |
-          direnv allow ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
-          cd ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
+          direnv allow ${{ env.GOPATH }}/src/github.com/akash-network/chain-sdk
+          cd ${{ env.GOPATH }}/src/github.com/akash-network/chain-sdk
           cat "$GITHUB_ENV" > "$GITHUB_WORKSPACE/env.backup"
           direnv export gha >> "$GITHUB_ENV"
-      - name: Run modvendor on akash-api
-        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/akash-api
+      - name: Run modvendor on chain-sdk
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/chain-sdk
         run: |
           make modvendor
           cat "$GITHUB_WORKSPACE/env.backup" > "$GITHUB_ENV"
@@ -132,7 +132,7 @@ jobs:
           make kube-deployment-rollout-operator-inventory
         env:
           KUBE_ROLLOUT_TIMEOUT: 360
-      - name: Run modvendor on akash-api
+      - name: Run modvendor on chain-sdk
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: cat "$GITHUB_WORKSPACE/env_run.backup" > "$GITHUB_ENV"
       - name: Run E2E Tests

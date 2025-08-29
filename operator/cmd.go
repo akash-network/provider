@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -10,7 +11,6 @@ import (
 	"github.com/troian/pubsub"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 
