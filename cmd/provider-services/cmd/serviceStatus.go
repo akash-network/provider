@@ -66,7 +66,8 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	opts = append(opts, apclient.WithQueryClient(cl))
+	gclient, err := apclient.NewClient(ctx, prov, opts...)
 	if err != nil {
 		return err
 	}

@@ -84,7 +84,8 @@ func Test_router_Status(t *testing.T) {
 		defer cancel()
 
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr)
+			opts := []apclient.ClientOption{apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			result, err := client.Status(context.Background())
 			assert.NoError(t, err)
@@ -108,7 +109,8 @@ func Test_router_Status(t *testing.T) {
 		defer cancel()
 
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr)
+			opts := []apclient.ClientOption{apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			_, err = client.Status(context.Background())
 			assert.Error(t, err)
@@ -141,16 +143,21 @@ func Test_router_Validate(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			result, err := client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.NoError(t, err)
 			assert.Equal(t, expected, result)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			result, err = client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.NoError(t, err)
@@ -178,17 +185,22 @@ func Test_router_Validate(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			_, err = client.Validate(context.Background(), dtypes.GroupSpec{})
 			assert.Error(t, err)
 			_, err = client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.Error(t, err)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			_, err = client.Validate(context.Background(), dtypes.GroupSpec{})
 			assert.Error(t, err)
@@ -220,15 +232,20 @@ func Test_router_Manifest(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			err = client.SubmitManifest(context.Background(), did.DSeq, nil)
 			assert.NoError(t, err)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			err = client.SubmitManifest(context.Background(), did.DSeq, nil)
 			assert.NoError(t, err)
@@ -257,12 +274,14 @@ func Test_router_Manifest(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			err = client.SubmitManifest(context.Background(), did.DSeq, nil)
 			assert.Error(t, err)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr)
+			opts = []apclient.ClientOption{apclient.WithQueryClient(mocks.qclient)}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			err = client.SubmitManifest(context.Background(), did.DSeq, nil)
 			assert.Error(t, err)
@@ -373,16 +392,21 @@ func Test_router_LeaseStatus(t *testing.T) {
 				IPs:            nil,
 			}
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err := client.LeaseStatus(context.Background(), id)
 			assert.Equal(t, expected, status)
 			assert.NoError(t, err)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err = client.LeaseStatus(context.Background(), id)
 			assert.Equal(t, expected, status)
@@ -413,16 +437,21 @@ func Test_router_LeaseStatus(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err := client.LeaseStatus(context.Background(), id)
 			assert.Error(t, err)
 			assert.Equal(t, apclient.LeaseStatus{}, status)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err = client.LeaseStatus(context.Background(), id)
 			assert.Error(t, err)
@@ -457,16 +486,21 @@ func Test_router_ServiceStatus(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err := client.ServiceStatus(context.Background(), id, service)
 			assert.NoError(t, err)
 			assert.Equal(t, expected, status)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err = client.ServiceStatus(context.Background(), id, service)
 			assert.NoError(t, err)
@@ -499,16 +533,21 @@ func Test_router_ServiceStatus(t *testing.T) {
 		withServer(ctx, t, keys, mocks.pclient, mocks.qclient, nil, func(_ string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, ckey, testutil.CertificateOptionMocks(mocks.qclient), testutil.CertificateOptionCache(cquerier))
 
-			client, err := apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthCerts(cert.Cert))
+			opts := []apclient.ClientOption{apclient.WithAuthCerts(cert.Cert), apclient.WithQueryClient(mocks.qclient)}
+			client, err := apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err := client.ServiceStatus(context.Background(), id, service)
 			assert.Nil(t, status)
 			assert.Error(t, err)
 
-			client, err = apclient.NewClient(context.Background(), mocks.qclient, paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}))
+			opts = []apclient.ClientOption{
+				apclient.WithAuthJWTSigner(&testJwtSigner{
+					key:  ckey,
+					addr: caddr,
+				}),
+				apclient.WithQueryClient(mocks.qclient),
+			}
+			client, err = apclient.NewClient(context.Background(), paddr, opts...)
 			assert.NoError(t, err)
 			status, err = client.ServiceStatus(context.Background(), id, service)
 			assert.Nil(t, status)
@@ -589,7 +628,7 @@ func withServer(
 	pclient provider.Client,
 	qclient *qmock.QueryClient,
 	certs []tls.Certificate,
-	fn func(string, *certQuerier, ),
+	fn func(string, *certQuerier),
 ) {
 	t.Helper()
 

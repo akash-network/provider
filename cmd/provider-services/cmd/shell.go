@@ -10,7 +10,6 @@ import (
 	"sync"
 	"syscall"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 
@@ -154,12 +153,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	var gclient apclient.Client
-	if providerURL != "" {
-		gclient, err = apclient.NewClientOffChain(ctx, providerURL, prov, opts...)
-	} else {
-		gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
-	}
+	gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 	if err != nil {
 		return err
 	}

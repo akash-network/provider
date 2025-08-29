@@ -263,3 +263,28 @@ func constructLeaseIDFromProviderURL(flags *pflag.FlagSet, owner string) (mtypes
 
 	return leaseID, nil
 }
+
+// createProviderClientFromFlags creates an akash provider client with appropriate options
+// based on whether a provider URL is specified via flags or not.
+// If provider-url flag is set, it uses WithProviderURL option.
+// Otherwise, it uses WithQueryClient option for blockchain queries.
+func createProviderClientFromFlags(
+	ctx context.Context,
+	cl aclient.QueryClient,
+	prov sdk.Address,
+	opts []apclient.ClientOption,
+	flags *pflag.FlagSet,
+) (apclient.Client, error) {
+	providerURL, err := flags.GetString(FlagProviderURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if providerURL != "" {
+		opts = append(opts, apclient.WithProviderURL(providerURL))
+	} else {
+		opts = append(opts, apclient.WithQueryClient(cl))
+	}
+
+	return apclient.NewClient(ctx, prov, opts...)
+}

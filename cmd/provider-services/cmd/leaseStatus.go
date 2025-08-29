@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -87,12 +86,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	var gclient apclient.Client
-	if providerURL != "" {
-		gclient, err = apclient.NewClientOffChain(ctx, providerURL, prov, opts...)
-	} else {
-		gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
-	}
+	gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 	if err != nil {
 		return err
 	}

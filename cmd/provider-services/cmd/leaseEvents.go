@@ -107,13 +107,7 @@ func doLeaseEvents(cmd *cobra.Command) error {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
 
-		var gclient apclient.Client
-		if providerURL != "" {
-			gclient, err = apclient.NewClientOffChain(ctx, providerURL, prov, opts...)
-		} else {
-			gclient, err = apclient.NewClient(ctx, cl, prov, opts...)
-		}
-
+		gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {
