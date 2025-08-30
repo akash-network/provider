@@ -4,11 +4,12 @@ import (
 	"strconv"
 	"testing"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	manitypes "pkg.akt.dev/go/manifest/v2beta3"
+	"pkg.akt.dev/go/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )

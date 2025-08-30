@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/tools/fromctx"

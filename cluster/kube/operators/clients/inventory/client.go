@@ -1,12 +1,12 @@
 package inventory
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"time"
 
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
@@ -17,8 +17,9 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
+	"pkg.akt.dev/go/util/ctxlog"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -83,8 +84,12 @@ func (cl *client) ResultChan() <-chan ctypes.Inventory {
 }
 
 func (cl *client) discovery() error {
-	ictx, icancel := context.WithCancel(cl.ctx)
-	defer icancel()
+	var ictx context.Context
+	icancel := func() {}
+
+	defer func() {
+		icancel()
+	}()
 
 	kc := fromctx.MustKubeClientFromCtx(cl.ctx)
 
@@ -115,6 +120,7 @@ func (cl *client) discovery() error {
 	const reconnect = 5 * time.Second
 
 	reconnecttm := time.NewTimer(reconnect)
+	reconnecttm.Stop()
 
 	startConnector := func() {
 		if svc == nil {
@@ -148,7 +154,8 @@ func (cl *client) discovery() error {
 		case <-cl.ctx.Done():
 			return cl.ctx.Err()
 		case <-ctrlexitch:
-			startConnector()
+			reconnecttm.Reset(reconnect)
+			// startConnector()
 		case <-reconnecttm.C:
 			startConnector()
 		case evt := <-svcEvents:
@@ -258,10 +265,12 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 				",app.kubernetes.io/part-of=provider",
 		})
 		if err != nil {
+			cancel()
 			return nil, err
 		}
 
 		if len(pods.Items) == 0 {
+			cancel()
 			return nil, fmt.Errorf("no inventory pods available") // nolint: err113
 		}
 
@@ -275,6 +284,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 		}
 
 		if pod == nil {
+			cancel()
 			return nil, fmt.Errorf("no inventory pods available") // nolint: err113
 		}
 
@@ -295,6 +305,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 			kubecfg := fromctx.MustKubeConfigFromCtx(ctx)
 			roundTripper, upgrader, err := spdy.RoundTripperFor(kubecfg)
 			if err != nil {
+				cancel()
 				return nil, err
 			}
 
@@ -312,6 +323,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 			errch := make(chan error, 1)
 			pf, err = portforward.New(dialer, []string{fmt.Sprintf(":%d", svcPort)}, ctx.Done(), make(chan struct{}), nil, nil)
 			if err != nil {
+				cancel()
 				return nil, err
 			}
 
@@ -362,15 +374,17 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 }
 
 func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventoryState) error {
-	log := fromctx.LogcFromCtx(ctx).With("operator", "inventory")
+	log := ctxlog.LogcFromCtx(ctx).With("operator", "inventory")
 
 	// Establish the gRPC connection
-	conn, err := grpc.Dial(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return err
 	}
 
 	defer func() {
+		log.Debug("inventory runner stopped")
+
 		_ = conn.Close()
 
 		select {
@@ -382,7 +396,7 @@ func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventorySt
 
 	}()
 
-	log.Info("dialing inventory operator", "endpoint", endpoint)
+	log.Debug("dialing inventory operator", "endpoint", endpoint)
 
 	client := inventoryV1.NewClusterRPCClient(conn)
 

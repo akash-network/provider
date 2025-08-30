@@ -1,7 +1,7 @@
 package builder
 
 import (
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )

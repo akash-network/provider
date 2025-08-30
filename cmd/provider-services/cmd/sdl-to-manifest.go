@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"github.com/akash-network/node/sdl"
+	sdltypes "pkg.akt.dev/go/sdl"
 )
 
 // SDL2ManifestCmd dump manifest into stdout
@@ -29,7 +29,7 @@ func SDL2ManifestCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sdl, err := sdl.ReadFile(args[0])
+			sdl, err := sdltypes.ReadFile(args[0])
 			if err != nil {
 				return err
 			}

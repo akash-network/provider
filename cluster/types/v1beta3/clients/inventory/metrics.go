@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/akash-api/go/util/units"
-
-	"github.com/akash-network/node/sdl"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/util/units"
 )
 
 type GPUModelAttributes struct {
@@ -35,7 +34,7 @@ func (m GPUModels) ExistsOrWildcard(model string) (*GPUModelAttributes, bool) {
 	return attr, exists
 }
 
-func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
+func ParseGPUAttributes(attrs attrtypes.Attributes) (GPUAttributes, error) {
 	nvidia := make(GPUModels)
 	amd := make(GPUModels)
 
@@ -116,7 +115,7 @@ func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
 	return res, nil
 }
 
-func ParseStorageAttributes(attrs types.Attributes) (StorageAttributes, error) {
+func ParseStorageAttributes(attrs attrtypes.Attributes) (StorageAttributes, error) {
 	attr := attrs.Find(sdl.StorageAttributePersistent)
 	persistent, _ := attr.AsBool()
 	attr = attrs.Find(sdl.StorageAttributeClass)

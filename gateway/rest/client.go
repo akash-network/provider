@@ -24,12 +24,12 @@ package rest
 //
 // 	sdk "github.com/cosmos/cosmos-sdk/types"
 //
-// 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-// 	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
-// 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-// 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-// 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
-// 	atls "github.com/akash-network/akash-api/go/util/tls"
+// 	manifest "pkg.akt.dev/go/manifest/v2beta2"
+// 	ctypes "pkg.akt.dev/go/node/cert/v1beta3"
+// 	dtypes "pkg.akt.dev/go/node/deployment/v1beta3"
+// 	mtypes "pkg.akt.dev/go/node/market/v1beta4"
+// 	ajwt "pkg.akt.dev/go/util/jwt"
+// 	atls "pkg.akt.dev/go/util/tls"
 //
 // 	"github.com/akash-network/provider"
 // 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"

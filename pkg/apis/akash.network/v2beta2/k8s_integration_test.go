@@ -18,7 +18,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 
-	atestutil "github.com/akash-network/node/testutil"
+	atestutil "pkg.akt.dev/go/testutil"
 
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"

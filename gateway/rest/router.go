@@ -7,15 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -24,19 +19,18 @@ import (
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
 
+	"cosmossdk.io/log"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-
-	"github.com/akash-network/node/util/wsutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	ajwt "pkg.akt.dev/go/util/jwt"
+	"pkg.akt.dev/node/util/wsutil"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/cluster"
-	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -214,45 +208,6 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 	return router
 }
 
-// lokiServiceHandler forwards all requests to the loki instance running in provider's cluster.
-// Example:
-//
-//	Incoming Request: http://localhost:8445/lease/1/1/1/loki-service/loki/api/v1/query?query={app=".+"}
-//	Outgoing Request: http://{lokiGwAddr}/loki/api/v1/query?query={app=".+"}
-func lokiServiceHandler(log log.Logger, lokiGwAddr string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// set the X-Scope-OrgID header for fetching logs for the right tenant
-		r.Header.Set("X-Scope-OrgID", builder.LidNS(requestLeaseID(r)))
-
-		// build target url for the reverse proxy
-		scheme := "http" // for http & https
-		if strings.HasPrefix(r.URL.Scheme, "ws") {
-			scheme = "ws" // for ws & wss
-		}
-		lokiURL, err := url.Parse(fmt.Sprintf("%s://%s", scheme, lokiGwAddr))
-		if err != nil {
-			log.Error(err.Error())
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reverseProxy := httputil.NewSingleHostReverseProxy(lokiURL)
-
-		// remove the "/lease/{dseq}/{gseq}/{oseq}/loki-service" path prefix from the request url
-		// before it is sent to the reverse proxy.
-		pathSplits := strings.SplitN(r.URL.Path, "/", 7)
-		if len(pathSplits) < 7 || pathSplits[6] == "" {
-			log.Error("loki api not provided in url")
-			http.Error(w, "loki api not provided in url", http.StatusBadRequest)
-			return
-		}
-		r.URL.Path = pathSplits[6]
-
-		// serve the request using the reverse proxy
-		log.Info("Forwarding request to loki", "HTTP_API", pathSplits[6])
-		reverseProxy.ServeHTTP(w, r)
-	}
-}
-
 type channelToTerminalSizeQueue <-chan remotecommand.TerminalSize
 
 func (sq channelToTerminalSizeQueue) Next() *remotecommand.TerminalSize {
@@ -280,7 +235,7 @@ func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc 
 
 		for i := 0; true; i++ {
 			v := vars.Get(fmt.Sprintf("cmd%d", i))
-			if 0 == len(v) {
+			if len(v) == 0 {
 				break
 			}
 			cmd = append(cmd, v)
@@ -508,7 +463,7 @@ func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFun
 
 		owner := requestOwner(req)
 
-		var gspec dtypes.GroupSpec
+		var gspec dvbeta.GroupSpec
 
 		if err := json.Unmarshal(data, &gspec); err != nil {
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
@@ -542,7 +497,7 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 		subctx, cancel := context.WithTimeout(req.Context(), manifestSubmitTimeout)
 		defer cancel()
 		if err := mclient.Submit(subctx, did, mani); err != nil {
-			if errors.Is(err, manifestValidation.ErrInvalidManifest) {
+			if errors.Is(err, manifest.ErrInvalidManifest) {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return
 			}
@@ -630,7 +585,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 		ipManifestGroupSearchLoop:
 			for _, service := range manifestGroup.Services {
 				for _, expose := range service.Expose {
-					if 0 != len(expose.IP) {
+					if len(expose.IP) != 0 {
 						hasLeasedIPs = true
 						break ipManifestGroupSearchLoop
 					}

@@ -1,14 +1,12 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
 
-	cmdcommon "github.com/akash-network/node/cmd/common"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	aclient "github.com/akash-network/provider/client"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func statusCmd() *cobra.Command {
@@ -17,6 +15,7 @@ func statusCmd() *cobra.Command {
 		Short:        "get provider status",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
+		PreRunE:      cli.QueryPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			addr, err := sdk.AccAddressFromBech32(args[0])
 			if err != nil {
@@ -31,19 +30,11 @@ func statusCmd() *cobra.Command {
 }
 
 func doStatus(cmd *cobra.Command, addr sdk.Address) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
+	cl := cli.MustLightClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
-	gclient, err := apclient.NewClient(ctx, cl, addr)
+	gclient, err := apclient.NewClient(ctx, cl.Query(), addr)
 	if err != nil {
 		return err
 	}
@@ -53,5 +44,5 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return showErrorToUser(err)
 	}
 
-	return cmdcommon.PrintJSON(cctx, result)
+	return cli.PrintJSON(cctx, result)
 }

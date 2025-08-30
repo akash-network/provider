@@ -1,9 +1,8 @@
 package manifest
 
 import (
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-
-	maniv2beta1 "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	maniv2beta1 "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
 )
 
 type submitRequest struct {

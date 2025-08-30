@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	clusterutil "github.com/akash-network/provider/cluster/util"
 )

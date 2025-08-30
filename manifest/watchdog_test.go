@@ -9,12 +9,12 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	clientmocks "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-
-	"github.com/akash-network/node/testutil"
+	clientmocks "pkg.akt.dev/go/mocks/node/client"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/session"
 )
@@ -24,7 +24,7 @@ type watchdogTestScaffold struct {
 	parentCh   chan struct{}
 	doneCh     chan dtypes.DeploymentID
 	broadcasts chan []sdk.Msg
-	leaseID    types.LeaseID
+	leaseID    mtypes.LeaseID
 	provider   ptypes.Provider
 }
 
@@ -38,7 +38,7 @@ func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *
 	scaffold.broadcasts = make(chan []sdk.Msg, 1)
 
 	txClientMock := &clientmocks.TxClient{}
-	txClientMock.On("Broadcast", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	txClientMock.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		scaffold.broadcasts <- args.Get(1).([]sdk.Msg)
 	}).Return(&sdk.Result{}, nil)
 
@@ -68,10 +68,10 @@ func TestWatchdogTimeout(t *testing.T) {
 
 	msgs := broadcasts.([]sdk.Msg)
 	require.Len(t, msgs, 1)
-	require.IsType(t, &types.MsgCloseBid{}, msgs[0])
+	require.IsType(t, &mvbeta.MsgCloseBid{}, msgs[0])
 
-	msg := msgs[0].(*types.MsgCloseBid)
-	require.Equal(t, scaffold.leaseID, msg.BidID.LeaseID())
+	msg := msgs[0].(*mvbeta.MsgCloseBid)
+	require.Equal(t, scaffold.leaseID, msg.ID.LeaseID())
 
 	deploymentID := testutil.ChannelWaitForValue(t, scaffold.doneCh)
 	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())
