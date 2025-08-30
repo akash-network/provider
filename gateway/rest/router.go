@@ -665,11 +665,9 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 
 		result.ForwardedPorts, err = cclient.ForwardedPortStatus(ctx, leaseID)
 		if err != nil {
-			log.Error("ForwardedPortStatus failed", "lease", leaseID, "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		log.Debug("ForwardedPortStatus returned", "lease", leaseID, "count", len(result.ForwardedPorts))
 
 		result.Services, err = cclient.LeaseStatus(ctx, leaseID)
 		if err != nil {
