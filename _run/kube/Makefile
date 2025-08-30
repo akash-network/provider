@@ -24,7 +24,7 @@ provider-run:
 		--from "$(PROVIDER_KEY_NAME)" \
 		--cluster-k8s \
 		--gateway-listen-address "$(GATEWAY_HOST)" \
-		--deployment-ingress-static-hosts true \
+		--deployment-ingress-static-hosts false \
 		--deployment-ingress-domain "$(GATEWAY_HOSTNAME)" \
 		--cluster-node-port-quantity 100 \
 		--cluster-public-hostname "$(GATEWAY_HOSTNAME)" \

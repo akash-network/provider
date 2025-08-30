@@ -28,7 +28,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 
 	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 
@@ -542,7 +541,7 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 		subctx, cancel := context.WithTimeout(req.Context(), manifestSubmitTimeout)
 		defer cancel()
 		if err := mclient.Submit(subctx, did, mani); err != nil {
-			if errors.Is(err, manifestValidation.ErrInvalidManifest) {
+			if errors.Is(err, manifest.ErrInvalidManifest) {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return
 			}
@@ -664,23 +663,13 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 			}
 		}
 
-		hasForwardedPorts := false
-	portManifestGroupSearchLoop:
-		for _, service := range manifestGroup.Services {
-			for _, expose := range service.Expose {
-				if expose.Global && expose.ExternalPort != 80 {
-					hasForwardedPorts = true
-					break portManifestGroupSearchLoop
-				}
-			}
+		result.ForwardedPorts, err = cclient.ForwardedPortStatus(ctx, leaseID)
+		if err != nil {
+			log.Error("ForwardedPortStatus failed", "lease", leaseID, "error", err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
-		if hasForwardedPorts {
-			result.ForwardedPorts, err = cclient.ForwardedPortStatus(ctx, leaseID)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
+		log.Debug("ForwardedPortStatus returned", "lease", leaseID, "count", len(result.ForwardedPorts))
 
 		result.Services, err = cclient.LeaseStatus(ctx, leaseID)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"sync"
 
 	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
@@ -60,6 +61,11 @@ type client struct {
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
+
+	// forwarded ports cache keyed by lease namespace
+	fwdPortCache    map[string]map[string][]apclient.ForwardedPortStatus
+	fwdPortWatchers map[string]context.CancelFunc
+	fwdPortCacheMtx sync.RWMutex
 }
 
 func (c *client) String() string {
@@ -110,6 +116,8 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		ns:                ns,
 		log:               log.With("client", "kube"),
 		kubeContentConfig: kubecfg,
+		fwdPortCache:      make(map[string]map[string][]apclient.ForwardedPortStatus),
+		fwdPortWatchers:   make(map[string]context.CancelFunc),
 	}
 
 	return cl, nil
@@ -653,6 +661,16 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 	c.log.Info("tearing down lease", "lease", lid)
 
+	// stop watcher and clear cache for this lease namespace
+	ns := builder.LidNS(lid)
+	c.fwdPortCacheMtx.Lock()
+	if cancel, ok := c.fwdPortWatchers[ns]; ok && cancel != nil {
+		cancel()
+		delete(c.fwdPortWatchers, ns)
+	}
+	delete(c.fwdPortCache, ns)
+	c.fwdPortCacheMtx.Unlock()
+
 	_, result := wrapKubeCall("namespaces-delete", func() (interface{}, error) {
 		return nil, c.kc.CoreV1().Namespaces().Delete(ctx, builder.LidNS(lid), metav1.DeleteOptions{})
 	})
@@ -812,6 +830,22 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 		return nil, err
 	}
 
+	// start watcher and try cache first
+	c.ensureForwardedPortsWatcher(settings, leaseID)
+	ns := builder.LidNS(leaseID)
+	c.fwdPortCacheMtx.RLock()
+	cached := c.fwdPortCache[ns]
+	c.fwdPortCacheMtx.RUnlock()
+	if len(cached) > 0 {
+		result := make(map[string][]apclient.ForwardedPortStatus, len(cached))
+		for k, v := range cached {
+			vv := make([]apclient.ForwardedPortStatus, len(v))
+			copy(vv, v)
+			result[k] = vv
+		}
+		return result, nil
+	}
+
 	services, err := wrapKubeCall("services-list", func() (*corev1.ServiceList, error) {
 		return c.kc.CoreV1().Services(builder.LidNS(leaseID)).List(ctx, metav1.ListOptions{})
 	})
@@ -820,49 +854,189 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 		return nil, fmt.Errorf("%s: %w", kubeclienterrors.ErrInternalError.Error(), err)
 	}
 
-	forwardedPorts := make(map[string][]apclient.ForwardedPortStatus)
+	forwardedPorts := c.computeForwardedPortsFromServices(settings, services)
 
-	// Search for a Kubernetes service declared as nodeport
-	for _, service := range services.Items {
-		if service.Spec.Type == corev1.ServiceTypeNodePort {
-			serviceName := service.Name // Always suffixed during creation, so chop it off
-			deploymentName := serviceName[0 : len(serviceName)-len(builder.SuffixForNodePortServiceName)]
-
-			if 0 != len(service.Spec.Ports) {
-				portsForDeployment := make([]apclient.ForwardedPortStatus, 0, len(service.Spec.Ports))
-				for _, port := range service.Spec.Ports {
-					// Check if the service is exposed via NodePort mechanism in the cluster
-					// This is a random port chosen by the cluster when the deployment is created
-					nodePort := port.NodePort
-					if nodePort > 0 {
-						// Record the actual port inside the container that is exposed
-						v := apclient.ForwardedPortStatus{
-							Host:         settings.ClusterPublicHostname,
-							Port:         uint16(port.TargetPort.IntVal), // nolint: gosec
-							ExternalPort: uint16(nodePort),               // nolint: gosec
-							Name:         deploymentName,
-						}
-
-						isValid := true
-						switch port.Protocol {
-						case corev1.ProtocolTCP:
-							v.Proto = mapi.TCP
-						case corev1.ProtocolUDP:
-							v.Proto = mapi.UDP
-						default:
-							isValid = false // Skip this, since the Protocol is set to something not supported by Akash
-						}
-						if isValid {
-							portsForDeployment = append(portsForDeployment, v)
-						}
-					}
-				}
-				forwardedPorts[deploymentName] = portsForDeployment
+	// Also check Ingress resources for global exposures
+	ingresses, err := wrapKubeCall("ingresses-list", func() (*netv1.IngressList, error) {
+		return c.kc.NetworkingV1().Ingresses(builder.LidNS(leaseID)).List(ctx, metav1.ListOptions{})
+	})
+	if err != nil {
+		c.log.Error("list ingresses", "err", err)
+		// Don't fail completely, just log and continue with services only
+	} else {
+		ingressPorts := c.computeForwardedPortsFromIngresses(settings, ingresses)
+		// Merge ingress ports with service ports
+		for serviceName, ports := range ingressPorts {
+			if existing, exists := forwardedPorts[serviceName]; exists {
+				forwardedPorts[serviceName] = append(existing, ports...)
+			} else {
+				forwardedPorts[serviceName] = ports
 			}
 		}
 	}
 
+	// seed cache
+	c.fwdPortCacheMtx.Lock()
+	c.fwdPortCache[ns] = forwardedPorts
+	c.fwdPortCacheMtx.Unlock()
+
 	return forwardedPorts, nil
+}
+
+// ensureForwardedPortsWatcher starts a background watcher (once per lease namespace)
+// that maintains an in-memory cache of forwarded ports for NodePort services.
+func (c *client) ensureForwardedPortsWatcher(settings builder.Settings, leaseID mtypes.LeaseID) {
+	ns := builder.LidNS(leaseID)
+
+	c.fwdPortCacheMtx.Lock()
+	if _, exists := c.fwdPortWatchers[ns]; exists {
+		c.fwdPortCacheMtx.Unlock()
+		return
+	}
+
+	wctx, cancel := context.WithCancel(c.ctx)
+	c.fwdPortWatchers[ns] = cancel
+	c.fwdPortCacheMtx.Unlock()
+
+	go func() {
+		// initial seed
+		if services, err := c.kc.CoreV1().Services(ns).List(wctx, metav1.ListOptions{}); err == nil {
+			ports := c.computeForwardedPortsFromServices(settings, services)
+			c.fwdPortCacheMtx.Lock()
+			c.fwdPortCache[ns] = ports
+			c.fwdPortCacheMtx.Unlock()
+		}
+
+		watcher, err := c.kc.CoreV1().Services(ns).Watch(wctx, metav1.ListOptions{})
+		if err != nil {
+			return
+		}
+		defer watcher.Stop()
+
+		for {
+			select {
+			case <-wctx.Done():
+				c.fwdPortCacheMtx.Lock()
+				delete(c.fwdPortWatchers, ns)
+				delete(c.fwdPortCache, ns)
+				c.fwdPortCacheMtx.Unlock()
+				return
+			case _, ok := <-watcher.ResultChan():
+				if !ok {
+					return
+				}
+				if services, err := c.kc.CoreV1().Services(ns).List(wctx, metav1.ListOptions{}); err == nil {
+					ports := c.computeForwardedPortsFromServices(settings, services)
+					c.fwdPortCacheMtx.Lock()
+					c.fwdPortCache[ns] = ports
+					c.fwdPortCacheMtx.Unlock()
+				}
+			}
+		}
+	}()
+}
+
+func (c *client) computeForwardedPortsFromServices(settings builder.Settings, services *corev1.ServiceList) map[string][]apclient.ForwardedPortStatus {
+	forwardedPorts := make(map[string][]apclient.ForwardedPortStatus)
+	if services == nil {
+		return forwardedPorts
+	}
+	for _, service := range services.Items {
+		if service.Spec.Type != corev1.ServiceTypeNodePort {
+			continue
+		}
+		if len(service.Spec.Ports) == 0 {
+			continue
+		}
+		serviceName := service.Name
+		if !strings.HasSuffix(serviceName, builder.SuffixForNodePortServiceName) {
+			continue
+		}
+		deploymentName := serviceName[0 : len(serviceName)-len(builder.SuffixForNodePortServiceName)]
+		portsForDeployment := make([]apclient.ForwardedPortStatus, 0, len(service.Spec.Ports))
+		for _, port := range service.Spec.Ports {
+			nodePort := port.NodePort
+			if nodePort == 0 {
+				continue
+			}
+			v := apclient.ForwardedPortStatus{
+				Host:         settings.ClusterPublicHostname,
+				Port:         uint16(port.TargetPort.IntVal),
+				ExternalPort: uint16(nodePort),
+				Name:         deploymentName,
+			}
+			switch port.Protocol {
+			case corev1.ProtocolTCP:
+				v.Proto = mapi.TCP
+			case corev1.ProtocolUDP:
+				v.Proto = mapi.UDP
+			default:
+				continue
+			}
+			portsForDeployment = append(portsForDeployment, v)
+		}
+		forwardedPorts[deploymentName] = portsForDeployment
+	}
+	return forwardedPorts
+}
+
+func (c *client) computeForwardedPortsFromIngresses(settings builder.Settings, ingresses *netv1.IngressList) map[string][]apclient.ForwardedPortStatus {
+	forwardedPorts := make(map[string][]apclient.ForwardedPortStatus)
+	if ingresses == nil {
+		return forwardedPorts
+	}
+
+	for _, ingress := range ingresses.Items {
+		for _, rule := range ingress.Spec.Rules {
+			if rule.HTTP == nil {
+				continue
+			}
+			for _, path := range rule.HTTP.Paths {
+				if path.Backend.Service == nil {
+					continue
+				}
+
+				serviceName := path.Backend.Service.Name
+				var port uint16
+				var externalPort uint16 = 80 // Default HTTP port for ingress
+
+				// Determine the service port
+				if path.Backend.Service.Port.Number != 0 {
+					port = uint16(path.Backend.Service.Port.Number)
+				} else {
+					// If port name is specified, we assume it's port 80 for HTTP
+					port = 80
+				}
+
+				// Check if this is HTTPS (TLS configured)
+				if len(ingress.Spec.TLS) > 0 {
+					for _, tls := range ingress.Spec.TLS {
+						for _, host := range tls.Hosts {
+							if host == rule.Host {
+								externalPort = 443
+								break
+							}
+						}
+					}
+				}
+
+				v := apclient.ForwardedPortStatus{
+					Host:         rule.Host,
+					Port:         port,
+					ExternalPort: externalPort,
+					Proto:        mapi.TCP,
+					Name:         serviceName,
+				}
+
+				if existing, exists := forwardedPorts[serviceName]; exists {
+					forwardedPorts[serviceName] = append(existing, v)
+				} else {
+					forwardedPorts[serviceName] = []apclient.ForwardedPortStatus{v}
+				}
+			}
+		}
+	}
+	return forwardedPorts
 }
 
 // LeaseStatus todo: limit number of results and do pagination / streaming

@@ -826,6 +826,62 @@ func TestRouteLeaseStatusErr(t *testing.T) {
 	})
 }
 
+func TestRouteLeaseStatusIncludesForwardedPorts(t *testing.T) {
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+
+		leaseID := testutil.LeaseID(t)
+		leaseID.Owner = caddr.String()
+		leaseID.Provider = paddr.String()
+		mockManifestGroupsForRouterTest(test, leaseID)
+
+		// Mock NodePort status to include a mapping for internal port 80
+		forwarded := map[string][]apclient.ForwardedPortStatus{
+			testServiceName: {
+				{
+					Host:         "provider.example.com",
+					Port:         80,
+					ExternalPort: 30001,
+					Proto:        manifestValidation.TCP,
+					Name:         testServiceName,
+				},
+			},
+		}
+		test.pcclient.On("ForwardedPortStatus", mock.Anything, leaseID).Return(forwarded, nil)
+
+		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
+		require.NoError(t, err)
+
+		parsedSDL, err := sdl.ReadFile(testSDL)
+		require.NoError(t, err)
+		mani, err := parsedSDL.Manifest()
+		require.NoError(t, err)
+		buf, err := json.Marshal(mani)
+		require.NoError(t, err)
+
+		req, err := http.NewRequest("GET", uri, bytes.NewBuffer(buf))
+		require.NoError(t, err)
+		req.Header = hdr
+		req.Header.Set("Content-Type", contentTypeJSON)
+
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var data apclient.LeaseStatus
+		dec := json.NewDecoder(resp.Body)
+		require.NoError(t, dec.Decode(&data))
+
+		ports, ok := data.ForwardedPorts[testServiceName]
+		require.True(t, ok)
+		require.NotEmpty(t, ports)
+		require.Equal(t, uint16(80), ports[0].Port)
+		require.Equal(t, uint16(30001), ports[0].ExternalPort)
+	})
+}
+
 func TestRouteServiceStatusOK(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
 		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
