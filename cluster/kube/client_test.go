@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -36,6 +37,8 @@ func clientForTest(t *testing.T, kobjs []runtime.Object, aobjs []runtime.Object)
 		ns:                testKubeClientNs,
 		log:               myLog.With("mode", "test-kube-provider-client"),
 		kubeContentConfig: &rest.Config{},
+		fwdPortCache:      make(map[string]map[string][]apclient.ForwardedPortStatus),
+		fwdPortWatchers:   make(map[string]context.CancelFunc),
 	}
 
 	return result

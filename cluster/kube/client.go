@@ -894,18 +894,23 @@ func (c *client) ensureForwardedPortsWatcher(settings builder.Settings, leaseID 
 		return
 	}
 
-	wctx, cancel := context.WithCancel(c.ctx)
+	// use background context if client context is nil (e.g., in tests)
+	parentCtx := c.ctx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+
+	wctx, cancel := context.WithCancel(parentCtx)
 	c.fwdPortWatchers[ns] = cancel
+
+	// do initial seed synchronously to avoid race condition
+	if services, err := c.kc.CoreV1().Services(ns).List(parentCtx, metav1.ListOptions{}); err == nil {
+		ports := c.computeForwardedPortsFromServices(settings, services)
+		c.fwdPortCache[ns] = ports
+	}
 	c.fwdPortCacheMtx.Unlock()
 
 	go func() {
-		// initial seed
-		if services, err := c.kc.CoreV1().Services(ns).List(wctx, metav1.ListOptions{}); err == nil {
-			ports := c.computeForwardedPortsFromServices(settings, services)
-			c.fwdPortCacheMtx.Lock()
-			c.fwdPortCache[ns] = ports
-			c.fwdPortCacheMtx.Unlock()
-		}
 
 		watcher, err := c.kc.CoreV1().Services(ns).Watch(wctx, metav1.ListOptions{})
 		if err != nil {
