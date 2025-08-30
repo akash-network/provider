@@ -903,7 +903,6 @@ func (c *client) ensureForwardedPortsWatcher(settings builder.Settings, leaseID 
 	wctx, cancel := context.WithCancel(parentCtx)
 	c.fwdPortWatchers[ns] = cancel
 
-	// initial seed - moved outside goroutine to avoid race condition
 	if services, err := c.kc.CoreV1().Services(ns).List(parentCtx, metav1.ListOptions{}); err == nil {
 		ports := c.computeForwardedPortsFromServices(settings, services)
 		c.fwdPortCache[ns] = ports

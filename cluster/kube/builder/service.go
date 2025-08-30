@@ -109,24 +109,19 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 func (b *service) Any() bool {
 	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
-	for i, expose := range service.Expose {
-		b.log.Debug("DEBUG: checking expose", "service", service.Name, "expose", i, "global", expose.Global, "isIngress", expose.IsIngress(), "requireNodePort", b.requireNodePort)
+	for _, expose := range service.Expose {
 		if b.requireNodePort && expose.IsIngress() {
-			b.log.Debug("DEBUG: skipping ingress for NodePort", "service", service.Name, "expose", i)
 			continue
 		}
 
 		if !b.requireNodePort && expose.IsIngress() {
-			b.log.Debug("DEBUG: returning true for ingress on ClusterIP", "service", service.Name, "expose", i)
 			return true
 		}
 
 		if expose.Global == b.requireNodePort {
-			b.log.Debug("DEBUG: returning true for global match", "service", service.Name, "expose", i, "global", expose.Global, "requireNodePort", b.requireNodePort)
 			return true
 		}
 	}
-	b.log.Debug("DEBUG: service.Any() returning false", "service", service.Name, "requireNodePort", b.requireNodePort)
 	return false
 }
 
