@@ -4,8 +4,6 @@ go 1.24.5
 
 toolchain go1.24.6
 
-toolchain go1.24.6
-
 require (
 	cosmossdk.io/errors v1.0.2
 	cosmossdk.io/log v1.6.0
@@ -59,7 +57,7 @@ require (
 	pkg.akt.dev/go v0.0.3-rc15
 	pkg.akt.dev/go/cli v0.0.3-rc13
 	pkg.akt.dev/go/sdl v0.0.2-rc6
-	pkg.akt.dev/node v1.0.0-rc29
+	pkg.akt.dev/node v1.0.0-rc30
 	sigs.k8s.io/kind v0.29.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
