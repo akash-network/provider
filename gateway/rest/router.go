@@ -112,32 +112,6 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
 
-	// GET /bid-proposed-ports/{owner}/{dseq}/{gseq}/{oseq} (PoC, unauthenticated for testing)
-	router.HandleFunc("/bid-proposed-ports/{owner}/{dseq:[0-9]+}/{gseq:[0-9]+}/{oseq:[0-9]+}",
-		func(w http.ResponseWriter, req *http.Request) {
-			vars := mux.Vars(req)
-
-			owner := vars["owner"]
-			dseq, _ := strconv.ParseUint(vars["dseq"], 10, 64)
-			gseq, _ := strconv.ParseUint(vars["gseq"], 10, 32)
-			oseq, _ := strconv.ParseUint(vars["oseq"], 10, 32)
-
-			orderID := mtypes.OrderID{
-				Owner: owner,
-				DSeq:  dseq,
-				GSeq:  uint32(gseq),
-				OSeq:  uint32(oseq),
-			}
-
-			// Get reserved ports for this order during bidding phase (use case layer)
-			ports := pclient.ClusterService().PortManager().PortsForOrder(orderID)
-
-			writeJSON(log, w, struct {
-				ProposedPorts []int32 `json:"proposed_ports"`
-			}{ProposedPorts: ports})
-		}).
-		Methods(http.MethodGet)
-
 	authedRouter := router.NewRoute().Subrouter()
 	authedRouter.Use(
 		authorizeProviderMiddleware,

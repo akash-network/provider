@@ -10,7 +10,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	"github.com/akash-network/provider/cluster/kube/builder/mocks"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
@@ -110,10 +109,7 @@ func TestGlobalServiceBuilder(t *testing.T) {
 
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
-
-	// This test has no expose directives, so AllocatePorts should not be called
-	mockAllocator := mocks.NewServicePortAllocator(t)
-	serviceBuilder := BuildService(workload, true, mockAllocator)
+	serviceBuilder := BuildService(workload, true)
 	require.NotNil(t, serviceBuilder)
 	// Should have name ending with suffix
 	require.Equal(t, "myservice-np", serviceBuilder.Name())
@@ -162,7 +158,7 @@ func TestLocalServiceBuilder(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, false, nil)
+	serviceBuilder := BuildService(workload, false)
 	require.NotNil(t, serviceBuilder)
 	// Should have name verbatim
 	require.Equal(t, "myservice", serviceBuilder.Name())
@@ -216,9 +212,7 @@ func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	// This test has expose directives but only local services (Global: false), so AllocatePorts should not be called for global service builder
-	mockAllocator := mocks.NewServicePortAllocator(t)
-	serviceBuilder := BuildService(workload, true, mockAllocator)
+	serviceBuilder := BuildService(workload, true)
 
 	// Should not have any work to do
 	require.False(t, serviceBuilder.Any())
@@ -278,10 +272,7 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	// This test has one global service, so AllocatePorts should be called with count=1
-	mockAllocator := mocks.NewServicePortAllocator(t)
-	mockAllocator.EXPECT().AllocatePorts("myservice", 1).Return([]int32{30000})
-	serviceBuilder := BuildService(workload, true, mockAllocator)
+	serviceBuilder := BuildService(workload, true)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())
@@ -341,7 +332,7 @@ func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, false, nil)
+	serviceBuilder := BuildService(workload, false)
 
 	// Should have work to do
 	require.False(t, serviceBuilder.Any())
@@ -401,7 +392,7 @@ func TestLocalServiceBuilderWithLocalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, false, nil)
+	serviceBuilder := BuildService(workload, false)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())

@@ -6,14 +6,22 @@ services:
     image: quay.io/ovrclk/demo-app
     expose:
       - port: 80
-        as: 8080
+        as: 80
+        http_options:
+          max_body_size: 2097152
+          next_cases:
+            - off
+        accept:
+          - hello.localhost
         to:
           - global: true
   bew:
     image: quay.io/ovrclk/demo-app
     expose:
       - port: 80
-        as: 8081
+        as: 80
+        accept:
+          - hello1.localhost
         to:
           - global: true
 

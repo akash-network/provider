@@ -309,11 +309,6 @@ provider-lease-status:
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type=$(GW_AUTH_TYPE)
 
-.PHONY: provider-bid-proposed-ports
-provider-bid-proposed-ports:
-	curl -sk "https://localhost:8443/bid-proposed-ports/$(KEY_ADDRESS)/$(DSEQ)/$(GSEQ)/$(OSEQ)"
-		
-
 .PHONY: provider-service-status
 provider-service-status:
 	$(PROVIDER_SERVICES) lease-status \
