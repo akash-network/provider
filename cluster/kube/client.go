@@ -460,6 +460,17 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		cdeployment.SetResourceVersion(currManifest.ResourceVersion)
 	}
 
+	// Get port manager and lease ID from context (passed by deployment manager)
+	portManager, ok := ctx.Value("port-manager").(cluster.PortManager)
+	if !ok {
+		panic("No PortManager found in context - deployment manager must provide one")
+	}
+
+	leaseID, ok := ctx.Value("lease-id").(mtypes.LeaseID)
+	if !ok {
+		panic("No lease ID found in context - deployment manager must provide one")
+	}
+
 	applies.ns = builder.BuildNS(settings, cdeployment)
 	applies.netPol = builder.BuildNetPol(settings, cdeployment)
 
@@ -498,8 +509,8 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			continue
 		}
 
-		svc.localService = builder.BuildService(workload, false)
-		svc.globalService = builder.BuildService(workload, true)
+		svc.localService = builder.BuildService(workload, false, nil)
+		svc.globalService = builder.BuildService(workload, true, &leasePortAllocator{portManager, leaseID})
 	}
 
 	po.nns, po.uns, po.ons, err = applyNS(ctx, c.kc, applies.ns)
@@ -1141,4 +1152,14 @@ func (c *client) KubeVersion() (*version.Info, error) {
 	return wrapKubeCall("discovery-serverversion", func() (*version.Info, error) {
 		return c.kc.Discovery().ServerVersion()
 	})
+}
+
+// leasePortAllocator adapts PortManager to the builder.ServicePortAllocator interface
+type leasePortAllocator struct {
+	portManager cluster.PortManager
+	leaseID     mtypes.LeaseID
+}
+
+func (lpa *leasePortAllocator) AllocatePorts(serviceName string, count int) []int32 {
+	return lpa.portManager.AllocatePorts(lpa.leaseID, serviceName, count)
 }

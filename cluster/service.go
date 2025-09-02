@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"context"
+	"time"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
@@ -103,6 +104,8 @@ type Service interface {
 	Done() <-chan struct{}
 	HostnameService() ctypes.HostnameServiceClient
 	TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error
+
+	PortManager() PortManager
 }
 
 // NewService returns new Service instance
@@ -238,6 +241,11 @@ func (s *service) Unreserve(order mtypes.OrderID) error {
 
 func (s *service) HostnameService() ctypes.HostnameServiceClient {
 	return s.hostnames
+}
+
+func (s *service) PortManager() PortManager {
+	// Return the unified port manager
+	return s.inventory.PortManager()
 }
 
 func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, hostname string, serviceName string, externalPort uint32) error {
@@ -383,7 +391,17 @@ loop:
 				s.managers[key] = newDeploymentManager(s, deployment, true)
 
 				trySignal()
+			case mtypes.EventLeaseCreated:
+				// Promote NodePort reservation from order to lease; keep for the manifest window (PoC)
+				s.log.Info("DEBUG: Promoting order ports to lease", "orderID", ev.ID.OrderID(), "leaseID", ev.ID)
+				s.PortManager().PromoteOrderToLease(ev.ID.OrderID(), ev.ID, time.Minute)
+				s.log.Info("DEBUG: Promotion completed", "leaseID", ev.ID)
 			case mtypes.EventLeaseClosed:
+				// Release lease ports when lease is closed
+				s.log.Info("DEBUG: Releasing lease ports", "leaseID", ev.ID)
+				s.PortManager().ReleaseLease(ev.ID)
+				s.log.Info("DEBUG: Lease ports released", "leaseID", ev.ID)
+
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
 			}

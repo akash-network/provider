@@ -26,6 +26,7 @@ import (
 	sdlutil "github.com/akash-network/node/sdl/util"
 	"github.com/akash-network/node/util/runner"
 
+	"github.com/akash-network/provider/cluster/portreserve"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -99,6 +100,7 @@ type inventoryService struct {
 	lc                     lifecycle.Lifecycle
 	waiter                 waiter.OperatorWaiter
 	availableExternalPorts uint
+	portManager            PortManager // Centralized port allocation management
 
 	clients struct {
 		ip        cip.Client
@@ -136,6 +138,9 @@ func newInventoryService(
 		waiter:                 waiter,
 	}
 
+	// Create centralized port manager with shared store
+	is.portManager = NewPortManager(is.log, portreserve.GetSharedStore())
+
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
 	is.clients.ip = cfromctx.ClientIPFromContext(ctx)
 
@@ -149,6 +154,7 @@ func newInventoryService(
 
 	go is.lc.WatchChannel(ctx.Done())
 	go is.run(ctx, reservations)
+	go is.startPortCleanup(ctx)
 
 	return is, nil
 }
@@ -159,6 +165,33 @@ func (is *inventoryService) done() <-chan struct{} {
 
 func (is *inventoryService) ready() <-chan struct{} {
 	return is.readych
+}
+
+// PortManager returns the centralized port manager instance.
+func (is *inventoryService) PortManager() PortManager {
+	return is.portManager
+}
+
+// startPortCleanup runs periodic cleanup of expired port reservations.
+func (is *inventoryService) startPortCleanup(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute) // Cleanup every minute
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			cleaned := is.portManager.CleanupExpired()
+			if cleaned > 0 {
+				is.log.Info("cleaned up expired port reservations", "count", cleaned)
+			}
+		case <-ctx.Done():
+			is.log.Info("port cleanup stopped")
+			return
+		case <-is.lc.ShuttingDown():
+			is.log.Info("port cleanup stopped due to service shutdown")
+			return
+		}
+	}
 }
 
 func (is *inventoryService) lookup(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
@@ -442,6 +475,15 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "pending", pending)
 	} else {
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
+	}
+
+	// Reserve NodePorts for RANDOM_PORT endpoints (PoC)
+	randomPortCount := reservationCountEndpoints(reservation)
+
+	if randomPortCount > 0 {
+		// Use centralized port manager for order operations
+		is.portManager.ReserveForOrder(req.order, int(randomPortCount), portreserve.DefaultReservationTTL)
+		is.log.Info("reserved NodePorts for random port endpoints", "order", req.order, "count", randomPortCount)
 	}
 
 	err := state.inventory.Adjust(reservation)
