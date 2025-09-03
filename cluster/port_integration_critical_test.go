@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -15,8 +16,19 @@ import (
 // TestEndToEndPortConsistency tests the complete user journey:
 // Bidding -> Query proposed ports -> Select provider -> Deploy -> Get same ports
 func TestEndToEndPortConsistency(t *testing.T) {
-	// Setup: Create shared store and port manager (simulating real provider)
-	store := portreserve.GetSharedStore()
+	// Setup: Create isolated store for this test to avoid cross-test coupling
+	tempFile, err := os.CreateTemp("", "akash-port-test-*.json")
+	require.NoError(t, err)
+	tempPath := tempFile.Name()
+	tempFile.Close()
+
+	// Cleanup temp file after test
+	t.Cleanup(func() {
+		os.Remove(tempPath)
+	})
+
+	store := portreserve.NewStoreWithFile(tempPath)
+	store.SetPortRange(30100, 30200) // Use test range
 	pm := NewPortManager(testutil.Logger(t), store)
 
 	// User creates deployment
@@ -115,8 +127,20 @@ func TestMultipleUsersNoCrossContamination(t *testing.T) {
 
 // TestProviderRestartPortPersistence tests that ports survive provider restarts
 func TestProviderRestartPortPersistence(t *testing.T) {
+	// Create temp file for persistence test
+	tempFile, err := os.CreateTemp("", "akash-restart-test-*.json")
+	require.NoError(t, err)
+	tempPath := tempFile.Name()
+	tempFile.Close()
+
+	// Cleanup temp file after test
+	t.Cleanup(func() {
+		os.Remove(tempPath)
+	})
+
 	// Simulate first provider instance
-	store1 := portreserve.GetSharedStore()
+	store1 := portreserve.NewStoreWithFile(tempPath)
+	store1.SetPortRange(30100, 30200) // Use test range
 	pm1 := NewPortManager(testutil.Logger(t), store1)
 
 	orderID := mtypes.OrderID{Owner: "akash1user", DSeq: 999, GSeq: 1, OSeq: 1}
@@ -125,8 +149,9 @@ func TestProviderRestartPortPersistence(t *testing.T) {
 	originalPorts := pm1.ReserveForOrder(orderID, 3, 5*time.Minute)
 	require.Len(t, originalPorts, 3, "Should reserve ports in first instance")
 
-	// Simulate provider restart - create new instances
-	store2 := portreserve.GetSharedStore()
+	// Simulate provider restart - create new instances with same file
+	store2 := portreserve.NewStoreWithFile(tempPath)
+	store2.SetPortRange(30100, 30200) // Use same test range
 	pm2 := NewPortManager(testutil.Logger(t), store2)
 
 	// After restart, user should still see their ports
@@ -152,7 +177,19 @@ func TestHighLoadPortAllocation(t *testing.T) {
 		t.Skip("Skipping high load test in short mode")
 	}
 
-	store := portreserve.GetSharedStore()
+	// Create isolated store for this test
+	tempFile, err := os.CreateTemp("", "akash-load-test-*.json")
+	require.NoError(t, err)
+	tempPath := tempFile.Name()
+	tempFile.Close()
+
+	// Cleanup temp file after test
+	t.Cleanup(func() {
+		os.Remove(tempPath)
+	})
+
+	store := portreserve.NewStoreWithFile(tempPath)
+	store.SetPortRange(30100, 32000) // Larger range for load test
 	pm := NewPortManager(testutil.Logger(t), store)
 
 	const numUsers = 100
@@ -240,9 +277,16 @@ func TestHighLoadPortAllocation(t *testing.T) {
 			"CRITICAL: Port %d allocated to %d users (should be 1)", port, count)
 	}
 
-	// Should have high success rate under load
+	// Should have 100% success rate under load
 	successRate := float64(successCount) / float64(numUsers)
-	require.Greater(t, successRate, 0.95,
+	if successRate != 1.0 {
+		t.Logf("FAILURE DIAGNOSTICS:")
+		t.Logf("Success rate: %.2f%% (%d/%d)", successRate*100, successCount, numUsers)
+		t.Logf("Failed users: %d", numUsers-successCount)
+		t.Logf("Port allocation state: %+v", allPorts)
+		// TODO: Add more diagnostics like goroutine traces if needed
+	}
+	require.Equal(t, 1.0, successRate,
 		"Should have >95%% success rate under high load, got %.2f%%", successRate*100)
 
 	t.Logf("High load test: %d/%d users successful (%.1f%%)",

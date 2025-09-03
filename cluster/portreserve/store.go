@@ -60,14 +60,19 @@ var (
 	storeOnce   sync.Once
 )
 
-// NewStore creates a new port reservation store
+// NewStore creates a new port reservation store with default file path
 func NewStore() *Store {
+	return NewStoreWithFile("/tmp/akash-provider-ports.json")
+}
+
+// NewStoreWithFile creates a new port reservation store with custom file path
+func NewStoreWithFile(path string) *Store {
 	return &Store{
 		byOrder:      make(map[orderKey]*reservation),
 		byLease:      make(map[leaseKey]*reservation),
 		defaultStart: 30100, // Start higher to avoid common conflicts
 		defaultEnd:   32767,
-		storageFile:  "/tmp/akash-provider-ports.json",
+		storageFile:  path,
 	}
 }
 
@@ -183,7 +188,22 @@ func (s *Store) loadFromFile() {
 				// Only load if not expired and not already in memory
 				if time.Now().Before(v.Expires) {
 					if _, exists := s.byOrder[key]; !exists {
-						s.byOrder[key] = v
+						// Check if this order was already promoted to a lease
+						// Don't resurrect orders that are now leases
+						hasActiveLease := false
+						for leaseKey, leaseRes := range s.byLease {
+							if leaseKey.Owner == owner && leaseKey.DSeq == dseq &&
+								leaseKey.GSeq == uint32(gseq) && leaseKey.OSeq == uint32(oseq) &&
+								time.Now().Before(leaseRes.Expires) {
+								hasActiveLease = true
+								break
+							}
+						}
+
+						// Only load order if no active lease exists
+						if !hasActiveLease {
+							s.byOrder[key] = v
+						}
 					}
 				}
 			}
@@ -291,6 +311,11 @@ func (s *Store) PromoteOrderToLease(oid mtypes.OrderID, lid mtypes.LeaseID, ttl 
 		s.byLease[lk] = r
 		delete(s.byOrder, ok)
 		fmt.Printf("DEBUG: PromoteOrderToLease - promoted to lease, expires: %v\n", r.Expires)
+
+		// Persist the order deletion to disk
+		if err := s.saveToFile(); err != nil {
+			fmt.Printf("Warning: failed to persist order promotion to file: %v\n", err)
+		}
 	} else {
 		fmt.Printf("DEBUG: PromoteOrderToLease - no order reservation found for key %+v\n", ok)
 	}

@@ -138,8 +138,29 @@ func newInventoryService(
 		waiter:                 waiter,
 	}
 
-	// Create centralized port manager with shared store
-	is.portManager = NewPortManager(is.log, portreserve.GetSharedStore())
+	// Create centralized port manager with shared store and validated port range
+	store := portreserve.GetSharedStore()
+
+	// Validate port range configuration
+	minPort := int32(30100) // Default minimum
+	maxPort := int32(32767) // Default maximum
+
+	// TODO: Read from config when port range configuration is added
+	// For now, use safe defaults
+
+	if minPort < 1 || minPort > 65535 {
+		return nil, fmt.Errorf("invalid minimum port %d: must be between 1-65535", minPort)
+	}
+	if maxPort < 1 || maxPort > 65535 {
+		return nil, fmt.Errorf("invalid maximum port %d: must be between 1-65535", maxPort)
+	}
+	if minPort > maxPort {
+		return nil, fmt.Errorf("invalid port range: minimum port %d > maximum port %d", minPort, maxPort)
+	}
+
+	// Set validated port range on store
+	store.SetPortRange(minPort, maxPort)
+	is.portManager = NewPortManager(is.log, store)
 
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
 	is.clients.ip = cfromctx.ClientIPFromContext(ctx)

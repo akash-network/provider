@@ -175,6 +175,10 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 		// Allocate all needed ports at once
 		if nodePortCount > 0 {
 			allocatedPorts = b.portAllocator.AllocatePorts(service.Name, nodePortCount)
+			if len(allocatedPorts) != nodePortCount {
+				return nil, fmt.Errorf("failed to allocate %d ports for service %s: only got %d ports",
+					nodePortCount, service.Name, len(allocatedPorts))
+			}
 		}
 	}
 
