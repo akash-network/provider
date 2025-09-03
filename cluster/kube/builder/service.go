@@ -26,9 +26,9 @@ type service struct {
 
 var _ Service = (*service)(nil)
 
-func BuildService(workload *Workload, requireNodePort bool, allocator ServicePortAllocator) Service {
+func BuildService(workload *Workload, requireNodePort bool, allocator ServicePortAllocator) (Service, error) {
 	if requireNodePort && allocator == nil {
-		panic("ServicePortAllocator is required when requireNodePort is true")
+		return nil, fmt.Errorf("ServicePortAllocator is required when requireNodePort is true")
 	}
 
 	ss := &service{
@@ -39,7 +39,7 @@ func BuildService(workload *Workload, requireNodePort bool, allocator ServicePor
 
 	ss.Workload.log = ss.Workload.log.With("object", "service", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
-	return ss
+	return ss, nil
 }
 
 //go:generate mockery --name ServicePortAllocator --case underscore --with-expecter
@@ -155,19 +155,19 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	ports := make([]corev1.ServicePort, 0, len(service.Expose))
-	portsAdded := make(map[int32]struct{})
 
 	// Pre-allocate NodePorts for this service if using port allocator
 	var allocatedPorts []int32
 	if b.requireNodePort {
-		// Count how many NodePorts we need
+		// Count how many unique NodePorts we need using a separate map
+		countedPorts := make(map[int32]struct{})
 		nodePortCount := 0
 		for _, expose := range service.Expose {
 			if expose.Global && !expose.IsIngress() {
 				externalPort := expose.GetExternalPort()
-				if _, added := portsAdded[externalPort]; !added {
+				if _, counted := countedPorts[externalPort]; !counted {
 					nodePortCount++
-					portsAdded[externalPort] = struct{}{} // Mark as counted
+					countedPorts[externalPort] = struct{}{} // Mark as counted
 				}
 			}
 		}
@@ -176,10 +176,10 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 		if nodePortCount > 0 {
 			allocatedPorts = b.portAllocator.AllocatePorts(service.Name, nodePortCount)
 		}
-
-		// Reset portsAdded for actual port creation
-		portsAdded = make(map[int32]struct{})
 	}
+
+	// Separate map for duplicate detection during port creation
+	portsAdded := make(map[int32]struct{})
 
 	allocatedIndex := 0
 	for i, expose := range service.Expose {

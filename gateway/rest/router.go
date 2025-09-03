@@ -118,19 +118,36 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 			vars := mux.Vars(req)
 
 			owner := vars["owner"]
-			dseq, _ := strconv.ParseUint(vars["dseq"], 10, 64)
-			gseq, _ := strconv.ParseUint(vars["gseq"], 10, 32)
-			oseq, _ := strconv.ParseUint(vars["oseq"], 10, 32)
+			dseq, err := strconv.ParseUint(vars["dseq"], 10, 64)
+			if err != nil {
+				http.Error(w, "invalid dseq", http.StatusBadRequest)
+				return
+			}
+			gseq64, err := strconv.ParseUint(vars["gseq"], 10, 32)
+			if err != nil || gseq64 > ^uint64(0)>>32 {
+				http.Error(w, "invalid gseq", http.StatusBadRequest)
+				return
+			}
+			oseq64, err := strconv.ParseUint(vars["oseq"], 10, 32)
+			if err != nil || oseq64 > ^uint64(0)>>32 {
+				http.Error(w, "invalid oseq", http.StatusBadRequest)
+				return
+			}
 
 			orderID := mtypes.OrderID{
 				Owner: owner,
 				DSeq:  dseq,
-				GSeq:  uint32(gseq),
-				OSeq:  uint32(oseq),
+				GSeq:  uint32(gseq64),
+				OSeq:  uint32(oseq64),
 			}
 
-			// Get reserved ports for this order during bidding phase (use case layer)
-			ports := pclient.ClusterService().PortManager().PortsForOrder(orderID)
+			pm := pclient.ClusterService().PortManager()
+			if pm == nil {
+				http.Error(w, "port manager unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			// Get reserved ports for this order during bidding phase
+			ports := pm.PortsForOrder(orderID)
 
 			writeJSON(log, w, struct {
 				ProposedPorts []int32 `json:"proposed_ports"`

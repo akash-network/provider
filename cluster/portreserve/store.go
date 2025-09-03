@@ -91,7 +91,7 @@ func makeLeaseKey(id mtypes.LeaseID) leaseKey {
 	return leaseKey{Owner: id.Owner, DSeq: id.DSeq, GSeq: id.GSeq, OSeq: id.OSeq, Provider: id.Provider}
 }
 
-func (s *Store) saveToFile() {
+func (s *Store) saveToFile() error {
 	store := &persistentStore{
 		ByOrder: make(map[string]*reservation),
 		Updated: time.Now(),
@@ -105,16 +105,56 @@ func (s *Store) saveToFile() {
 
 	data, err := json.Marshal(store)
 	if err != nil {
-		return
+		return fmt.Errorf("failed to marshal port store data: %w", err)
 	}
 
 	// Ensure directory exists
 	dir := filepath.Dir(s.storageFile)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return
+		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 
-	os.WriteFile(s.storageFile, data, 0644)
+	// Atomic write: write to temp file first, then rename
+	tempFile, err := os.CreateTemp(dir, "akash-provider-ports-*.tmp")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tempPath := tempFile.Name()
+
+	// Set restrictive permissions (readable/writable only by owner)
+	if err := tempFile.Chmod(0600); err != nil {
+		tempFile.Close()
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to set file permissions: %w", err)
+	}
+
+	// Write data to temp file
+	if _, err := tempFile.Write(data); err != nil {
+		tempFile.Close()
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to write data to temp file: %w", err)
+	}
+
+	// Ensure data is written to disk
+	if err := tempFile.Sync(); err != nil {
+		tempFile.Close()
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to sync temp file: %w", err)
+	}
+
+	// Close temp file
+	if err := tempFile.Close(); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Atomically replace the target file
+	if err := os.Rename(tempPath, s.storageFile); err != nil {
+		os.Remove(tempPath)
+		return fmt.Errorf("failed to rename temp file to target: %w", err)
+	}
+
+	return nil
 }
 
 func (s *Store) loadFromFile() {
@@ -152,13 +192,26 @@ func (s *Store) loadFromFile() {
 }
 
 func (s *Store) inUseLocked(p int32) bool {
+	now := time.Now()
+
+	// Check ports in order reservations (bidding phase)
 	for _, r := range s.byOrder {
 		for _, v := range r.Ports {
-			if v == p && time.Now().Before(r.Expires) {
+			if v == p && now.Before(r.Expires) {
 				return true
 			}
 		}
 	}
+
+	// Check ports in lease reservations (deployment phase)
+	for _, r := range s.byLease {
+		for _, v := range r.Ports {
+			if v == p && now.Before(r.Expires) {
+				return true
+			}
+		}
+	}
+
 	return false
 }
 
@@ -195,7 +248,10 @@ func (s *Store) ReserveForOrder(id mtypes.OrderID, count int, ttl time.Duration)
 	s.byOrder[ok] = res
 
 	// Save to file for cross-process access
-	s.saveToFile()
+	if err := s.saveToFile(); err != nil {
+		// Log error but don't fail the operation - ports are still reserved in memory
+		fmt.Printf("Warning: failed to persist port reservation to file: %v\n", err)
+	}
 
 	return append([]int32(nil), ports...)
 }
@@ -270,7 +326,10 @@ func (s *Store) ReleaseOrder(orderID mtypes.OrderID) {
 
 	ok := makeOrderKey(orderID)
 	delete(s.byOrder, ok)
-	s.saveToFile() // Persist the change
+	if err := s.saveToFile(); err != nil {
+		// Log error but don't fail the operation - order is still released in memory
+		fmt.Printf("Warning: failed to persist order release to file: %v\n", err)
+	}
 }
 
 // ReleaseLease removes a lease reservation (lease closed).
@@ -309,8 +368,19 @@ func (s *Store) CleanupExpired() int {
 
 	// Save changes if any orders were cleaned
 	if cleaned > 0 {
-		s.saveToFile()
+		if err := s.saveToFile(); err != nil {
+			// Log error but don't fail the cleanup - expired items are still removed from memory
+			fmt.Printf("Warning: failed to persist cleanup to file: %v\n", err)
+		}
 	}
 
 	return cleaned
+}
+
+// SetPortRange sets the port allocation range (for testing)
+func (s *Store) SetPortRange(start, end int32) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.defaultStart = start
+	s.defaultEnd = end
 }

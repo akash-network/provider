@@ -32,6 +32,7 @@ import (
 	metricsutils "github.com/akash-network/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster"
+	clusterctx "github.com/akash-network/provider/cluster/ctx"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -461,14 +462,19 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	}
 
 	// Get port manager and lease ID from context (passed by deployment manager)
-	portManager, ok := ctx.Value("port-manager").(cluster.PortManager)
+	pmInterface, ok := clusterctx.PortManagerFrom(ctx)
 	if !ok {
-		panic("No PortManager found in context - deployment manager must provide one")
+		return fmt.Errorf("missing PortManager in context - deployment manager must provide one")
 	}
 
-	leaseID, ok := ctx.Value("lease-id").(mtypes.LeaseID)
+	portManager, ok := pmInterface.(cluster.PortManager)
 	if !ok {
-		panic("No lease ID found in context - deployment manager must provide one")
+		return fmt.Errorf("invalid PortManager type in context")
+	}
+
+	leaseID, ok := clusterctx.LeaseIDFrom(ctx)
+	if !ok {
+		return fmt.Errorf("missing lease ID in context - deployment manager must provide one")
 	}
 
 	applies.ns = builder.BuildNS(settings, cdeployment)
@@ -509,8 +515,15 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			continue
 		}
 
-		svc.localService = builder.BuildService(workload, false, nil)
-		svc.globalService = builder.BuildService(workload, true, &leasePortAllocator{portManager, leaseID})
+		svc.localService, err = builder.BuildService(workload, false, nil)
+		if err != nil {
+			return fmt.Errorf("failed to build local service: %w", err)
+		}
+
+		svc.globalService, err = builder.BuildService(workload, true, &leasePortAllocator{portManager, leaseID})
+		if err != nil {
+			return fmt.Errorf("failed to build global service: %w", err)
+		}
 	}
 
 	po.nns, po.uns, po.ons, err = applyNS(ctx, c.kc, applies.ns)

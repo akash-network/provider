@@ -20,7 +20,6 @@ import (
 	"github.com/akash-network/node/pubsub"
 	"github.com/akash-network/node/testutil"
 
-	"github.com/akash-network/provider/cluster/mocks"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -100,8 +99,6 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 
 	deployments := make([]ctypes.IDeployment, 0)
 
-	clusterClient := &mocks.Client{}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 
@@ -117,7 +114,7 @@ func TestInventory_ClusterDeploymentNotDeployed(t *testing.T) {
 		config,
 		myLog,
 		subscriber,
-		clusterClient,
+		nil,
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
@@ -192,8 +189,6 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 
 	deployments[0] = deployment
 
-	clusterClient := &mocks.Client{}
-
 	// clusterInv := newInventory("nodeA")
 	//
 	// inventoryCalled := make(chan int, 1)
@@ -215,7 +210,7 @@ func TestInventory_ClusterDeploymentDeployed(t *testing.T) {
 		config,
 		myLog,
 		subscriber,
-		clusterClient,
+		nil,
 		waiter.NewNullWaiter(), // Do not need to wait in test
 		deployments)
 	require.NoError(t, err)
@@ -280,7 +275,7 @@ type inventoryScaffold struct {
 	donech   chan struct{}
 	// inventoryCalled chan struct{}
 	bus           pubsub.Bus
-	clusterClient *mocks.Client
+	clusterClient Client
 }
 
 func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
@@ -333,9 +328,7 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 		Resources: deploymentRequirements,
 	}
 
-	cclient := &mocks.Client{}
-
-	scaffold.clusterClient = cclient
+	scaffold.clusterClient = nil
 
 	return scaffold
 }

@@ -477,15 +477,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
-	// Reserve NodePorts for RANDOM_PORT endpoints (PoC)
-	randomPortCount := reservationCountEndpoints(reservation)
-
-	if randomPortCount > 0 {
-		// Use centralized port manager for order operations
-		is.portManager.ReserveForOrder(req.order, int(randomPortCount), portreserve.DefaultReservationTTL)
-		is.log.Info("reserved NodePorts for random port endpoints", "order", req.order, "count", randomPortCount)
-	}
-
+	// First, check if we have sufficient capacity before reserving any resources
 	err := state.inventory.Adjust(reservation)
 	if err != nil {
 		is.log.Info("insufficient capacity for reservation", "order", req.order)
@@ -494,7 +486,26 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		return
 	}
 
-	// Add the reservation to the list
+	// Only reserve NodePorts after successful capacity check
+	randomPortCount := reservationCountEndpoints(reservation)
+	var portsReserved bool
+
+	if randomPortCount > 0 {
+		// Use centralized port manager for order operations
+		is.portManager.ReserveForOrder(req.order, int(randomPortCount), portreserve.DefaultReservationTTL)
+		is.log.Info("reserved NodePorts for random port endpoints", "order", req.order, "count", randomPortCount)
+		portsReserved = true
+	}
+
+	// Add the reservation to the list - if this fails, we need to rollback port reservation
+	defer func() {
+		if portsReserved && err != nil {
+			// Rollback: release the reserved ports on any error
+			is.portManager.ReleaseOrder(req.order)
+			is.log.Info("rolled back NodePort reservation due to error", "order", req.order, "error", err)
+		}
+	}()
+
 	state.reservations = append(state.reservations, reservation)
 	req.ch <- inventoryResponse{value: reservation}
 	inventoryRequestsCounter.WithLabelValues("reserve", "create").Inc()

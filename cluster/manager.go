@@ -18,6 +18,7 @@ import (
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/pubsub"
 
+	clusterctx "github.com/akash-network/provider/cluster/ctx"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -386,8 +387,8 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	deployCtx := fromctx.ApplyToContext(context.Background(), dm.config.ClusterSettings)
 
 	// Get PortManager and pass it through context for service building
-	deployCtx = context.WithValue(deployCtx, "port-manager", dm.portManager)
-	deployCtx = context.WithValue(deployCtx, "lease-id", dm.deployment.LeaseID())
+	deployCtx = clusterctx.WithPortManager(deployCtx, dm.portManager)
+	deployCtx = clusterctx.WithLeaseID(deployCtx, dm.deployment.LeaseID())
 
 	err = dm.client.Deploy(deployCtx, dm.deployment)
 	label := "success"

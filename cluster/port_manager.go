@@ -88,9 +88,8 @@ func (pm *portManager) AllocatePorts(leaseID mtypes.LeaseID, serviceName string,
 	if !exists {
 		pm.log.Info("AllocatePorts: lease state not found, attempting to load from store", "leaseID", leaseID)
 		// Try to load lease state from store (for existing leases that weren't promoted)
-		pm.mu.Unlock()
-		pm.ensureLeaseState(leaseID)
-		pm.mu.Lock()
+		// Call the locked version since we already hold pm.mu
+		pm.ensureLeaseStateLocked(leaseID)
 
 		state, exists = pm.leaseState[leaseKey]
 		if !exists {
@@ -115,12 +114,16 @@ func (pm *portManager) AllocatePorts(leaseID mtypes.LeaseID, serviceName string,
 	return result
 }
 
-// ensureLeaseState loads ports for a lease if not already cached
+// ensureLeaseState loads ports for a lease if not already cached (acquires lock)
 func (pm *portManager) ensureLeaseState(leaseID mtypes.LeaseID) {
-	leaseKey := leaseID.String()
-
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
+	pm.ensureLeaseStateLocked(leaseID)
+}
+
+// ensureLeaseStateLocked loads ports for a lease if not already cached (assumes pm.mu is held)
+func (pm *portManager) ensureLeaseStateLocked(leaseID mtypes.LeaseID) {
+	leaseKey := leaseID.String()
 
 	if _, exists := pm.leaseState[leaseKey]; exists {
 		return // Already loaded
@@ -128,12 +131,18 @@ func (pm *portManager) ensureLeaseState(leaseID mtypes.LeaseID) {
 
 	// Load all ports for this lease from store
 	var ports []int32
-	for {
+	maxIterations := 1000 // Defensive limit to prevent infinite loops
+	for i := 0; i < maxIterations; i++ {
 		port := pm.store.NextForLease(leaseID)
 		if port == 0 {
 			break
 		}
 		ports = append(ports, port)
+	}
+
+	if len(ports) == maxIterations {
+		pm.log.Error("Hit maximum iteration limit while loading lease ports - possible store issue",
+			"leaseID", leaseID, "maxIterations", maxIterations)
 	}
 
 	pm.leaseState[leaseKey] = &leasePortState{
