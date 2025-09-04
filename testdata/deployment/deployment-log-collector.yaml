@@ -1,0 +1,41 @@
+---
+version: "2.0"
+
+services:
+  log-collector:
+    image: ghcr.io/akash-network/log-collector:1.7.0
+    expose:
+      - port: 8080
+        to:
+          - global: true
+        accept:
+          - log-collector.localhost
+    env:
+      - PROVIDER=DATADOG
+      - POD_LABEL_SELECTOR="akash.network/manifest-service=target"
+      - DD_API_KEY=some-secret-value
+      - DD_SITE=datadoghq.eu
+
+profiles:
+  compute:
+    log-collector:
+      resources:
+        cpu:
+          units: "0.01"
+        memory:
+          size: "128Mi"
+        storage:
+          size: "512Mi"
+
+  placement:
+    global:
+      pricing:
+        log-collector:
+          denom: uakt
+          amount: 30
+
+deployment:
+  log-collector:
+    global:
+      profile: log-collector
+      count: 1

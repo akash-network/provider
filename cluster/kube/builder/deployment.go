@@ -5,6 +5,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"strings"
 )
 
 type Deployment interface {
@@ -37,6 +38,10 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 	maxSurge := intstr.FromInt32(0)
 	maxUnavailable := intstr.FromInt32(1)
 
+	container := b.container()
+	image := container.Image
+	automountServiceAccountToken := b.determineAutomountServiceAccountToken(image)
+
 	kdeployment := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   b.Name(),
@@ -65,8 +70,8 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot: &falseValue,
 					},
-					AutomountServiceAccountToken: &falseValue,
-					Containers:                   []corev1.Container{b.container()},
+					AutomountServiceAccountToken: &automountServiceAccountToken,
+					Containers:                   []corev1.Container{container},
 					ImagePullSecrets:             b.secretsRefs,
 					Volumes:                      b.volumesObjs,
 				},
@@ -79,6 +84,7 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 
 func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:golint,unparam
 	uobj := obj.DeepCopy()
+	container := b.container()
 
 	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
 	uobj.Spec.Selector.MatchLabels = b.selectorLabels()
@@ -86,9 +92,43 @@ func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) 
 	uobj.Spec.Template.Labels = b.labels()
 	uobj.Spec.Template.Spec.Affinity = b.affinity()
 	uobj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
-	uobj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
+	uobj.Spec.Template.Spec.Containers = []corev1.Container{container}
 	uobj.Spec.Template.Spec.ImagePullSecrets = b.secretsRefs
 	uobj.Spec.Template.Spec.Volumes = b.volumesObjs
 
+	image := container.Image
+	automountServiceAccountToken := b.determineAutomountServiceAccountToken(image)
+	uobj.Spec.Template.Spec.AutomountServiceAccountToken = &automountServiceAccountToken
+
 	return uobj, nil
+}
+
+func (b *deployment) determineAutomountServiceAccountToken(image string) bool {
+	automountImages := []string{
+		"ghcr.io/akash-network/log-collector",
+	}
+
+	imageName := extractImageName(image)
+
+	for _, automountImage := range automountImages {
+		if strings.EqualFold(imageName, automountImage) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func extractImageName(image string) string {
+	if idxAt := strings.LastIndex(image, "@"); idxAt != -1 {
+		return image[:idxAt]
+	}
+
+	if idx := strings.LastIndex(image, ":"); idx != -1 {
+		if lastSlash := strings.LastIndex(image, "/"); lastSlash == -1 || idx > lastSlash {
+			return image[:idx]
+		}
+	}
+
+	return image
 }

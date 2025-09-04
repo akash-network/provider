@@ -79,3 +79,70 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, lid.Provider, value)
 }
+
+func TestDeploymentAutomountServiceAccountToken(t *testing.T) {
+	log := testutil.Logger(t)
+	const fakeHostname = "ahostname.dev"
+	settings := Settings{
+		ClusterPublicHostname: fakeHostname,
+	}
+	lid := testutil.LeaseID(t)
+
+	testCases := []struct {
+		name           string
+		sdlFile        string
+		expectedResult bool
+	}{
+		{
+			name:           "should enable automount for log-collector image",
+			sdlFile:        "../../../testdata/deployment/deployment-log-collector.yaml",
+			expectedResult: true,
+		},
+		{
+			name:           "should disable automount for regular image",
+			sdlFile:        "../../../testdata/deployment/deployment.yaml",
+			expectedResult: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			sdl, err := sdl.ReadFile(testCase.sdlFile)
+			require.NoError(t, err)
+
+			manifest, err := sdl.Manifest()
+			require.NoError(t, err)
+
+			schedulerParams := make([]*crd.SchedulerParams, len(manifest.GetGroups()[0].Services))
+
+			clusterManifest, err := crd.NewManifest("lease", lid, &manifest.GetGroups()[0], crd.ClusterSettings{SchedulerParams: schedulerParams})
+			require.NoError(t, err)
+
+			group, schedulerParams, err := clusterManifest.Spec.Group.FromCRD()
+			require.NoError(t, err)
+
+			clusterDeployment := &ClusterDeployment{
+				Lid:     lid,
+				Group:   &group,
+				Sparams: crd.ClusterSettings{SchedulerParams: schedulerParams},
+			}
+
+			workload, err := NewWorkloadBuilder(log, settings, clusterDeployment, clusterManifest, 0)
+			require.NoError(t, err)
+
+			deploymentBuilder := NewDeployment(workload)
+
+			require.NotNil(t, deploymentBuilder)
+
+			deploymentInstance := deploymentBuilder.(*deployment)
+
+			deployment, err := deploymentInstance.Create()
+			require.NoError(t, err)
+			require.NotNil(t, deployment)
+
+			automountValue := deployment.Spec.Template.Spec.AutomountServiceAccountToken
+			require.NotNil(t, automountValue)
+			require.Equal(t, testCase.expectedResult, *automountValue)
+		})
+	}
+}
