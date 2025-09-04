@@ -146,3 +146,64 @@ func TestDeploymentAutomountServiceAccountToken(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractImageName(t *testing.T) {
+	testCases := []struct {
+		name     string
+		image    string
+		expected string
+	}{
+		{
+			name:     "image with tag",
+			image:    "ghcr.io/akash-network/log-collector:v1.2.3",
+			expected: "ghcr.io/akash-network/log-collector",
+		},
+		{
+			name:     "image without tag",
+			image:    "ghcr.io/akash-network/log-collector",
+			expected: "ghcr.io/akash-network/log-collector",
+		},
+		{
+			name:     "image with latest tag",
+			image:    "nginx:latest",
+			expected: "nginx",
+		},
+		{
+			name:     "image with port and tag",
+			image:    "registry.example.com:5000/myapp:v1.0",
+			expected: "registry.example.com:5000/myapp",
+		},
+		{
+			name:     "simple image name",
+			image:    "postgres",
+			expected: "postgres",
+		},
+		{
+			name:     "image with digest",
+			image:    "ghcr.io/akash-network/log-collector@sha256:abc123def456",
+			expected: "ghcr.io/akash-network/log-collector",
+		},
+		{
+			name:     "image with tag and digest",
+			image:    "ghcr.io/akash-network/log-collector:v1.2.3@sha256:abc123def456",
+			expected: "ghcr.io/akash-network/log-collector:v1.2.3",
+		},
+		{
+			name:     "registry with port",
+			image:    "registry.example.com:5000/myapp:latest",
+			expected: "registry.example.com:5000/myapp",
+		},
+		{
+			name:     "registry with port no tag",
+			image:    "registry.example.com:5000/myapp",
+			expected: "registry.example.com:5000/myapp",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := extractImageName(tc.image)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
