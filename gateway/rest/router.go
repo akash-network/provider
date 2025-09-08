@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +15,6 @@ import (
 	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
@@ -732,7 +732,7 @@ func wsSetupPongHandler(ws *websocket.Conn, cancel func()) error {
 			}
 
 			if mtype == websocket.CloseMessage {
-				err = errors.Errorf("disconnect")
+				err = fmt.Errorf("disconnect")
 			}
 		}
 	}()

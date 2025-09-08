@@ -19,7 +19,6 @@ package rest
 //
 // 	"github.com/golang-jwt/jwt/v5"
 // 	"github.com/gorilla/websocket"
-// 	"github.com/pkg/errors"
 // 	"k8s.io/client-go/tools/remotecommand"
 //
 // 	sdk "github.com/cosmos/cosmos-sdk/types"

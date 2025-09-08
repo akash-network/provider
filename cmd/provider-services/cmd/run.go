@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,16 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"cosmossdk.io/log"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	kruntime "k8s.io/apimachinery/pkg/util/runtime"
+
+	"cosmossdk.io/log"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"k8s.io/client-go/kubernetes"
 	"pkg.akt.dev/go/cli"
@@ -124,7 +125,7 @@ const (
 )
 
 var (
-	errInvalidConfig = errors.New("Invalid configuration")
+	errInvalidConfig = errors.New("invalid configuration")
 )
 
 func init() {
@@ -147,19 +148,19 @@ func RunCmd() *cobra.Command {
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
 
 			if leaseFundsMonInterval < time.Minute || leaseFundsMonInterval > 24*time.Hour {
-				return errors.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
+				return fmt.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
-				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
-				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorRetryPeriod, 4*time.Second) // nolint: err113
+				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorRetryPeriod, 4*time.Second) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorHealthcheckPeriod) < 4*time.Second {
-				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
+				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
 			}
 
 			pconfigBackend := viper.GetString(FlagPersistentConfigBackend)

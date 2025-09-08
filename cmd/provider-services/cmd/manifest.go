@@ -3,15 +3,15 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
-	"pkg.akt.dev/go/cli"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	"pkg.akt.dev/go/cli"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 	sdltypes "pkg.akt.dev/go/sdl"

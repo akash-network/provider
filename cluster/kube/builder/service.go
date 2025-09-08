@@ -1,9 +1,9 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -125,7 +125,7 @@ func (b *service) Any() bool {
 	return false
 }
 
-var errUnsupportedProtocol = errors.New("Unsupported protocol for service")
+var errUnsupportedProtocol = errors.New("unsupported protocol for service")
 var errInvalidServiceBuilder = errors.New("service builder invalid")
 
 func (b *service) ports() ([]corev1.ServicePort, error) {

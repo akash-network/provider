@@ -1,12 +1,13 @@
 package v2beta2
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
+
 	mani "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"

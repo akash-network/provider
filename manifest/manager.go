@@ -4,12 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/pkg/errors"
-	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"cosmossdk.io/log"
 
@@ -17,6 +16,7 @@ import (
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	"pkg.akt.dev/go/util/pubsub"
 	"pkg.akt.dev/go/util/runner"
 

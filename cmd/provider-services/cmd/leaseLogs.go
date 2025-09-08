@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
@@ -66,7 +65,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	}
 
 	if outputFormat != outputText && outputFormat != outputJSON {
-		return errors.Errorf("invalid output format %s. expected text|json", outputFormat)
+		return fmt.Errorf("invalid output format %s. expected text|json", outputFormat)
 	}
 
 	follow, err := cmd.Flags().GetBool(flagFollow)
@@ -80,7 +79,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	}
 
 	if tailLines < -1 {
-		return errors.Errorf("tail flag supplied with invalid value. must be >= -1")
+		return fmt.Errorf("tail flag supplied with invalid value. must be >= -1")
 	}
 
 	type result struct {
