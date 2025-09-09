@@ -436,7 +436,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	// Configure HTTP transport with connection pooling to prevent ephemeral port exhaustion
 	// This addresses the issue where thousands of concurrent RPC calls exhaust available ports
-	cctx = configureHTTPTransportForConnectionPooling(cctx)
+	cctx, err = configureHTTPTransportForConnectionPooling(cctx, rpcQueryTimeout)
+	if err != nil {
+		return err
+	}
 
 	opts, err := cltypes.ClientOptionsFromFlags(cmd.Flags())
 	if err != nil {

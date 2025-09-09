@@ -3,6 +3,8 @@ package cmd
 import (
 	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client"
@@ -13,7 +15,7 @@ import (
 // configureHTTPTransportForConnectionPooling configures the Cosmos SDK client context
 // to use connection pooling to prevent ephemeral port exhaustion when making many
 // concurrent RPC calls to the blockchain node.
-func configureHTTPTransportForConnectionPooling(cctx client.Context) client.Context {
+func configureHTTPTransportForConnectionPooling(cctx client.Context, rpcTimeout time.Duration) (client.Context, error) {
 	// Create a custom HTTP transport with connection pooling
 	transport := &http.Transport{
 		// Connection pooling settings
@@ -42,28 +44,44 @@ func configureHTTPTransportForConnectionPooling(cctx client.Context) client.Cont
 	}
 
 	// Create HTTP client with the pooled transport
+	// Use the provided RPC timeout, with a reasonable default if not specified
+	clientTimeout := rpcTimeout
+	if clientTimeout <= 0 {
+		clientTimeout = 60 * time.Second
+	}
+	
 	httpClient := &http.Client{
 		Transport: transport,
-		Timeout:   60 * time.Second, // Overall request timeout
+		Timeout:   clientTimeout, // Use configured RPC timeout
 	}
 
-	// If the client context already has an RPC client, replace it with one that uses our pooled transport
-	if cctx.Client != nil {
-		nodeURI := cctx.NodeURI
-		if nodeURI != "" {
-			// Create new RPC client with pooled HTTP transport
-			rpcClient, err := rpchttp.NewWithClient(nodeURI, "/websocket", httpClient)
-			if err == nil {
-				cctx = cctx.WithClient(rpcClient)
+	// If a NodeURI is present, build an RPC client that uses the pooled transport
+	if nodeURI := strings.TrimSpace(cctx.NodeURI); nodeURI != "" {
+		// Convert tcp:// → http:// and tcp+tls:// → https:// so rpchttp.NewWithClient accepts it
+		if u, err := url.Parse(nodeURI); err == nil {
+			switch u.Scheme {
+			case "tcp":
+				u.Scheme = "http"
+				nodeURI = u.String()
+			case "tcp+tls":
+				u.Scheme = "https"
+				nodeURI = u.String()
 			}
 		}
+		
+		// Create new RPC client with pooled HTTP transport
+		rpcClient, err := rpchttp.NewWithClient(nodeURI, "/websocket", httpClient)
+		if err != nil {
+			return cctx, err
+		}
+		cctx = cctx.WithClient(rpcClient)
 	}
 
-	return cctx
+	return cctx, nil
 }
 
 // createPooledRPCClient creates an RPC client with connection pooling
-func createPooledRPCClient(nodeURI string) (rpcclient.Client, error) {
+func createPooledRPCClient(nodeURI string, timeout time.Duration) (rpcclient.Client, error) {
 	// Create the same pooled transport as above
 	transport := &http.Transport{
 		MaxIdleConns:        100,
@@ -83,9 +101,27 @@ func createPooledRPCClient(nodeURI string) (rpcclient.Client, error) {
 		ForceAttemptHTTP2:     false,
 	}
 
+	// Use the provided timeout, with a reasonable default if not specified
+	clientTimeout := timeout
+	if clientTimeout <= 0 {
+		clientTimeout = 60 * time.Second
+	}
+
 	httpClient := &http.Client{
 		Transport: transport,
-		Timeout:   60 * time.Second,
+		Timeout:   clientTimeout,
+	}
+
+	// Normalize nodeURI scheme
+	if u, err := url.Parse(nodeURI); err == nil {
+		switch u.Scheme {
+		case "tcp":
+			u.Scheme = "http"
+			nodeURI = u.String()
+		case "tcp+tls":
+			u.Scheme = "https"
+			nodeURI = u.String()
+		}
 	}
 
 	return rpchttp.NewWithClient(nodeURI, "/websocket", httpClient)
