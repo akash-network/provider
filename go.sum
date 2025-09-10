@@ -1429,10 +1429,10 @@ github.com/ajstarks/svgo v0.0.0-20180226025133-644b8db467af/go.mod h1:K08gAheRH3
 github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b/go.mod h1:1KcenG0jGWcpt8ov532z81sp/kMMUG485J2InIOyADM=
 github.com/akash-network/akash-api v0.0.82 h1:/Qkwhp1hm6UAzWgTBQdghrbSVArjq9hGzeOcycgCVqI=
 github.com/akash-network/akash-api v0.0.82/go.mod h1:Y9Bq4S3c/MMjvWj/3KuEYmDfv3leo9OeGGxo7xL0pVc=
-github.com/akash-network/cometbft v0.34.27-akash.3 h1:ObmkKrMybIuRLPcwPwUMJ8Pllsr+Gsve443mkJsonMA=
-github.com/akash-network/cometbft v0.34.27-akash.3/go.mod h1:BcCbhKv7ieM0KEddnYXvQZR+pZykTKReJJYf7YC7qhw=
-github.com/akash-network/cosmos-sdk v0.45.16-akash.3 h1:QiHOQ1ACzCvAEXRlzGNQhp9quWLOowE104D0uESGrEk=
-github.com/akash-network/cosmos-sdk v0.45.16-akash.3/go.mod h1:NTnk/GuQdFyfk/iGFxDAgQH9fwcbRW/hREap6qaPg48=
+github.com/akash-network/cometbft v0.34.27-akash.4 h1:TYsQiSq6D1JsbA5YHdmLPM2oAHtFH0PF8+9/0ubp1U8=
+github.com/akash-network/cometbft v0.34.27-akash.4/go.mod h1:BcCbhKv7ieM0KEddnYXvQZR+pZykTKReJJYf7YC7qhw=
+github.com/akash-network/cosmos-sdk v0.45.16-akash.6 h1:P+rgR+nzfcTtcNW7UgF0c72Viky9j0e1c9F/5Ac90fo=
+github.com/akash-network/cosmos-sdk v0.45.16-akash.6/go.mod h1:W3yB30N27EE+hFVxm3Y0k/S0LjZekPrjAa2TyzZ3Ypw=
 github.com/akash-network/ledger-go v0.14.3 h1:LCEFkTfgGA2xFMN2CtiKvXKE7dh0QSM77PJHCpSkaAo=
 github.com/akash-network/ledger-go v0.14.3/go.mod h1:NfsjfFvno9Kaq6mfpsKz4sqjnAVVEsVsnBJfKB4ueAs=
 github.com/akash-network/ledger-go/cosmos v0.14.4 h1:h3WiXmoKKs9wkj1LHcJ12cLjXXg6nG1fp+UQ5+wu/+o=

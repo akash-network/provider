@@ -66,7 +66,7 @@ replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
-	github.com/cosmos/cosmos-sdk => github.com/akash-network/cosmos-sdk v0.45.16-akash.3
+	github.com/cosmos/cosmos-sdk => github.com/akash-network/cosmos-sdk v0.45.16-akash.6
 
 	github.com/cosmos/ledger-cosmos-go => github.com/akash-network/ledger-go/cosmos v0.14.4
 	// Fix upstream GHSA-h395-qcrw-5vmq vulnerability.
@@ -74,7 +74,7 @@ replace (
 	github.com/gin-gonic/gin => github.com/gin-gonic/gin v1.8.1
 
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
-	github.com/tendermint/tendermint => github.com/akash-network/cometbft v0.34.27-akash.3
+	github.com/tendermint/tendermint => github.com/akash-network/cometbft v0.34.27-akash.4
 
 	github.com/zondax/hid => github.com/troian/hid v0.13.2
 
