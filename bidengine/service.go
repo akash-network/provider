@@ -22,6 +22,7 @@ import (
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/pconfig"
 	ptypes "github.com/akash-network/provider/types"
 )
 
@@ -52,6 +53,28 @@ type Service interface {
 	Done() <-chan struct{}
 }
 
+type service struct {
+	session session.Session
+	cluster cluster.Cluster
+	cfg     Config
+
+	bus  pubsub.Bus
+	sub  pubsub.Subscriber
+	pcfg pconfig.StorageNextKey
+
+	statusch chan chan<- *apclient.BidEngineStatus
+	orders   map[string]*order
+	drainch  chan *order
+	ordersch chan []mtypes.OrderID
+
+	group  *errgroup.Group
+	cancel context.CancelFunc
+	lc     lifecycle.Lifecycle
+	pass   *providerAttrSignatureService
+
+	waiter waiter.OperatorWaiter
+}
+
 // NewService creates new service instance and returns error in case of failure
 func NewService(
 	pctx context.Context,
@@ -74,6 +97,11 @@ func NewService(
 		return nil, err
 	}
 
+	pcfg, err := fromctx.PersistentConfigFromCtx(pctx)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(pctx)
 	group, _ := errgroup.WithContext(ctx)
 
@@ -82,6 +110,7 @@ func NewService(
 		cluster:  cluster,
 		bus:      bus,
 		sub:      sub,
+		pcfg:     pcfg,
 		statusch: make(chan chan<- *apclient.BidEngineStatus),
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
@@ -102,27 +131,6 @@ func NewService(
 	})
 
 	return s, nil
-}
-
-type service struct {
-	session session.Session
-	cluster cluster.Cluster
-	cfg     Config
-
-	bus pubsub.Bus
-	sub pubsub.Subscriber
-
-	statusch chan chan<- *apclient.BidEngineStatus
-	orders   map[string]*order
-	drainch  chan *order
-	ordersch chan []mtypes.OrderID
-
-	group  *errgroup.Group
-	cancel context.CancelFunc
-	lc     lifecycle.Lifecycle
-	pass   *providerAttrSignatureService
-
-	waiter waiter.OperatorWaiter
 }
 
 func (s *service) Close() error {
@@ -169,9 +177,13 @@ func (s *service) updateOrderManagerGauge() {
 }
 
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	var nextKey []byte
+	nextKey, _ := s.pcfg.GetOrdersNextKey(ctx)
 
 	limit := cap(s.ordersch)
+
+	defer func() {
+		_ = s.pcfg.SetOrdersNextKey(ctx, nextKey)
+	}()
 
 loop:
 	for {
