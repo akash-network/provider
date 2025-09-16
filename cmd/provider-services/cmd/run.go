@@ -246,8 +246,10 @@ func RunCmd() *cobra.Command {
 			}
 
 			startupch := make(chan struct{}, 1)
+			shutdownch := make(chan struct{}, 1)
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyShutdownCh, (chan<- struct{})(shutdownch))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, logger)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
@@ -270,6 +272,10 @@ func RunCmd() *cobra.Command {
 
 			go func() {
 				<-ctx.Done()
+
+				select {
+				case <-shutdownch:
+				}
 
 				_ = pstorage.Close()
 			}()
@@ -412,6 +418,11 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	monitorRetryPeriodJitter := viper.GetDuration(FlagMonitorRetryPeriodJitter)
 	monitorHealthcheckPeriod := viper.GetDuration(FlagMonitorHealthcheckPeriod)
 	monitorHealthcheckPeriodJitter := viper.GetDuration(FlagMonitorHealthcheckPeriodJitter)
+
+	shutdownch := fromctx.MustStartupChFromCtx(ctx)
+	defer func() {
+		close(shutdownch)
+	}()
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
