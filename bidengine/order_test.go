@@ -12,6 +12,7 @@ import (
 
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/pconfig/memory"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -190,7 +191,11 @@ func makeOrderForTest(
 	cfg.Deposit = mtypes.DefaultBidMinDeposit
 	cfg.MaxGroupVolumes = constants.DefaultMaxGroupVolumes
 
+	pstorage, err := memory.NewMemory()
+	require.NoError(t, err)
+
 	ctx := context.Background()
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPersistentConfig, pstorage)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
 	myService, err := NewService(ctx, scaffold.queryClient, mySession, scaffold.cluster, scaffold.testBus, waiter.NewNullWaiter(), cfg)
 	require.NoError(t, err)

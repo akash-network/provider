@@ -85,11 +85,11 @@ type providerAttrSignatureService struct {
 	attr types.Attributes
 }
 
-func newProviderAttrSignatureService(s session.Session, bus pubsub.Bus) (*providerAttrSignatureService, error) {
-	return newProviderAttrSignatureServiceInternal(s, bus, 18*time.Hour)
+func newProviderAttrSignatureService(ctx context.Context, s session.Session, bus pubsub.Bus) (*providerAttrSignatureService, error) {
+	return newProviderAttrSignatureServiceInternal(ctx, s, bus, 18*time.Hour)
 }
 
-func newProviderAttrSignatureServiceInternal(s session.Session, bus pubsub.Bus, ttl time.Duration) (*providerAttrSignatureService, error) {
+func newProviderAttrSignatureServiceInternal(ctx context.Context, s session.Session, bus pubsub.Bus, ttl time.Duration) (*providerAttrSignatureService, error) {
 	subscriber, err := bus.Subscribe()
 	if err != nil {
 		return nil, err
@@ -116,6 +116,7 @@ func newProviderAttrSignatureServiceInternal(s session.Session, bus pubsub.Bus, 
 		ttl: ttl,
 	}
 
+	go retval.lc.WatchContext(ctx)
 	go retval.run()
 
 	return retval, nil
