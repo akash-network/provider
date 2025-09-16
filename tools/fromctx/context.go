@@ -32,6 +32,7 @@ const (
 	CtxKeyErrGroup           = Key("errgroup")
 	CtxKeyLogc               = Key("logc")
 	CtxKeyStartupCh          = Key("startup-ch")
+	CtxKeyShutdownCh         = Key("shutdown-ch")
 	CtxKeyInventoryUnderTest = Key("inventory-under-test")
 	CtxKeyPersistentConfig   = Key("persistent-config")
 	CtxKeyCertIssuer         = Key("cert-issuer")
@@ -104,8 +105,31 @@ func StartupChFromCtx(ctx context.Context) (chan<- struct{}, error) {
 	return res, nil
 }
 
+func ShutdownChFromCtx(ctx context.Context) (chan<- struct{}, error) {
+	val := ctx.Value(CtxKeyShutdownCh)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have shutdown channel set", ErrNotFound)
+	}
+
+	res, valid := val.(chan<- struct{})
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
 func MustStartupChFromCtx(ctx context.Context) chan<- struct{} {
 	val, err := StartupChFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func MustShutdownChFromCtx(ctx context.Context) chan<- struct{} {
+	val, err := ShutdownChFromCtx(ctx)
 	if err != nil {
 		panic(err.Error())
 	}
