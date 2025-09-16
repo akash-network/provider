@@ -15,6 +15,7 @@ import (
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"go.etcd.io/bbolt"
+	berrors "go.etcd.io/bbolt/errors"
 
 	"github.com/akash-network/provider/tools/pconfig"
 )
@@ -33,11 +34,13 @@ var (
 	keyPubKey          = []byte("pubkey")
 	bucketCertificates = []byte("certificates")
 	keyCertificate     = []byte("certificate")
+	bucketProvider     = []byte("provider")
+	bucketBidengine    = []byte("bidengine")
+	keyOrdersNextKey   = []byte("orders-nextkey")
 )
 
 type impl struct {
-	db *bbolt.DB
-	// db     *bolthold.Store
+	db     *bbolt.DB
 	closed chan struct{}
 }
 
@@ -55,7 +58,17 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 	}
 
 	err = db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucket(bucketAccounts)
+		_, err := tx.CreateBucketIfNotExists(bucketAccounts)
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+
+		provider, err := tx.CreateBucketIfNotExists(bucketProvider)
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+
+		_, err = provider.CreateBucketIfNotExists(bucketBidengine)
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
@@ -102,7 +115,7 @@ func (b *impl) AddAccount(_ context.Context, acc sdk.Address, pubkey cryptotypes
 
 		account, err := accounts.CreateBucket(acc.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketExists) {
+			if errors.Is(err, berrors.ErrBucketExists) {
 				return pconfig.ErrAccountExists
 			}
 
@@ -137,7 +150,7 @@ func (b *impl) DelAccount(_ context.Context, acc sdk.Address) error {
 
 		err := accounts.DeleteBucket(acc.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketExists) {
+			if errors.Is(err, berrors.ErrBucketExists) {
 				return pconfig.ErrAccountNotExists
 			}
 
@@ -208,7 +221,7 @@ func (b *impl) AddAccountCertificate(_ context.Context, acc sdk.Address, cert *x
 
 		certBucket, err := certs.CreateBucket(cert.SerialNumber.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketExists) {
+			if errors.Is(err, berrors.ErrBucketExists) {
 				return pconfig.ErrCertificateExists
 			}
 			return err
@@ -262,7 +275,7 @@ func (b *impl) DelAccountCertificate(_ context.Context, acc sdk.Address, serial 
 
 		err := certs.DeleteBucket(serial.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketNotFound) {
+			if errors.Is(err, berrors.ErrBucketNotFound) {
 				return pconfig.ErrCertificateNotExists
 			}
 
@@ -382,4 +395,88 @@ func (b *impl) GetAllCertificates(_ context.Context) ([]*x509.Certificate, error
 	}
 
 	return res, nil
+}
+
+func (b *impl) SetOrdersNextKey(_ context.Context, key []byte) error {
+	err := b.db.Update(func(tx *bbolt.Tx) error {
+		provider := tx.Bucket(bucketProvider)
+		if provider == nil {
+			return ErrUninitialized
+		}
+
+		bidengine := provider.Bucket(bucketBidengine)
+		if bidengine == nil {
+			return ErrUninitialized
+		}
+
+		err := bidengine.Put(keyOrdersNextKey, key)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *impl) DelOrdersNextKey(_ context.Context) error {
+	err := b.db.Update(func(tx *bbolt.Tx) error {
+		provider := tx.Bucket(bucketProvider)
+		if provider == nil {
+			return ErrUninitialized
+		}
+
+		bidengine := provider.Bucket(bucketBidengine)
+		if bidengine == nil {
+			return ErrUninitialized
+		}
+
+		err := bidengine.Delete(keyOrdersNextKey)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *impl) GetOrdersNextKey(_ context.Context) ([]byte, error) {
+	var nextkey []byte
+
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		provider := tx.Bucket(bucketProvider)
+		if provider == nil {
+			return ErrUninitialized
+		}
+
+		bidengine := provider.Bucket(bucketBidengine)
+		if bidengine == nil {
+			return pconfig.ErrNotExists
+		}
+
+		nextkey = bidengine.Get(keyOrdersNextKey)
+
+		return nil
+	})
+
+	if err == nil && len(nextkey) == 0 {
+		err = pconfig.ErrNotExists
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return nextkey, nil
 }

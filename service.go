@@ -177,6 +177,7 @@ func (s *service) ClusterService() cluster.Service {
 
 func (s *service) Close() error {
 	s.lc.Shutdown(nil)
+
 	return s.lc.Error()
 }
 
