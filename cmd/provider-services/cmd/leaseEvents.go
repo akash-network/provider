@@ -53,11 +53,6 @@ func doLeaseEvents(cmd *cobra.Command) error {
 	var leases []mtypes.LeaseID
 	var cl qclient.QueryClient
 
-	cl, err = aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
 	if providerURL != "" {
 		leaseID, err := constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
@@ -66,6 +61,11 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 		leases = []mtypes.LeaseID{leaseID}
 	} else {
+		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return err
+		}
+
 		dseq, err := dseqFromFlags(cmd.Flags())
 		if err != nil {
 			return err
