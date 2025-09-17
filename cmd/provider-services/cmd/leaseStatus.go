@@ -50,11 +50,6 @@ func doLeaseStatus(cmd *cobra.Command) error {
 	var cl qclient.QueryClient
 	var prov sdk.Address
 
-	cl, err = aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
 	var leaseID mtypes.LeaseID
 
 	if providerURL != "" {
@@ -68,6 +63,11 @@ func doLeaseStatus(cmd *cobra.Command) error {
 			return err
 		}
 	} else {
+		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return err
+		}
+
 		prov, err = providerFromFlags(cmd.Flags())
 		if err != nil {
 			return err

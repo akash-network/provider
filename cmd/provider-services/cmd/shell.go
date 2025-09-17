@@ -120,11 +120,6 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	var prov sdk.Address
 	var lID mtypes.LeaseID
 
-	cl, err = aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
 	if providerURL != "" {
 		prov, err = providerFromFlags(cmd.Flags())
 		if err != nil {
@@ -136,6 +131,11 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
+		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return err
+		}
+
 		prov, err = providerFromFlags(cmd.Flags())
 		if err != nil {
 			return err
