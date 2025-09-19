@@ -136,8 +136,6 @@ func (c *client) newReqClient(ctx context.Context) *reqClient {
 	}
 
 	tlsConfig := &tls.Config{
-		// must use Hostname rather than Host field as certificate is issued for host without port
-		ServerName:            cl.host.Hostname(),
 		Certificates:          c.certs,
 		InsecureSkipVerify:    true, // nolint: gosec
 		VerifyPeerCertificate: cl.verifyPeerCertificate,
