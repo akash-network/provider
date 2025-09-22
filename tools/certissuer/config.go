@@ -2,6 +2,7 @@ package certissuer
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	tpubsub "github.com/troian/pubsub"
@@ -18,6 +19,8 @@ type Config struct {
 	StorageDir               string
 	CADirURL                 string
 	Domains                  []string
+	HTTPChallengePort        int
+	TLSChallengePort         int
 	DNSProviders             []string
 	DNSResolvers             []string
 	DNSTimeout               time.Duration
@@ -51,6 +54,14 @@ func (c Config) Validate() error {
 
 	if c.CADirURL == "" {
 		return fmt.Errorf("%w: invalid ca dir url", ErrConfig)
+	}
+
+	if c.HTTPChallengePort < 0 && c.HTTPChallengePort > math.MaxUint16 {
+		return fmt.Errorf("%w: invalid port value \"%d\" for http-01 challenge. allowed range 1..65535", ErrConfig, c.HTTPChallengePort)
+	}
+
+	if c.TLSChallengePort < 0 && c.TLSChallengePort > math.MaxUint16 {
+		return fmt.Errorf("%w: invalid port value \"%d\" for tls-alpn-01 challenge. allowed range 1..65535", ErrConfig, c.HTTPChallengePort)
 	}
 
 	return nil

@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/challenge/http01"
+	"github.com/go-acme/lego/v4/challenge/tlsalpn01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/providers/dns/gcloud"
@@ -109,7 +112,7 @@ func NewLego(ctx context.Context, log log.Logger, cfg Config) (CertIssuer, error
 	retryClient.Logger = nil
 	lcfg.HTTPClient = retryClient.StandardClient()
 
-	providers, err := initProviders(cfg.DNSProviders)
+	dnsProviders, err := initDNSProviders(cfg.DNSProviders)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +162,21 @@ func NewLego(ctx context.Context, log log.Logger, cfg Config) (CertIssuer, error
 		pub:     cfg.Bus,
 	}
 
-	for _, provider := range providers {
+	if cfg.HTTPChallengePort > 0 {
+		srv := http01.NewProviderServer("", strconv.Itoa(cfg.HTTPChallengePort))
+		if err = client.Challenge.SetHTTP01Provider(srv); err != nil {
+			return nil, err
+		}
+	}
+
+	if cfg.TLSChallengePort > 0 {
+		srv := tlsalpn01.NewProviderServer("", strconv.Itoa(cfg.TLSChallengePort))
+		if err = client.Challenge.SetTLSALPN01Provider(srv); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, provider := range dnsProviders {
 		opts := []dns01.ChallengeOption{
 			dns01.CondOption(len(cfg.DNSResolvers) > 0,
 				dns01.AddRecursiveNameservers(dns01.ParseNameservers(cfg.DNSResolvers))),
@@ -325,7 +342,7 @@ func (ci *certIssuer) run() error {
 	}
 }
 
-func initProviders(providers []string) ([]challenge.Provider, error) {
+func initDNSProviders(providers []string) ([]challenge.Provider, error) {
 	res := make([]challenge.Provider, 0, len(providers))
 
 	for _, provider := range providers {

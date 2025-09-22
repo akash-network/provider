@@ -114,6 +114,8 @@ const (
 	FlagCertIssuerHMAC                   = "cert-issuer-hmac"
 	FlagCertIssuerStorageDir             = "cert-issuer-storage-dir"
 	FlagCertIssuerCADirURL               = "cert-issuer-ca-dir-url"
+	FlagCertIssuerHTTPChallengePort      = "cert-issuer-http-challenge-port"
+	FlagCertIssuerTLSChallengePort       = "cert-issuer-tls-challenge-port"
 	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
 	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
 	FlagCertIssuerEmail                  = "cert-issuer-email"
@@ -242,15 +244,17 @@ func RunCmd() *cobra.Command {
 				}
 
 				ciCfg := certissuer.Config{
-					Bus:          bus,
-					Owner:        cctx.FromAddress,
-					KID:          viper.GetString(FlagCertIssuerKID),
-					HMAC:         viper.GetString(FlagCertIssuerHMAC),
-					StorageDir:   storageDir,
-					CADirURL:     viper.GetString(FlagCertIssuerCADirURL),
-					Email:        viper.GetString(FlagCertIssuerEmail),
-					DNSProviders: viper.GetStringSlice(FlagCertIssuerDNSProviders),
-					DNSResolvers: viper.GetStringSlice(FlagCertIssuerDNSResolvers),
+					Bus:               bus,
+					Owner:             cctx.FromAddress,
+					KID:               viper.GetString(FlagCertIssuerKID),
+					HMAC:              viper.GetString(FlagCertIssuerHMAC),
+					StorageDir:        storageDir,
+					CADirURL:          viper.GetString(FlagCertIssuerCADirURL),
+					Email:             viper.GetString(FlagCertIssuerEmail),
+					HTTPChallengePort: viper.GetInt(FlagCertIssuerHTTPChallengePort),
+					TLSChallengePort:  viper.GetInt(FlagCertIssuerTLSChallengePort),
+					DNSProviders:      viper.GetStringSlice(FlagCertIssuerDNSProviders),
+					DNSResolvers:      viper.GetStringSlice(FlagCertIssuerDNSResolvers),
 					Domains: []string{
 						viper.GetString(FlagClusterPublicHostname),
 					},
