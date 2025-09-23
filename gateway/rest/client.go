@@ -136,6 +136,13 @@ func (c *client) newReqClient(ctx context.Context) *reqClient {
 	}
 
 	tlsConfig := &tls.Config{
+		// this is an incredibly dirty hack.
+		// ServerName prefix "mtls." signals to the provider that the client intends to use
+		// mTLS authentication instead of JWT. This is necessary because Go's standard library 
+		// automatically sets ServerName if not explicitly provided, and the provider uses SNI
+		// to determine the authentication method. When the provider sees this prefix, it will
+		// bypass JWT and use certificate-based authentication during TLS handshake.
+		ServerName:            fmt.Sprintf("mtls.%s", cl.host.Hostname()),
 		Certificates:          c.certs,
 		InsecureSkipVerify:    true, // nolint: gosec
 		VerifyPeerCertificate: cl.verifyPeerCertificate,
@@ -146,7 +153,7 @@ func (c *client) newReqClient(ctx context.Context) *reqClient {
 		Transport: &http.Transport{
 			TLSClientConfig: tlsConfig,
 		},
-		// Never  follow redirects
+		// Never follow redirects
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
