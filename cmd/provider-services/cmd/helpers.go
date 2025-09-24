@@ -239,7 +239,7 @@ func validateProviderURLFlags(flags *pflag.FlagSet) error {
 
 	for _, req := range requiredFlags {
 		if !flags.Changed(req.flag) {
-			return errors.Errorf("%s flag is required when using provider-url", req.name)
+			return fmt.Errorf("%s flag is required when using provider-url", req.name)
 		}
 	}
 
