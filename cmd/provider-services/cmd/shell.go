@@ -126,7 +126,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 			return err
 		}
 
-		lID, err = constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
+		lID, err = leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
+	gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 	if err != nil {
 		return err
 	}
