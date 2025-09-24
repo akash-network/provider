@@ -57,7 +57,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	var cl qclient.QueryClient
 
 	if providerURL != "" {
-		leaseID, err := constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
+		leaseID, err := leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
 			return err
 		}
@@ -128,7 +128,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
 
-		gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
+		gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {
@@ -165,7 +165,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	for _, stream := range streams {
 		if stream.error != nil {
-			fmt.Println(stream.error)
+			fmt.Errorf("error getting lease logs: %w", stream.error)
 			continue
 		}
 

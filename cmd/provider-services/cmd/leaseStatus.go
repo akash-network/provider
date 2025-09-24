@@ -58,7 +58,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 			return err
 		}
 
-		leaseID, err = constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
+		leaseID, err = leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
 			return err
 		}
@@ -86,7 +86,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
+	gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 	if err != nil {
 		return err
 	}

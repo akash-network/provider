@@ -15,7 +15,6 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -240,16 +239,16 @@ func validateProviderURLFlags(flags *pflag.FlagSet) error {
 
 	for _, req := range requiredFlags {
 		if !flags.Changed(req.flag) {
-			return pkgerrors.Errorf("%s flag is required when using provider-url", req.name)
+			return errors.Errorf("%s flag is required when using provider-url", req.name)
 		}
 	}
 
 	return nil
 }
 
-// constructLeaseIDFromProviderURL constructs a lease ID from flags when using provider URL
+// leaseIDWhenProviderURLIsProvided constructs a lease ID from flags when using provider URL
 // This bypasses RPC discovery and constructs the lease ID directly from command line flags
-func constructLeaseIDFromProviderURL(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
+func leaseIDWhenProviderURLIsProvided(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
 	// Validate all required flags are present
 	if err := validateProviderURLFlags(flags); err != nil {
 		return mtypes.LeaseID{}, err
@@ -264,11 +263,11 @@ func constructLeaseIDFromProviderURL(flags *pflag.FlagSet, owner string) (mtypes
 	return leaseID, nil
 }
 
-// createProviderClientFromFlags creates an akash provider client with appropriate options
+// providerClientFromFlags creates an akash provider client with appropriate options
 // based on whether a provider URL is specified via flags or not.
 // If provider-url flag is set, it uses WithProviderURL option.
 // Otherwise, it uses WithQueryClient option for blockchain queries.
-func createProviderClientFromFlags(
+func providerClientFromFlags(
 	ctx context.Context,
 	cl aclient.QueryClient,
 	prov sdk.Address,

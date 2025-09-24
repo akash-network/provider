@@ -15,6 +15,7 @@ CERT_HOSTNAME  ?= localhost
 LEASE_SERVICES ?= web
 
 RESOURCE_SERVER_HOST ?= localhost:8445
+AP_PROVIDER_URL      ?= https://localhost:8443
 
 GW_AUTH_TYPE   ?= jwt
 
@@ -300,7 +301,7 @@ provider-url-lease-logs:
 		--oseq      "$(OSEQ)"        \
 		--from      "$(KEY_NAME)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "https://localhost:8443" \
+		--provider-url "$(AP_PROVIDER_URL)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: provider-url-lease-events
@@ -313,7 +314,7 @@ provider-url-lease-events:
 		--oseq      "$(OSEQ)"     \
 		--from      "$(KEY_NAME)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "https://localhost:8443" \
+		--provider-url "$(AP_PROVIDER_URL)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: provider-url-lease-status
@@ -324,7 +325,7 @@ provider-url-lease-status:
 		--oseq      "$(OSEQ)"        \
 		--from      "$(KEY_NAME)"    \
 		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "https://localhost:8443" \
+		--provider-url "$(AP_PROVIDER_URL)" \
 		--auth-type=$(GW_AUTH_TYPE)
 
 .PHONY: provider-url-lease-shell
@@ -335,7 +336,7 @@ provider-url-lease-shell:
 		--oseq      "$(OSEQ)"        \
 		--from      "$(KEY_NAME)"    \
 		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "https://localhost:8443" \
+		--provider-url "$(AP_PROVIDER_URL)" \
 		--auth-type=$(GW_AUTH_TYPE) \
 		${LEASE_SERVICES} \
 		date

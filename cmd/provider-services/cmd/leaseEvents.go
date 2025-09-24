@@ -54,7 +54,7 @@ func doLeaseEvents(cmd *cobra.Command) error {
 	var cl qclient.QueryClient
 
 	if providerURL != "" {
-		leaseID, err := constructLeaseIDFromProviderURL(cmd.Flags(), cctx.GetFromAddress().String())
+		leaseID, err := leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
 		if err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func doLeaseEvents(cmd *cobra.Command) error {
 		stream := result{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
 
-		gclient, err := createProviderClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
+		gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {
