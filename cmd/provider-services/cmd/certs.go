@@ -573,31 +573,40 @@ func (c *accountQuerier) accountQuerier() error {
 				if err != nil {
 					c.log.Error("fetching account info", "err", err.Error(), "account", req.acc.String())
 					requests = append(requests, req)
-					continue
 				}
 
-				var acc authtypes.AccountI
-				if err := cctx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
-					c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
-					requests = append(requests, req)
-					continue
-				}
+				if err == nil {
+					var acc authtypes.AccountI
 
-				pubkey = acc.GetPubKey()
+					err = cctx.InterfaceRegistry.UnpackAny(res.Account, &acc)
+					if err != nil {
+						c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
+						requests = append(requests, req)
+					}
 
-				err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
-				if err != nil && !errors.Is(err, pconfig.ErrExists) {
-					c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+					if err == nil {
+						pubkey = acc.GetPubKey()
+
+						err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
+						if err != nil && !errors.Is(err, pconfig.ErrExists) {
+							c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+
+							// reset the error as we have got the pubkey and need to pass it above if it was a user request
+							err = nil
+						}
+					}
 				}
 			}
 
 			if req.resp != nil {
 				req.resp <- accResp{
 					pubkey:   pubkey,
-					userData: nil,
-					err:      nil,
+					userData: req.userData,
+					err:      err,
 				}
 			}
+
+			trySignal()
 		}
 	}
 }
