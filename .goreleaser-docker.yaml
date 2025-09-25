@@ -14,6 +14,7 @@ builds:
     goos:
       - linux
     env:
+      - GOWORK=off
       - CC=aarch64-linux-gnu-gcc
       - CXX=aarch64-linux-gnu-g++
     flags:
@@ -33,6 +34,7 @@ builds:
     goos:
       - linux
     env:
+      - GOWORK=off
       - CC=x86_64-linux-gnu-gcc
       - CXX=x86_64-linux-gnu-g++
     flags:

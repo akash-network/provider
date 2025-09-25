@@ -31,6 +31,10 @@ profiles:
       resources:
         cpu:
           units: 0.1
+          attributes:
+            arch:
+              - arm64
+              - amd64
         memory:
           size: 16Mi
         storage:
