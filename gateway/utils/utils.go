@@ -139,7 +139,7 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 				return nil, err
 			}
 
-			pstorage, err := fromctx.PersistentConfigReaderFromCtx(ctx)
+			pstorage, err := fromctx.AccountQuerierFromCtx(ctx)
 			if err != nil {
 				return nil, err
 			}
