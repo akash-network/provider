@@ -18,6 +18,7 @@ import (
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/tools/certissuer"
 	"github.com/akash-network/provider/tools/pconfig"
+	"github.com/akash-network/provider/types"
 )
 
 type Key string
@@ -36,6 +37,7 @@ const (
 	CtxKeyInventoryUnderTest = Key("inventory-under-test")
 	CtxKeyPersistentConfig   = Key("persistent-config")
 	CtxKeyCertIssuer         = Key("cert-issuer")
+	CtxKeyAccountQuerier     = Key("account-querier")
 )
 
 var (
@@ -333,6 +335,20 @@ func PersistentConfigFromCtx(ctx context.Context) (pconfig.Storage, error) {
 	}
 
 	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func AccountQuerierFromCtx(ctx context.Context) (types.AccountQuerier, error) {
+	val := ctx.Value(CtxKeyAccountQuerier)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have persistent config set", ErrNotFound)
+	}
+
+	res, valid := val.(types.AccountQuerier)
 	if !valid {
 		return nil, ErrValueInvalidType
 	}
