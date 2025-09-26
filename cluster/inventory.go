@@ -26,6 +26,7 @@ import (
 	sdlutil "github.com/akash-network/node/sdl/util"
 	"github.com/akash-network/node/util/runner"
 
+	"github.com/akash-network/provider/cluster/portreserve"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -99,6 +100,7 @@ type inventoryService struct {
 	lc                     lifecycle.Lifecycle
 	waiter                 waiter.OperatorWaiter
 	availableExternalPorts uint
+	portManager            PortManager // Centralized port allocation management
 
 	clients struct {
 		ip        cip.Client
@@ -136,6 +138,30 @@ func newInventoryService(
 		waiter:                 waiter,
 	}
 
+	// Create centralized port manager with shared store and validated port range
+	store := portreserve.GetSharedStore()
+
+	// Validate port range configuration
+	minPort := int32(30100) // Default minimum
+	maxPort := int32(32767) // Default maximum
+
+	// TODO: Read from config when port range configuration is added
+	// For now, use safe defaults
+
+	if minPort < 1 || minPort > 65535 {
+		return nil, fmt.Errorf("invalid minimum port %d: must be between 1-65535", minPort)
+	}
+	if maxPort < 1 || maxPort > 65535 {
+		return nil, fmt.Errorf("invalid maximum port %d: must be between 1-65535", maxPort)
+	}
+	if minPort > maxPort {
+		return nil, fmt.Errorf("invalid port range: minimum port %d > maximum port %d", minPort, maxPort)
+	}
+
+	// Set validated port range on store
+	store.SetPortRange(minPort, maxPort)
+	is.portManager = NewPortManager(is.log, store)
+
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
 	is.clients.ip = cfromctx.ClientIPFromContext(ctx)
 
@@ -149,6 +175,7 @@ func newInventoryService(
 
 	go is.lc.WatchChannel(ctx.Done())
 	go is.run(ctx, reservations)
+	go is.startPortCleanup(ctx)
 
 	return is, nil
 }
@@ -159,6 +186,33 @@ func (is *inventoryService) done() <-chan struct{} {
 
 func (is *inventoryService) ready() <-chan struct{} {
 	return is.readych
+}
+
+// PortManager returns the centralized port manager instance.
+func (is *inventoryService) PortManager() PortManager {
+	return is.portManager
+}
+
+// startPortCleanup runs periodic cleanup of expired port reservations.
+func (is *inventoryService) startPortCleanup(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute) // Cleanup every minute
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			cleaned := is.portManager.CleanupExpired()
+			if cleaned > 0 {
+				is.log.Info("cleaned up expired port reservations", "count", cleaned)
+			}
+		case <-ctx.Done():
+			is.log.Info("port cleanup stopped")
+			return
+		case <-is.lc.ShuttingDown():
+			is.log.Info("port cleanup stopped due to service shutdown")
+			return
+		}
+	}
 }
 
 func (is *inventoryService) lookup(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
@@ -444,6 +498,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
+	// First, check if we have sufficient capacity before reserving any resources
 	err := state.inventory.Adjust(reservation)
 	if err != nil {
 		is.log.Info("insufficient capacity for reservation", "order", req.order)
@@ -452,7 +507,26 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		return
 	}
 
-	// Add the reservation to the list
+	// Only reserve NodePorts after successful capacity check
+	randomPortCount := reservationCountEndpoints(reservation)
+	var portsReserved bool
+
+	if randomPortCount > 0 {
+		// Use centralized port manager for order operations
+		is.portManager.ReserveForOrder(req.order, int(randomPortCount), portreserve.DefaultReservationTTL)
+		is.log.Info("reserved NodePorts for random port endpoints", "order", req.order, "count", randomPortCount)
+		portsReserved = true
+	}
+
+	// Add the reservation to the list - if this fails, we need to rollback port reservation
+	defer func() {
+		if portsReserved && err != nil {
+			// Rollback: release the reserved ports on any error
+			is.portManager.ReleaseOrder(req.order)
+			is.log.Info("rolled back NodePort reservation due to error", "order", req.order, "error", err)
+		}
+	}()
+
 	state.reservations = append(state.reservations, reservation)
 	req.ch <- inventoryResponse{value: reservation}
 	inventoryRequestsCounter.WithLabelValues("reserve", "create").Inc()

@@ -18,7 +18,9 @@ import (
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	"github.com/akash-network/node/pubsub"
 
+	clusterctx "github.com/akash-network/provider/cluster/ctx"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	clusterutil "github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
@@ -70,6 +72,7 @@ type deploymentManager struct {
 	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
 	messages            []string
+	portManager         PortManager
 }
 
 func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease bool) *deploymentManager {
@@ -94,6 +97,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		serviceShuttingDown: s.lc.ShuttingDown(),
 		isNewLease:          isNewLease,
 		currentHostnames:    make(map[string]struct{}),
+		portManager:         s.PortManager(), // Direct injection, no cross-reference
 	}
 
 	go dm.lc.WatchChannel(s.lc.ShuttingDown())
@@ -381,6 +385,10 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 
 	// Don't use a context tied to the lifecycle, as we don't want to cancel Kubernetes operations
 	deployCtx := fromctx.ApplyToContext(context.Background(), dm.config.ClusterSettings)
+
+	// Get PortManager and pass it through context for service building
+	deployCtx = clusterctx.WithPortManager(deployCtx, dm.portManager)
+	deployCtx = clusterctx.WithLeaseID(deployCtx, dm.deployment.LeaseID())
 
 	err = dm.client.Deploy(deployCtx, dm.deployment)
 	label := "success"
