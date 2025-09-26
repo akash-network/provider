@@ -44,7 +44,7 @@ builds:
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
       - -extldflags "-lc -lrt -lpthread --static"
-  - id: provider-services-linux-debug-arm64
+  - id: provider-services-linux-arm64-debug
     binary: provider-services
     main: ./cmd/provider-services
     goarch:
@@ -64,7 +64,7 @@ builds:
       - -extldflags "-lc -lrt -lpthread --static"
     gcflags:
       - "all=-N -l"
-  - id: provider-services-linux-debug-amd64
+  - id: provider-services-linux-amd64-debug
     binary: provider-services
     main: ./cmd/provider-services
     goarch:
@@ -123,7 +123,7 @@ dockers:
       - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
   - dockerfile: Dockerfile.debug
     ids:
-      - provider-services-linux-debug-amd64
+      - provider-services-linux-amd64-debug
     use: buildx
     goos: linux
     goarch: amd64
@@ -137,10 +137,10 @@ dockers:
       - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
     image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-debug-amd64"
+      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
   - dockerfile: Dockerfile.debug
     ids:
-      - provider-services-linux-debug-arm64
+      - provider-services-linux-arm64-debug
     use: buildx
     goos: linux
     goarch: arm64
@@ -154,4 +154,4 @@ dockers:
       - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
     image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-debug-arm64"
+      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
