@@ -130,10 +130,6 @@ var (
 	errInvalidConfig = errors.New("invalid configuration")
 )
 
-func init() {
-
-}
-
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
 	cmd := &cobra.Command{
