@@ -79,3 +79,131 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, lid.Provider, value)
 }
+
+func TestDeploymentAutomountServiceAccountToken(t *testing.T) {
+	log := testutil.Logger(t)
+	const fakeHostname = "ahostname.dev"
+	settings := Settings{
+		ClusterPublicHostname: fakeHostname,
+	}
+	lid := testutil.LeaseID(t)
+
+	testCases := []struct {
+		name           string
+		sdlFile        string
+		expectedResult bool
+	}{
+		{
+			name:           "should enable automount for log-collector image",
+			sdlFile:        "../../../testdata/deployment/deployment-log-collector.yaml",
+			expectedResult: true,
+		},
+		{
+			name:           "should disable automount for regular image",
+			sdlFile:        "../../../testdata/deployment/deployment.yaml",
+			expectedResult: false,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			sdl, err := sdl.ReadFile(testCase.sdlFile)
+			require.NoError(t, err)
+
+			manifest, err := sdl.Manifest()
+			require.NoError(t, err)
+
+			schedulerParams := make([]*crd.SchedulerParams, len(manifest.GetGroups()[0].Services))
+
+			clusterManifest, err := crd.NewManifest("lease", lid, &manifest.GetGroups()[0], crd.ClusterSettings{SchedulerParams: schedulerParams})
+			require.NoError(t, err)
+
+			group, schedulerParams, err := clusterManifest.Spec.Group.FromCRD()
+			require.NoError(t, err)
+
+			clusterDeployment := &ClusterDeployment{
+				Lid:     lid,
+				Group:   &group,
+				Sparams: crd.ClusterSettings{SchedulerParams: schedulerParams},
+			}
+
+			workload, err := NewWorkloadBuilder(log, settings, clusterDeployment, clusterManifest, 0)
+			require.NoError(t, err)
+
+			deploymentBuilder := NewDeployment(workload)
+
+			require.NotNil(t, deploymentBuilder)
+
+			deploymentInstance := deploymentBuilder.(*deployment)
+
+			deployment, err := deploymentInstance.Create()
+			require.NoError(t, err)
+			require.NotNil(t, deployment)
+
+			automountValue := deployment.Spec.Template.Spec.AutomountServiceAccountToken
+			require.NotNil(t, automountValue)
+			require.Equal(t, testCase.expectedResult, *automountValue)
+		})
+	}
+}
+
+func TestExtractImageName(t *testing.T) {
+	testCases := []struct {
+		name     string
+		image    string
+		expected string
+	}{
+		{
+			name:     "image with tag",
+			image:    "ghcr.io/akash-network/log-collector:v1.2.3",
+			expected: "ghcr.io/akash-network/log-collector",
+		},
+		{
+			name:     "image without tag",
+			image:    "ghcr.io/akash-network/log-collector",
+			expected: "ghcr.io/akash-network/log-collector",
+		},
+		{
+			name:     "image with latest tag",
+			image:    "nginx:latest",
+			expected: "nginx",
+		},
+		{
+			name:     "image with port and tag",
+			image:    "registry.example.com:5000/myapp:v1.0",
+			expected: "registry.example.com:5000/myapp",
+		},
+		{
+			name:     "simple image name",
+			image:    "postgres",
+			expected: "postgres",
+		},
+		{
+			name:     "image with digest",
+			image:    "ghcr.io/akash-network/log-collector@sha256:abc123def456",
+			expected: "ghcr.io/akash-network/log-collector",
+		},
+		{
+			name:     "image with tag and digest",
+			image:    "ghcr.io/akash-network/log-collector:v1.2.3@sha256:abc123def456",
+			expected: "ghcr.io/akash-network/log-collector:v1.2.3",
+		},
+		{
+			name:     "registry with port",
+			image:    "registry.example.com:5000/myapp:latest",
+			expected: "registry.example.com:5000/myapp",
+		},
+		{
+			name:     "registry with port no tag",
+			image:    "registry.example.com:5000/myapp",
+			expected: "registry.example.com:5000/myapp",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := extractImageName(tc.image)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
