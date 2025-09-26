@@ -1,4 +1,4 @@
-FROM golang:1.24.7-bookworm
+FROM ubuntu:noble
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
 COPY provider-services /usr/bin/
