@@ -24,15 +24,16 @@ import (
 )
 
 const (
-	FlagService  = "service"
-	FlagProvider = "provider"
-	FlagDSeq     = "dseq"
-	FlagGSeq     = "gseq"
-	FlagOSeq     = "oseq"
-	flagOutput   = "output"
-	flagFollow   = "follow"
-	flagTail     = "tail"
-	flagAuthType = "auth-type"
+	FlagService     = "service"
+	FlagProvider    = "provider"
+	FlagProviderURL = "provider-url"
+	FlagDSeq        = "dseq"
+	FlagGSeq        = "gseq"
+	FlagOSeq        = "oseq"
+	flagOutput      = "output"
+	flagFollow      = "follow"
+	flagTail        = "tail"
+	flagAuthType    = "auth-type"
 )
 
 const (
@@ -222,4 +223,67 @@ func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.Flag
 	}
 
 	return opts, nil
+}
+
+// validateProviderURLFlags validates that all required flags are provided when using provider-url
+func validateProviderURLFlags(flags *pflag.FlagSet) error {
+	requiredFlags := []struct {
+		flag string
+		name string
+	}{
+		{FlagProvider, "provider"},
+		{FlagDSeq, "dseq"},
+		{FlagGSeq, "gseq"},
+		{FlagOSeq, "oseq"},
+	}
+
+	for _, req := range requiredFlags {
+		if !flags.Changed(req.flag) {
+			return fmt.Errorf("%s flag is required when using provider-url", req.name)
+		}
+	}
+
+	return nil
+}
+
+// leaseIDWhenProviderURLIsProvided constructs a lease ID from flags when using provider URL
+// This bypasses RPC discovery and constructs the lease ID directly from command line flags
+func leaseIDWhenProviderURLIsProvided(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
+	// Validate all required flags are present
+	if err := validateProviderURLFlags(flags); err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	// Construct lease ID from flags
+	leaseID, err := leaseIDFromFlags(flags, owner)
+	if err != nil {
+		return mtypes.LeaseID{}, err
+	}
+
+	return leaseID, nil
+}
+
+// providerClientFromFlags creates an akash provider client with appropriate options
+// based on whether a provider URL is specified via flags or not.
+// If provider-url flag is set, it uses WithProviderURL option.
+// Otherwise, it uses WithQueryClient option for blockchain queries.
+func providerClientFromFlags(
+	ctx context.Context,
+	cl aclient.QueryClient,
+	prov sdk.Address,
+	opts []apclient.ClientOption,
+	flags *pflag.FlagSet,
+) (apclient.Client, error) {
+	providerURL, err := flags.GetString(FlagProviderURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if providerURL != "" {
+		opts = append(opts, apclient.WithProviderURL(providerURL))
+	} else {
+		opts = append(opts, apclient.WithQueryClient(cl))
+	}
+
+	return apclient.NewClient(ctx, prov, opts...)
 }

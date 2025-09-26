@@ -10,19 +10,22 @@ import (
 	"sync"
 	"syscall"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
+	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -32,9 +35,7 @@ const (
 	FlagReplicaIndex = "replica-index"
 )
 
-var (
-	errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
-)
+var errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
 
 func LeaseShellCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -62,6 +63,8 @@ func LeaseShellCmd() *cobra.Command {
 	if err := viper.BindPFlag(FlagReplicaIndex, cmd.Flags().Lookup(FlagReplicaIndex)); err != nil {
 		return nil
 	}
+
+	cmd.Flags().String(FlagProviderURL, "", "provider URL to connect to directly (bypasses provider discovery)")
 
 	return cmd
 }
@@ -108,28 +111,49 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
+	var cl qclient.QueryClient
+	var prov sdk.Address
+	var lID mtypes.LeaseID
 
-	bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
-	if err != nil {
-		return err
+	if providerURL != "" {
+		prov, err = providerFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		lID, err = leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
+		if err != nil {
+			return err
+		}
+	} else {
+		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return err
+		}
+
+		prov, err = providerFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+		if err != nil {
+			return err
+		}
+		lID = bidID.LeaseID()
 	}
-	lID := bidID.LeaseID()
 
 	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
 	if err != nil {
 		return err
 	}
