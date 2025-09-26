@@ -5,6 +5,8 @@ COPY provider-services /usr/bin/
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
 RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
