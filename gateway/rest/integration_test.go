@@ -619,6 +619,7 @@ func withServer(
 	}
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPersistentConfig, pstorage)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, pstorage)
 
 	crt := testutil.Certificate(
 		t,
