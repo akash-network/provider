@@ -81,12 +81,14 @@ func fakeIPOperatorHandler() *fakeOperator {
 }
 
 func TestIPOperatorClient(t *testing.T) {
-	ports, err := testutil.GetFreePorts(1)
+	ports, err := testutil.GetUsablePorts(1)
 	require.NoError(t, err)
 
 	fake := fakeIPOperatorHandler()
+
+	port := ports.MustGetPort()
 	fakeServer := &http.Server{
-		Addr:         fmt.Sprintf("localhost:%d", ports[0]),
+		Addr:         fmt.Sprintf("localhost:%d", port),
 		Handler:      fake.mux,
 		ReadTimeout:  1 * time.Second,
 		WriteTimeout: 1 * time.Second,
@@ -109,7 +111,7 @@ func TestIPOperatorClient(t *testing.T) {
 
 	srv := net.SRV{
 		Target:   "localhost",
-		Port:     uint16(ports[0]), // nolint: gosec
+		Port:     uint16(port), // nolint: gosec
 		Priority: 0,
 		Weight:   0,
 	}
