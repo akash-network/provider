@@ -26,6 +26,7 @@ const (
 	AkashNetworkStorageClasses    = "akash.network/storageclasses"
 	AkashServiceTarget            = "akash.network/service-target"
 	AkashServiceCapabilityGPU     = "akash.network/capabilities.gpu"
+	AkashServiceCapabilityCPU     = "akash.network/capabilities.cpu"
 	AkashServiceCapabilityStorage = "akash.network/capabilities.storage"
 	AkashMetalLB                  = "metal-lb"
 	akashDeploymentPolicyName     = "akash-deployment-restrictions"

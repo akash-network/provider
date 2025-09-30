@@ -285,7 +285,7 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
-	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU) {
+	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU, nd.Resources.CPU.Info) {
 		return nil, false, true
 	}
 
@@ -356,7 +356,43 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 	return sparams, true, true
 }
 
-func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *types.CPU) bool {
+func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *types.CPU, nodeCPUInfo inventoryV1.CPUInfoS) bool {
+	// Parse CPU attributes if present
+	if len(res.Attributes) > 0 {
+		attrs, err := ParseCPUAttributes(res.Attributes)
+		if err != nil {
+			return false
+		}
+
+		// Check if CPU architecture requirements are specified
+		if cpuAttrs, exists := attrs["cpu"]; exists && len(cpuAttrs.Architectures) > 0 {
+			// Check if the node supports any of the requested architectures
+			supported := false
+			for _, requestedArch := range cpuAttrs.Architectures {
+				// For now, we'll use a simple heuristic based on CPU model
+				// In a real implementation, you would have actual architecture info
+				for _, cpuInfo := range nodeCPUInfo {
+					nodeArch := "amd64" // Default
+					if strings.Contains(strings.ToLower(cpuInfo.Model), "arm") {
+						nodeArch = "arm64"
+					}
+
+					if requestedArch == nodeArch || requestedArch == "*" {
+						supported = true
+						break
+					}
+				}
+				if supported {
+					break
+				}
+			}
+
+			if !supported {
+				return false
+			}
+		}
+	}
+
 	return rp.SubMilliNLZ(res.Units)
 }
 
