@@ -16,8 +16,12 @@ on:
 
 jobs:
   build-bins:
-    runs-on: ubuntu-latest
+    runs-on: core-e2e
     steps:
+      - name: Cleanup build folder
+        run: |
+          sudo rm -rf ./* || true
+          sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
