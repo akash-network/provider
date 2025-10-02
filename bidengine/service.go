@@ -128,9 +128,10 @@ func NewService(
 	go s.lc.WatchContext(pctx)
 	go s.run(pctx)
 
-	group.Go(func() error {
-		return s.ordersFetcher(ctx, aqc)
-	})
+	// to enable after SDK53 upgrade
+	//group.Go(func() error {
+	//	return s.ordersFetcher(ctx, aqc)
+	//})
 
 	return s, nil
 }
