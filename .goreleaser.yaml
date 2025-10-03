@@ -195,23 +195,25 @@ archives:
     files:
       - none*
   - id: provider-services-version-debug
-    builds:
+    ids:
       - darwin-universal-debug
       - provider-services-linux-arm64-debug
       - provider-services-linux-amd64-debug
     name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}_debug"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
   - id: provider-services-debug
-    builds:
+    ids:
       - darwin-universal-debug
       - provider-services-linux-arm64-debug
       - provider-services-linux-amd64-debug
     name_template: "provider-services_{{ .Os }}_{{ .Arch }}_debug"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
 checksum:
