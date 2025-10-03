@@ -80,7 +80,8 @@ type accountQuerier struct {
 	bus        pubsub.Bus
 	pstorage   pconfig.Storage
 	qc         v1beta2.Client
-	accCh      chan accReq
+	accCh      chan accReq // priority: direct user/API lookups
+	leaseCh    chan accReq // normal: background (leases/events)
 	peerCertCh chan peerCertReq
 	mtlsCh     chan chan<- certResp
 	caCh       chan certReq
@@ -166,7 +167,8 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 		bus:        bus,
 		pstorage:   pstorage,
 		qc:         qc,
-		accCh:      make(chan accReq, 1),
+		accCh:      make(chan accReq, 64),
+		leaseCh:    make(chan accReq, 64),
 		peerCertCh: make(chan peerCertReq, 1),
 		mtlsCh:     make(chan chan<- certResp, 1),
 		caCh:       make(chan certReq, 1),
@@ -539,11 +541,12 @@ func (c *accountQuerier) certsQuerier() error {
 
 func (c *accountQuerier) accountQuerier() error {
 	requests := make([]accReq, 0)
+	prioRequests := make([]accReq, 0)
 
 	signalch := make(chan struct{}, 1)
 
 	trySignal := func() {
-		if len(requests) > 0 {
+		if len(prioRequests) > 0 || len(requests) > 0 {
 			select {
 			case signalch <- struct{}{}:
 			default:
@@ -558,11 +561,23 @@ func (c *accountQuerier) accountQuerier() error {
 		case <-c.ctx.Done():
 			return c.ctx.Err()
 		case req := <-c.accCh:
+			prioRequests = append(prioRequests, req)
+			trySignal()
+		case req := <-c.leaseCh:
 			requests = append(requests, req)
 			trySignal()
 		case <-signalch:
-			req := requests[0]
-			requests = requests[1:]
+			var req accReq
+
+			priority := true
+			if len(prioRequests) > 0 {
+				req = prioRequests[0]
+				prioRequests = prioRequests[1:]
+			} else {
+				priority = false
+				req = requests[0]
+				requests = requests[1:]
+			}
 
 			var pubkey cryptotypes.PubKey
 			var err error
@@ -572,32 +587,47 @@ func (c *accountQuerier) accountQuerier() error {
 				res, err := c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
 				if err != nil {
 					c.log.Error("fetching account info", "err", err.Error(), "account", req.acc.String())
-					requests = append(requests, req)
-					continue
 				}
 
-				var acc authtypes.AccountI
-				if err := cctx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
-					c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
-					requests = append(requests, req)
-					continue
+				if err == nil {
+					var acc authtypes.AccountI
+
+					err = cctx.InterfaceRegistry.UnpackAny(res.Account, &acc)
+					if err != nil {
+						c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
+					}
+
+					if err == nil {
+						pubkey = acc.GetPubKey()
+
+						err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
+						if err != nil && !errors.Is(err, pconfig.ErrExists) {
+							c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+
+							// reset the error as we have got the pubkey and need to pass it above if it was a user request
+							err = nil
+						}
+					}
 				}
 
-				pubkey = acc.GetPubKey()
-
-				err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
-				if err != nil && !errors.Is(err, pconfig.ErrExists) {
-					c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+				if err != nil {
+					if priority {
+						prioRequests = append(prioRequests, req)
+					} else {
+						requests = append(requests, req)
+					}
 				}
 			}
 
 			if req.resp != nil {
 				req.resp <- accResp{
 					pubkey:   pubkey,
-					userData: nil,
-					err:      nil,
+					userData: req.userData,
+					err:      err,
 				}
 			}
+
+			trySignal()
 		}
 	}
 }
@@ -635,9 +665,7 @@ loop:
 			owner, _ := sdk.AccAddressFromBech32(lease.Lease.LeaseID.Owner)
 
 			select {
-			case c.accCh <- accReq{
-				acc: owner,
-			}:
+			case c.accCh <- accReq{acc: owner}:
 			case <-c.ctx.Done():
 				break loop
 			}

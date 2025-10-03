@@ -3,7 +3,6 @@ package cluster
 import (
 	"context"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
 	tpubsub "github.com/troian/pubsub"
 
@@ -13,10 +12,12 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	apclient "github.com/akash-network/akash-api/go/provider/client"
 	provider "github.com/akash-network/akash-api/go/provider/v1"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/node/pubsub"
 

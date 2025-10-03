@@ -293,6 +293,16 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Int(FlagCertIssuerHTTPChallengePort, 0, "port to listen for http-01 challenge; 0 disables http-01. any port other than 80 requires proxy forwarding")
+	if err := viper.BindPFlag(FlagCertIssuerHTTPChallengePort, cmd.Flags().Lookup(FlagCertIssuerHTTPChallengePort)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Int(FlagCertIssuerTLSChallengePort, 0, "port to listen for tls-alpn-01 challenge; 0 disables tls-alpn-01. any port other than 443 requires proxy forwarding")
+	if err := viper.BindPFlag(FlagCertIssuerTLSChallengePort, cmd.Flags().Lookup(FlagCertIssuerTLSChallengePort)); err != nil {
+		return err
+	}
+
 	cmd.Flags().StringSlice(FlagCertIssuerDNSProviders, nil, "comma separated list of dns providers")
 	if err := viper.BindPFlag(FlagCertIssuerDNSProviders, cmd.Flags().Lookup(FlagCertIssuerDNSProviders)); err != nil {
 		return err

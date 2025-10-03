@@ -610,6 +610,7 @@ func withServer(
 	}
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPersistentConfig, pstorage)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, pstorage)
 
 	if len(certs) == 0 {
 		crt := testutil.Certificate(

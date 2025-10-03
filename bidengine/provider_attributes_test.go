@@ -1,6 +1,7 @@
 package bidengine
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func setupProviderAttributesTestScaffold(
 	t *testing.T,
 	ttl time.Duration,
 	clientFactory func(scaffold *providerAttributesTestScaffold,
-	) *clientmocks.QueryClient) *providerAttributesTestScaffold {
+) *clientmocks.QueryClient) *providerAttributesTestScaffold {
 	retval := &providerAttributesTestScaffold{
 		auditorAddr:  testutil.AccAddress(t),
 		providerAddr: testutil.AccAddress(t),
@@ -55,7 +56,10 @@ func setupProviderAttributesTestScaffold(
 	retval.s = session.New(testutil.Logger(t), retval.client, retval.provider, -1)
 	retval.bus = pubsub.NewBus()
 	var err error
-	retval.service, err = newProviderAttrSignatureServiceInternal(retval.s, retval.bus, ttl)
+
+	ctx := context.Background()
+
+	retval.service, err = newProviderAttrSignatureServiceInternal(ctx, retval.s, retval.bus, ttl)
 	require.NoError(t, err)
 
 	return retval
