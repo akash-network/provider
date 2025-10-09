@@ -14,6 +14,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
+	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	"github.com/akash-network/node/sdl"
 
 	"github.com/akash-network/provider/client"
@@ -180,8 +181,20 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	}
 
 	for i, lid := range leases {
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
+		prov, err := sdk.AccAddressFromBech32(lid.Provider)
+		if err != nil {
+			return err
+		}
+
+		resp, err := cl.Provider(ctx, &ptypes.QueryProviderRequest{
+			Owner: prov.String(),
+		})
+		if err != nil {
+			return err
+		}
+
+		opts = append(opts, apclient.WithProviderURL(resp.Provider.HostURI), apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
+
 		gclient, err := apclient.NewClient(ctx, prov, opts...)
 		if err != nil {
 			return err
