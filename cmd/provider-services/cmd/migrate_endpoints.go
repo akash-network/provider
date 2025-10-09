@@ -8,6 +8,7 @@ import (
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 
+	"github.com/akash-network/provider/client"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -41,7 +42,7 @@ func migrateEndpoints(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	opts = append(opts, apclient.WithQueryClient(cl))
+	opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
 	gclient, err := apclient.NewClient(ctx, prov, opts...)
 	if err != nil {
 		return err

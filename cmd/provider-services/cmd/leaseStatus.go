@@ -1,18 +1,17 @@
 package cmd
 
 import (
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
+	"context"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
 	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	aclient "github.com/akash-network/provider/client"
 )
 
 func leaseStatusCmd() *cobra.Command {
@@ -29,7 +28,9 @@ func leaseStatusCmd() *cobra.Command {
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
 
-	cmd.Flags().String(FlagProviderURL, "", "Provider URL to connect to directly (bypasses provider discovery)")
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }
@@ -42,44 +43,36 @@ func doLeaseStatus(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
+	// Define the on-chain callback for lease status specific logic
+	onChainCallback := func(ctx context.Context, cctx sdkclient.Context, cl qclient.QueryClient, flags *pflag.FlagSet) (ProviderURLHandlerResult, error) {
+		prov, err := providerFromFlags(flags)
+		if err != nil {
+			return ProviderURLHandlerResult{}, err
+		}
+
+		bid, err := mcli.BidIDFromFlags(flags, dcli.WithOwner(cctx.FromAddress))
+		if err != nil {
+			return ProviderURLHandlerResult{}, err
+		}
+
+		leaseID := bid.LeaseID()
+
+		return ProviderURLHandlerResult{
+			QueryClient: cl,
+			LeaseID:     leaseID,
+			Provider:    prov,
+		}, nil
+	}
+
+	// Handle provider URL or on-chain discovery
+	result, err := handleProviderURLOrOnChain(ctx, cctx, cmd.Flags(), onChainCallback)
 	if err != nil {
 		return err
 	}
 
-	var cl qclient.QueryClient
-	var prov sdk.Address
-
-	var leaseID mtypes.LeaseID
-
-	if providerURL != "" {
-		prov, err = providerFromFlags(cmd.Flags())
-		if err != nil {
-			return err
-		}
-
-		leaseID, err = leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
-		if err != nil {
-			return err
-		}
-	} else {
-		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
-		if err != nil {
-			return err
-		}
-
-		prov, err = providerFromFlags(cmd.Flags())
-		if err != nil {
-			return err
-		}
-
-		bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
-		if err != nil {
-			return err
-		}
-
-		leaseID = bid.LeaseID()
-	}
+	leaseID := result.LeaseID
+	prov := result.Provider
+	cl := result.QueryClient
 
 	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
 	if err != nil {
@@ -91,10 +84,10 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	result, err := gclient.LeaseStatus(ctx, leaseID)
+	status, err := gclient.LeaseStatus(ctx, leaseID)
 	if err != nil {
 		return showErrorToUser(err)
 	}
 
-	return cmdcommon.PrintJSON(cctx, result)
+	return cmdcommon.PrintJSON(cctx, status)
 }

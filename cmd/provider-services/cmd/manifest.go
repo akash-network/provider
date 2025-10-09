@@ -16,6 +16,7 @@ import (
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	"github.com/akash-network/node/sdl"
 
+	"github.com/akash-network/provider/client"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -83,7 +84,7 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			opts = append(opts, apclient.WithQueryClient(cl))
+			opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
 			gclient, err := apclient.NewClient(ctx, prov, opts...)
 			if err != nil {
 				return err
@@ -180,7 +181,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	for i, lid := range leases {
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		opts = append(opts, apclient.WithQueryClient(cl))
+		opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
 		gclient, err := apclient.NewClient(ctx, prov, opts...)
 		if err != nil {
 			return err

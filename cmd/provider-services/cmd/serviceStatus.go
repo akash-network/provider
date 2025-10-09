@@ -9,6 +9,7 @@ import (
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
 
+	"github.com/akash-network/provider/client"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -66,7 +67,7 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	opts = append(opts, apclient.WithQueryClient(cl))
+	opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
 	gclient, err := apclient.NewClient(ctx, prov, opts...)
 	if err != nil {
 		return err

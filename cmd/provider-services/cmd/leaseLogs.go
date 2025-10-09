@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -9,13 +10,13 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
 	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	aclient "github.com/akash-network/provider/client"
 )
 
 func leaseLogsCmd() *cobra.Command {
@@ -35,7 +36,10 @@ func leaseLogsCmd() *cobra.Command {
 	cmd.Flags().BoolP(flagFollow, "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P(flagTail, "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
 	cmd.Flags().StringP(flagOutput, "o", outputText, "Output format text|json. Defaults to text")
-	cmd.Flags().String(FlagProviderURL, "", "Provider URL to connect to directly (bypasses provider discovery)")
+
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }
@@ -48,40 +52,35 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	providerURL, err := cmd.Flags().GetString(FlagProviderURL)
-	if err != nil {
-		return err
-	}
-
-	var leases []mtypes.LeaseID
-	var cl qclient.QueryClient
-
-	if providerURL != "" {
-		leaseID, err := leaseIDWhenProviderURLIsProvided(cmd.Flags(), cctx.GetFromAddress().String())
+	// Define the on-chain callback for lease logs specific logic
+	onChainCallback := func(ctx context.Context, cctx sdkclient.Context, cl qclient.QueryClient, flags *pflag.FlagSet) (ProviderURLHandlerResult, error) {
+		dseq, err := dseqFromFlags(flags)
 		if err != nil {
-			return err
+			return ProviderURLHandlerResult{}, err
 		}
 
-		leases = []mtypes.LeaseID{leaseID}
-	} else {
-		cl, err = aclient.DiscoverQueryClient(ctx, cctx)
-		if err != nil {
-			return err
-		}
-
-		dseq, err := dseqFromFlags(cmd.Flags())
-		if err != nil {
-			return err
-		}
-
-		leases, err = leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
+		leases, err := leasesForDeployment(ctx, cl, flags, dtypes.DeploymentID{
 			Owner: cctx.GetFromAddress().String(),
 			DSeq:  dseq,
 		})
 		if err != nil {
-			return markRPCServerError(err)
+			return ProviderURLHandlerResult{}, markRPCServerError(err)
 		}
+
+		return ProviderURLHandlerResult{
+			QueryClient: cl,
+			LeaseIDs:    leases,
+		}, nil
 	}
+
+	// Handle provider URL or on-chain discovery
+	result, err := handleProviderURLOrOnChain(ctx, cctx, cmd.Flags(), onChainCallback)
+	if err != nil {
+		return err
+	}
+
+	leases := result.LeaseIDs
+	cl := result.QueryClient
 
 	svcs, err := cmd.Flags().GetString(FlagService)
 	if err != nil {
@@ -111,13 +110,13 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		return errors.Errorf("tail flag supplied with invalid value. must be >= -1")
 	}
 
-	type result struct {
+	type streamResult struct {
 		lid    mtypes.LeaseID
 		error  error
 		stream *apclient.ServiceLogs
 	}
 
-	streams := make([]result, 0, len(leases))
+	streams := make([]streamResult, 0, len(leases))
 
 	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
 	if err != nil {
@@ -125,7 +124,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	}
 
 	for _, lid := range leases {
-		stream := result{lid: lid}
+		stream := streamResult{lid: lid}
 		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
 
 		gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
@@ -170,7 +169,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		}
 
 		wgStreams.Add(1)
-		go func(stream result) {
+		go func(stream streamResult) {
 			defer wgStreams.Done()
 
 			for res := range stream.stream.Stream {

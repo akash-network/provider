@@ -15,8 +15,7 @@ CERT_HOSTNAME  ?= localhost
 LEASE_SERVICES ?= web
 
 RESOURCE_SERVER_HOST ?= localhost:8445
-AP_PROVIDER_URL      ?= https://localhost:8443
-
+AP_PROVIDER_URL      ?= 
 GW_AUTH_TYPE   ?= jwt
 
 .PHONY: multisig-send
@@ -290,56 +289,6 @@ provider-lease-logs:
 		--from      "$(KEY_NAME)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
-
-.PHONY: provider-url-lease-logs
-provider-url-lease-logs:
-	$(PROVIDER_SERVICES) lease-logs \
-		-f \
-		--service="$(LEASE_SERVICES)" \
-		--dseq      "$(DSEQ)"     \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "$(AP_PROVIDER_URL)" \
-		--auth-type "$(GW_AUTH_TYPE)"
-
-.PHONY: provider-url-lease-events
-provider-url-lease-events:
-	$(PROVIDER_SERVICES) lease-events \
-		-f \
-		--service="$(LEASE_SERVICES)" \
-		--dseq      "$(DSEQ)"     \
-		--gseq      "$(GSEQ)"     \
-		--oseq      "$(OSEQ)"     \
-		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "$(AP_PROVIDER_URL)" \
-		--auth-type "$(GW_AUTH_TYPE)"
-
-.PHONY: provider-url-lease-status
-provider-url-lease-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)"    \
-		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "$(AP_PROVIDER_URL)" \
-		--auth-type=$(GW_AUTH_TYPE)
-
-.PHONY: provider-url-lease-shell
-provider-url-lease-shell:
-	$(PROVIDER_SERVICES) lease-shell \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)"    \
-		--provider  "$(PROVIDER_ADDRESS)" \
-		--provider-url "$(AP_PROVIDER_URL)" \
-		--auth-type=$(GW_AUTH_TYPE) \
-		${LEASE_SERVICES} \
-		date
 
 .PHONY: provider-lease-shell
 provider-lease-shell:

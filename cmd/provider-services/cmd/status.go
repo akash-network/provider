@@ -8,6 +8,7 @@ import (
 
 	cmdcommon "github.com/akash-network/node/cmd/common"
 
+	"github.com/akash-network/provider/client"
 	aclient "github.com/akash-network/provider/client"
 )
 
@@ -43,7 +44,7 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, addr, apclient.WithQueryClient(cl))
+	gclient, err := apclient.NewClient(ctx, addr, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
 	if err != nil {
 		return err
 	}
