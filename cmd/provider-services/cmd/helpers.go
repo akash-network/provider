@@ -13,14 +13,14 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
 	cutils "github.com/akash-network/node/x/cert/utils"
-	"github.com/akash-network/provider/client"
-	pclient "github.com/akash-network/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
+
+	pclient "github.com/akash-network/provider/client"
 
 	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
@@ -141,7 +141,7 @@ func leaseIDFromFlags(cflags *pflag.FlagSet, owner string) (mtypes.LeaseID, erro
 	}, nil
 }
 
-func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
+func providerFromFlags(flags *pflag.FlagSet) (sdk.AccAddress, error) {
 	provider, err := flags.GetString(FlagProvider)
 	if err != nil {
 		return nil, err
@@ -237,87 +237,124 @@ func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.Flag
 	return opts, nil
 }
 
-// providerClientFromFlags creates an akash provider client with appropriate options
-// based on whether a provider URL is specified via flags or not.
-// If provider-url flag is set, it uses that URL directly.
-// Otherwise, it queries the blockchain for the provider's URL.
-func providerClientFromFlags(
-	ctx context.Context,
-	cl aclient.QueryClient,
-	prov sdk.Address,
-	opts []apclient.ClientOption,
-	flags *pflag.FlagSet,
-) (apclient.Client, error) {
-	providerURL, err := flags.GetString(FlagProviderURL)
+//// providerClientFromFlags creates an akash provider client with appropriate options
+//// based on whether a provider URL is specified via flags or not.
+//// If provider-url flag is set, it uses that URL directly.
+//// Otherwise, it queries the blockchain for the provider's URL.
+//func providerClientFromFlags(
+//	ctx context.Context,
+//	cl aclient.QueryClient,
+//	prov sdk.Address,
+//	opts []apclient.ClientOption,
+//	flags *pflag.FlagSet,
+//) (apclient.Client, error) {
+//	providerURL, err := flags.GetString(FlagProviderURL)
+//	if err != nil {
+//		return nil, err
+//	}
+//
+//	// If no provider URL is provided via flag, query the blockchain for it
+//	if providerURL == "" {
+//		resp, err := cl.Provider(ctx, &ptypes.QueryProviderRequest{
+//			Owner: prov.String(),
+//		})
+//		if err != nil {
+//			return nil, err
+//		}
+//		providerURL = resp.Provider.HostURI
+//	}
+//
+//	if cl != nil {
+//		opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
+//	}
+//
+//	// Always add the provider URL - the client requires it
+//	opts = append(opts, apclient.WithProviderURL(providerURL))
+//
+//	return apclient.NewClient(ctx, prov, opts...)
+//}
+//
+//// ProviderURLHandlerResult contains the results from provider URL handling
+//type ProviderURLHandlerResult struct {
+//	QueryClient aclient.QueryClient
+//	LeaseIDs    []mtypes.LeaseID
+//	LeaseID     mtypes.LeaseID
+//	Provider    sdk.Address
+//}
+//
+//// OnChainCallback defines the callback function type for on-chain specific behavior
+//type OnChainCallback func(ctx context.Context, cctx sdkclient.Context, cl aclient.QueryClient, flags *pflag.FlagSet) (ProviderURLHandlerResult, error)
+//
+//// handleProviderURLOrOnChain handles the common pattern of checking provider URL flag
+//// and either using direct provider connection or falling back to on-chain discovery.
+//// It takes a callback function to handle the on-chain specific logic.
+//func handleProviderURLOrOnChain(
+//	ctx context.Context,
+//	cctx sdkclient.Context,
+//	flags *pflag.FlagSet,
+//	onChainCallback OnChainCallback,
+//) (ProviderURLHandlerResult, error) {
+//	providerURL := viper.GetString(FlagProviderURL)
+//
+//	if providerURL != "" {
+//		leaseID, err := leaseIDFromFlags(flags, cctx.GetFromAddress().String())
+//		if err != nil {
+//			return ProviderURLHandlerResult{}, err
+//		}
+//
+//		prov, err := providerFromFlags(flags)
+//		if err != nil {
+//			return ProviderURLHandlerResult{}, err
+//		}
+//
+//		return ProviderURLHandlerResult{
+//			LeaseID:  leaseID,
+//			LeaseIDs: []mtypes.LeaseID{leaseID},
+//			Provider: prov,
+//		}, nil
+//	}
+//
+//	cl, err := pclient.DiscoverQueryClient(ctx, cctx)
+//	if err != nil {
+//		return ProviderURLHandlerResult{}, err
+//	}
+//
+//	return onChainCallback(ctx, cctx, cl, flags)
+//}
+
+func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) (apclient.Client, error) {
+	paddr, err := providerFromFlags(flags)
 	if err != nil {
 		return nil, err
 	}
 
-	// If no provider URL is provided via flag, query the blockchain for it
-	if providerURL == "" {
-		resp, err := cl.Provider(ctx, &ptypes.QueryProviderRequest{
-			Owner: prov.String(),
-		})
+	purl := viper.GetString(FlagProviderURL)
+	if purl == "" {
+		cl, err := pclient.DiscoverQueryClient(ctx, cctx)
 		if err != nil {
 			return nil, err
 		}
-		providerURL = resp.Provider.HostURI
+
+		resp, err := cl.Provider(ctx, &ptypes.QueryProviderRequest{Owner: paddr.String()})
+		if err != nil {
+			return nil, err
+		}
+
+		purl = resp.Provider.HostURI
 	}
 
-	if cl != nil {
-		opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
+	opts, err := loadAuthOpts(ctx, cctx, flags)
+	if err != nil {
+		return nil, err
 	}
 
 	// Always add the provider URL - the client requires it
-	opts = append(opts, apclient.WithProviderURL(providerURL))
+	opts = append(opts, apclient.WithProviderURL(purl))
 
-	return apclient.NewClient(ctx, prov, opts...)
-}
-
-// ProviderURLHandlerResult contains the results from provider URL handling
-type ProviderURLHandlerResult struct {
-	QueryClient aclient.QueryClient
-	LeaseIDs    []mtypes.LeaseID
-	LeaseID     mtypes.LeaseID
-	Provider    sdk.Address
-}
-
-// OnChainCallback defines the callback function type for on-chain specific behavior
-type OnChainCallback func(ctx context.Context, cctx sdkclient.Context, cl aclient.QueryClient, flags *pflag.FlagSet) (ProviderURLHandlerResult, error)
-
-// handleProviderURLOrOnChain handles the common pattern of checking provider URL flag
-// and either using direct provider connection or falling back to on-chain discovery.
-// It takes a callback function to handle the on-chain specific logic.
-func handleProviderURLOrOnChain(
-	ctx context.Context,
-	cctx sdkclient.Context,
-	flags *pflag.FlagSet,
-	onChainCallback OnChainCallback,
-) (ProviderURLHandlerResult, error) {
-	providerURL := viper.GetString(FlagProviderURL)
-
-	if providerURL != "" {
-		leaseID, err := leaseIDFromFlags(flags, cctx.GetFromAddress().String())
-		if err != nil {
-			return ProviderURLHandlerResult{}, err
-		}
-
-		prov, err := providerFromFlags(flags)
-		if err != nil {
-			return ProviderURLHandlerResult{}, err
-		}
-
-		return ProviderURLHandlerResult{
-			LeaseID:  leaseID,
-			LeaseIDs: []mtypes.LeaseID{leaseID},
-			Provider: prov,
-		}, nil
-	}
-
-	cl, err := pclient.DiscoverQueryClient(ctx, cctx)
+	cl, err := apclient.NewClient(ctx, paddr, opts...)
 	if err != nil {
-		return ProviderURLHandlerResult{}, err
+		return nil, err
 	}
 
-	return onChainCallback(ctx, cctx, cl, flags)
+	return cl, nil
 }
