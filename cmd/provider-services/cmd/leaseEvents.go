@@ -1,20 +1,14 @@
 package cmd
 
 import (
-	"context"
 	"sync"
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
-
-	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 )
 
 func leaseEventsCmd() *cobra.Command {
@@ -49,35 +43,10 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	// Define the on-chain callback for lease events specific logic
-	onChainCallback := func(ctx context.Context, cctx sdkclient.Context, cl qclient.QueryClient, flags *pflag.FlagSet) (ProviderURLHandlerResult, error) {
-		dseq, err := dseqFromFlags(flags)
-		if err != nil {
-			return ProviderURLHandlerResult{}, err
-		}
-
-		leases, err := leasesForDeployment(ctx, cl, flags, dtypes.DeploymentID{
-			Owner: cctx.GetFromAddress().String(),
-			DSeq:  dseq,
-		})
-		if err != nil {
-			return ProviderURLHandlerResult{}, markRPCServerError(err)
-		}
-
-		return ProviderURLHandlerResult{
-			QueryClient: cl,
-			LeaseIDs:    leases,
-		}, nil
-	}
-
-	// Handle provider URL or on-chain discovery
-	result, err := handleProviderURLOrOnChain(ctx, cctx, cmd.Flags(), onChainCallback)
+	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags())
 	if err != nil {
-		return err
+		return markRPCServerError(err)
 	}
-
-	leases := result.LeaseIDs
-	cl := result.QueryClient
 
 	svcs, err := cmd.Flags().GetString(FlagService)
 	if err != nil {
@@ -97,16 +66,10 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	streams := make([]streamResult, 0, len(leases))
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
 	for _, lid := range leases {
 		stream := streamResult{lid: lid}
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
 
-		gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {

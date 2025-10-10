@@ -14,7 +14,6 @@ import (
 	dockerterm "github.com/moby/term"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
@@ -23,8 +22,6 @@ import (
 
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
-
-	qclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 )
 
 const (
@@ -111,43 +108,14 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	// Define the on-chain callback for shell specific logic
-	onChainCallback := func(ctx context.Context, cctx sdkclient.Context, cl qclient.QueryClient, flags *pflag.FlagSet) (ProviderURLHandlerResult, error) {
-		prov, err := providerFromFlags(flags)
-		if err != nil {
-			return ProviderURLHandlerResult{}, err
-		}
-
-		bidID, err := mcli.BidIDFromFlags(flags, dcli.WithOwner(cctx.FromAddress))
-		if err != nil {
-			return ProviderURLHandlerResult{}, err
-		}
-
-		lID := bidID.LeaseID()
-
-		return ProviderURLHandlerResult{
-			QueryClient: cl,
-			LeaseID:     lID,
-			Provider:    prov,
-		}, nil
-	}
-
-	// Handle provider URL or on-chain discovery
-	result, err := handleProviderURLOrOnChain(ctx, cctx, cmd.Flags(), onChainCallback)
+	bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}
 
-	lID := result.LeaseID
-	prov := result.Provider
-	cl := result.QueryClient
+	lID := bidID.LeaseID()
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	gclient, err := providerClientFromFlags(ctx, cl, prov, opts, cmd.Flags())
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}

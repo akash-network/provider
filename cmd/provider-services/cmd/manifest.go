@@ -46,7 +46,6 @@ func SendManifestCmd() *cobra.Command {
 	addManifestFlags(cmd)
 	addAuthFlags(cmd)
 
-	cmd.MarkFlagsRequiredTogether(FlagProviderURL, FlagProvider)
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
 
 	return cmd
@@ -159,6 +158,8 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	results := make([]result, len(leases))
 
 	submitFailed := false
+
+	fmt.Println("leases", leases)
 
 	for i, lid := range leases {
 		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())

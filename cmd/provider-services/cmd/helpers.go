@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 
+	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
@@ -19,6 +20,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/akash-network/provider/client"
 	pclient "github.com/akash-network/provider/client"
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
@@ -100,10 +102,6 @@ func addServiceFlags(cmd *cobra.Command) {
 	cmd.Flags().String(FlagService, "", "name of service to query")
 }
 
-func dseqFromFlags(flags *pflag.FlagSet) (uint64, error) {
-	return flags.GetUint64(FlagDSeq)
-}
-
 func leaseIDFromFlags(cflags *pflag.FlagSet, owner string) (mtypes.LeaseID, error) {
 	str, err := cflags.GetString(FlagProvider)
 	if err != nil {
@@ -156,8 +154,10 @@ func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pfl
 	var leases []mtypes.LeaseID
 	var err error
 
-	// the presence of FlagProvider is checked by cobra's MarkFlagsRequiredTogether
-	prov, _ := flags.GetString(FlagProvider)
+	prov, err := flags.GetString(FlagProvider)
+	if err != nil {
+		return nil, err
+	}
 	var paddr sdk.AccAddress
 	if prov != "" {
 		paddr, err = sdk.AccAddressFromBech32(prov)
@@ -172,7 +172,7 @@ func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pfl
 
 	owner := cctx.FromAddress
 
-	dseq, err = flags.GetUint64(FlagGSeq)
+	dseq, err = flags.GetUint64(FlagDSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pfl
 	if err != nil {
 		return nil, err
 	}
-	oseq, err = flags.GetUint32(FlagGSeq)
+	oseq, err = flags.GetUint32(FlagOSeq)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pfl
 			return nil, fmt.Errorf("%w for dseq=%v", errNoActiveLease, dseq)
 		}
 
-		leases := make([]mtypes.LeaseID, 0, len(resp.Leases))
+		leases = make([]mtypes.LeaseID, 0, len(resp.Leases))
 
 		for _, lease := range resp.Leases {
 			leases = append(leases, lease.Lease.LeaseID)
@@ -272,9 +272,11 @@ func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pfl
 		return nil, err
 	}
 
-	purl, _ := flags.GetString(FlagProviderURL)
+	var cl aclient.QueryClient
+
+	purl := viper.GetString(FlagProviderURL)
 	if purl == "" {
-		cl, err := pclient.DiscoverQueryClient(ctx, cctx)
+		cl, err = pclient.DiscoverQueryClient(ctx, cctx)
 		if err != nil {
 			return nil, err
 		}
@@ -292,13 +294,12 @@ func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pfl
 		return nil, err
 	}
 
+	if cl != nil {
+		opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
+	}
+
 	// Always add the provider URL - the client requires it
 	opts = append(opts, apclient.WithProviderURL(purl))
 
-	cl, err := apclient.NewClient(ctx, paddr, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return cl, nil
+	return apclient.NewClient(ctx, paddr, opts...)
 }
