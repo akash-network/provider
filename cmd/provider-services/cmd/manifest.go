@@ -13,7 +13,6 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	"github.com/akash-network/node/sdl"
 
 	"github.com/akash-network/provider/client"
@@ -47,6 +46,7 @@ func SendManifestCmd() *cobra.Command {
 	addManifestFlags(cmd)
 	addAuthFlags(cmd)
 
+	cmd.MarkFlagsRequiredTogether(FlagProviderURL, FlagProvider)
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
 
 	return cmd
@@ -134,11 +134,6 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
 	sdl, err := sdl.ReadFile(sdlpath)
 	if err != nil {
 		return err
@@ -148,17 +143,8 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	if err != nil {
 		return err
 	}
-
-	dseq, err := dseqFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
 	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags())
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -185,7 +171,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 			return err
 		}
 
-		err = gclient.SubmitManifest(ctx, dseq, mani)
+		err = gclient.SubmitManifest(ctx, lid.DSeq, mani)
 		res := result{
 			Provider: paddr,
 			Status:   "PASS",
