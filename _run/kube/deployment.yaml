@@ -16,7 +16,7 @@ services:
         to:
           - global: true
   bew:
-    image: nginxdemos/hello:latest
+    image: quay.io/ovrclk/demo-app
     expose:
       - port: 80
         as: 80
