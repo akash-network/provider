@@ -46,7 +46,12 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags())
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), cl)
 	if err != nil {
 		return err
 	}
@@ -90,7 +95,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	for _, lid := range leases {
 		stream := streamResult{lid: lid}
 
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {

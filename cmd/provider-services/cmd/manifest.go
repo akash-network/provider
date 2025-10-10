@@ -14,9 +14,6 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/node/sdl"
-
-	"github.com/akash-network/provider/client"
-	aclient "github.com/akash-network/provider/client"
 )
 
 var (
@@ -47,6 +44,7 @@ func SendManifestCmd() *cobra.Command {
 	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
+	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
 
 	return cmd
 }
@@ -66,7 +64,7 @@ func GetManifestCmd() *cobra.Command {
 
 			ctx := cmd.Context()
 
-			cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+			cl, err := setupChainClient(ctx, cctx, cmd.Flags())
 			if err != nil {
 				return err
 			}
@@ -76,15 +74,7 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-
-			opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-			if err != nil {
-				return err
-			}
-
-			opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
-			gclient, err := apclient.NewClient(ctx, prov, opts...)
+			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
 			if err != nil {
 				return err
 			}
@@ -121,6 +111,7 @@ func GetManifestCmd() *cobra.Command {
 	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputYAML, "output format json|yaml. default yaml")
+	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
 
 	return cmd
 }
@@ -133,6 +124,11 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	ctx := cmd.Context()
 
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	sdl, err := sdl.ReadFile(sdlpath)
 	if err != nil {
 		return err
@@ -143,7 +139,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags())
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), cl)
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -159,10 +155,8 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	submitFailed := false
 
-	fmt.Println("leases", leases)
-
 	for i, lid := range leases {
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
 		if err != nil {
 			return err
 		}

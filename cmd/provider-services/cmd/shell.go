@@ -108,6 +108,11 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
@@ -115,7 +120,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	lID := bidID.LeaseID()
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
 	if err != nil {
 		return err
 	}

@@ -9,6 +9,7 @@ import (
 	"net/url"
 
 	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+
 	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	ajwt "github.com/akash-network/akash-api/go/util/jwt"
@@ -20,7 +21,6 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
-	"github.com/akash-network/provider/client"
 	pclient "github.com/akash-network/provider/client"
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
@@ -38,6 +38,7 @@ const (
 	flagFollow      = "follow"
 	flagTail        = "tail"
 	flagAuthType    = "auth-type"
+	FlagNoChain     = "no-chain"
 )
 
 const (
@@ -150,7 +151,7 @@ func providerFromFlags(flags *pflag.FlagSet) (sdk.AccAddress, error) {
 	return addr, nil
 }
 
-func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) ([]mtypes.LeaseID, error) {
+func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient) ([]mtypes.LeaseID, error) {
 	var leases []mtypes.LeaseID
 	var err error
 
@@ -186,16 +187,11 @@ func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pfl
 	}
 
 	purl, _ := flags.GetString(FlagProviderURL)
-	if purl == "" {
+	if purl == "" && cl != nil {
 		filter := mtypes.LeaseFilters{
 			Owner: owner.String(),
 			DSeq:  dseq,
 			State: mtypes.Lease_State_name[int32(mtypes.LeaseActive)],
-		}
-
-		cl, err := pclient.DiscoverQueryClient(ctx, cctx)
-		if err != nil {
-			return nil, err
 		}
 
 		resp, err := cl.Leases(ctx, &mtypes.QueryLeasesRequest{
@@ -266,17 +262,29 @@ func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.Flag
 	return opts, nil
 }
 
-func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) (apclient.Client, error) {
+func setupChainClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) (aclient.QueryClient, error) {
+	offchain, _ := flags.GetBool(FlagNoChain)
+	if !offchain {
+		cl, err := pclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return cl, nil
+	}
+
+	return nil, nil
+}
+
+func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient) (apclient.Client, error) {
 	paddr, err := providerFromFlags(flags)
 	if err != nil {
 		return nil, err
 	}
 
-	var cl aclient.QueryClient
-
-	purl := viper.GetString(FlagProviderURL)
-	if purl == "" {
-		cl, err = pclient.DiscoverQueryClient(ctx, cctx)
+	purl, _ := flags.GetString(FlagProviderURL)
+	if cl != nil && purl == "" {
+		cl, err := pclient.DiscoverQueryClient(ctx, cctx)
 		if err != nil {
 			return nil, err
 		}
@@ -295,11 +303,16 @@ func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pfl
 	}
 
 	if cl != nil {
-		opts = append(opts, apclient.WithCertQuerier(client.NewCertificateQuerier(cl)))
+		opts = append(opts, apclient.WithCertQuerier(pclient.NewCertificateQuerier(cl)))
 	}
 
 	// Always add the provider URL - the client requires it
 	opts = append(opts, apclient.WithProviderURL(purl))
 
-	return apclient.NewClient(ctx, paddr, opts...)
+	pcl, err := apclient.NewClient(ctx, paddr, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return pcl, nil
 }

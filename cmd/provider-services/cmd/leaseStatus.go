@@ -37,12 +37,17 @@ func doLeaseStatus(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags())
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
 	if err != nil {
 		return err
 	}
