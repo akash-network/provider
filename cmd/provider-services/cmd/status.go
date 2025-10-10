@@ -48,7 +48,7 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		return err
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, false)
 	if err != nil {
 		return err
 	}

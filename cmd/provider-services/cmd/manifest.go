@@ -74,7 +74,7 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
+			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 			if err != nil {
 				return err
 			}
@@ -156,7 +156,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	submitFailed := false
 
 	for i, lid := range leases {
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 		if err != nil {
 			return err
 		}

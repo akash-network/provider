@@ -276,7 +276,7 @@ func setupChainClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.
 	return nil, nil
 }
 
-func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient) (apclient.Client, error) {
+func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient, authRequired bool) (apclient.Client, error) {
 	paddr, err := providerFromFlags(flags)
 	if err != nil {
 		return nil, err
@@ -297,9 +297,13 @@ func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pfl
 		purl = resp.Provider.HostURI
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, flags)
-	if err != nil {
-		return nil, err
+	var opts []apclient.ClientOption
+
+	if authRequired {
+		opts, err = loadAuthOpts(ctx, cctx, flags)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if cl != nil {

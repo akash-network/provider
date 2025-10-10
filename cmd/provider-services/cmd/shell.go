@@ -120,7 +120,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 
 	lID := bidID.LeaseID()
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 	if err != nil {
 		return err
 	}
