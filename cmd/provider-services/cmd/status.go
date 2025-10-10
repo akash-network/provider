@@ -14,6 +14,10 @@ func statusCmd() *cobra.Command {
 		Short:        "get provider status",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Set the hidden provider flag to the address value for internal use
+			return cmd.Flags().Set(FlagProvider, args[0])
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			addr, err := sdk.AccAddressFromBech32(args[0])
 			if err != nil {
@@ -23,6 +27,10 @@ func statusCmd() *cobra.Command {
 			return doStatus(cmd, addr)
 		},
 	}
+
+	// Add hidden provider flag for internal use by setupProviderClient
+	cmd.Flags().String(FlagProvider, "", "provider address")
+	cmd.Flags().MarkHidden(FlagProvider)
 
 	return cmd
 }
