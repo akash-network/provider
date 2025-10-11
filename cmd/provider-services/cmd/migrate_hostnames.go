@@ -3,12 +3,9 @@ package cmd
 import (
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/spf13/cobra"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	aclient "github.com/akash-network/provider/client"
 )
 
 var errEmptyHostnames = errors.New("hostnames cannot be empty")
@@ -25,23 +22,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
-	prov, err := providerFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	opts = append(opts, apclient.WithCertQuerier(aclient.NewCertificateQuerier(cl)))
-	gclient, err := apclient.NewClient(ctx, prov, opts...)
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
@@ -52,6 +33,11 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 	}
 
 	gseq, err := cmd.Flags().GetUint32("gseq")
+	if err != nil {
+		return err
+	}
+
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 	if err != nil {
 		return err
 	}
