@@ -43,6 +43,10 @@ func LeaseShellCmd() *cobra.Command {
 
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
+	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
+	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Bool(FlagStdin, false, "connect stdin")
 	if err := viper.BindPFlag(FlagStdin, cmd.Flags().Lookup(FlagStdin)); err != nil {
