@@ -10,6 +10,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
+	"github.com/akash-network/provider/cluster/kube/builder/mocks"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
@@ -109,7 +110,11 @@ func TestGlobalServiceBuilder(t *testing.T) {
 
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
-	serviceBuilder := BuildService(workload, true)
+
+	// This test has no expose directives, so AllocatePorts should not be called
+	mockAllocator := mocks.NewServicePortAllocator(t)
+	serviceBuilder, err := BuildService(workload, true, mockAllocator)
+	require.NoError(t, err)
 	require.NotNil(t, serviceBuilder)
 	// Should have name ending with suffix
 	require.Equal(t, "myservice-np", serviceBuilder.Name())
@@ -158,7 +163,8 @@ func TestLocalServiceBuilder(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, false)
+	serviceBuilder, err := BuildService(workload, false, nil)
+	require.NoError(t, err)
 	require.NotNil(t, serviceBuilder)
 	// Should have name verbatim
 	require.Equal(t, "myservice", serviceBuilder.Name())
@@ -212,7 +218,10 @@ func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, true)
+	// This test has expose directives but only local services (Global: false), so AllocatePorts should not be called for global service builder
+	mockAllocator := mocks.NewServicePortAllocator(t)
+	serviceBuilder, err := BuildService(workload, true, mockAllocator)
+	require.NoError(t, err)
 
 	// Should not have any work to do
 	require.False(t, serviceBuilder.Any())
@@ -272,7 +281,11 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, true)
+	// This test has one global service, so AllocatePorts should be called with count=1
+	mockAllocator := mocks.NewServicePortAllocator(t)
+	mockAllocator.EXPECT().AllocatePorts("myservice", 1).Return([]int32{30000})
+	serviceBuilder, err := BuildService(workload, true, mockAllocator)
+	require.NoError(t, err)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())
@@ -285,6 +298,7 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 	require.Equal(t, ports[0].Port, int32(1001))
 	require.Equal(t, ports[0].TargetPort, intstr.FromInt(1000))
 	require.Equal(t, ports[0].Name, "0-1001")
+	require.Equal(t, int32(30000), ports[0].NodePort)
 }
 
 func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
@@ -332,7 +346,8 @@ func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, false)
+	serviceBuilder, err := BuildService(workload, false, nil)
+	require.NoError(t, err)
 
 	// Should have work to do
 	require.False(t, serviceBuilder.Any())
@@ -392,7 +407,8 @@ func TestLocalServiceBuilderWithLocalServices(t *testing.T) {
 	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
 	require.NoError(t, err)
 
-	serviceBuilder := BuildService(workload, false)
+	serviceBuilder, err := BuildService(workload, false, nil)
+	require.NoError(t, err)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())
