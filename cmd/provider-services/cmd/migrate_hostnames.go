@@ -3,11 +3,10 @@ package cmd
 import (
 	"errors"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
-
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 var errEmptyHostnames = errors.New("hostnames cannot be empty")
@@ -22,17 +21,7 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 	cl := cli.MustClientFromContext(ctx)
 	cctx := cl.ClientContext()
 
-	prov, err := providerFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+	qclient, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
@@ -43,6 +32,11 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 	}
 
 	gseq, err := cmd.Flags().GetUint32("gseq")
+	if err != nil {
+		return err
+	}
+
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), qclient, true)
 	if err != nil {
 		return err
 	}

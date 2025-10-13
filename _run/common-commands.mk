@@ -15,7 +15,7 @@ CERT_HOSTNAME  ?= localhost
 LEASE_SERVICES ?= web
 
 RESOURCE_SERVER_HOST ?= localhost:8445
-
+AP_PROVIDER_URL      ?= 
 GW_AUTH_TYPE   ?= jwt
 
 .PHONY: multisig-send
@@ -283,6 +283,18 @@ provider-lease-logs:
 		--from      "$(KEY_NAME)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: provider-lease-shell
+provider-lease-shell:
+	$(PROVIDER_SERVICES) lease-shell \
+		--dseq      "$(DSEQ)"        \
+		--gseq      "$(GSEQ)"        \
+		--oseq      "$(OSEQ)"        \
+		--from      "$(KEY_NAME)"    \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type=$(GW_AUTH_TYPE) \
+		${LEASE_SERVICES} \
+		date
 
 .PHONY: provider-lease-events
 provider-lease-events:

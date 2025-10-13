@@ -12,6 +12,8 @@ import (
 
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
+
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
@@ -19,7 +21,6 @@ import (
 	"pkg.akt.dev/go/cli"
 
 	cflags "pkg.akt.dev/go/cli/flags"
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 const (
@@ -28,9 +29,7 @@ const (
 	FlagReplicaIndex = "replica-index"
 )
 
-var (
-	errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
-)
+var errTerminalNotATty = errors.New("input is not a terminal, cannot setup TTY")
 
 func LeaseShellCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -44,6 +43,9 @@ func LeaseShellCmd() *cobra.Command {
 
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
+	if err := addNoChainFlag(cmd); err != nil {
+		panic(err)
+	}
 
 	cmd.Flags().Bool(FlagStdin, false, "connect stdin")
 	if err := viper.BindPFlag(FlagStdin, cmd.Flags().Lookup(FlagStdin)); err != nil {
@@ -57,6 +59,10 @@ func LeaseShellCmd() *cobra.Command {
 
 	cmd.Flags().Uint(FlagReplicaIndex, 0, "replica index to connect to")
 	if err := viper.BindPFlag(FlagReplicaIndex, cmd.Flags().Lookup(FlagReplicaIndex)); err != nil {
+		return nil
+	}
+
+	if err := addProviderURLFlag(cmd); err != nil {
 		return nil
 	}
 
@@ -102,7 +108,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	cl := cli.MustClientFromContext(ctx)
 	cctx := cl.ClientContext()
 
-	prov, err := providerFromFlags(cmd.Flags())
+	qclient, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
@@ -111,14 +117,10 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
 	lID := bidID.LeaseID()
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), qclient, true)
 	if err != nil {
 		return err
 	}

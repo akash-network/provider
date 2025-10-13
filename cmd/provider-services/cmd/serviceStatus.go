@@ -1,11 +1,11 @@
 package cmd
 
 import (
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
 	cflags "pkg.akt.dev/go/cli/flags"
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func serviceStatusCmd() *cobra.Command {
@@ -35,12 +35,12 @@ func doServiceStatus(cmd *cobra.Command) error {
 	cl := cli.MustClientFromContext(ctx)
 	cctx := cl.ClientContext()
 
-	svcName, err := cmd.Flags().GetString(FlagService)
+	qclient, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
+	svcName, err := cmd.Flags().GetString(FlagService)
 	if err != nil {
 		return err
 	}
@@ -50,12 +50,7 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), qclient, true)
 	if err != nil {
 		return err
 	}

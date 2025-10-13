@@ -10,15 +10,18 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	pclient "github.com/akash-network/provider/client"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkclient "github.com/cosmos/cosmos-sdk/types"
 
 	cflags "pkg.akt.dev/go/cli/flags"
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
-	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
 	apclient "pkg.akt.dev/go/provider/client"
 	ajwt "pkg.akt.dev/go/util/jwt"
 	"pkg.akt.dev/node/app"
@@ -26,11 +29,17 @@ import (
 )
 
 const (
-	FlagService  = "service"
-	flagOutput   = "output"
-	flagFollow   = "follow"
-	flagTail     = "tail"
-	flagAuthType = "auth-type"
+	FlagService     = "service"
+	FlagProvider    = cflags.FlagProvider
+	FlagProviderURL = "provider-url"
+	FlagDSeq        = cflags.FlagDSeq
+	FlagGSeq        = cflags.FlagGSeq
+	FlagOSeq        = cflags.FlagOSeq
+	flagOutput      = "output"
+	flagFollow      = "follow"
+	flagTail        = "tail"
+	flagAuthType    = "auth-type"
+	FlagNoChain     = "no-chain"
 )
 
 const (
@@ -68,6 +77,22 @@ func addCmdFlags(cmd *cobra.Command) {
 
 func addAuthFlags(cmd *cobra.Command) {
 	cmd.Flags().String(flagAuthType, authTypeJWT, "gateway auth type. jwt|mtls. defaults to mtls")
+}
+
+func addProviderURLFlag(cmd *cobra.Command) error {
+	cmd.Flags().String(FlagProviderURL, "", "Provider URL to connect to directly")
+	if err := viper.BindPFlag(FlagProviderURL, cmd.Flags().Lookup(FlagProviderURL)); err != nil {
+		return err
+	}
+	return nil
+}
+
+func addNoChainFlag(cmd *cobra.Command) error {
+	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
+	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+		return err
+	}
+	return nil
 }
 
 func addManifestFlags(cmd *cobra.Command) {
@@ -130,7 +155,7 @@ func leaseIDFromFlags(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error
 	}, nil
 }
 
-func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
+func providerFromFlags(flags *pflag.FlagSet) (sdk.AccAddress, error) {
 	provider, err := flags.GetString(cflags.FlagProvider)
 	if err != nil {
 		return nil, err
@@ -143,45 +168,73 @@ func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
 	return addr, nil
 }
 
-func leasesForDeployment(ctx context.Context, cl aclient.QueryClient, flags *pflag.FlagSet, did dtypes.DeploymentID) ([]mtypes.LeaseID, error) {
-	filter := mtypes.LeaseFilters{
-		Owner: did.Owner,
-		DSeq:  did.DSeq,
-		State: mtypes.Lease_State_name[int32(mtypes.LeaseActive)],
-	}
+func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient) ([]mtypes.LeaseID, error) {
+	var leases []mtypes.LeaseID
+	var err error
 
-	if flags.Changed(cflags.FlagProvider) {
-		prov, err := providerFromFlags(flags)
+	prov, err := flags.GetString(cflags.FlagProvider)
+	if err != nil {
+		return nil, err
+	}
+	var paddr sdk.AccAddress
+	if prov != "" {
+		paddr, err = sdk.AccAddressFromBech32(prov)
 		if err != nil {
 			return nil, err
 		}
-
-		filter.Provider = prov.String()
 	}
 
-	if val, err := flags.GetUint32(cflags.FlagGSeq); flags.Changed(cflags.FlagGSeq) && err == nil {
-		filter.GSeq = val
-	}
+	var dseq uint64
+	var gseq uint32
+	var oseq uint32
 
-	if val, err := flags.GetUint32(cflags.FlagOSeq); flags.Changed(cflags.FlagOSeq) && err == nil {
-		filter.OSeq = val
-	}
+	owner := cctx.FromAddress
 
-	resp, err := cl.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
-		Filters: filter,
-	})
+	dseq, err = flags.GetUint64(cflags.FlagDSeq)
+	if err != nil {
+		return nil, err
+	}
+	gseq, err = flags.GetUint32(cflags.FlagGSeq)
+	if err != nil {
+		return nil, err
+	}
+	oseq, err = flags.GetUint32(cflags.FlagOSeq)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(resp.Leases) == 0 {
-		return nil, fmt.Errorf("%w  for dseq=%v", errNoActiveLease, did.DSeq)
-	}
+	purl, _ := flags.GetString(FlagProviderURL)
+	if purl == "" && cl != nil {
+		filter := mtypes.LeaseFilters{
+			Owner: owner.String(),
+			DSeq:  dseq,
+			State: mtypes.Lease_State_name[int32(mtypes.LeaseActive)],
+		}
 
-	leases := make([]mtypes.LeaseID, 0, len(resp.Leases))
+		resp, err := cl.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
+			Filters: filter,
+		})
+		if err != nil {
+			return nil, err
+		}
 
-	for _, lease := range resp.Leases {
-		leases = append(leases, lease.Lease.ID)
+		if len(resp.Leases) == 0 {
+			return nil, fmt.Errorf("%w for dseq=%v", errNoActiveLease, dseq)
+		}
+
+		leases = make([]mtypes.LeaseID, 0, len(resp.Leases))
+
+		for _, lease := range resp.Leases {
+			leases = append(leases, lease.Lease.ID)
+		}
+	} else {
+		leases = append(leases, mtypes.LeaseID{
+			Owner:    owner.String(),
+			DSeq:     dseq,
+			GSeq:     gseq,
+			OSeq:     oseq,
+			Provider: paddr.String(),
+		})
 	}
 
 	return leases, nil
@@ -224,4 +277,58 @@ func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.Flag
 	}
 
 	return opts, nil
+}
+
+func setupChainClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet) (aclient.QueryClient, error) {
+	offchain, _ := flags.GetBool(FlagNoChain)
+	if !offchain {
+		cl, err := pclient.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return nil, err
+		}
+
+		return cl, nil
+	}
+
+	return nil, nil
+}
+
+func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient, authRequired bool) (apclient.Client, error) {
+	paddr, err := providerFromFlags(flags)
+	if err != nil {
+		return nil, err
+	}
+
+	purl, _ := flags.GetString(FlagProviderURL)
+	if cl != nil && purl == "" {
+		resp, err := cl.Provider().Provider(ctx, &ptypes.QueryProviderRequest{Owner: paddr.String()})
+		if err != nil {
+			return nil, err
+		}
+
+		purl = resp.Provider.HostURI
+	}
+
+	var opts []apclient.ClientOption
+
+	if authRequired {
+		opts, err = loadAuthOpts(ctx, cctx, flags)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if cl != nil {
+		opts = append(opts, apclient.WithCertQuerier(pclient.NewCertificateQuerier(cl)))
+	}
+
+	// Always add the provider URL - the client requires it
+	opts = append(opts, apclient.WithProviderURL(purl))
+
+	pcl, err := apclient.NewClient(ctx, paddr, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return pcl, nil
 }

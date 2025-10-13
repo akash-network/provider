@@ -5,7 +5,6 @@ import (
 	"pkg.akt.dev/go/cli"
 
 	cflags "pkg.akt.dev/go/cli/flags"
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func leaseStatusCmd() *cobra.Command {
@@ -22,6 +21,13 @@ func leaseStatusCmd() *cobra.Command {
 
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
+	if err := addNoChainFlag(cmd); err != nil {
+		panic(err)
+	}
+
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }
@@ -31,7 +37,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 	cl := cli.MustClientFromContext(ctx)
 	cctx := cl.ClientContext()
 
-	prov, err := providerFromFlags(cmd.Flags())
+	qclient, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
@@ -41,20 +47,15 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), qclient, true)
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
-	if err != nil {
-		return err
-	}
-
-	result, err := gclient.LeaseStatus(ctx, bid.LeaseID())
+	status, err := gclient.LeaseStatus(ctx, bid.LeaseID())
 	if err != nil {
 		return showErrorToUser(err)
 	}
 
-	return cli.PrintJSON(cctx, result)
+	return cli.PrintJSON(cctx, status)
 }
