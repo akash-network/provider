@@ -6,7 +6,6 @@ import (
 	mcli "github.com/akash-network/node/x/market/client/cli"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func leaseStatusCmd() *cobra.Command {
@@ -22,8 +21,7 @@ func leaseStatusCmd() *cobra.Command {
 
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
-	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
-	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+	if err := addNoChainFlag(cmd); err != nil {
 		panic(err)
 	}
 

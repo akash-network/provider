@@ -6,7 +6,6 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
@@ -25,8 +24,7 @@ func leaseEventsCmd() *cobra.Command {
 
 	addServiceFlags(cmd)
 	addAuthFlags(cmd)
-	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
-	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+	if err := addNoChainFlag(cmd); err != nil {
 		panic(err)
 	}
 

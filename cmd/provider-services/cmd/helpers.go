@@ -82,6 +82,14 @@ func addProviderURLFlag(cmd *cobra.Command) error {
 	return nil
 }
 
+func addNoChainFlag(cmd *cobra.Command) error {
+	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
+	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+		return err
+	}
+	return nil
+}
+
 func addManifestFlags(cmd *cobra.Command) {
 	addCmdFlags(cmd)
 

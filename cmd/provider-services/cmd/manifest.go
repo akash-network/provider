@@ -8,7 +8,6 @@ import (
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -45,8 +44,7 @@ func SendManifestCmd() *cobra.Command {
 	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
-	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
-	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+	if err := addNoChainFlag(cmd); err != nil {
 		panic(err)
 	}
 
@@ -115,8 +113,7 @@ func GetManifestCmd() *cobra.Command {
 	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputYAML, "output format json|yaml. default yaml")
-	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
-	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+	if err := addNoChainFlag(cmd); err != nil {
 		panic(err)
 	}
 

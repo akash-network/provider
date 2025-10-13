@@ -32,6 +32,14 @@ func statusCmd() *cobra.Command {
 	cmd.Flags().String(FlagProvider, "", "provider address")
 	cmd.Flags().MarkHidden(FlagProvider)
 
+	if err := addNoChainFlag(cmd); err != nil {
+		panic(err)
+	}
+
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
+	}
+
 	return cmd
 }
 

@@ -8,7 +8,6 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
@@ -31,8 +30,7 @@ func leaseLogsCmd() *cobra.Command {
 	cmd.Flags().BoolP(flagFollow, "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P(flagTail, "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
 	cmd.Flags().StringP(flagOutput, "o", outputText, "Output format text|json. Defaults to text")
-	cmd.Flags().Bool(FlagNoChain, false, "do no go onchain to read data")
-	if err := viper.BindPFlag(FlagNoChain, cmd.Flags().Lookup(FlagNoChain)); err != nil {
+	if err := addNoChainFlag(cmd); err != nil {
 		panic(err)
 	}
 
@@ -137,7 +135,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	for _, stream := range streams {
 		if stream.error != nil {
-			fmt.Errorf("error getting lease logs: %w", stream.error)
+			fmt.Fprintf(cmd.ErrOrStderr(), "error getting lease logs: %v\n", stream.error)
 			continue
 		}
 
