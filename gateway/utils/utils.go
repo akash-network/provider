@@ -152,8 +152,10 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 				return nil, err
 			}
 
-			return pk, nil
-		}, jwt.WithValidMethods([]string{"ES256K"}))
+			verifier := ajwt.NewVerifier(pk, iss)
+
+			return verifier, nil
+		}, jwt.WithValidMethods([]string{"ES256K", "ES256KADR36"}))
 
 		if err == nil && !token.Valid {
 			err = ErrJWTInvalid
