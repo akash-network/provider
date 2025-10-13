@@ -31,6 +31,7 @@ import (
 
 	"github.com/akash-network/node/sdl"
 
+	certclient "github.com/akash-network/provider/client"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	pcmock "github.com/akash-network/provider/cluster/mocks"
 	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
@@ -150,7 +151,8 @@ func runRouterTest(t *testing.T, authTypes []routerTestAuth, fn func(*routerTest
 				hdr.Set("Authorization", fmt.Sprintf("Bearer %s", tokString))
 			}
 
-			mf.gwclient, err = apclient.NewClient(ctx, mocks.qclient, sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
+			opts = append(opts, apclient.WithCertQuerier(certclient.NewCertificateQuerier(mocks.qclient)), apclient.WithProviderURL(host))
+			mf.gwclient, err = apclient.NewClient(ctx, sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
 			require.NoError(t, err)
 			require.NotNil(t, mf.gwclient)
 
@@ -217,7 +219,8 @@ func TestRouteNotActiveClientCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		mf.gwclient, err = apclient.NewClient(context.Background(), mocks.qclient, sdk.AccAddress(mf.pkey.PubKey().Address()))
+		opts := []apclient.ClientOption{apclient.WithCertQuerier(certclient.NewCertificateQuerier(mocks.qclient)), apclient.WithProviderURL(host)}
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
 		require.NoError(t, err)
 		require.NotNil(t, mf.gwclient)
 
@@ -249,7 +252,8 @@ func TestRouteExpiredClientCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		mf.gwclient, err = apclient.NewClient(context.Background(), mocks.qclient, sdk.AccAddress(mf.pkey.PubKey().Address()))
+		opts := []apclient.ClientOption{apclient.WithCertQuerier(certclient.NewCertificateQuerier(mocks.qclient)), apclient.WithProviderURL(host)}
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
 		require.NoError(t, err)
 		require.NotNil(t, mf.gwclient)
 
@@ -281,7 +285,8 @@ func TestRouteNotActiveServerCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		mf.gwclient, err = apclient.NewClient(context.Background(), mocks.qclient, sdk.AccAddress(mf.pkey.PubKey().Address()))
+		opts := []apclient.ClientOption{apclient.WithCertQuerier(certclient.NewCertificateQuerier(mocks.qclient)), apclient.WithProviderURL(host)}
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
 		require.NoError(t, err)
 		require.NotNil(t, mf.gwclient)
 
@@ -313,7 +318,8 @@ func TestRouteExpiredServerCert(t *testing.T) {
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		mf.gwclient, err = apclient.NewClient(context.Background(), mocks.qclient, sdk.AccAddress(mf.pkey.PubKey().Address()))
+		opts := []apclient.ClientOption{apclient.WithCertQuerier(certclient.NewCertificateQuerier(mocks.qclient)), apclient.WithProviderURL(host)}
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
 		require.NoError(t, err)
 		require.NotNil(t, mf.gwclient)
 

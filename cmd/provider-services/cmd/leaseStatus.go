@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	"github.com/spf13/cobra"
-
 	cmdcommon "github.com/akash-network/node/cmd/common"
 	dcli "github.com/akash-network/node/x/deployment/client/cli"
 	mcli "github.com/akash-network/node/x/market/client/cli"
-
-	aclient "github.com/akash-network/provider/client"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	"github.com/spf13/cobra"
 )
 
 func leaseStatusCmd() *cobra.Command {
@@ -25,6 +21,13 @@ func leaseStatusCmd() *cobra.Command {
 
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
+	if err := addNoChainFlag(cmd); err != nil {
+		panic(err)
+	}
+
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }
@@ -37,12 +40,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
-	prov, err := providerFromFlags(cmd.Flags())
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
@@ -52,20 +50,15 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
-	if err != nil {
-		return err
-	}
-
-	result, err := gclient.LeaseStatus(ctx, bid.LeaseID())
+	status, err := gclient.LeaseStatus(ctx, bid.LeaseID())
 	if err != nil {
 		return showErrorToUser(err)
 	}
 
-	return cmdcommon.PrintJSON(cctx, result)
+	return cmdcommon.PrintJSON(cctx, status)
 }

@@ -6,15 +6,11 @@ import (
 
 	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
 	cmdcommon "github.com/akash-network/node/cmd/common"
-
-	aclient "github.com/akash-network/provider/client"
 )
 
 func leaseLogsCmd() *cobra.Command {
@@ -34,6 +30,13 @@ func leaseLogsCmd() *cobra.Command {
 	cmd.Flags().BoolP(flagFollow, "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P(flagTail, "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
 	cmd.Flags().StringP(flagOutput, "o", outputText, "Output format text|json. Defaults to text")
+	if err := addNoChainFlag(cmd); err != nil {
+		panic(err)
+	}
+
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
+	}
 
 	return cmd
 }
@@ -46,22 +49,14 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	dseq, err := dseqFromFlags(cmd.Flags())
+	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), cl)
 	if err != nil {
 		return err
-	}
-
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
-	if err != nil {
-		return markRPCServerError(err)
 	}
 
 	svcs, err := cmd.Flags().GetString(FlagService)
@@ -92,23 +87,18 @@ func doLeaseLogs(cmd *cobra.Command) error {
 		return errors.Errorf("tail flag supplied with invalid value. must be >= -1")
 	}
 
-	type result struct {
+	type streamResult struct {
 		lid    mtypes.LeaseID
 		error  error
 		stream *apclient.ServiceLogs
 	}
 
-	streams := make([]result, 0, len(leases))
-
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
+	streams := make([]streamResult, 0, len(leases))
 
 	for _, lid := range leases {
-		stream := result{lid: lid}
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+		stream := streamResult{lid: lid}
+
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {
@@ -145,11 +135,12 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	for _, stream := range streams {
 		if stream.error != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "error getting lease logs: %v\n", stream.error)
 			continue
 		}
 
 		wgStreams.Add(1)
-		go func(stream result) {
+		go func(stream streamResult) {
 			defer wgStreams.Done()
 
 			for res := range stream.stream.Stream {

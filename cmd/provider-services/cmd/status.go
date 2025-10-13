@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 
 	cmdcommon "github.com/akash-network/node/cmd/common"
-
-	aclient "github.com/akash-network/provider/client"
 )
 
 func statusCmd() *cobra.Command {
@@ -17,6 +14,10 @@ func statusCmd() *cobra.Command {
 		Short:        "get provider status",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Set the hidden provider flag to the address value for internal use
+			return cmd.Flags().Set(FlagProvider, args[0])
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			addr, err := sdk.AccAddressFromBech32(args[0])
 			if err != nil {
@@ -25,6 +26,18 @@ func statusCmd() *cobra.Command {
 
 			return doStatus(cmd, addr)
 		},
+	}
+
+	// Add hidden provider flag for internal use by setupProviderClient
+	cmd.Flags().String(FlagProvider, "", "provider address")
+	cmd.Flags().MarkHidden(FlagProvider)
+
+	if err := addNoChainFlag(cmd); err != nil {
+		panic(err)
+	}
+
+	if err := addProviderURLFlag(cmd); err != nil {
+		panic(err)
 	}
 
 	return cmd
@@ -38,12 +51,12 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 
 	ctx := cmd.Context()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, addr)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, false)
 	if err != nil {
 		return err
 	}
