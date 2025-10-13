@@ -5,7 +5,7 @@ go 1.24.2
 toolchain go1.24.6
 
 require (
-	github.com/akash-network/akash-api v0.0.91
+	github.com/akash-network/akash-api v0.0.92-rc0
 	github.com/akash-network/node v0.38.5
 	github.com/avast/retry-go/v4 v4.5.0
 	github.com/blang/semver/v4 v4.0.0
