@@ -61,7 +61,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(version.NewVersionCommand())
 
 	cmd.AddCommand(acmd.QueryCmd())
-	cmd.AddCommand(acmd.TxCmd())
+	cmd.AddCommand(addNodeFlagToTxCmd(acmd.TxCmd()))
 
 	cmd.AddCommand(nodeCmd())
 

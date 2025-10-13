@@ -328,3 +328,15 @@ func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pfl
 
 	return pcl, nil
 }
+
+// addNodeFlagToTxCmd adds the node flag with environment variable binding to tx commands
+func addNodeFlagToTxCmd(txCmd *cobra.Command) *cobra.Command {
+	// Add node flag that respects AKASH_NODE and AP_NODE environment variables
+	txCmd.PersistentFlags().String(flags.FlagNode, "http://localhost:26657", "The node address")
+
+	// Bind environment variables: AP_NODE and AKASH_NODE
+	viper.BindEnv(flags.FlagNode, "AP_NODE", "AKASH_NODE")
+	viper.BindPFlag(flags.FlagNode, txCmd.PersistentFlags().Lookup(flags.FlagNode))
+
+	return txCmd
+}
