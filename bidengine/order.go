@@ -461,7 +461,8 @@ loop:
 			o.log.Debug("closing bid", "order-id", o.orderID)
 
 			msg := &mvbeta.MsgCloseBid{
-				ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				ID:     mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				Reason: mtypes.LeaseClosedReasonUnspecified,
 			}
 
 			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())

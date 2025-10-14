@@ -7,6 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	mv1 "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"github.com/boz/go-lifecycle"
@@ -195,7 +196,8 @@ func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Res
 	return runner.Do(func() runner.Result {
 		// TODO: retry, timeout
 		msg := &mvbeta.MsgCloseBid{
-			ID: m.deployment.LeaseID().BidID(),
+			ID:     m.deployment.LeaseID().BidID(),
+			Reason: mv1.LeaseClosedReasonUnstable,
 		}
 		res, err := m.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 		if err != nil {

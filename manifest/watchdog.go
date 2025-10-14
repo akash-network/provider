@@ -67,12 +67,13 @@ func (wd *watchdog) run() {
 	wd.log.Debug("watchdog start")
 	select {
 	case <-time.After(wd.timeout):
-		// Close the bid, since if this point is reached then a manifest has not been received
+		// Close the bid, since if this point is reached, then a manifest has not been received
 		wd.log.Info("watchdog closing bid")
 
 		runch = runner.Do(func() runner.Result {
 			msg := &mvbeta.MsgCloseBid{
-				ID: mtypes.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
+				ID:     mtypes.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
+				Reason: mtypes.LeaseClosedReasonManifestTimeout,
 			}
 
 			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
