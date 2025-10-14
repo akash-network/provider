@@ -583,7 +583,8 @@ func (c *accountQuerier) accountQuerier() error {
 
 			// could be a duplicate request
 			if pubkey, err = c.pstorage.GetAccountPublicKey(c.ctx, req.acc); err != nil {
-				res, err := c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
+				var res *authtypes.QueryAccountResponse
+				res, err = c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
 				if err != nil {
 					c.log.Error("fetching account info", "err", err.Error(), "account", req.acc.String())
 				}
