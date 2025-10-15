@@ -12,6 +12,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"pkg.akt.dev/go/cli"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 	sdltypes "pkg.akt.dev/go/sdl"
 )
@@ -45,9 +46,6 @@ func SendManifestCmd() *cobra.Command {
 	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
-	if err := addNoChainFlag(cmd); err != nil {
-		panic(err)
-	}
 
 	return cmd
 }
@@ -64,17 +62,19 @@ func GetManifestCmd() *cobra.Command {
 			cl := cli.MustClientFromContext(ctx)
 			cctx := cl.ClientContext()
 
-			qclient, err := setupChainClient(ctx, cctx, cmd.Flags())
-			if err != nil {
-				return err
-			}
-
 			lid, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
 			if err != nil {
 				return err
 			}
 
-			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), qclient, true)
+			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
+
+			opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+			if err != nil {
+				return err
+			}
+
+			gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 			if err != nil {
 				return err
 			}
@@ -111,9 +111,6 @@ func GetManifestCmd() *cobra.Command {
 	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputYAML, "output format json|yaml. default yaml")
-	if err := addNoChainFlag(cmd); err != nil {
-		panic(err)
-	}
 
 	return cmd
 }
@@ -122,11 +119,6 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	ctx := cmd.Context()
 	cl := cli.MustClientFromContext(ctx)
 	cctx := cl.ClientContext()
-
-	qclient, err := setupChainClient(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
 
 	sdl, err := sdltypes.ReadFile(sdlpath)
 	if err != nil {
@@ -137,8 +129,17 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	if err != nil {
 		return err
 	}
+
+	dseq, err := dseqFromFlags(cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), qclient)
+	leases, err := leasesForDeployment(ctx, cl.Query(), cmd.Flags(), dtypes.DeploymentID{
+		Owner: cctx.GetFromAddress().String(),
+		DSeq:  dseq,
+	})
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -154,20 +155,21 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	submitFailed := false
 
+	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	for i, lid := range leases {
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), qclient, true)
+		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
+		gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 		if err != nil {
 			return err
 		}
 
-		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
-		if err != nil {
-			return err
-		}
-
-		err = gclient.SubmitManifest(ctx, lid.DSeq, mani)
+		err = gclient.SubmitManifest(ctx, dseq, mani)
 		res := result{
-			Provider: paddr,
+			Provider: prov,
 			Status:   "PASS",
 		}
 		if err != nil {

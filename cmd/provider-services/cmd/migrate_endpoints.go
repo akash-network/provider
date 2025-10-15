@@ -7,7 +7,6 @@ import (
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
 
-	pclient "github.com/akash-network/provider/client"
 	apclient "pkg.akt.dev/go/provider/client"
 )
 
@@ -33,8 +32,7 @@ func migrateEndpoints(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	opts = append(opts, apclient.WithCertQuerier(pclient.NewCertificateQuerier(cl.Query())))
-	gclient, err := apclient.NewClient(ctx, prov, opts...)
+	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
 	if err != nil {
 		return err
 	}
