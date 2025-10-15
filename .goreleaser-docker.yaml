@@ -85,7 +85,8 @@ builds:
     gcflags:
       - "all=-N -l"
 archives:
-  - format: binary
+  - formats:
+      - binary
 dockers:
   - dockerfile: Dockerfile
     ids:
