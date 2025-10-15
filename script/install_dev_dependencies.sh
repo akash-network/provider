@@ -13,7 +13,7 @@ macos_deps=(
 
 debian_deps=(
     "make"
-    "build-essentials"
+    "build-essential"
     "direnv"
     "unzip"
     "wget"
