@@ -1,10 +1,8 @@
 # Setting-up development environment
 
-**Warning**
-All links to the `provider` repo are referencing to the `gpu` branch. As soon as `gpu` is merged into `main` all links need update.
 
 This page covers setting up development environment for both [node](https://github.com/akash-network/node) and [provider](https://github.com/akash-network/provider) repositories.
-The provider repo elected as placeholder for all the scripts as it depends on the `node` repo (Better explanation?)
+The provider repository hosts the shared development scripts because it depends on the `node` repository.
 Should you already know what this guide is all about - feel free to explore [examples](#how-to-use-runbook)
 
 ## Code
@@ -16,8 +14,8 @@ Checkout below assumes `git` is set to use SSH connection to GitHub
 
 ```shell
 cd ~/go/src/github.com/akash-network # all commands below assume this as current directory
-git clone git@github.com:akash-netowrk/node
-git clone git@github.com:akash-netowrk/provider
+git clone git@github.com:akash-network/node
+git clone git@github.com:akash-network/provider
 ```
 
 ## Requirements
@@ -42,20 +40,20 @@ Currently supported host platforms:
 
 ### General behaviour
 
-All examples are located within [_run](https://github.com/akash-network/provider/blob/gpu/_run) directory.
+All examples are located within the [_run](https://github.com/akash-network/provider/tree/main/_run) directory.
 [Commands](#commands) are implemented as `make` targets.
 
 There are three ways we use to set up the k8s cluster.
 
 - kind
-- minukube
+- minikube
 - ssh
 
 Both `kind` and `minikube` are e2e, i.e. the configuration is capable of spinning up cluster and the local host, whereas `ssh` expects cluster to be configured before use.
 
 ### Runbook
 
-There are four configuration variants, each presented as directory within [_run](https://github.com/akash-network/provider/blob/gpu/_run).
+There are four configuration variants, each presented as a directory within [_run](https://github.com/akash-network/provider/tree/main/_run).
 
 - `kube` - uses `kind` to set up local cluster. It is widely used by e2e testing of the provider. Provider and the node run as host services. All operators run as kubernetes deployments.
 - `single` - uses `kind` to set up local cluster. Main difference is both node and provider (and all operators) are running within k8s cluster as deployments. (at some point we will merge `single`
@@ -92,8 +90,8 @@ TBD
 
 ##### Keys
 
-Each configuration creates four [keys](https://github.com/akash-network/provider/blob/gpu/_run/common.mk#L40..L43):
-They keys are assigned to the targets and under normal circumstances there is no need to alter it. However, it can be done with setting `KEY_NAME`:
+Each configuration creates four [keys](https://github.com/akash-network/provider/blob/main/_run/common.mk#L38-L43):
+The keys are assigned to the targets and under normal circumstances there is no need to alter them. However, it can be done by setting `KEY_NAME`:
 
 ```shell
 # create provider from **provider** key
@@ -139,14 +137,14 @@ This runbook requires three terminals
 
    __t3 run__
    ```shell
-   make provider-create
+   make provider-run
    ```
 
-6. Start the provider
+6. Query the provider for its status
 
    __t1 run__
    ```shell
-   make provider-create
+   make provider-status
    ```
 
 7. __t1__ Create a deployment. Check that the deployment was created.  Take note of the `dseq` - deployment sequence:
@@ -226,7 +224,7 @@ This runbook requires three terminals
 
 ##### Kube for e2e tests
 
-This runbook requires two terminal
+This runbook requires two terminals
 
 1. Open runbook
 
@@ -240,11 +238,12 @@ This runbook requires two terminal
    __t1 run__
    ```shell
    make kube-cluster-setup-e2e
+   ```
 
 3. Run e2e tests
 
    ```shell
-   make test-e2e-intergration
+   make test-e2e-integration
    ```
 
 ##### Single
