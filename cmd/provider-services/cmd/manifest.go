@@ -9,10 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"pkg.akt.dev/go/cli"
-	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 	sdltypes "pkg.akt.dev/go/sdl"
 )
@@ -36,12 +36,13 @@ func SendManifestCmd() *cobra.Command {
 		Args:         cobra.ExactArgs(1),
 		Short:        "Submit manifest to provider(s)",
 		SilenceUsage: true,
-		PreRunE:      cli.TxPersistentPreRunE,
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return doSendManifest(cmd, args[0])
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addManifestFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -59,22 +60,17 @@ func GetManifestCmd() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
-			cl := cli.MustClientFromContext(ctx)
-			cctx := cl.ClientContext()
+			cctx, err := sdkclient.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
 
 			lid, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
 			if err != nil {
 				return err
 			}
 
-			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-
-			opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-			if err != nil {
-				return err
-			}
-
-			gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 			if err != nil {
 				return err
 			}
@@ -107,6 +103,7 @@ func GetManifestCmd() *cobra.Command {
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -136,10 +133,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	}
 
 	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(ctx, cl.Query(), cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), cl.Query())
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -155,21 +149,20 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 
 	submitFailed := false
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
 	for i, lid := range leases {
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), true)
+		if err != nil {
+			return err
+		}
+
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
 		if err != nil {
 			return err
 		}
 
 		err = gclient.SubmitManifest(ctx, dseq, mani)
 		res := result{
-			Provider: prov,
+			Provider: paddr,
 			Status:   "PASS",
 		}
 		if err != nil {

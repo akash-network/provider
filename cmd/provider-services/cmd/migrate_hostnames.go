@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 
+	pclient "github.com/akash-network/provider/client"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
@@ -20,19 +21,13 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 	cl := cli.MustClientFromContext(ctx)
-	cctx := cl.ClientContext()
 
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+	gclient, err := apclient.NewClient(ctx, prov, apclient.WithCertQuerier(pclient.NewCertificateQuerier(cl.Query())))
 	if err != nil {
 		return err
 	}
@@ -64,6 +59,8 @@ func MigrateHostnamesCmd() *cobra.Command {
 		RunE:         migrateHostnames,
 	}
 
+	cflags.AddQueryFlagsToCmd(cmd)
+	cmd.Flags().Bool(cflags.FlagOffline, false, "Offline mode (does not allow any online functionality)")
 	addCmdFlags(cmd)
 	addAuthFlags(cmd)
 

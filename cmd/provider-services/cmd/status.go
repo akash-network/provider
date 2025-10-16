@@ -3,10 +3,10 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func statusCmd() *cobra.Command {
@@ -15,7 +15,15 @@ func statusCmd() *cobra.Command {
 		Short:        "get provider status",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
-		PreRunE:      cli.QueryPersistentPreRunE,
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			err := cli.QueryPersistentPreRunE(cmd, args)
+			if err != nil {
+				return err
+			}
+
+			// Set the hidden provider flag to the address value for internal use
+			return cmd.Flags().Set(cflags.FlagProvider, args[0])
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			addr, err := sdk.AccAddressFromBech32(args[0])
 			if err != nil {
@@ -26,15 +34,28 @@ func statusCmd() *cobra.Command {
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
+
+	// Add hidden provider flag for internal use by setupProviderClient
+	cmd.Flags().String(cflags.FlagProvider, "", "provider address")
+	cmd.Flags().MarkHidden(cflags.FlagProvider)
+
 	return cmd
 }
 
 func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 	ctx := cmd.Context()
-	cl := cli.MustLightClientFromContext(ctx)
-	cctx := cl.ClientContext()
+	cctx, err := sdkclient.GetClientTxContext(cmd)
+	if err != nil {
+		return err
+	}
 
-	gclient, err := apclient.NewClient(ctx, cl.Query(), addr)
+	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	if err != nil {
+		return err
+	}
+
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, false)
 	if err != nil {
 		return err
 	}

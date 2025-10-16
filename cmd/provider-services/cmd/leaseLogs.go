@@ -1,15 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 )
@@ -20,36 +18,31 @@ func leaseLogsCmd() *cobra.Command {
 		Short:        "get lease logs",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
-		PreRunE:      cli.TxPersistentPreRunE,
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseLogs(cmd)
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addServiceFlags(cmd)
 	addAuthFlags(cmd)
 
 	cmd.Flags().BoolP(flagFollow, "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P(flagTail, "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
-	cmd.Flags().StringP(flagOutput, "o", outputText, "Output format text|json. Defaults to text")
 
 	return cmd
 }
 
 func doLeaseLogs(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	cl := cli.MustClientFromContext(ctx)
-	cctx := cl.ClientContext()
-
-	dseq, err := dseqFromFlags(cmd.Flags())
-	if err != nil {
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
 		return err
 	}
+	cctx := cl.ClientContext()
 
-	leases, err := leasesForDeployment(cmd.Context(), cl.Query(), cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), cl)
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -90,15 +83,9 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	streams := make([]result, 0, len(leases))
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
 	for _, lid := range leases {
 		stream := result{lid: lid}
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {
