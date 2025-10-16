@@ -1,7 +1,8 @@
 package cmd
 
 import (
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	"errors"
+
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
@@ -33,13 +34,11 @@ func serviceStatusCmd() *cobra.Command {
 
 func doServiceStatus(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
 		return err
 	}
-
-	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
@@ -54,7 +53,7 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
 	if err != nil {
 		return err
 	}

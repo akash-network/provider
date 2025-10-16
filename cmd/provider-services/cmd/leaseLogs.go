@@ -40,9 +40,12 @@ func doLeaseLogs(cmd *cobra.Command) error {
 	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
 		return err
 	}
-	cctx := cl.ClientContext()
+	cctx, err := cli.GetClientTxContext(cmd)
+	if err != nil {
+		return err
+	}
 
-	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), cl)
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -85,7 +88,7 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	for _, lid := range leases {
 		stream := result{lid: lid}
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {

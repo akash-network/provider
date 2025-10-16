@@ -43,7 +43,7 @@ func doLeaseStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), true)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
 	if err != nil {
 		return err
 	}

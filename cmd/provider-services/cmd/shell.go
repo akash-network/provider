@@ -10,7 +10,6 @@ import (
 	"sync"
 	"syscall"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
@@ -18,6 +17,7 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
 
+	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
 )
 
@@ -99,12 +99,11 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
 		return err
 	}
-
-	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
@@ -115,7 +114,7 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 	lID := bidID.LeaseID()
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
 	if err != nil {
 		return err
 	}

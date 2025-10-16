@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"pkg.akt.dev/go/cli"
@@ -60,7 +59,11 @@ func GetManifestCmd() *cobra.Command {
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
-			cctx, err := sdkclient.GetClientTxContext(cmd)
+			cl, err := cli.ClientFromContext(ctx)
+			if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+				return err
+			}
+			cctx, err := cli.GetClientTxContext(cmd)
 			if err != nil {
 				return err
 			}
@@ -70,7 +73,7 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, true)
+			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
 			if err != nil {
 				return err
 			}
@@ -133,7 +136,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	}
 
 	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), cl.Query())
+	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -150,7 +153,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	submitFailed := false
 
 	for i, lid := range leases {
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), true)
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
 		if err != nil {
 			return err
 		}

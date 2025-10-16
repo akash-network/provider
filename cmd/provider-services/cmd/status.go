@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"errors"
+
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
+	v1beta3 "pkg.akt.dev/go/node/client/v1beta3"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
@@ -45,17 +47,21 @@ func statusCmd() *cobra.Command {
 
 func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 	ctx := cmd.Context()
-	cctx, err := sdkclient.GetClientTxContext(cmd)
+	cl, err := cli.LightClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	cl, err := setupChainClient(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
+	var queryClient v1beta3.QueryClient
+	if cl != nil {
+		queryClient = cl.Query()
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl, false)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClient, false)
 	if err != nil {
 		return err
 	}

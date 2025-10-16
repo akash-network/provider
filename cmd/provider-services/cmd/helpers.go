@@ -188,7 +188,7 @@ func leasesForDeployment(ctx context.Context, cctx sdkclient.Context, flags *pfl
 		return nil, err
 	}
 
-	purl, _ := flags.GetString(cflags.FlagProviderURL)
+	purl, _ := flags.GetString(flagProviderURL)
 	if purl == "" && cl != nil {
 		filter := mtypes.LeaseFilters{
 			Owner: owner.String(),
@@ -356,4 +356,11 @@ func ProviderPersistentPreRunE(cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+func queryClientOrNil(cl aclient.Client) aclient.QueryClient {
+	if cl == nil {
+		return nil
+	}
+	return cl.Query()
 }
