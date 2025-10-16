@@ -53,9 +53,9 @@ require (
 	k8s.io/client-go v0.33.3
 	k8s.io/code-generator v0.33.3
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.0.3-rc28
-	pkg.akt.dev/go/cli v0.0.3-rc18
-	pkg.akt.dev/go/sdl v0.0.2-rc6
+	pkg.akt.dev/go v0.0.3-rc31
+	pkg.akt.dev/go/cli v0.0.3-rc20
+	pkg.akt.dev/go/sdl v0.0.2-rc7
 	pkg.akt.dev/node v1.0.0-rc45
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0
@@ -144,7 +144,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chzyer/readline v1.5.1 // indirect
-	github.com/cloudwego/base64x v0.1.5 // indirect
+	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/cockroachdb/apd/v2 v2.0.2 // indirect
 	github.com/cockroachdb/errors v1.12.0 // indirect
