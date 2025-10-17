@@ -1,5 +1,7 @@
 package v2beta2
 
+import "slices"
+
 type GPUCapabilities struct {
 	Vendor string `json:"vendor" capabilities:"vendor"`
 	Model  string `json:"string" capabilities:"model"`
@@ -15,10 +17,5 @@ type NodeInfoCapabilities struct {
 }
 
 func (c *StorageCapabilities) HasClass(class string) bool {
-	for _, val := range c.Classes {
-		if val == class {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Classes, class)
 }
