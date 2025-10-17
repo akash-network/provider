@@ -58,7 +58,7 @@ func MigrateHostnamesCmd() *cobra.Command {
 	}
 
 	cflags.AddQueryFlagsToCmd(cmd)
-	cmd.Flags().Bool(cflags.FlagOffline, false, "Offline mode (does not allow any online functionality)")
+	AddProviderOperationFlagsToCmd(cmd)
 	addCmdFlags(cmd)
 	addAuthFlags(cmd)
 
