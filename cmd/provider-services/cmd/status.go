@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
-	v1beta3 "pkg.akt.dev/go/node/client/v1beta3"
+	"pkg.akt.dev/go/node/client/v1beta3"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
@@ -24,7 +24,12 @@ func statusCmd() *cobra.Command {
 			}
 
 			// Set the hidden provider flag to the address value for internal use
-			return cmd.Flags().Set(cflags.FlagProvider, args[0])
+			err = cmd.Flags().Set(cflags.FlagProvider, args[0])
+			if err != nil {
+				return err
+			}
+
+			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			addr, err := sdk.AccAddressFromBech32(args[0])
@@ -61,7 +66,8 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 		queryClient = cl.Query()
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClient, false)
+	paddr, err := providerFromFlags(cmd.Flags())
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClient, paddr, false)
 	if err != nil {
 		return err
 	}

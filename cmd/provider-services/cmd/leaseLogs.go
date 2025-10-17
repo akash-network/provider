@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
@@ -88,7 +89,12 @@ func doLeaseLogs(cmd *cobra.Command) error {
 
 	for _, lid := range leases {
 		stream := result{lid: lid}
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), true)
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+		if err != nil {
+			return err
+		}
+
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), paddr, true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseLogs(ctx, lid, svcs, follow, tailLines)
 		} else {

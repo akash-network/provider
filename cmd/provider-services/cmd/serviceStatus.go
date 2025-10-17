@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
@@ -53,7 +54,12 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
+	paddr, err := sdk.AccAddressFromBech32(bid.Provider)
+	if err != nil {
+		return err
+	}
+
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}

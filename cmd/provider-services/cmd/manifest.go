@@ -73,7 +73,12 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
+			paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+			if err != nil {
+				return err
+			}
+
+			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 			if err != nil {
 				return err
 			}
@@ -153,12 +158,12 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	submitFailed := false
 
 	for i, lid := range leases {
-		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), true)
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
 		if err != nil {
 			return err
 		}
 
-		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 		if err != nil {
 			return err
 		}

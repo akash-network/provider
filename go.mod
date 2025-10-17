@@ -1,8 +1,6 @@
 module github.com/akash-network/provider
 
-go 1.25.0
-
-toolchain go1.25.2
+go 1.25.2
 
 require (
 	cosmossdk.io/errors v1.0.2
@@ -56,7 +54,7 @@ require (
 	pkg.akt.dev/go v0.0.3-rc31
 	pkg.akt.dev/go/cli v0.0.3-rc20
 	pkg.akt.dev/go/sdl v0.0.2-rc7
-	pkg.akt.dev/node v1.0.0-rc45
+	pkg.akt.dev/node v1.0.0-rc52
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0

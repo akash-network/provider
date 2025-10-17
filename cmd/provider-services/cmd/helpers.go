@@ -14,7 +14,6 @@ import (
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	pclient "github.com/akash-network/provider/client"
 	cflags "pkg.akt.dev/go/cli/flags"
 	discovery "pkg.akt.dev/go/node/client/discovery"
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
@@ -23,7 +22,9 @@ import (
 	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
 	apclient "pkg.akt.dev/go/provider/client"
 
-	cli "pkg.akt.dev/go/cli"
+	pclient "github.com/akash-network/provider/client"
+
+	"pkg.akt.dev/go/cli"
 	ajwt "pkg.akt.dev/go/util/jwt"
 	"pkg.akt.dev/node/app"
 	cutils "pkg.akt.dev/node/x/cert/utils"
@@ -140,7 +141,7 @@ func leaseIDFromFlags(flags *pflag.FlagSet, owner string) (mtypes.LeaseID, error
 	}, nil
 }
 
-func providerFromFlags(flags *pflag.FlagSet) (sdk.Address, error) {
+func providerFromFlags(flags *pflag.FlagSet) (sdk.AccAddress, error) {
 	provider, err := flags.GetString(cflags.FlagProvider)
 	if err != nil {
 		return nil, err
@@ -264,12 +265,7 @@ func loadAuthOpts(ctx context.Context, cctx sdkclient.Context, flags *pflag.Flag
 	return opts, nil
 }
 
-func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient, authRequired bool) (apclient.Client, error) {
-	paddr, err := providerFromFlags(flags)
-	if err != nil {
-		return nil, err
-	}
-
+func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient, paddr sdk.AccAddress, authRequired bool) (apclient.Client, error) {
 	purl, err := flags.GetString(flagProviderURL)
 	if err != nil {
 		return nil, err

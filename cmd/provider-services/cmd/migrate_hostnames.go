@@ -3,12 +3,9 @@ package cmd
 import (
 	"errors"
 
-	pclient "github.com/akash-network/provider/client"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
-
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 var errEmptyHostnames = errors.New("hostnames cannot be empty")
@@ -21,13 +18,14 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 
 	ctx := cmd.Context()
 	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
-	prov, err := providerFromFlags(cmd.Flags())
+	paddr, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, prov, apclient.WithCertQuerier(pclient.NewCertificateQuerier(cl.Query())))
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}
