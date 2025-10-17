@@ -57,7 +57,6 @@ func MigrateHostnamesCmd() *cobra.Command {
 		RunE:         migrateHostnames,
 	}
 
-	cflags.AddQueryFlagsToCmd(cmd)
 	AddProviderOperationFlagsToCmd(cmd)
 	addCmdFlags(cmd)
 	addAuthFlags(cmd)
