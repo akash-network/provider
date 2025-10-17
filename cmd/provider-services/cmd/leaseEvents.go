@@ -1,14 +1,13 @@
 package cmd
 
 import (
+	"errors"
 	"sync"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 )
@@ -19,12 +18,13 @@ func leaseEventsCmd() *cobra.Command {
 		Short:        "get lease events",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
-		PreRunE:      cli.TxPersistentPreRunE,
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseEvents(cmd)
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addServiceFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -36,18 +36,16 @@ func leaseEventsCmd() *cobra.Command {
 
 func doLeaseEvents(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	cl := cli.MustClientFromContext(ctx)
-	cctx := cl.ClientContext()
-
-	dseq, err := dseqFromFlags(cmd.Flags())
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	leases, err := leasesForDeployment(cmd.Context(), cl.Query(), cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -70,15 +68,14 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	streams := make([]result, 0, len(leases))
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
 	for _, lid := range leases {
 		stream := result{lid: lid}
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+		if err != nil {
+			return err
+		}
+
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), paddr, true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {

@@ -1,11 +1,13 @@
 package cmd
 
 import (
+	"errors"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
 	"pkg.akt.dev/go/cli"
 
 	cflags "pkg.akt.dev/go/cli/flags"
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func serviceStatusCmd() *cobra.Command {
@@ -20,6 +22,7 @@ func serviceStatusCmd() *cobra.Command {
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addServiceFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -32,15 +35,16 @@ func serviceStatusCmd() *cobra.Command {
 
 func doServiceStatus(cmd *cobra.Command) error {
 	ctx := cmd.Context()
-	cl := cli.MustClientFromContext(ctx)
-	cctx := cl.ClientContext()
-
-	svcName, err := cmd.Flags().GetString(FlagService)
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
+	svcName, err := cmd.Flags().GetString(FlagService)
 	if err != nil {
 		return err
 	}
@@ -50,12 +54,12 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	paddr, err := sdk.AccAddressFromBech32(bid.Provider)
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}

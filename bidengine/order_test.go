@@ -546,7 +546,8 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 
 	// Should have closed the bid
 	expMsgs := []sdk.Msg{&mvbeta.MsgCloseBid{
-		ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+		ID:     mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+		Reason: mtypes.LeaseClosedReasonUnspecified,
 	}}
 
 	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
@@ -597,7 +598,8 @@ func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 	// Should have closed the bid
 	expMsgs := []sdk.Msg{
 		&mvbeta.MsgCloseBid{
-			ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+			ID:     mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+			Reason: mtypes.LeaseClosedReasonUnspecified,
 		},
 	}
 	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)

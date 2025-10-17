@@ -10,16 +10,16 @@ import (
 	"sync"
 	"syscall"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
-	"pkg.akt.dev/go/cli"
 
+	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
-	apclient "pkg.akt.dev/go/provider/client"
 )
 
 const (
@@ -38,10 +38,11 @@ func LeaseShellCmd() *cobra.Command {
 		Use:          "lease-shell <service-name> <command>",
 		Short:        "do lease shell",
 		SilenceUsage: true,
-		PreRunE:      cli.TxPersistentPreRunE,
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE:         doLeaseShell,
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -99,10 +100,11 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := cmd.Context()
-	cl := cli.MustClientFromContext(ctx)
-	cctx := cl.ClientContext()
-
-	prov, err := providerFromFlags(cmd.Flags())
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
@@ -113,12 +115,12 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 	}
 	lID := bidID.LeaseID()
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	paddr, err := sdk.AccAddressFromBech32(lID.Provider)
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl.Query(), prov, opts...)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}
