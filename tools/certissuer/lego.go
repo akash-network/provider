@@ -369,7 +369,7 @@ func (ci *certIssuer) run() error {
 				}
 			}
 
-			renewCheckIn := earliestRenewAt.Sub(time.Now())
+			renewCheckIn := time.Until(earliestRenewAt)
 			if renewCheckIn >= time.Hour*24 {
 				renewCheckIn -= time.Hour * 24
 			} else if renewCheckIn <= 0 {

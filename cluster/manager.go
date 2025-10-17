@@ -11,13 +11,13 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	mtypes "pkg.akt.dev/go/node/market/v1"
-	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	errorsmod "cosmossdk.io/errors"
 	"cosmossdk.io/log"
+
 	mani "pkg.akt.dev/go/manifest/v2beta3"
 	mv1 "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	"pkg.akt.dev/go/util/pubsub"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
@@ -591,7 +591,7 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 		return err
 	}
 
-	if lease.GetLease().State != mtypes.LeaseActive {
+	if lease.GetLease().State != mv1.LeaseActive {
 		dm.log.Error("lease not active, not deploying")
 		return fmt.Errorf("%w: %s", ErrLeaseInactive, dm.deployment.LeaseID())
 	}

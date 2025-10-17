@@ -7,8 +7,6 @@ import (
 	"pkg.akt.dev/go/cli"
 	cflags "pkg.akt.dev/go/cli/flags"
 	"pkg.akt.dev/go/node/client/v1beta3"
-
-	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
 func statusCmd() *cobra.Command {
@@ -32,12 +30,7 @@ func statusCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			addr, err := sdk.AccAddressFromBech32(args[0])
-			if err != nil {
-				return err
-			}
-
-			return doStatus(cmd, addr)
+			return doStatus(cmd)
 		},
 	}
 
@@ -45,12 +38,12 @@ func statusCmd() *cobra.Command {
 
 	// Add hidden provider flag for internal use by setupProviderClient
 	cmd.Flags().String(cflags.FlagProvider, "", "provider address")
-	cmd.Flags().MarkHidden(cflags.FlagProvider)
+	_ = cmd.Flags().MarkHidden(cflags.FlagProvider)
 
 	return cmd
 }
 
-func doStatus(cmd *cobra.Command, addr sdk.Address) error {
+func doStatus(cmd *cobra.Command) error {
 	ctx := cmd.Context()
 	cl, err := cli.LightClientFromContext(ctx)
 	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
@@ -67,6 +60,10 @@ func doStatus(cmd *cobra.Command, addr sdk.Address) error {
 	}
 
 	paddr, err := providerFromFlags(cmd.Flags())
+	if err != nil {
+		return err
+	}
+
 	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClient, paddr, false)
 	if err != nil {
 		return err
