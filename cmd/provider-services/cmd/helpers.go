@@ -328,3 +328,13 @@ func setupProviderClient(ctx context.Context, cctx sdkclient.Context, flags *pfl
 
 	return pcl, nil
 }
+
+// addNodeFlagToTxCmd ensures tx commands respect AKASH_NODE and AP_NODE environment variables.
+// Cosmos SDK tx commands add their own --node flags via flags.AddTxFlagsToCmd().
+// Those local flags override persistent flags and have no environment variable binding.
+// This function binds the flag name globally in viper so any --node flag gets env vars.
+func addNodeFlagToTxCmd(txCmd *cobra.Command) *cobra.Command {
+	viper.BindEnv(flags.FlagNode, "AP_NODE", "AKASH_NODE")
+
+	return txCmd
+}
