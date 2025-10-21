@@ -32,7 +32,7 @@ func leaseLogsCmd() *cobra.Command {
 
 	cmd.Flags().BoolP(flagFollow, "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P(flagTail, "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
-	cmd.Flags().StringP(cflags.FlagOutput, "o", outputText, "output format text|json. default text")
+	cmd.Flags().StringP(cflags.FlagOutput, "o", outputText, "output format of the lease logs. This flag does not set the container specifc logs but rather the output format of the lease log. text|json. default text")
 
 	return cmd
 }
