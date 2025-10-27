@@ -3,23 +3,23 @@ package cluster
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"sync"
 	"time"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	mquery "github.com/akash-network/node/x/market/query"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	mquery "pkg.akt.dev/node/x/market/query"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
@@ -42,7 +42,6 @@ var (
 
 var _ Client = (*nullClient)(nil)
 
-//go:generate mockery --name ReadClient
 type ReadClient interface {
 	LeaseStatus(context.Context, mtypes.LeaseID) (map[string]*apclient.ServiceStatus, error)
 	ForwardedPortStatus(context.Context, mtypes.LeaseID) (map[string][]apclient.ForwardedPortStatus, error)
@@ -61,8 +60,6 @@ type ReadClient interface {
 }
 
 // Client interface lease and deployment methods
-//
-//go:generate mockery --name Client
 type Client interface {
 	ReadClient
 	Deploy(ctx context.Context, deployment ctypes.IDeployment) error

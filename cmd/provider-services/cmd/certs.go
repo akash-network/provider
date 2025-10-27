@@ -16,19 +16,19 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
-	"github.com/akash-network/akash-api/go/node/client/v1beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	cutils "github.com/akash-network/node/x/cert/utils"
+	ctypes "pkg.akt.dev/go/node/cert/v1"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	"pkg.akt.dev/go/util/pubsub"
+	cutils "pkg.akt.dev/node/x/cert/utils"
 
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/tools/certissuer"
@@ -53,7 +53,7 @@ type peerCertResp struct {
 type accReq struct {
 	acc      sdk.Address
 	resp     chan<- accResp
-	userData any
+	userData any //nolint: unused
 }
 
 type accResp struct {
@@ -79,8 +79,9 @@ type accountQuerier struct {
 	cancel     context.CancelFunc
 	bus        pubsub.Bus
 	pstorage   pconfig.Storage
-	qc         v1beta2.Client
-	accCh      chan accReq
+	qc         aclient.Client
+	accCh      chan accReq // priority: direct user/API lookups
+	leaseCh    chan accReq // normal: background (leases/events)
 	peerCertCh chan peerCertReq
 	mtlsCh     chan chan<- certResp
 	caCh       chan certReq
@@ -137,7 +138,7 @@ func WithMTLSPem(val string) AccountQuerierOption {
 	}
 }
 
-func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logger, bus pubsub.Bus, qc v1beta2.Client, opts ...AccountQuerierOption) (*accountQuerier, error) {
+func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logger, bus pubsub.Bus, qc aclient.Client, opts ...AccountQuerierOption) (*accountQuerier, error) {
 	cOpts, err := aqParseOpts(opts...)
 	if err != nil {
 		return nil, err
@@ -166,7 +167,8 @@ func newAccountQuerier(ctx context.Context, cctx sdkclient.Context, log log.Logg
 		bus:        bus,
 		pstorage:   pstorage,
 		qc:         qc,
-		accCh:      make(chan accReq, 1),
+		accCh:      make(chan accReq, 64),
+		leaseCh:    make(chan accReq, 64),
 		peerCertCh: make(chan peerCertReq, 1),
 		mtlsCh:     make(chan chan<- certResp, 1),
 		caCh:       make(chan certReq, 1),
@@ -428,11 +430,10 @@ func (c *accountQuerier) run() error {
 		case resp := <-mtlsRespCh:
 			mtlsRespCh = nil
 
+			// todo retry query
 			if resp.err == nil {
 				tlsCerts := resp.userData.([]tls.Certificate)
 				c.mtlsCerts = tlsCerts
-			} else {
-				// todo retry query
 			}
 		case evt := <-c.watcher.Events:
 			if c.cOpts.mtlsPemFile != "" && evt.Name == c.cOpts.mtlsPemFile {
@@ -466,7 +467,7 @@ func (c *accountQuerier) run() error {
 					c.mtlsCerts = []tls.Certificate{}
 				}
 			} else if c.cOpts.tlsCertFile != "" && evt.Name == c.cOpts.tlsCertFile {
-				c.log.Info(fmt.Sprintf("detected certificate change, reloading"))
+				c.log.Info("detected certificate change, reloading")
 				cert, err := tls.LoadX509KeyPair(c.cOpts.tlsCertFile, c.cOpts.tlsKeyFile)
 				if err != nil {
 					c.log.Error("unable to load tls certificate", "err", err)
@@ -485,7 +486,7 @@ func (c *accountQuerier) certsQuerier() error {
 			return c.ctx.Err()
 		case req := <-c.peerCertCh:
 			// Check that the certificate exists on the chain and is not revoked
-			cresp, err := c.qc.Query().Certificates(c.ctx, &ctypes.QueryCertificatesRequest{
+			cresp, err := c.qc.Query().Certs().Certificates(c.ctx, &ctypes.QueryCertificatesRequest{
 				Filter: ctypes.CertificateFilter{
 					Owner:  req.acc.String(),
 					Serial: req.serial.String(),
@@ -539,11 +540,12 @@ func (c *accountQuerier) certsQuerier() error {
 
 func (c *accountQuerier) accountQuerier() error {
 	requests := make([]accReq, 0)
+	prioRequests := make([]accReq, 0)
 
 	signalch := make(chan struct{}, 1)
 
 	trySignal := func() {
-		if len(requests) > 0 {
+		if len(prioRequests) > 0 || len(requests) > 0 {
 			select {
 			case signalch <- struct{}{}:
 			default:
@@ -558,46 +560,72 @@ func (c *accountQuerier) accountQuerier() error {
 		case <-c.ctx.Done():
 			return c.ctx.Err()
 		case req := <-c.accCh:
+			prioRequests = append(prioRequests, req)
+			trySignal()
+		case req := <-c.leaseCh:
 			requests = append(requests, req)
 			trySignal()
 		case <-signalch:
-			req := requests[0]
-			requests = requests[1:]
+			var req accReq
+
+			priority := true
+			if len(prioRequests) > 0 {
+				req = prioRequests[0]
+				prioRequests = prioRequests[1:]
+			} else {
+				priority = false
+				req = requests[0]
+				requests = requests[1:]
+			}
 
 			var pubkey cryptotypes.PubKey
 			var err error
 
 			// could be a duplicate request
 			if pubkey, err = c.pstorage.GetAccountPublicKey(c.ctx, req.acc); err != nil {
-				res, err := c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
+				var res *authtypes.QueryAccountResponse
+				res, err = c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
 				if err != nil {
 					c.log.Error("fetching account info", "err", err.Error(), "account", req.acc.String())
-					requests = append(requests, req)
-					continue
 				}
 
-				var acc authtypes.AccountI
-				if err := cctx.InterfaceRegistry.UnpackAny(res.Account, &acc); err != nil {
-					c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
-					requests = append(requests, req)
-					continue
+				var acc sdk.AccountI
+				if err == nil {
+					err = cctx.InterfaceRegistry.UnpackAny(res.Account, &acc)
+					if err != nil {
+						c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
+					}
+
+					if err == nil {
+						pubkey = acc.GetPubKey()
+
+						err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
+						if err != nil && !errors.Is(err, pconfig.ErrExists) {
+							c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+
+							// reset the error as we have got the pubkey and need to pass it above if it was a user request
+							err = nil
+						}
+					}
 				}
 
-				pubkey = acc.GetPubKey()
-
-				err = c.pstorage.AddAccount(c.ctx, acc.GetAddress(), acc.GetPubKey())
-				if err != nil && !errors.Is(err, pconfig.ErrExists) {
-					c.log.Error("unable to save account pubkey into storage", "owner", acc.GetAddress().String(), "err", err)
+				if err != nil {
+					if priority {
+						prioRequests = append(prioRequests, req)
+					} else {
+						requests = append(requests, req)
+					}
 				}
 			}
 
 			if req.resp != nil {
 				req.resp <- accResp{
 					pubkey:   pubkey,
-					userData: nil,
-					err:      nil,
+					userData: req.userData,
+					err:      err,
 				}
 			}
+			trySignal()
 		}
 	}
 }
@@ -612,7 +640,7 @@ loop:
 			Limit: uint64(100),
 		}
 
-		resp, err := c.qc.Query().Leases(c.ctx, &mtypes.QueryLeasesRequest{
+		resp, err := c.qc.Query().Market().Leases(c.ctx, &mvbeta.QueryLeasesRequest{
 			Filters: mtypes.LeaseFilters{
 				State:    mtypes.LeaseActive.String(),
 				Provider: c.paddr.String(),
@@ -632,12 +660,10 @@ loop:
 		}
 
 		for _, lease := range resp.Leases {
-			owner, _ := sdk.AccAddressFromBech32(lease.Lease.LeaseID.Owner)
+			owner, _ := sdk.AccAddressFromBech32(lease.Lease.ID.Owner)
 
 			select {
-			case c.accCh <- accReq{
-				acc: owner,
-			}:
+			case c.accCh <- accReq{acc: owner}:
 			case <-c.ctx.Done():
 				break loop
 			}

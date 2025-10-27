@@ -19,15 +19,15 @@ limitations under the License.
 package v2beta2
 
 import (
-	v1beta3 "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	v1 "pkg.akt.dev/go/node/types/attributes/v1"
 )
 
 // ResourceVolumeApplyConfiguration represents a declarative configuration of the ResourceVolume type for use
 // with apply.
 type ResourceVolumeApplyConfiguration struct {
-	Name       *string             `json:"name,omitempty"`
-	Size       *string             `json:"size,omitempty"`
-	Attributes *v1beta3.Attributes `json:"attributes,omitempty"`
+	Name       *string        `json:"name,omitempty"`
+	Size       *string        `json:"size,omitempty"`
+	Attributes *v1.Attributes `json:"attributes,omitempty"`
 }
 
 // ResourceVolumeApplyConfiguration constructs a declarative configuration of the ResourceVolume type for use with
@@ -55,7 +55,7 @@ func (b *ResourceVolumeApplyConfiguration) WithSize(value string) *ResourceVolum
 // WithAttributes sets the Attributes field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Attributes field is set to the value of the last call.
-func (b *ResourceVolumeApplyConfiguration) WithAttributes(value v1beta3.Attributes) *ResourceVolumeApplyConfiguration {
+func (b *ResourceVolumeApplyConfiguration) WithAttributes(value v1.Attributes) *ResourceVolumeApplyConfiguration {
 	b.Attributes = &value
 	return b
 }

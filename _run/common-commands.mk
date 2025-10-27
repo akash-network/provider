@@ -98,15 +98,9 @@ deployment-create:
 		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"
 
-.PHONY: deploy-create
-deploy-create:
-	$(AKASH) deploy create "$(SDL_PATH)" \
-		--dseq "$(DSEQ)" \
-		--from "$(KEY_NAME)"
-
 .PHONY: deployment-deposit
 deployment-deposit:
-	$(AKASH) tx deployment deposit "$(PRICE)" \
+	$(AKASH) tx escrow deposit deployment "$(PRICE)" \
 		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"
 
