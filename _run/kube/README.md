@@ -46,18 +46,20 @@ this example.
 The following steps will bring up a network and allow for interacting
 with it.
 
-Running through the entire runbook requires three terminals.
-Each command is marked __t1__-__t3__ to indicate a suggested terminal number.
+Running through the entire runbook requires three terminals. Each command is marked t1-t3 to indicate a suggested terminal number.
+
+> **❗ Important Note:**  
+> Make sure you run all commands from the `./_run/kube` directory.
 
 If at any time you'd like to start over with a fresh chain, simply run:
 
 __t1 run__
 ```sh
-make clean kind-cluster-clean
+make clean kube-cluster-delete-kind
 make init
 ```
 
-## Initialize
+### __t1 Step: 1__ (Initialize)
 
 Start and initialize kind.
 
@@ -73,8 +75,8 @@ there may be a problem.
 
 | Option                                            | __t1 Step: 1__                                             | Explanation                                                                                                                                                        |
 |---------------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Map random local port to port 80 of your workload | `make kind-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
-| Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kind-cluster-create` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
+| Map random local port to port 80 of your workload | `make kube-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
+| Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kube-cluster-setup` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
 
 ## Build Akash binaries and initialize network
 
