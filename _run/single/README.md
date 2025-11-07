@@ -67,7 +67,8 @@ Or if it does not conflict with other local rules, use a wildcard for localhost:
 The following steps will bring up a network and allow for interacting
 with it.
 
-Running through the entire runbook requires three terminals. Each command is marked t1-t3 to indicate a suggested terminal number.
+Running through the entire runbook requires three terminals.
+Each command is marked __t1__-__t3__ to indicate a suggested terminal number.
 
 > **❗ Important Note:**  
 > Make sure you run all commands from the `./_run/kube` directory.
