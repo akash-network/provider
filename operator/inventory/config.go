@@ -303,13 +303,7 @@ func (nd *Exclude) IsStorageNodeExcluded(name string, class string) bool {
 }
 
 func (cfg *Config) HasStorageClass(name string) bool {
-	for _, class := range cfg.ClusterStorage {
-		if class == name {
-			return true
-		}
-	}
-
-	return false
+	return slices.Contains(cfg.ClusterStorage, name)
 }
 
 func (cfg *Config) StorageClassesForNode(name string) []string {
