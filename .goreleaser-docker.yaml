@@ -5,6 +5,10 @@ env:
   - GO111MODULE=on
   - DOCKER_CLI_EXPERIMENTAL="enabled"
   - CGO_ENABLED=1
+before:
+  hooks:
+    - apt update
+    - apt install -y pkg-config libudev-dev:amd64 libudev-dev:arm64
 builds:
   - id: provider-services-linux-arm64
     binary: provider-services
