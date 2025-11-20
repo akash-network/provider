@@ -1,6 +1,6 @@
 ---
 name: setup-ubuntu
-description: "Sets up Ubuntu environment with dependencies, Node.js, and Go"
+description: 'Set up Ubuntu environment for CI/CD workflows'
 runs:
   using: 'composite'
   steps:
@@ -15,7 +15,7 @@ runs:
     - name: Install dependencies
       # Shell must explicitly specify the shell for each step. https://github.com/orgs/community/discussions/18597
       shell: bash
-      run: sudo apt install -y make direnv unzip lz4 wget curl npm jq pv coreutils libudev-dev
+      run: sudo apt install -y pkg-config make direnv unzip lz4 wget curl npm jq pv coreutils libudev-dev
     - name: Setup npm
       uses: actions/setup-node@v4
       with:
