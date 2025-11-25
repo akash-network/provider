@@ -20,8 +20,6 @@ jobs:
           sudo rm -rf ./* || true
           sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Setup environment
         uses: ./.github/actions/setup-ubuntu
       - name: Set up QEMU
@@ -50,8 +48,6 @@ jobs:
       - publish
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: release version
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
       - name: check if pre-release
