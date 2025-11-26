@@ -98,9 +98,9 @@ func NewService(
 	go s.lc.WatchContext(pctx)
 	go s.run(pctx)
 
-	//group.Go(func() error {
-	//	return s.ordersFetcher(ctx, aqc)
-	//})
+	group.Go(func() error {
+		return s.ordersFetcher(ctx, aqc)
+	})
 
 	return s, nil
 }
@@ -172,6 +172,17 @@ func (s *service) updateOrderManagerGauge() {
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
 	var nextKey []byte
 
+	pcfg, err := fromctx.PersistentConfigFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	nextKey, _ = pcfg.BidEngine().GetOrdersNextKey(ctx)
+
+	defer func() {
+		_ = pcfg.BidEngine().SetOrdersNextKey(context.Background(), nextKey)
+	}()
+
 	limit := cap(s.ordersch)
 
 loop:
@@ -195,10 +206,6 @@ loop:
 			continue
 		}
 
-		if resp.Pagination != nil {
-			nextKey = resp.Pagination.NextKey
-		}
-
 		var orders []mtypes.OrderID
 
 		for _, order := range resp.Orders {
@@ -211,9 +218,15 @@ loop:
 			break loop
 		}
 
-		if len(nextKey) == 0 {
+		// if pagination (or next key) is empty indicates
+		// we're done with queries and it is time to quit
+		// we do not update nextKey with empty value, so on the next restart provider
+		// does not begin traversing orders from the beginning
+		if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
 			break loop
 		}
+
+		nextKey = resp.Pagination.NextKey
 	}
 
 	return ctx.Err()
