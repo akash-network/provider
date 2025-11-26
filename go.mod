@@ -51,7 +51,7 @@ require (
 	k8s.io/client-go v0.33.3
 	k8s.io/code-generator v0.33.3
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.1.6
+	pkg.akt.dev/go v0.1.7
 	pkg.akt.dev/go/cli v0.1.4
 	pkg.akt.dev/go/sdl v0.1.1
 	pkg.akt.dev/node v1.1.0
