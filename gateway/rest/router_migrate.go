@@ -43,7 +43,7 @@ func migrateHandler(log log.Logger, hostnameService clustertypes.HostnameService
 		owner := requestOwner(req)
 
 		// Make sure this hostname can be taken
-		//  make sure destination deployment actually exists
+		// make sure destination deployment actually exists
 		found, leaseID, mgroup, err := clusterService.FindActiveLease(req.Context(), owner, body.DestinationDSeq, body.DestinationGSeq)
 		if err != nil {
 			log.Error("failed checking if destination deployment exists", "err", err)

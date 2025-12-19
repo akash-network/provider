@@ -57,7 +57,7 @@ const (
 
 const (
 	// as per RFC https://www.iana.org/assignments/websocket/websocket.xhtml#close-code-number
-	// errors from private use staring
+	// errors from private use starting
 	websocketInternalServerErrorCode = 4000
 	websocketLeaseNotFound           = 4001
 	manifestSubmitTimeout            = 120 * time.Second

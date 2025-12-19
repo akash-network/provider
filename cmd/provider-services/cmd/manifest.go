@@ -140,7 +140,7 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 
-	// the owner address in FlagFrom has already been validated thus save to just pull its value as string
+	// the owner address in FlagFrom has already been validated thus safe to just pull its value as string
 	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
