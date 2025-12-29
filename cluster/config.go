@@ -18,6 +18,9 @@ type Config struct {
 	MonitorRetryPeriodJitter        time.Duration
 	MonitorHealthcheckPeriod        time.Duration
 	MonitorHealthcheckPeriodJitter  time.Duration
+	IngressMode                     string
+	GatewayName                     string
+	GatewayNamespace                string
 	ClusterSettings                 map[interface{}]interface{}
 }
 
@@ -30,5 +33,8 @@ func NewDefaultConfig() Config {
 		MonitorRetryPeriodJitter:        time.Second * 15,
 		MonitorHealthcheckPeriod:        time.Second * 10, // nolint revive
 		MonitorHealthcheckPeriodJitter:  time.Second * 5,
+		IngressMode:                     "ingress",
+		GatewayName:                     "akash-gateway",
+		GatewayNamespace:                "akash-gateway",
 	}
 }
