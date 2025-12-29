@@ -37,6 +37,9 @@ const (
 	CtxKeyPersistentConfig   = Key("persistent-config")
 	CtxKeyCertIssuer         = Key("cert-issuer")
 	CtxKeyAccountQuerier     = Key("account-querier")
+	CtxKeyIngressMode        = Key("ingress-mode")
+	CtxKeyGatewayName        = Key("gateway-name")
+	CtxKeyGatewayNamespace   = Key("gateway-namespace")
 )
 
 var (
@@ -326,6 +329,45 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	}
 
 	return false
+}
+
+func IngressModeFromCtx(ctx context.Context) string {
+	val := ctx.Value(CtxKeyIngressMode)
+	if val == nil {
+		return "ingress" // default to NGINX Ingress
+	}
+
+	if v, valid := val.(string); valid {
+		return v
+	}
+
+	return "ingress"
+}
+
+func GatewayNameFromCtx(ctx context.Context) string {
+	val := ctx.Value(CtxKeyGatewayName)
+	if val == nil {
+		return ""
+	}
+
+	if v, valid := val.(string); valid {
+		return v
+	}
+
+	return ""
+}
+
+func GatewayNamespaceFromCtx(ctx context.Context) string {
+	val := ctx.Value(CtxKeyGatewayNamespace)
+	if val == nil {
+		return ""
+	}
+
+	if v, valid := val.(string); valid {
+		return v
+	}
+
+	return ""
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {
