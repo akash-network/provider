@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	restclient "k8s.io/client-go/rest"
@@ -57,9 +58,13 @@ type client struct {
 	ctx               context.Context
 	kc                kubernetes.Interface
 	ac                akashclient.Interface
+	dc                dynamic.Interface
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
+	ingressMode       string
+	gatewayName       string
+	gatewayNamespace  string
 }
 
 func (c *client) String() string {
@@ -98,18 +103,36 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		return nil, err
 	}
 
+	dc, err := dynamic.NewForConfig(kubecfg)
+	if err != nil {
+		return nil, fmt.Errorf("kube: unable to create dynamic client: %w", err)
+	}
+
 	_, err = kc.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("kube: unable to fetch leases namespace: %w", err)
 	}
 
+	ingressMode := fromctx.IngressModeFromCtx(ctx)
+	gatewayName := fromctx.GatewayNameFromCtx(ctx)
+	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
+
+	log.Info("initializing kube client",
+		"ingress-mode", ingressMode,
+		"gateway-name", gatewayName,
+		"gateway-namespace", gatewayNamespace)
+
 	cl := &client{
 		ctx:               ctx,
 		kc:                kc,
 		ac:                ac,
+		dc:                dc,
 		ns:                ns,
 		log:               log.With("client", "kube"),
 		kubeContentConfig: kubecfg,
+		ingressMode:       ingressMode,
+		gatewayName:       gatewayName,
+		gatewayNamespace:  gatewayNamespace,
 	}
 
 	return cl, nil

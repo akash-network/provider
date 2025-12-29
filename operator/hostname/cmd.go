@@ -29,6 +29,13 @@ func Cmd() *cobra.Command {
 
 			logger := common.OpenLogger().With("op", "hostname")
 
+			ctx = withGatewayApi(ctx)
+
+			logger.Info("hostname operator configuration",
+				"ingress-mode", fromctx.IngressModeFromCtx(ctx),
+				"gateway-name", fromctx.GatewayNameFromCtx(ctx),
+				"gateway-namespace", fromctx.GatewayNamespaceFromCtx(ctx))
+
 			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {
 				return err
@@ -78,5 +85,37 @@ func Cmd() *cobra.Command {
 	common.AddOperatorFlags(cmd)
 	common.AddIgnoreListFlags(cmd)
 
+	addGatewayApiFlags(cmd)
+
 	return cmd
+}
+
+func addGatewayApiFlags(cmd *cobra.Command) {
+	cmd.Flags().String("ingress-mode", "ingress", "Ingress mode: 'ingress' for NGINX Ingress (default) or 'gateway-api' for Gateway API")
+	if err := viper.BindPFlag("ingress-mode", cmd.Flags().Lookup("ingress-mode")); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String("gateway-name", "akash-gateway", "Gateway name when using gateway-api mode")
+	if err := viper.BindPFlag("gateway-name", cmd.Flags().Lookup("gateway-name")); err != nil {
+		panic(err)
+	}
+
+	cmd.Flags().String("gateway-namespace", "akash-gateway", "Gateway namespace when using gateway-api mode")
+	if err := viper.BindPFlag("gateway-namespace", cmd.Flags().Lookup("gateway-namespace")); err != nil {
+		panic(err)
+	}
+}
+
+func withGatewayApi(ctx context.Context) context.Context {
+
+	ingressMode := viper.GetString("ingress-mode")
+	gatewayName := viper.GetString("gateway-name")
+	gatewayNamespace := viper.GetString("gateway-namespace")
+
+	ctx = context.WithValue(ctx, fromctx.CtxKeyIngressMode, ingressMode)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayName, gatewayName)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayNamespace, gatewayNamespace)
+
+	return ctx
 }

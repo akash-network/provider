@@ -324,5 +324,20 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().String(FlagIngressMode, "ingress", "Ingress mode: 'ingress' for NGINX Ingress (default) or 'gateway-api' for Gateway API")
+	if err := viper.BindPFlag(FlagIngressMode, cmd.Flags().Lookup(FlagIngressMode)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagGatewayName, "akash-gateway", "Gateway name when using gateway-api mode")
+	if err := viper.BindPFlag(FlagGatewayName, cmd.Flags().Lookup(FlagGatewayName)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagGatewayNamespace, "akash-gateway", "Gateway namespace when using gateway-api mode")
+	if err := viper.BindPFlag(FlagGatewayNamespace, cmd.Flags().Lookup(FlagGatewayNamespace)); err != nil {
+		return err
+	}
+
 	return nil
 }

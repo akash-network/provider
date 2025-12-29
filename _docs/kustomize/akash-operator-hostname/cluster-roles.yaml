@@ -22,6 +22,19 @@ rules:
       - deletecollection
       - watch
   - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - httproutes
+      - gateways
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - deletecollection
+      - watch
+  - apiGroups:
       - ""
     resources:
       - namespaces
