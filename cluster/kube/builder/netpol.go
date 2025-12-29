@@ -37,6 +37,53 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 	const ingressLabelName = "app.kubernetes.io/name"
 	const ingressLabelValue = "ingress-nginx"
 
+	// Build ingress rules
+	ingressRules := []netv1.NetworkPolicyIngressRule{
+		{ // Allow Network Connections from same Namespace
+			From: []netv1.NetworkPolicyPeer{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
+						},
+					},
+				},
+			},
+		},
+		{ // Allow Network Connections from NGINX ingress controller
+			From: []netv1.NetworkPolicyPeer{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							ingressLabelName: ingressLabelValue,
+						},
+					},
+					PodSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							ingressLabelName: ingressLabelValue,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Add Gateway API ingress rule if gateway-api mode is enabled
+	if b.settings.IngressMode == "gateway-api" && b.settings.GatewayNamespace != "" {
+		ingressRules = append(ingressRules, netv1.NetworkPolicyIngressRule{
+			// Allow Network Connections from Gateway API namespace
+			From: []netv1.NetworkPolicyPeer{
+				{
+					NamespaceSelector: &metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							"kubernetes.io/metadata.name": b.settings.GatewayNamespace,
+						},
+					},
+				},
+			},
+		})
+	}
+
 	result := []*netv1.NetworkPolicy{
 		{
 
@@ -51,35 +98,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 					netv1.PolicyTypeIngress,
 					netv1.PolicyTypeEgress,
 				},
-				Ingress: []netv1.NetworkPolicyIngressRule{
-					{ // Allow Network Connections from same Namespace
-						From: []netv1.NetworkPolicyPeer{
-							{
-								NamespaceSelector: &metav1.LabelSelector{
-									MatchLabels: map[string]string{
-										akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
-									},
-								},
-							},
-						},
-					},
-					{ // Allow Network Connections from NGINX ingress controller
-						From: []netv1.NetworkPolicyPeer{
-							{
-								NamespaceSelector: &metav1.LabelSelector{
-									MatchLabels: map[string]string{
-										ingressLabelName: ingressLabelValue,
-									},
-								},
-								PodSelector: &metav1.LabelSelector{
-									MatchLabels: map[string]string{
-										ingressLabelName: ingressLabelValue,
-									},
-								},
-							},
-						},
-					},
-				},
+				Ingress: ingressRules,
 				Egress: []netv1.NetworkPolicyEgressRule{
 					{ // Allow Network Connections to same Namespace
 						To: []netv1.NetworkPolicyPeer{

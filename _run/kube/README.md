@@ -53,9 +53,11 @@ If at any time you'd like to start over with a fresh chain, simply run:
 
 __t1 run__
 ```sh
-make clean kind-cluster-clean
+make clean kube-cluster-delete
 make init
 ```
+
+Note: The same cleanup command works for both NGINX Ingress and Gateway API modes.
 
 ## Initialize
 
@@ -73,8 +75,36 @@ there may be a problem.
 
 | Option                                            | __t1 Step: 1__                                             | Explanation                                                                                                                                                        |
 |---------------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Map random local port to port 80 of your workload | `make kind-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
+| Map random local port to port 80 of your workload | `make kind-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser. Configures hostname operator for NGINX Ingress mode.                      |
 | Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kind-cluster-create` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
+
+### Gateway API Setup (Optional)
+
+As an alternative to NGINX Ingress, you can use Kubernetes Gateway API. NGINX Ingress will be EOL by March 2026, so Gateway API is the recommended approach for new deployments.
+
+| Option                                   | __t1 Step: 1 (Gateway API)__     | Explanation                                                                                      |
+|------------------------------------------|----------------------------------|--------------------------------------------------------------------------------------------------|
+| Gateway API with NGINX Gateway Fabric    | `make kube-cluster-setup-gateway`| Creates kind cluster with Gateway API support, installs NGINX Gateway Fabric, and sets up all resources. Configures hostname operator for Gateway API mode. Maps ports 8080 (HTTP) and 8443 (HTTPS). |
+
+This comprehensive setup target:
+- Creates a kind cluster with port mappings for HTTP (8080) and HTTPS (8443)
+- Installs Gateway API CRDs (v1)
+- Installs NGINX Gateway Fabric controller
+- Configures NodePort service for ports 31437 (HTTP) and 31438 (HTTPS)
+- Creates the Gateway resource (`akash-gateway`)
+- Configures the hostname operator for Gateway API mode
+- Sets up all necessary Akash operators and services
+
+You can verify the Gateway is ready:
+```sh
+kubectl get gateway akash-gateway -n akash-gateway
+```
+
+Expected output:
+```
+NAME            CLASS   CLUSTER-IP      ADDRESS        PROGRAMMED   AGE
+akash-gateway   nginx   10.96.x.x       10.96.x.x      True         1m
+```
 
 ## Build Akash binaries and initialize network
 
@@ -131,15 +161,33 @@ make query-provider
 To run Provider as a simple binary connecting to the cluster, in a third terminal, run the command:
 
 ### __t3 Step: 5__
+
+**With NGINX Ingress (default):**
 ```sh
 make provider-run
 ```
+
+**With Gateway API:**
+```sh
+make provider-run-gateway
+```
+
+The Gateway API mode uses the following flags:
+- `--ingress-mode=gateway-api` - Enable Gateway API instead of NGINX Ingress
+- `--gateway-name=akash-gateway` - Name of the Gateway resource to use
+- `--gateway-namespace=akash-gateway` - Namespace where the Gateway exists
 
 Query the provider service gateway for its status:
 
 __t1 status__
 ```sh
 make provider-status
+```
+
+When using Gateway API mode, deployments will create `HTTPRoute` resources instead of `Ingress` resources. You can verify this with:
+
+```sh
+kubectl get httproutes -A
 ```
 
 ## Create a deployment
@@ -249,6 +297,36 @@ Between the first and second step, the prior deployment's containers will contin
 #### Limitations
 
 Akash Groups are translated into Kubernetes Deployments, this means that only a few fields from the Akash SDL are mutable. For example `image`, `command`, `args`, `env` and exposed ports can be modified, but compute resources and placement criteria cannot.
+
+## Gateway API vs NGINX Ingress
+
+### Comparison
+
+| Feature | NGINX Ingress (default) | Gateway API |
+|---------|------------------------|-------------|
+| Resource Type | `Ingress` | `HTTPRoute` |
+| Class/Reference | `IngressClass: akash-ingress-class` | `Gateway: akash-gateway` |
+| Annotations | `nginx.ingress.kubernetes.io/*` | `nginx.org/*` |
+| EOL Status | March 2026 | Current standard |
+
+### HTTP Options Translation
+
+The provider automatically translates HTTP options from the SDL to the appropriate annotations:
+
+| SDL Option | NGINX Ingress Annotation | Gateway API Annotation |
+|------------|-------------------------|------------------------|
+| Read Timeout | `nginx.ingress.kubernetes.io/proxy-read-timeout` | `nginx.org/proxy-read-timeout` |
+| Send Timeout | `nginx.ingress.kubernetes.io/proxy-send-timeout` | `nginx.org/proxy-send-timeout` |
+| Max Body Size | `nginx.ingress.kubernetes.io/proxy-body-size` | `nginx.org/client-max-body-size` |
+| Next Upstream Tries | `nginx.ingress.kubernetes.io/proxy-next-upstream-tries` | `nginx.org/proxy-next-upstream-tries` |
+
+### Cleanup
+
+To remove the cluster (works for both NGINX Ingress and Gateway API):
+
+```sh
+make kube-cluster-delete
+```
 
 ## Terminate lease
 
