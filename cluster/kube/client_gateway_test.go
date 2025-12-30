@@ -2,37 +2,76 @@ package kube
 
 import (
 	"testing"
+	"time"
 
+	"cosmossdk.io/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
-func TestHTTPRouteRules(t *testing.T) {
-	serviceName := "test-service"
-	servicePort := int32(8080)
+func TestNginxGatewayHTTPRouteSpec(t *testing.T) {
+	impl := gateway.NewNginxGateway(log.NewNopLogger())
 
-	rules := httpRouteRules(serviceName, servicePort)
+	directive := chostname.ConnectToDeploymentDirective{
+		Hostname:    "test.example.com",
+		LeaseID:     mtypes.LeaseID{},
+		ServiceName: "test-service",
+		ServicePort: 8080,
+		ReadTimeout: 60000,
+		SendTimeout: 30000,
+	}
 
-	require.Len(t, rules, 1)
-	rule := rules[0]
+	spec := impl.BuildHTTPRouteSpec(
+		"test-gateway",
+		"test-namespace",
+		"test.example.com",
+		"test-service",
+		8080,
+		directive,
+	)
 
+	// Verify parent refs
+	require.Len(t, spec.ParentRefs, 1)
+	assert.Equal(t, gatewayv1.ObjectName("test-gateway"), spec.ParentRefs[0].Name)
+	assert.Equal(t, gatewayv1.Namespace("test-namespace"), *spec.ParentRefs[0].Namespace)
+
+	// Verify hostnames
+	require.Len(t, spec.Hostnames, 1)
+	assert.Equal(t, gatewayv1.Hostname("test.example.com"), spec.Hostnames[0])
+
+	// Verify rules
+	require.Len(t, spec.Rules, 1)
+	rule := spec.Rules[0]
+
+	// Verify standard Gateway API timeouts
+	require.NotNil(t, rule.Timeouts)
+	require.NotNil(t, rule.Timeouts.Request)
+	require.NotNil(t, rule.Timeouts.BackendRequest)
+	assert.Equal(t, gatewayv1.Duration((60 * time.Second).String()), *rule.Timeouts.Request)
+	assert.Equal(t, gatewayv1.Duration((30 * time.Second).String()), *rule.Timeouts.BackendRequest)
+
+	// Verify path matching
 	require.Len(t, rule.Matches, 1)
 	match := rule.Matches[0]
 	require.NotNil(t, match.Path)
 	assert.Equal(t, gatewayv1.PathMatchPathPrefix, *match.Path.Type)
 	assert.Equal(t, "/", *match.Path.Value)
 
+	// Verify backend refs
 	require.Len(t, rule.BackendRefs, 1)
 	backendRef := rule.BackendRefs[0]
-	assert.Equal(t, gatewayv1.ObjectName(serviceName), backendRef.Name)
-	assert.Equal(t, gatewayv1.PortNumber(servicePort), *backendRef.Port)
+	assert.Equal(t, gatewayv1.ObjectName("test-service"), backendRef.Name)
+	assert.Equal(t, gatewayv1.PortNumber(8080), *backendRef.Port)
 }
 
-func TestGatewayAPIAnnotations(t *testing.T) {
+func TestNginxGatewayAnnotations(t *testing.T) {
+	impl := gateway.NewNginxGateway(log.NewNopLogger())
+
 	directive := chostname.ConnectToDeploymentDirective{
 		Hostname:    "test.example.com",
 		LeaseID:     mtypes.LeaseID{},
@@ -46,17 +85,28 @@ func TestGatewayAPIAnnotations(t *testing.T) {
 		NextCases:   []string{"error", "timeout"},
 	}
 
-	annotations := gatewayAPIAnnotations(directive)
+	annotations := impl.BuildAnnotations(directive)
 
+	// Verify NGINX-specific annotations (timeouts are now in HTTPRoute spec)
 	assert.Equal(t, "1048576", annotations["nginx.org/client-max-body-size"])
-	assert.Equal(t, "60s", annotations["nginx.org/proxy-read-timeout"])
-	assert.Equal(t, "60s", annotations["nginx.org/proxy-send-timeout"])
 	assert.Equal(t, "30s", annotations["nginx.org/proxy-next-upstream-timeout"])
 	assert.Equal(t, "3", annotations["nginx.org/proxy-next-upstream-tries"])
 	assert.Equal(t, "error timeout", annotations["nginx.org/proxy-next-upstream"])
+
+	// Verify timeout annotations are NOT present (they use standard Gateway API fields now)
+	_, hasReadTimeout := annotations["nginx.org/proxy-read-timeout"]
+	assert.False(t, hasReadTimeout, "Should not use proxy-read-timeout annotation (uses standard HTTPRoute timeouts)")
+
+	_, hasSendTimeout := annotations["nginx.org/proxy-send-timeout"]
+	assert.False(t, hasSendTimeout, "Should not use proxy-send-timeout annotation (uses standard HTTPRoute timeouts)")
+
+	_, hasConnectTimeout := annotations["nginx.org/proxy-connect-timeout"]
+	assert.False(t, hasConnectTimeout, "Should not use proxy-connect-timeout annotation (uses standard HTTPRoute timeouts)")
 }
 
-func TestGatewayAPIAnnotationsWithHTTPCodes(t *testing.T) {
+func TestNginxGatewayAnnotationsWithHTTPCodes(t *testing.T) {
+	impl := gateway.NewNginxGateway(log.NewNopLogger())
+
 	directive := chostname.ConnectToDeploymentDirective{
 		Hostname:    "test.example.com",
 		LeaseID:     mtypes.LeaseID{},
@@ -70,11 +120,9 @@ func TestGatewayAPIAnnotationsWithHTTPCodes(t *testing.T) {
 		NextCases:   []string{"error", "502", "503", "504"},
 	}
 
-	annotations := gatewayAPIAnnotations(directive)
+	annotations := impl.BuildAnnotations(directive)
 
 	assert.Equal(t, "2097152", annotations["nginx.org/client-max-body-size"])
-	assert.Equal(t, "30s", annotations["nginx.org/proxy-read-timeout"])
-	assert.Equal(t, "30s", annotations["nginx.org/proxy-send-timeout"])
 	assert.Equal(t, "5", annotations["nginx.org/proxy-next-upstream-tries"])
 	assert.Equal(t, "error http_502 http_503 http_504", annotations["nginx.org/proxy-next-upstream"])
 
@@ -82,7 +130,9 @@ func TestGatewayAPIAnnotationsWithHTTPCodes(t *testing.T) {
 	assert.False(t, hasNextTimeout, "Should not set next-upstream-timeout when NextTimeout is 0")
 }
 
-func TestGatewayAPIAnnotationsMinimal(t *testing.T) {
+func TestNginxGatewayAnnotationsMinimal(t *testing.T) {
+	impl := gateway.NewNginxGateway(log.NewNopLogger())
+
 	directive := chostname.ConnectToDeploymentDirective{
 		Hostname:    "test.example.com",
 		LeaseID:     mtypes.LeaseID{},
@@ -96,20 +146,29 @@ func TestGatewayAPIAnnotationsMinimal(t *testing.T) {
 		NextCases:   []string{},
 	}
 
-	annotations := gatewayAPIAnnotations(directive)
+	annotations := impl.BuildAnnotations(directive)
 
 	assert.Equal(t, "1024", annotations["nginx.org/client-max-body-size"])
-	assert.Equal(t, "10s", annotations["nginx.org/proxy-read-timeout"])
-	assert.Equal(t, "10s", annotations["nginx.org/proxy-send-timeout"])
 	assert.Equal(t, "1", annotations["nginx.org/proxy-next-upstream-tries"])
 
 	_, hasNextUpstream := annotations["nginx.org/proxy-next-upstream"]
 	assert.False(t, hasNextUpstream, "Should not set proxy-next-upstream when NextCases is empty")
 }
 
-func TestStrPtr(t *testing.T) {
-	s := "test-string"
-	ptr := strPtr(s)
-	require.NotNil(t, ptr)
-	assert.Equal(t, s, *ptr)
+func TestNginxGatewayValidateOptions(t *testing.T) {
+	impl := gateway.NewNginxGateway(log.NewNopLogger())
+
+	directive := chostname.ConnectToDeploymentDirective{
+		Hostname:    "test.example.com",
+		ServiceName: "test-service",
+		ServicePort: 8080,
+		ReadTimeout: 60000,
+		SendTimeout: 30000,
+		MaxBodySize: 1048576,
+	}
+
+	warnings := impl.ValidateOptions(directive)
+
+	// NGINX Gateway Fabric supports all current directive options
+	assert.Empty(t, warnings, "NGINX implementation should not have any warnings for supported options")
 }
