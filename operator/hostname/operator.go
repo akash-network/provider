@@ -30,6 +30,7 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	clusterutil "github.com/akash-network/provider/cluster/util"
@@ -57,6 +58,7 @@ type hostnameOperator struct {
 	flagHostnamesData  common.PrepareFlagFn
 	flagIgnoreListData common.PrepareFlagFn
 	ingressConfig      kube.IngressConfig
+	gatewayImpl        gateway.Implementation
 }
 
 func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, config common.OperatorConfig, ilc common.IgnoreListConfig) (*hostnameOperator, error) {
@@ -88,11 +90,25 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 	ingressMode := fromctx.IngressModeFromCtx(ctx)
 	gatewayName := fromctx.GatewayNameFromCtx(ctx)
 	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
+	gatewayImplementation := fromctx.GatewayImplementationFromCtx(ctx)
+
+	// Initialize Gateway implementation if using gateway-api mode
+	var gatewayImpl gateway.Implementation
+	if ingressMode == "gateway-api" {
+		impl, err := gateway.GetImplementation(gatewayImplementation, logger)
+		if err != nil {
+			return nil, fmt.Errorf("hostname operator: failed to get gateway implementation: %w", err)
+		}
+		gatewayImpl = impl
+		logger.Info("initialized gateway implementation",
+			"implementation", impl.Name())
+	}
 
 	logger.Info("initializing hostname operator",
 		"ingress-mode", ingressMode,
 		"gateway-name", gatewayName,
-		"gateway-namespace", gatewayNamespace)
+		"gateway-namespace", gatewayNamespace,
+		"gateway-implementation", gatewayImplementation)
 
 	op := &hostnameOperator{
 		ctx:           ctx,
@@ -110,6 +126,7 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 			GatewayName:      gatewayName,
 			GatewayNamespace: gatewayNamespace,
 		},
+		gatewayImpl: gatewayImpl,
 	}
 
 	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)

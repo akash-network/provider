@@ -7,5 +7,6 @@ data:
   ingress-mode: ingress
   gateway-name: ""
   gateway-namespace: ""
+  gateway-implementation: nginx
 
 

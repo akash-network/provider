@@ -85,6 +85,11 @@ spec:
                 configMapKeyRef:
                   name: operator-hostname
                   key: gateway-namespace
+            - name: AP_GATEWAY_IMPLEMENTATION
+              valueFrom:
+                configMapKeyRef:
+                  name: operator-hostname
+                  key: gateway-implementation
             - name: AP_POD_NAME
               valueFrom:
                 fieldRef:

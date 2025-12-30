@@ -123,6 +123,7 @@ const (
 	FlagIngressMode                      = "ingress-mode"
 	FlagGatewayName                      = "gateway-name"
 	FlagGatewayNamespace                 = "gateway-namespace"
+	FlagGatewayImplementation            = "gateway-implementation"
 )
 
 const (
@@ -535,11 +536,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	ingressMode := viper.GetString(FlagIngressMode)
 	gatewayName := viper.GetString(FlagGatewayName)
 	gatewayNamespace := viper.GetString(FlagGatewayNamespace)
+	gatewayImplementation := viper.GetString(FlagGatewayImplementation)
 
 	// Add ingress mode and gateway settings
 	kubeSettings.IngressMode = ingressMode
 	kubeSettings.GatewayName = gatewayName
 	kubeSettings.GatewayNamespace = gatewayNamespace
+	kubeSettings.GatewayImplementation = gatewayImplementation
 
 	if err := builder.ValidateSettings(kubeSettings); err != nil {
 		return err
@@ -548,7 +551,8 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	logger.Info("provider ingress configuration",
 		"ingress-mode", ingressMode,
 		"gateway-name", gatewayName,
-		"gateway-namespace", gatewayNamespace)
+		"gateway-namespace", gatewayNamespace,
+		"gateway-implementation", gatewayImplementation)
 
 	if ingressMode == "gateway-api" {
 		if gatewayName == "" {
@@ -560,10 +564,11 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	clusterSettings := map[interface{}]interface{}{
-		builder.SettingsKey:            kubeSettings,
-		fromctx.CtxKeyIngressMode:      ingressMode,
-		fromctx.CtxKeyGatewayName:      gatewayName,
-		fromctx.CtxKeyGatewayNamespace: gatewayNamespace,
+		builder.SettingsKey:                 kubeSettings,
+		fromctx.CtxKeyIngressMode:           ingressMode,
+		fromctx.CtxKeyGatewayName:           gatewayName,
+		fromctx.CtxKeyGatewayNamespace:      gatewayNamespace,
+		fromctx.CtxKeyGatewayImplementation: gatewayImplementation,
 	}
 
 	// Apply cluster settings to context
@@ -626,6 +631,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.IngressMode = ingressMode
 	config.GatewayName = gatewayName
 	config.GatewayNamespace = gatewayNamespace
+	config.GatewayImplementation = gatewayImplementation
 
 	bidDeposit, err := sdk.ParseCoinNormalized(viper.GetString(FlagBidDeposit))
 	if err != nil {

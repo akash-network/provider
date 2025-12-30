@@ -14,5 +14,6 @@ data:
   ingress-mode: ingress
   gateway-name: akash-gateway
   gateway-namespace: akash-gateway
+  gateway-implementation: nginx
 
 
