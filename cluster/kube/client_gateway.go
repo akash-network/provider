@@ -3,9 +3,6 @@ package kube
 import (
 	"context"
 	"fmt"
-	"math"
-	"strconv"
-	"strings"
 
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,24 +35,29 @@ func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directi
 		"route-name", routeName,
 		"namespace", ns,
 		"gateway-name", c.gatewayName,
-		"gateway-namespace", c.gatewayNamespace)
+		"gateway-namespace", c.gatewayNamespace,
+		"implementation", c.gatewayImpl.Name())
+
+	// Validate options and log warnings
+	warnings := c.gatewayImpl.ValidateOptions(directive)
+	for _, warning := range warnings {
+		c.log.Warn("gateway option not supported", "warning", warning)
+	}
 
 	labels := make(map[string]string)
 	labels[builder.AkashManagedLabelName] = "true"
 	builder.AppendLeaseLabels(directive.LeaseID, labels)
 
-	annotations := gatewayAPIAnnotations(directive)
-
-	parentRefs := []gatewayv1.ParentReference{
-		{
-			Group:     (*gatewayv1.Group)(&gatewayv1.GroupVersion.Group),
-			Kind:      (*gatewayv1.Kind)(strPtr("Gateway")),
-			Namespace: (*gatewayv1.Namespace)(&c.gatewayNamespace),
-			Name:      gatewayv1.ObjectName(c.gatewayName),
-		},
-	}
-
-	rules := httpRouteRules(directive.ServiceName, directive.ServicePort)
+	// Use implementation to build annotations and spec
+	annotations := c.gatewayImpl.BuildAnnotations(directive)
+	spec := c.gatewayImpl.BuildHTTPRouteSpec(
+		c.gatewayName,
+		c.gatewayNamespace,
+		directive.Hostname,
+		directive.ServiceName,
+		directive.ServicePort,
+		directive,
+	)
 
 	obj := &gatewayv1.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{
@@ -67,13 +69,7 @@ func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directi
 			Labels:      labels,
 			Annotations: annotations,
 		},
-		Spec: gatewayv1.HTTPRouteSpec{
-			CommonRouteSpec: gatewayv1.CommonRouteSpec{
-				ParentRefs: parentRefs,
-			},
-			Hostnames: []gatewayv1.Hostname{gatewayv1.Hostname(directive.Hostname)},
-			Rules:     rules,
-		},
+		Spec: spec,
 	}
 
 	// Convert typed object to unstructured
@@ -169,77 +165,3 @@ func (c *client) getHostnameDeploymentConnectionsGateway(ctx context.Context) ([
 	return results, nil
 }
 
-func httpRouteRules(kubeServiceName string, kubeServicePort int32) []gatewayv1.HTTPRouteRule {
-	pathType := gatewayv1.PathMatchPathPrefix
-	backendPort := gatewayv1.PortNumber(kubeServicePort)
-
-	return []gatewayv1.HTTPRouteRule{
-		{
-			Matches: []gatewayv1.HTTPRouteMatch{
-				{
-					Path: &gatewayv1.HTTPPathMatch{
-						Type:  &pathType,
-						Value: strPtr("/"),
-					},
-				},
-			},
-			BackendRefs: []gatewayv1.HTTPBackendRef{
-				{
-					BackendRef: gatewayv1.BackendRef{
-						BackendObjectReference: gatewayv1.BackendObjectReference{
-							Name: gatewayv1.ObjectName(kubeServiceName),
-							Port: &backendPort,
-						},
-					},
-				},
-			},
-		},
-	}
-}
-
-func gatewayAPIAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string {
-	annotations := make(map[string]string)
-
-	readTimeout := math.Ceil(float64(directive.ReadTimeout) / 1000.0)
-	sendTimeout := math.Ceil(float64(directive.SendTimeout) / 1000.0)
-
-	annotations["nginx.org/client-max-body-size"] = strconv.Itoa(int(directive.MaxBodySize))
-	annotations["nginx.org/proxy-connect-timeout"] = fmt.Sprintf("%ds", int(readTimeout))
-	annotations["nginx.org/proxy-read-timeout"] = fmt.Sprintf("%ds", int(readTimeout))
-	annotations["nginx.org/proxy-send-timeout"] = fmt.Sprintf("%ds", int(sendTimeout))
-
-	nextTimeout := 0
-	if directive.NextTimeout > 0 {
-		nextTimeout = int(math.Ceil(float64(directive.NextTimeout) / 1000.0))
-	}
-
-	if nextTimeout > 0 {
-		annotations["nginx.org/proxy-next-upstream-timeout"] = fmt.Sprintf("%ds", nextTimeout)
-	}
-
-	annotations["nginx.org/proxy-next-upstream-tries"] = strconv.Itoa(int(directive.NextTries))
-
-	if len(directive.NextCases) > 0 {
-		strBuilder := strings.Builder{}
-		for i, v := range directive.NextCases {
-			first := string(v[0])
-			isHTTPCode := strings.ContainsAny(first, "12345")
-
-			if isHTTPCode {
-				strBuilder.WriteString("http_")
-			}
-			strBuilder.WriteString(v)
-
-			if i != len(directive.NextCases)-1 {
-				strBuilder.WriteRune(' ')
-			}
-		}
-		annotations["nginx.org/proxy-next-upstream"] = strBuilder.String()
-	}
-
-	return annotations
-}
-
-func strPtr(s string) *string {
-	return &s
-}

@@ -37,9 +37,10 @@ const (
 	CtxKeyPersistentConfig   = Key("persistent-config")
 	CtxKeyCertIssuer         = Key("cert-issuer")
 	CtxKeyAccountQuerier     = Key("account-querier")
-	CtxKeyIngressMode        = Key("ingress-mode")
-	CtxKeyGatewayName        = Key("gateway-name")
-	CtxKeyGatewayNamespace   = Key("gateway-namespace")
+	CtxKeyIngressMode             = Key("ingress-mode")
+	CtxKeyGatewayName             = Key("gateway-name")
+	CtxKeyGatewayNamespace        = Key("gateway-namespace")
+	CtxKeyGatewayImplementation   = Key("gateway-implementation")
 )
 
 var (
@@ -368,6 +369,19 @@ func GatewayNamespaceFromCtx(ctx context.Context) string {
 	}
 
 	return ""
+}
+
+func GatewayImplementationFromCtx(ctx context.Context) string {
+	val := ctx.Value(CtxKeyGatewayImplementation)
+	if val == nil {
+		return "nginx" // default to NGINX Gateway Fabric
+	}
+
+	if v, valid := val.(string); valid {
+		return v
+	}
+
+	return "nginx"
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {

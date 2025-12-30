@@ -52,6 +52,9 @@ type Settings struct {
 
 	// Gateway namespace when using gateway-api mode
 	GatewayNamespace string
+
+	// Gateway implementation when using gateway-api mode
+	GatewayImplementation string
 }
 
 var ErrSettingsValidation = errors.New("settings validation")

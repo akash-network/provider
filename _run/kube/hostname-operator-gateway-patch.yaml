@@ -7,5 +7,6 @@ data:
   ingress-mode: gateway-api
   gateway-name: akash-gateway
   gateway-namespace: akash-gateway
+  gateway-implementation: nginx
 
 
