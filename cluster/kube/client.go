@@ -35,6 +35,7 @@ import (
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
@@ -65,6 +66,7 @@ type client struct {
 	ingressMode       string
 	gatewayName       string
 	gatewayNamespace  string
+	gatewayImpl       gateway.Implementation
 }
 
 func (c *client) String() string {
@@ -116,11 +118,25 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 	ingressMode := fromctx.IngressModeFromCtx(ctx)
 	gatewayName := fromctx.GatewayNameFromCtx(ctx)
 	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
+	gatewayImplementation := fromctx.GatewayImplementationFromCtx(ctx)
+
+	// Initialize Gateway implementation if using gateway-api mode
+	var gatewayImpl gateway.Implementation
+	if ingressMode == "gateway-api" {
+		impl, err := gateway.GetImplementation(gatewayImplementation, log)
+		if err != nil {
+			return nil, fmt.Errorf("kube: failed to get gateway implementation: %w", err)
+		}
+		gatewayImpl = impl
+		log.Info("initialized gateway implementation",
+			"implementation", impl.Name())
+	}
 
 	log.Info("initializing kube client",
 		"ingress-mode", ingressMode,
 		"gateway-name", gatewayName,
-		"gateway-namespace", gatewayNamespace)
+		"gateway-namespace", gatewayNamespace,
+		"gateway-implementation", gatewayImplementation)
 
 	cl := &client{
 		ctx:               ctx,
@@ -133,6 +149,7 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		ingressMode:       ingressMode,
 		gatewayName:       gatewayName,
 		gatewayNamespace:  gatewayNamespace,
+		gatewayImpl:       gatewayImpl,
 	}
 
 	return cl, nil

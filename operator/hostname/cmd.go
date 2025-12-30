@@ -34,7 +34,8 @@ func Cmd() *cobra.Command {
 			logger.Info("hostname operator configuration",
 				"ingress-mode", fromctx.IngressModeFromCtx(ctx),
 				"gateway-name", fromctx.GatewayNameFromCtx(ctx),
-				"gateway-namespace", fromctx.GatewayNamespaceFromCtx(ctx))
+				"gateway-namespace", fromctx.GatewayNamespaceFromCtx(ctx),
+				"gateway-implementation", fromctx.GatewayImplementationFromCtx(ctx))
 
 			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {
@@ -105,6 +106,11 @@ func addGatewayApiFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag("gateway-namespace", cmd.Flags().Lookup("gateway-namespace")); err != nil {
 		panic(err)
 	}
+
+	cmd.Flags().String("gateway-implementation", "nginx", "Gateway implementation: 'nginx' for NGINX Gateway Fabric (default)")
+	if err := viper.BindPFlag("gateway-implementation", cmd.Flags().Lookup("gateway-implementation")); err != nil {
+		panic(err)
+	}
 }
 
 func withGatewayApi(ctx context.Context) context.Context {
@@ -112,10 +118,12 @@ func withGatewayApi(ctx context.Context) context.Context {
 	ingressMode := viper.GetString("ingress-mode")
 	gatewayName := viper.GetString("gateway-name")
 	gatewayNamespace := viper.GetString("gateway-namespace")
+	gatewayImplementation := viper.GetString("gateway-implementation")
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyIngressMode, ingressMode)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayName, gatewayName)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayNamespace, gatewayNamespace)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayImplementation, gatewayImplementation)
 
 	return ctx
 }
