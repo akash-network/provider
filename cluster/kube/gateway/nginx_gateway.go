@@ -5,7 +5,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -15,9 +14,8 @@ import (
 )
 
 // nginxGateway implements the Gateway API interface for NGINX Gateway Fabric.
-// It uses a hybrid approach:
-// - Standard Gateway API features (HTTPRoute timeouts) where available
-// - NGINX-specific annotations for features not in the standard (body size, retries)
+// It uses NGINX-specific annotations for configuration since HTTPRoute timeouts
+// are not yet supported by NGINX Gateway Fabric (see https://github.com/nginx/nginx-gateway-fabric/issues/2164)
 type nginxGateway struct {
 	log log.Logger
 }
@@ -33,8 +31,8 @@ func (n *nginxGateway) Name() string {
 }
 
 // BuildHTTPRouteSpec builds the HTTPRoute spec using standard Gateway API features.
-// Timeouts are configured using the standard HTTPRoute.Spec.Rules[].Timeouts field
-// rather than NGINX-specific annotations.
+// Timeouts are configured via NGINX-specific annotations (see BuildAnnotations)
+// because HTTPRoute.Spec.Rules[].Timeouts is not supported by NGINX Gateway Fabric.
 func (n *nginxGateway) BuildHTTPRouteSpec(
 	gatewayName string,
 	gatewayNamespace string,
@@ -51,17 +49,6 @@ func (n *nginxGateway) BuildHTTPRouteSpec(
 			Namespace: (*gatewayv1.Namespace)(&gatewayNamespace),
 			Name:      gatewayv1.ObjectName(gatewayName),
 		},
-	}
-
-	// Configure standard Gateway API timeouts
-	// ReadTimeout maps to Request timeout (client to gateway)
-	// SendTimeout maps to BackendRequest timeout (gateway to backend)
-	// Gateway API Duration type is a string formatted as a Go duration (e.g., "60s", "1m")
-	requestTimeout := gatewayv1.Duration((time.Duration(directive.ReadTimeout) * time.Millisecond).String())
-	backendRequestTimeout := gatewayv1.Duration((time.Duration(directive.SendTimeout) * time.Millisecond).String())
-	timeouts := &gatewayv1.HTTPRouteTimeouts{
-		Request:        &requestTimeout,
-		BackendRequest: &backendRequestTimeout,
 	}
 
 	// Build HTTP route rules
@@ -88,7 +75,6 @@ func (n *nginxGateway) BuildHTTPRouteSpec(
 					},
 				},
 			},
-			Timeouts: timeouts,
 		},
 	}
 
@@ -107,18 +93,28 @@ func (n *nginxGateway) BuildHTTPRouteSpec(
 //
 // Annotations used:
 // - nginx.org/client-max-body-size: Request body size limit (no standard equivalent)
+// - nginx.org/proxy-read-timeout: Read timeout (client to gateway)
+// - nginx.org/proxy-send-timeout: Send timeout (gateway to backend)
 // - nginx.org/proxy-next-upstream-timeout: Retry timeout (retry policies experimental in Gateway API)
 // - nginx.org/proxy-next-upstream-tries: Maximum retry attempts
 // - nginx.org/proxy-next-upstream: Conditions for retrying requests
 //
-// Note: Timeout annotations (proxy-connect-timeout, proxy-read-timeout, proxy-send-timeout)
-// are NOT used because they're handled by standard HTTPRoute.Spec.Rules[].Timeouts
+// Note: HTTPRoute.Spec.Rules[].Timeouts is not used because NGINX Gateway Fabric
+// does not support it yet (see https://github.com/nginx/nginx-gateway-fabric/issues/2164)
 func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string {
 	annotations := make(map[string]string)
 
 	// Client max body size - no standard Gateway API equivalent
 	// This controls the maximum size of the client request body
 	annotations["nginx.org/client-max-body-size"] = strconv.Itoa(int(directive.MaxBodySize))
+
+	// Timeout configuration - using annotations because HTTPRoute timeouts are not supported
+	// ReadTimeout maps to proxy-read-timeout (client to gateway)
+	// SendTimeout maps to proxy-send-timeout (gateway to backend)
+	readTimeout := math.Ceil(float64(directive.ReadTimeout) / 1000.0)
+	sendTimeout := math.Ceil(float64(directive.SendTimeout) / 1000.0)
+	annotations["nginx.org/proxy-read-timeout"] = fmt.Sprintf("%d", int(readTimeout))
+	annotations["nginx.org/proxy-send-timeout"] = fmt.Sprintf("%d", int(sendTimeout))
 
 	// Retry/next upstream configuration - not in Gateway API v1 standard
 	// Gateway API has experimental retry policies, but they're not widely supported yet
@@ -163,8 +159,8 @@ func (n *nginxGateway) ValidateOptions(directive chostname.ConnectToDeploymentDi
 	var warnings []string
 
 	// All directive options are currently supported by NGINX Gateway Fabric:
-	// - ReadTimeout -> HTTPRoute.Spec.Rules[].Timeouts.Request
-	// - SendTimeout -> HTTPRoute.Spec.Rules[].Timeouts.BackendRequest
+	// - ReadTimeout -> nginx.org/proxy-read-timeout annotation
+	// - SendTimeout -> nginx.org/proxy-send-timeout annotation
 	// - MaxBodySize -> nginx.org/client-max-body-size annotation
 	// - NextTimeout -> nginx.org/proxy-next-upstream-timeout annotation
 	// - NextTries -> nginx.org/proxy-next-upstream-tries annotation

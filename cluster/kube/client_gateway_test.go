@@ -2,7 +2,6 @@ package kube
 
 import (
 	"testing"
-	"time"
 
 	"cosmossdk.io/log"
 	"github.com/stretchr/testify/assert"
@@ -48,12 +47,8 @@ func TestNginxGatewayHTTPRouteSpec(t *testing.T) {
 	require.Len(t, spec.Rules, 1)
 	rule := spec.Rules[0]
 
-	// Verify standard Gateway API timeouts
-	require.NotNil(t, rule.Timeouts)
-	require.NotNil(t, rule.Timeouts.Request)
-	require.NotNil(t, rule.Timeouts.BackendRequest)
-	assert.Equal(t, gatewayv1.Duration((60 * time.Second).String()), *rule.Timeouts.Request)
-	assert.Equal(t, gatewayv1.Duration((30 * time.Second).String()), *rule.Timeouts.BackendRequest)
+	// Verify that timeouts are NOT in the spec (they're in annotations instead)
+	assert.Nil(t, rule.Timeouts, "Timeouts should not be in HTTPRoute spec (not supported by NGINX Gateway Fabric)")
 
 	// Verify path matching
 	require.Len(t, rule.Matches, 1)
@@ -87,21 +82,13 @@ func TestNginxGatewayAnnotations(t *testing.T) {
 
 	annotations := impl.BuildAnnotations(directive)
 
-	// Verify NGINX-specific annotations (timeouts are now in HTTPRoute spec)
+	// Verify NGINX-specific annotations
 	assert.Equal(t, "1048576", annotations["nginx.org/client-max-body-size"])
+	assert.Equal(t, "60", annotations["nginx.org/proxy-read-timeout"])
+	assert.Equal(t, "60", annotations["nginx.org/proxy-send-timeout"])
 	assert.Equal(t, "30s", annotations["nginx.org/proxy-next-upstream-timeout"])
 	assert.Equal(t, "3", annotations["nginx.org/proxy-next-upstream-tries"])
 	assert.Equal(t, "error timeout", annotations["nginx.org/proxy-next-upstream"])
-
-	// Verify timeout annotations are NOT present (they use standard Gateway API fields now)
-	_, hasReadTimeout := annotations["nginx.org/proxy-read-timeout"]
-	assert.False(t, hasReadTimeout, "Should not use proxy-read-timeout annotation (uses standard HTTPRoute timeouts)")
-
-	_, hasSendTimeout := annotations["nginx.org/proxy-send-timeout"]
-	assert.False(t, hasSendTimeout, "Should not use proxy-send-timeout annotation (uses standard HTTPRoute timeouts)")
-
-	_, hasConnectTimeout := annotations["nginx.org/proxy-connect-timeout"]
-	assert.False(t, hasConnectTimeout, "Should not use proxy-connect-timeout annotation (uses standard HTTPRoute timeouts)")
 }
 
 func TestNginxGatewayAnnotationsWithHTTPCodes(t *testing.T) {

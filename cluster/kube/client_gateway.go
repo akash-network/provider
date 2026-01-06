@@ -84,12 +84,10 @@ func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directi
 
 	switch {
 	case err == nil:
-		// Update existing
 		u.SetResourceVersion(existing.GetResourceVersion())
 		_, err = c.dc.Resource(httpRouteGVR).Namespace(ns).Update(ctx, u, metav1.UpdateOptions{})
 		metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "gateway-httproutes-update", err)
 	case kubeErrors.IsNotFound(err):
-		// Create new
 		_, err = c.dc.Resource(httpRouteGVR).Namespace(ns).Create(ctx, u, metav1.CreateOptions{})
 		metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "gateway-httproutes-create", err)
 	}
@@ -148,6 +146,12 @@ func (c *client) getHostnameDeploymentConnectionsGateway(ctx context.Context) ([
 			}
 			backendRef := rule.BackendRefs[0]
 
+			// We only use the first hostname because the operator implementation creates
+			// one HTTPRoute per hostname/domain from the SDL. Each HTTPRoute contains
+			// exactly one hostname.
+			if len(route.Spec.Hostnames) != 1 {
+				c.log.Warn("multiple hostnames specified for HTTPRoute, ignoring additional hostnames except the first", "route-name", route.Name, "hostnames", route.Spec.Hostnames)
+			}
 			results = append(results, leaseIDHostnameConnection{
 				leaseID:      routeLeaseID,
 				hostname:     string(route.Spec.Hostnames[0]),
@@ -164,4 +168,3 @@ func (c *client) getHostnameDeploymentConnectionsGateway(ctx context.Context) ([
 
 	return results, nil
 }
-
