@@ -3,19 +3,10 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: akash-services
 resources:
+  - configmap.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml
   - role-bindings.yaml
   - service-accounts.yaml
   - cluster-roles.yaml
-configMapGenerator:
-  - name: operator-hostname
-    literals:
-      - k8s-manifest-ns=lease
-      - prune-interval=600s
-      - ignore-list-entry-limit=131072
-      - web-refresh-interval=5s
-      - retry-delay=3s
-      - ignore-list-age-limit=2613600s
-      - event-failure-limit=3

@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operator-hostname
+data:
+  ingress-mode: ingress
+  gateway-name: ""
+  gateway-namespace: ""
+  gateway-implementation: nginx
+
+
