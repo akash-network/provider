@@ -324,5 +324,15 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Bool(FlagRunMigrations, false, "run migrations automatically on startup")
+	if err := viper.BindPFlag(FlagRunMigrations, cmd.Flags().Lookup(FlagRunMigrations)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagMigrationsStatePath, "", "path to migrations state file (default: $AP_HOME/migrations.json)")
+	if err := viper.BindPFlag(FlagMigrationsStatePath, cmd.Flags().Lookup(FlagMigrationsStatePath)); err != nil {
+		return err
+	}
+
 	return nil
 }

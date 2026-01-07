@@ -21,6 +21,7 @@ GATEWAY_ENDPOINT ?= https://$(GATEWAY_HOST)
 .PHONY: provider-run
 provider-run:
 	$(PROVIDER_SERVICES) run \
+		--run-migrations \
 		--from "$(PROVIDER_KEY_NAME)" \
 		--cluster-k8s \
 		--gateway-listen-address "$(GATEWAY_HOST)" \

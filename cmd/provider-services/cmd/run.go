@@ -33,6 +33,8 @@ import (
 	"pkg.akt.dev/go/util/pubsub"
 	xpconfig "pkg.akt.dev/node/x/provider/config"
 
+	"path/filepath"
+
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
 	"github.com/akash-network/provider/cluster"
@@ -47,6 +49,7 @@ import (
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	gwgrpc "github.com/akash-network/provider/gateway/grpc"
 	gwrest "github.com/akash-network/provider/gateway/rest"
+	"github.com/akash-network/provider/migrations"
 	"github.com/akash-network/provider/operator/waiter"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/session"
@@ -55,6 +58,7 @@ import (
 	"github.com/akash-network/provider/tools/pconfig"
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
 	"github.com/akash-network/provider/tools/pconfig/memory"
+	"github.com/akash-network/provider/version"
 )
 
 const (
@@ -120,6 +124,8 @@ const (
 	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
 	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
 	FlagCertIssuerEmail                  = "cert-issuer-email"
+	FlagRunMigrations                    = "run-migrations"
+	FlagMigrationsStatePath              = "migrations-state-path"
 )
 
 const (
@@ -490,6 +496,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	logger := ctxlog.LogcFromCtx(cmd.Context())
 
+	runMigrations := viper.GetBool(FlagRunMigrations)
+	if runMigrations {
+		if err := runMigrationsOnStartup(ctx, cmd, logger); err != nil {
+			return fmt.Errorf("migrations failed: %w", err)
+		}
+	}
+
 	logger.Info("starting provider service")
 
 	var metricsRouter http.Handler
@@ -734,6 +747,116 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+func runMigrationsOnStartup(ctx context.Context, cmd *cobra.Command, logger log.Logger) error {
+	statePath, err := determineStatePath(cmd)
+	if err != nil {
+		return fmt.Errorf("determining state path: %w", err)
+	}
+
+	stateManager := migrations.NewStateManager(statePath)
+	registry := migrations.NewRegistry(stateManager)
+
+	currentVersion := setCurrentVersionOrDefault(registry)
+
+	previousVersion, err := stateManager.GetProviderVersion()
+	if err != nil {
+		return fmt.Errorf("failed to get previous provider version: %w", err)
+	}
+
+	if previousVersion == "" {
+		logger.Info("fresh install detected, marking all migrations as applied", "current_version", currentVersion)
+		allMigrations := migrations.GetAll()
+		for _, m := range allMigrations {
+			if err := stateManager.MarkApplied(m.Name()); err != nil {
+				return fmt.Errorf("failed to mark migration %q as applied: %w", m.Name(), err)
+			}
+		}
+		if err := stateManager.SetProviderVersion(currentVersion); err != nil {
+			return fmt.Errorf("failed to set provider version: %w", err)
+		}
+		return nil
+	}
+
+	logger.Info("checking for migrations", "previous_version", previousVersion, "current_version", currentVersion)
+
+	allMigrations := migrations.GetAll()
+	logger.Info("discovered migrations", "count", len(allMigrations))
+	if len(allMigrations) == 0 {
+		logger.Info("no migrations found")
+		if err := stateManager.SetProviderVersion(currentVersion); err != nil {
+			return fmt.Errorf("failed to update provider version: %w", err)
+		}
+		return nil
+	}
+
+	for _, m := range allMigrations {
+		logger.Info("registered migration", "name", m.Name(), "description", m.Description(), "from_version", m.FromVersion())
+		applied, _ := stateManager.IsApplied(m.Name())
+		logger.Info("migration status", "name", m.Name(), "applied", applied, "previous_version", previousVersion, "from_version", m.FromVersion())
+	}
+
+	pending, err := registry.GetPending(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get pending migrations: %w", err)
+	}
+
+	if len(pending) == 0 {
+		logger.Info("no pending migrations")
+		if err := stateManager.SetProviderVersion(currentVersion); err != nil {
+			return fmt.Errorf("failed to update provider version: %w", err)
+		}
+		return nil
+	}
+
+	logger.Info("running pending migrations on startup", "count", len(pending))
+
+	successCount, errs := registry.RunMigrations(ctx)
+
+	if len(errs) > 0 {
+		for _, err := range errs {
+			logger.Error("migration error", "err", err)
+		}
+		return fmt.Errorf("%d migration(s) failed", len(errs))
+	}
+
+	logger.Info("migrations completed successfully", "count", successCount)
+	return nil
+}
+
+func determineStatePath(cmd *cobra.Command) (string, error) {
+	statePath, err := cmd.Flags().GetString(FlagMigrationsStatePath)
+	if err != nil {
+		return "", fmt.Errorf("getting migrations state path flag: %w", err)
+	}
+
+	if statePath == "" {
+		homeDir, err := cmd.Flags().GetString(cflags.FlagHome)
+		if err != nil {
+			// Try persistent flags if not found in regular flags
+			homeDir, err = cmd.PersistentFlags().GetString(cflags.FlagHome)
+			if err != nil {
+				return "", fmt.Errorf("unable to get home directory flag: %w", err)
+			}
+		}
+		if homeDir == "" {
+			return "", fmt.Errorf("home directory flag is not set")
+		}
+		statePath = filepath.Join(homeDir, "migrations.json")
+	}
+
+	return statePath, nil
+}
+
+func setCurrentVersionOrDefault(registry *migrations.Registry) string {
+	currentVersion := version.Version
+	if currentVersion == "" {
+		currentVersion = "0.0.0"
+	}
+	registry.SetCurrentVersion(currentVersion)
+
+	return currentVersion
 }
 
 func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command) (cluster.Client, error) {

@@ -2,14 +2,14 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
-	"pkg.akt.dev/go/cli"
 )
 
 func migrate() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:               "migrate",
-		PersistentPreRunE: cli.TxPersistentPreRunE,
+		Use: "migrate",
 	}
+
+	cmd.AddCommand(MigrateRunCmd())
 
 	return cmd
 }
