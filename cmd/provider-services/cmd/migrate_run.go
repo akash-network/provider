@@ -3,9 +3,12 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
+	"cosmossdk.io/log"
 	"github.com/spf13/cobra"
 	"k8s.io/client-go/kubernetes"
+	cflags "pkg.akt.dev/go/cli/flags"
 	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
@@ -13,6 +16,7 @@ import (
 	"github.com/akash-network/provider/cmd/provider-services/cmd/util"
 	"github.com/akash-network/provider/migrations"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/version"
 )
 
 func MigrateRunCmd() *cobra.Command {
@@ -61,6 +65,66 @@ func doMigrateRun(ctx context.Context, cmd *cobra.Command) error {
 		return fmt.Errorf("determining state path: %w", err)
 	}
 
+	result, err := runMigrations(ctx, statePath, logger)
+	if err != nil {
+		return err
+	}
+
+	// Log completion with success/failed counts (even if there are errors)
+	logger.Info("migrations completed", "successful", result.SuccessCount, "failed", len(result.Errs))
+
+	if len(result.Errs) > 0 {
+		return fmt.Errorf("%d migration(s) failed", len(result.Errs))
+	}
+
+	return nil
+}
+
+func determineStatePath(cmd *cobra.Command) (string, error) {
+	statePath, err := cmd.Flags().GetString(FlagMigrationsStatePath)
+	if err != nil {
+		return "", fmt.Errorf("getting migrations state path flag: %w", err)
+	}
+
+	if statePath == "" {
+		homeDir, err := cmd.Flags().GetString(cflags.FlagHome)
+		if err != nil {
+			// Try persistent flags if not found in regular flags
+			homeDir, err = cmd.PersistentFlags().GetString(cflags.FlagHome)
+			if err != nil {
+				return "", fmt.Errorf("unable to get home directory flag: %w", err)
+			}
+		}
+		if homeDir == "" {
+			return "", fmt.Errorf("home directory flag is not set")
+		}
+		statePath = filepath.Join(homeDir, "migrations.json")
+	}
+
+	return statePath, nil
+}
+
+func setCurrentVersionOrDefault(registry *migrations.Registry) string {
+	currentVersion := version.Version
+	if currentVersion == "" {
+		currentVersion = "0.0.0"
+	}
+	registry.SetCurrentVersion(currentVersion)
+
+	return currentVersion
+}
+
+// runMigrationsResult contains the results of running migrations.
+type runMigrationsResult struct {
+	SuccessCount int
+	Errs         []error
+}
+
+// runMigrations executes pending migrations with the provided state path.
+// The logContext parameter is used to customize log messages (e.g., "running pending migrations" vs "running pending migrations on startup").
+// The logMigrationStatus parameter controls whether detailed migration status is logged for each migration.
+// Returns the migration results and an error if the migration process itself failed (not individual migration errors).
+func runMigrations(ctx context.Context, statePath string, logger log.Logger) (*runMigrationsResult, error) {
 	stateManager := migrations.NewStateManager(statePath)
 	registry := migrations.NewRegistry(stateManager)
 
@@ -68,7 +132,7 @@ func doMigrateRun(ctx context.Context, cmd *cobra.Command) error {
 
 	previousVersion, err := stateManager.GetProviderVersion()
 	if err != nil {
-		return fmt.Errorf("failed to get previous provider version: %w", err)
+		return nil, fmt.Errorf("failed to get previous provider version: %w", err)
 	}
 
 	if previousVersion == "" {
@@ -76,43 +140,44 @@ func doMigrateRun(ctx context.Context, cmd *cobra.Command) error {
 		allMigrations := migrations.GetAll()
 		for _, m := range allMigrations {
 			if err := stateManager.MarkApplied(m.Name()); err != nil {
-				return fmt.Errorf("failed to mark migration %q as applied: %w", m.Name(), err)
+				return nil, fmt.Errorf("failed to mark migration %q as applied: %w", m.Name(), err)
 			}
 		}
 		if err := stateManager.SetProviderVersion(currentVersion); err != nil {
-			return fmt.Errorf("failed to set provider version: %w", err)
+			return nil, fmt.Errorf("failed to set provider version: %w", err)
 		}
-		return nil
+		return &runMigrationsResult{SuccessCount: 0, Errs: nil}, nil
 	}
 
 	logger.Info("checking for migrations", "previous_version", previousVersion, "current_version", currentVersion)
 
 	allMigrations := migrations.GetAll()
 	logger.Info("discovered migrations", "count", len(allMigrations))
-
 	if len(allMigrations) == 0 {
 		logger.Info("no migrations found")
 		if err := stateManager.SetProviderVersion(currentVersion); err != nil {
-			return fmt.Errorf("failed to update provider version: %w", err)
+			return nil, fmt.Errorf("failed to update provider version: %w", err)
 		}
-		return nil
+		return &runMigrationsResult{SuccessCount: 0, Errs: nil}, nil
 	}
 
 	for _, m := range allMigrations {
 		logger.Info("registered migration", "name", m.Name(), "description", m.Description(), "from_version", m.FromVersion())
+		applied, _ := stateManager.IsApplied(m.Name())
+		logger.Info("migration status", "name", m.Name(), "applied", applied, "previous_version", previousVersion, "from_version", m.FromVersion())
 	}
 
 	pending, err := registry.GetPending(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get pending migrations: %w", err)
+		return nil, fmt.Errorf("failed to get pending migrations: %w", err)
 	}
 
 	if len(pending) == 0 {
 		logger.Info("no pending migrations")
 		if err := stateManager.SetProviderVersion(currentVersion); err != nil {
-			return fmt.Errorf("failed to update provider version: %w", err)
+			return nil, fmt.Errorf("failed to update provider version: %w", err)
 		}
-		return nil
+		return &runMigrationsResult{SuccessCount: 0, Errs: nil}, nil
 	}
 
 	logger.Info("running pending migrations", "count", len(pending))
@@ -123,13 +188,9 @@ func doMigrateRun(ctx context.Context, cmd *cobra.Command) error {
 		for _, err := range errs {
 			logger.Error("migration error", "err", err)
 		}
+		return &runMigrationsResult{SuccessCount: successCount, Errs: errs}, nil
 	}
 
-	logger.Info("migrations completed", "successful", successCount, "failed", len(errs))
-
-	if len(errs) > 0 {
-		return fmt.Errorf("%d migration(s) failed", len(errs))
-	}
-
-	return nil
+	logger.Info("migrations completed successfully", "count", successCount)
+	return &runMigrationsResult{SuccessCount: successCount, Errs: nil}, nil
 }
