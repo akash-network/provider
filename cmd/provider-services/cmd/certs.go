@@ -348,7 +348,10 @@ func (c *accountQuerier) GetCACerts(ctx context.Context, domain string) ([]tls.C
 }
 
 func (c *accountQuerier) run() error {
-	sub, _ := c.bus.Subscribe()
+	sub, err := c.bus.Subscribe()
+	if err != nil {
+		return err
+	}
 
 	defer func() {
 		c.cancel()
