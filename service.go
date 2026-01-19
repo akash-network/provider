@@ -300,14 +300,9 @@ func (s *service) run() {
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
 
-	// Always close balanceChecker for proper cleanup
+	// Log balance checker error during lifecycle/close
 	if err := s.bc.Close(); err != nil {
 		s.session.Log().Error("balance checker had error", "err", err)
-		// Only set shutdownErr if we don't have one already (preserve root cause)
-		if shutdownErr == nil {
-			shutdownErr = err
-			s.lc.ShutdownInitiated(shutdownErr)
-		}
 	}
 
 	s.session.Log().Info("shutdown complete")
