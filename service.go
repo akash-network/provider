@@ -284,7 +284,10 @@ func (s *service) run() {
 			s.session.Log().Error("bidengine service terminated with error", "err", shutdownErr)
 		}
 	case <-s.manifest.Done():
-		s.session.Log().Error("manifest service terminated unexpectedly")
+		shutdownErr = s.manifest.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("manifest service terminated with error", "err", shutdownErr)
+		}
 	}
 
 	s.session.Log().Info("shutting down services")
@@ -296,6 +299,16 @@ func (s *service) run() {
 	<-s.bidengine.Done()
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
+
+	// Always close balanceChecker for proper cleanup
+	if err := s.bc.Close(); err != nil {
+		s.session.Log().Error("balance checker had error", "err", err)
+		// Only set shutdownErr if we don't have one already (preserve root cause)
+		if shutdownErr == nil {
+			shutdownErr = err
+			s.lc.ShutdownInitiated(shutdownErr)
+		}
+	}
 
 	s.session.Log().Info("shutdown complete")
 }
