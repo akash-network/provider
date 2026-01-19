@@ -662,7 +662,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Monitor accountQuerier lifecycle and propagate errors
+	// Monitor accountQuerier lifecycle and propagate errors from internal errgroup
 	group.Go(func() error {
 		<-ctx.Done()
 		return accQuerier.Close()
@@ -696,7 +696,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group.Go(func() error {
 		<-service.Done()
-		return nil
+		return service.Close()
 	})
 
 	group.Go(func() error {
