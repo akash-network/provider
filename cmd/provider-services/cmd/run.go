@@ -662,6 +662,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Monitor accountQuerier lifecycle and propagate errors
+	group.Go(func() error {
+		<-ctx.Done()
+		return accQuerier.Close()
+	})
+
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, accQuerier)
 
 	gwRest, err := gwrest.NewServer(

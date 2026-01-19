@@ -415,7 +415,11 @@ func (c *accountQuerier) run() error {
 		case evt := <-eventsch:
 			switch ev := evt.(type) {
 			case event.LeaseWon:
-				owner, _ := sdk.AccAddressFromBech32(ev.LeaseID.Owner)
+				owner, err := sdk.AccAddressFromBech32(ev.LeaseID.Owner)
+				if err != nil {
+					c.log.Error("invalid lease owner address", "owner", ev.LeaseID.Owner, "err", err)
+					continue
+				}
 				c.accCh <- accReq{
 					acc: owner,
 				}
@@ -663,7 +667,11 @@ loop:
 		}
 
 		for _, lease := range resp.Leases {
-			owner, _ := sdk.AccAddressFromBech32(lease.Lease.ID.Owner)
+			owner, err := sdk.AccAddressFromBech32(lease.Lease.ID.Owner)
+			if err != nil {
+				c.log.Error("invalid lease owner address", "owner", lease.Lease.ID.Owner, "err", err)
+				continue
+			}
 
 			select {
 			case c.accCh <- accReq{acc: owner}:
