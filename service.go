@@ -300,7 +300,6 @@ func (s *service) run() {
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
 
-	// Log balance checker error during lifecycle/close
 	if err := s.bc.Close(); err != nil {
 		s.session.Log().Error("balance checker had error", "err", err)
 	}
