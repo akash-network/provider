@@ -86,7 +86,8 @@ type ManifestStorageParams struct {
 }
 
 type ManifestServiceParams struct {
-	Storage []ManifestStorageParams `json:"storage,omitempty"`
+	Storage                      []ManifestStorageParams `json:"storage,omitempty"`
+	AutomountServiceAccountToken *bool                   `json:"automountServiceAccountToken,omitempty"`
 }
 
 type SchedulerResourceGPU struct {
@@ -280,6 +281,12 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				ReadOnly: storage.ReadOnly,
 			})
 		}
+
+		if ms.Params.AutomountServiceAccountToken != nil {
+			ams.Params.AutomountServiceAccountToken = *ms.Params.AutomountServiceAccountToken
+		} else {
+			ams.Params.AutomountServiceAccountToken = false
+		}
 	}
 
 	return *ams, nil
@@ -319,6 +326,10 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				ReadOnly: storage.ReadOnly,
 			})
 		}
+
+		// Always set the value to preserve the explicit setting in the CRD
+		automountValue := ams.Params.AutomountServiceAccountToken
+		ms.Params.AutomountServiceAccountToken = &automountValue
 	}
 
 	if ams.Credentials != nil {

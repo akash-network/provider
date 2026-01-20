@@ -419,6 +419,32 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOwner, lid.Owner)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, lid.Provider)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashClusterPublicHostname, b.settings.ClusterPublicHostname)
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarKubernetesNamespaceOverride, b.NS())
 
 	return env
+}
+
+func (b *Workload) automountServiceAccountToken() *bool {
+	service := &b.group.Services[b.serviceIdx]
+	if service.Params != nil {
+		if service.Params.AutomountServiceAccountToken {
+			trueValue := true
+			return &trueValue
+		}
+		falseValue := false
+		return &falseValue
+	}
+	falseValue := false
+	return &falseValue
+}
+
+func (b *Workload) serviceAccountName() string {
+	if b.automountServiceAccountToken() != nil && *b.automountServiceAccountToken() {
+		return b.Name()
+	}
+	return ""
+}
+
+func (b *Workload) AutomountServiceAccountToken() *bool {
+	return b.automountServiceAccountToken()
 }

@@ -502,6 +502,11 @@ func (in *ManifestServiceParams) DeepCopyInto(out *ManifestServiceParams) {
 		*out = make([]ManifestStorageParams, len(*in))
 		copy(*out, *in)
 	}
+	if in.AutomountServiceAccountToken != nil {
+		in, out := &in.AutomountServiceAccountToken, &out.AutomountServiceAccountToken
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

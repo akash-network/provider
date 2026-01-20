@@ -21,7 +21,8 @@ package v2beta2
 // ManifestServiceParamsApplyConfiguration represents a declarative configuration of the ManifestServiceParams type for use
 // with apply.
 type ManifestServiceParamsApplyConfiguration struct {
-	Storage []ManifestStorageParamsApplyConfiguration `json:"storage,omitempty"`
+	Storage                      []ManifestStorageParamsApplyConfiguration `json:"storage,omitempty"`
+	AutomountServiceAccountToken *bool                                     `json:"automountServiceAccountToken,omitempty"`
 }
 
 // ManifestServiceParamsApplyConfiguration constructs a declarative configuration of the ManifestServiceParams type for use with
@@ -40,5 +41,13 @@ func (b *ManifestServiceParamsApplyConfiguration) WithStorage(values ...*Manifes
 		}
 		b.Storage = append(b.Storage, *values[i])
 	}
+	return b
+}
+
+// WithAutomountServiceAccountToken sets the AutomountServiceAccountToken field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the AutomountServiceAccountToken field is set to the value of the last call.
+func (b *ManifestServiceParamsApplyConfiguration) WithAutomountServiceAccountToken(value bool) *ManifestServiceParamsApplyConfiguration {
+	b.AutomountServiceAccountToken = &value
 	return b
 }

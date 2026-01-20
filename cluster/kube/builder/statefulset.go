@@ -65,10 +65,11 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:unparam
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot: &falseValue,
 					},
-					AutomountServiceAccountToken: &falseValue,
-					Containers:                   []corev1.Container{b.container()},
-					ImagePullSecrets:             b.secretsRefs,
-					Volumes:                      b.volumesObjs,
+					AutomountServiceAccountToken: b.automountServiceAccountToken(),
+					ServiceAccountName:          b.serviceAccountName(),
+					Containers:                  []corev1.Container{b.container()},
+					ImagePullSecrets:            b.secretsRefs,
+					Volumes:                     b.volumesObjs,
 				},
 			},
 			VolumeClaimTemplates: b.pvcsObjs,
@@ -87,6 +88,8 @@ func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, erro
 	uobj.Spec.Template.Labels = b.labels()
 	uobj.Spec.Template.Spec.Affinity = b.affinity()
 	uobj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
+	uobj.Spec.Template.Spec.AutomountServiceAccountToken = b.automountServiceAccountToken()
+	uobj.Spec.Template.Spec.ServiceAccountName = b.serviceAccountName()
 	uobj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
 	uobj.Spec.Template.Spec.ImagePullSecrets = b.secretsRefs
 	uobj.Spec.Template.Spec.Volumes = b.volumesObjs
