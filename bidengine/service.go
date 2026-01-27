@@ -262,7 +262,7 @@ loop:
 		select {
 		case shutdownErr := <-s.lc.ShutdownRequest():
 			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
-			s.lc.ShutdownInitiated(nil)
+			s.lc.ShutdownInitiated(shutdownErr)
 			break loop
 		case orders := <-s.ordersch:
 			for _, orderID := range orders {

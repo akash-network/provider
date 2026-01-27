@@ -267,18 +267,31 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dt
 func (s *service) run() {
 	defer s.lc.ShutdownCompleted()
 
+	var shutdownErr error
+
 	// Wait for any service to finish
 	select {
-	case shutdownErr := <-s.lc.ShutdownRequest():
+	case shutdownErr = <-s.lc.ShutdownRequest():
 		s.session.Log().Info("received shutdown request", "err", shutdownErr)
 	case <-s.cluster.Done():
+		shutdownErr = s.cluster.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("cluster service terminated with error", "err", shutdownErr)
+		}
 	case <-s.bidengine.Done():
+		shutdownErr = s.bidengine.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("bidengine service terminated with error", "err", shutdownErr)
+		}
 	case <-s.manifest.Done():
+		shutdownErr = s.manifest.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("manifest service terminated with error", "err", shutdownErr)
+		}
 	}
 
 	s.session.Log().Info("shutting down services")
-	// Shut down all services
-	s.lc.ShutdownInitiated(nil)
+	s.lc.ShutdownInitiated(shutdownErr)
 	s.cancel()
 
 	// Wait for all services to finish
@@ -286,6 +299,10 @@ func (s *service) run() {
 	<-s.bidengine.Done()
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
+
+	if err := s.bc.Close(); err != nil {
+		s.session.Log().Error("balance checker had error", "err", err)
+	}
 
 	s.session.Log().Info("shutdown complete")
 }

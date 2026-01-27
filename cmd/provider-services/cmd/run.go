@@ -671,6 +671,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Monitor accountQuerier lifecycle and propagate errors from internal errgroup
+	group.Go(func() error {
+		<-ctx.Done()
+		return accQuerier.Close()
+	})
+
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, accQuerier)
 
 	gwRest, err := gwrest.NewServer(
@@ -699,7 +705,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group.Go(func() error {
 		<-service.Done()
-		return nil
+		return service.Close()
 	})
 
 	group.Go(func() error {
@@ -739,6 +745,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	hostnameOperatorClient.Stop()
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("provider shutdown with error", "err", err)
 		return err
 	}
 
