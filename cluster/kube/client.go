@@ -10,13 +10,9 @@ import (
 	"slices"
 	"strings"
 
-	mapi "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	apclient "github.com/akash-network/akash-api/go/provider/client"
+	"cosmossdk.io/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/tendermint/tendermint/libs/log"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
@@ -26,10 +22,14 @@ import (
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
-	restclient "k8s.io/client-go/rest"
 
-	"github.com/akash-network/node/sdl"
-	metricsutils "github.com/akash-network/node/util/metrics"
+	restclient "k8s.io/client-go/rest"
+	mapi "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	"pkg.akt.dev/go/sdl"
+	metricsutils "pkg.akt.dev/node/util/metrics"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -828,7 +828,7 @@ func (c *client) ForwardedPortStatus(ctx context.Context, leaseID mtypes.LeaseID
 			serviceName := service.Name // Always suffixed during creation, so chop it off
 			deploymentName := serviceName[0 : len(serviceName)-len(builder.SuffixForNodePortServiceName)]
 
-			if 0 != len(service.Spec.Ports) {
+			if len(service.Spec.Ports) != 0 {
 				portsForDeployment := make([]apclient.ForwardedPortStatus, 0, len(service.Spec.Ports))
 				for _, port := range service.Spec.Ports {
 					// Check if the service is exposed via NodePort mechanism in the cluster

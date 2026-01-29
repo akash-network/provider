@@ -1,16 +1,17 @@
 package v2beta2
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 )
 
 var (
@@ -92,63 +93,63 @@ func LeaseIDFromAkash(id mtypes.LeaseID) LeaseID {
 }
 
 type ResourceCPU struct {
-	Units      uint32           `json:"units"`
-	Attributes types.Attributes `json:"attributes,omitempty"`
+	Units      uint32               `json:"units"`
+	Attributes attrtypes.Attributes `json:"attributes,omitempty"`
 }
 
 type ResourceGPU struct {
-	Units      uint32           `json:"units"`
-	Attributes types.Attributes `json:"attributes,omitempty"`
+	Units      uint32               `json:"units"`
+	Attributes attrtypes.Attributes `json:"attributes,omitempty"`
 }
 
 type ResourceMemory struct {
-	Size       string           `json:"size"`
-	Attributes types.Attributes `json:"attributes,omitempty"`
+	Size       string               `json:"size"`
+	Attributes attrtypes.Attributes `json:"attributes,omitempty"`
 }
 
 type ResourceVolume struct {
-	Name       string           `json:"name"`
-	Size       string           `json:"size"`
-	Attributes types.Attributes `json:"attributes,omitempty"`
+	Name       string               `json:"name"`
+	Size       string               `json:"size"`
+	Attributes attrtypes.Attributes `json:"attributes,omitempty"`
 }
 
 type ResourceStorage []ResourceVolume
 
-func (ru ResourceCPU) ToAkash() *types.CPU {
-	return &types.CPU{
-		Units:      types.NewResourceValue(uint64(ru.Units)),
+func (ru ResourceCPU) ToAkash() *rtypes.CPU {
+	return &rtypes.CPU{
+		Units:      rtypes.NewResourceValue(uint64(ru.Units)),
 		Attributes: ru.Attributes.Dup(),
 	}
 }
 
-func (ru ResourceGPU) ToAkash() *types.GPU {
-	return &types.GPU{
-		Units:      types.NewResourceValue(uint64(ru.Units)),
+func (ru ResourceGPU) ToAkash() *rtypes.GPU {
+	return &rtypes.GPU{
+		Units:      rtypes.NewResourceValue(uint64(ru.Units)),
 		Attributes: ru.Attributes.Dup(),
 	}
 }
 
-func (ru ResourceMemory) ToAkash() *types.Memory {
+func (ru ResourceMemory) ToAkash() *rtypes.Memory {
 	size, _ := strconv.ParseUint(ru.Size, 10, 64)
 
-	return &types.Memory{
-		Quantity:   types.NewResourceValue(size),
+	return &rtypes.Memory{
+		Quantity:   rtypes.NewResourceValue(size),
 		Attributes: ru.Attributes.Dup(),
 	}
 }
 
-func (ru ResourceVolume) ToAkash() types.Storage {
+func (ru ResourceVolume) ToAkash() rtypes.Storage {
 	size, _ := strconv.ParseUint(ru.Size, 10, 64)
 
-	return types.Storage{
+	return rtypes.Storage{
 		Name:       ru.Name,
-		Quantity:   types.NewResourceValue(size),
+		Quantity:   rtypes.NewResourceValue(size),
 		Attributes: ru.Attributes.Dup(),
 	}
 }
 
-func (ru ResourceStorage) ToAkash() types.Volumes {
-	res := make(types.Volumes, 0, len(ru))
+func (ru ResourceStorage) ToAkash() rtypes.Volumes {
+	res := make(rtypes.Volumes, 0, len(ru))
 
 	for _, vol := range ru {
 		res = append(res, vol.ToAkash())
@@ -166,8 +167,8 @@ type Resources struct {
 	Storage ResourceStorage `json:"storage,omitempty"`
 }
 
-func (ru *Resources) ToAkash() (types.Resources, error) {
-	return types.Resources{
+func (ru *Resources) ToAkash() (rtypes.Resources, error) {
+	return rtypes.Resources{
 		ID:      ru.ID,
 		CPU:     ru.CPU.ToAkash(),
 		GPU:     ru.GPU.ToAkash(),
@@ -176,7 +177,7 @@ func (ru *Resources) ToAkash() (types.Resources, error) {
 	}, nil
 }
 
-func resourcesFromAkash(aru types.Resources) (Resources, error) {
+func resourcesFromAkash(aru rtypes.Resources) (Resources, error) {
 	res := Resources{
 		ID: aru.ID,
 	}

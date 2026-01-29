@@ -8,19 +8,23 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge"
 	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/challenge/http01"
+	"github.com/go-acme/lego/v4/challenge/tlsalpn01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/providers/dns/cloudflare"
 	"github.com/go-acme/lego/v4/providers/dns/gcloud"
 	"github.com/go-acme/lego/v4/registration"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/tendermint/tendermint/libs/log"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+
+	"cosmossdk.io/log"
 )
 
 var (
@@ -108,12 +112,12 @@ func NewLego(ctx context.Context, log log.Logger, cfg Config) (CertIssuer, error
 	retryClient.Logger = nil
 	lcfg.HTTPClient = retryClient.StandardClient()
 
-	providers, err := initProviders(cfg.DNSProviders)
+	client, err := lego.NewClient(lcfg)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := lego.NewClient(lcfg)
+	dnsProviders, err := initDNSProviders(cfg.DNSProviders)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +162,23 @@ func NewLego(ctx context.Context, log log.Logger, cfg Config) (CertIssuer, error
 		pub:     cfg.Bus,
 	}
 
-	for _, provider := range providers {
+	if cfg.HTTPChallengePort > 0 {
+		log.Info(fmt.Sprintf("starting HTTP-01 listener on port %d", cfg.HTTPChallengePort))
+		srv := http01.NewProviderServer("", strconv.Itoa(cfg.HTTPChallengePort))
+		if err = client.Challenge.SetHTTP01Provider(srv); err != nil {
+			return nil, err
+		}
+	}
+
+	if cfg.TLSChallengePort > 0 {
+		log.Info(fmt.Sprintf("starting TLS-ALPN-01 listener on port %d", cfg.TLSChallengePort))
+		srv := tlsalpn01.NewProviderServer("", strconv.Itoa(cfg.TLSChallengePort))
+		if err = client.Challenge.SetTLSALPN01Provider(srv); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, provider := range dnsProviders {
 		opts := []dns01.ChallengeOption{
 			dns01.CondOption(len(cfg.DNSResolvers) > 0,
 				dns01.AddRecursiveNameservers(dns01.ParseNameservers(cfg.DNSResolvers))),
@@ -203,10 +223,31 @@ func (ci *certIssuer) Close() error {
 	return nil
 }
 
+func (ci *certIssuer) obtainCert(domain string) (*certificate.Resource, ResourcesInfo, error) {
+	req := certificate.ObtainRequest{
+		Domains:                        []string{domain},
+		PrivateKey:                     nil,
+		MustStaple:                     false,
+		EmailAddresses:                 nil, // do not set email addresses or LetsEncrypt will reject the request
+		Bundle:                         true,
+		PreferredChain:                 "",
+		AlwaysDeactivateAuthorizations: false,
+	}
+	res, err := ci.cl.Certificate.Obtain(req)
+	if err != nil {
+		return nil, ResourcesInfo{}, err
+	}
+
+	info, err := ci.storage.SaveResource(res)
+	if err != nil {
+		return nil, ResourcesInfo{}, fmt.Errorf("failed to save resource for %s: %w", domain, err)
+	}
+
+	return res, info, nil
+}
+
 func (ci *certIssuer) run() error {
 	resources := make(resourceInfos, 0, len(ci.domains))
-
-	var errs []error
 
 	var err error
 	defer func() {
@@ -219,51 +260,51 @@ func (ci *certIssuer) run() error {
 		res, info, err := ci.storage.ReadResource(domain)
 		if err != nil {
 			if !errors.Is(err, os.ErrNotExist) {
-				errs = append(errs, fmt.Errorf("failed to read resource for %s: %w", domain, err))
+				ci.log.Error(fmt.Sprintf("failed to read resource for %s", domain), "err", err)
 				continue
 			}
 
-			req := certificate.ObtainRequest{
-				Domains:    []string{domain},
-				PrivateKey: nil,
-				MustStaple: false,
-				// do not set email addresses or LetsEncrypt will reject the request
-				EmailAddresses:                 nil,
-				Bundle:                         true,
-				PreferredChain:                 "",
-				AlwaysDeactivateAuthorizations: false,
-			}
-			res, err = ci.cl.Certificate.Obtain(req)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to obtain certificate for %s: %w", domain, err))
-				continue
-			}
+			// if this is a first time certificate is being requested, it may take a little time
+			// for ACME to propagate and deploy it. we give it a few attempts to retry the download
 
-			info, err = ci.storage.SaveResource(res)
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to save resource for %s: %w", domain, err))
-				continue
+			for retryCnt := 0; retryCnt < 5; retryCnt++ {
+				res, info, err = ci.obtainCert(domain)
+				if err == nil {
+					break
+				}
+				if err != nil {
+					ci.log.Error(fmt.Sprintf("failed to obtain certificate for %s", domain), "err", err.Error())
+
+					select {
+					case <-ci.ctx.Done():
+						return ci.ctx.Err()
+					case <-time.After(10 * time.Second):
+					}
+				}
 			}
 		}
 
-		block, _ := pem.Decode(res.Certificate)
-		cert, err := x509.ParseCertificate(block.Bytes)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("failed to parse certificate %s: %w", domain, err))
-			continue
+		if err == nil {
+			block, _ := pem.Decode(res.Certificate)
+			if block == nil {
+				ci.log.Error(fmt.Sprintf("invalid PEM certificate data for %s", domain))
+				continue
+			}
+
+			cert, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				ci.log.Error(fmt.Sprintf("failed to parse certificate %s", domain), "err", err)
+				continue
+			}
+			ci.pub.Pub(info, []string{fmt.Sprintf("domain-cert-%s", info.Domain)}, tpubsub.WithRetain())
+
+			resources = append(resources, resourceInfo{
+				Resource: res,
+				cert:     cert,
+			})
+		} else {
+			ci.log.Error(fmt.Sprintf("unable to obtain certificate for %s after 5 retries. giving up. provider will not check this certificate until next restart", domain), "err", err.Error())
 		}
-
-		ci.pub.Pub(info, []string{fmt.Sprintf("domain-cert-%s", info.Domain)}, tpubsub.WithRetain())
-
-		resources = append(resources, resourceInfo{
-			Resource: res,
-			cert:     cert,
-		})
-	}
-
-	if len(errs) > 0 {
-		err = errors.Join(errs...)
-		return err
 	}
 
 	sort.Sort(sort.Reverse(resources))
@@ -289,42 +330,58 @@ func (ci *certIssuer) run() error {
 		case <-renewTrigger:
 			checkAt := time.Now().Add(renewCheck)
 
+			// set up the initial check far enough so all certificates should expire before this time.
+			// with ACME generally certs are valid for 90d, so setting the initial value to 365d looks "safe".
+			// might need to find a better starting point tho
+			earliestRenewAt := time.Now().Add(24 * time.Hour * 365)
+
 			ci.log.Debug("starting check if any of certificates need a renew")
 			for i, res := range resources {
 				// check when a certificate is expected to expire and set renew check 1d prior
 				if checkAt.After(res.cert.NotAfter) {
 					ci.log.Debug(fmt.Sprintf("certificate for \"%s\" needs renew", res.Domain))
 
-					req := certificate.ObtainRequest{
-						Domains:    []string{res.Domain},
-						PrivateKey: nil,
-						MustStaple: false,
-						// do not set email addresses or LetsEncrypt will reject the request
-						EmailAddresses:                 nil,
-						Bundle:                         true,
-						PreferredChain:                 "",
-						AlwaysDeactivateAuthorizations: false,
-					}
-					resp, err := ci.cl.Certificate.Obtain(req)
+					resp, info, err := ci.obtainCert(res.Domain)
 					if err != nil {
 						ci.log.Error(fmt.Sprintf("failed to renew certificate for %s: %s", res.Domain, err))
 						continue
 					}
 
-					_, err = ci.storage.SaveResource(resp)
+					block, _ := pem.Decode(res.Certificate)
+					if block == nil {
+						ci.log.Error(fmt.Sprintf("invalid PEM certificate data for %s", res.Domain))
+						continue
+					}
+
+					cert, err := x509.ParseCertificate(block.Bytes)
 					if err != nil {
-						ci.log.Error(fmt.Sprintf("failed to save certificate for %s: %s", res.Domain, err))
+						ci.log.Error(fmt.Sprintf("failed to parse certificate %s", res.Domain), "err", err)
 						continue
 					}
 
 					resources[i].Resource = resp
+					resources[i].cert = cert
+					ci.pub.Pub(info, []string{fmt.Sprintf("domain-cert-%s", info.Domain)}, tpubsub.WithRetain())
+				}
+
+				if earliestRenewAt.After(resources[i].cert.NotAfter) {
+					earliestRenewAt = resources[i].cert.NotAfter
 				}
 			}
+
+			renewCheckIn := time.Until(earliestRenewAt)
+			if renewCheckIn >= time.Hour*24 {
+				renewCheckIn -= time.Hour * 24
+			} else if renewCheckIn <= 0 {
+				renewCheckIn = time.Hour
+			}
+
+			timer.Reset(renewCheckIn)
 		}
 	}
 }
 
-func initProviders(providers []string) ([]challenge.Provider, error) {
+func initDNSProviders(providers []string) ([]challenge.Provider, error) {
 	res := make([]challenge.Provider, 0, len(providers))
 
 	for _, provider := range providers {

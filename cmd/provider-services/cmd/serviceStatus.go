@@ -1,15 +1,13 @@
 package cmd
 
 import (
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	"errors"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
 
-	cmdcommon "github.com/akash-network/node/cmd/common"
-	dcli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
-
-	aclient "github.com/akash-network/provider/client"
+	cflags "pkg.akt.dev/go/cli/flags"
 )
 
 func serviceStatusCmd() *cobra.Command {
@@ -18,11 +16,13 @@ func serviceStatusCmd() *cobra.Command {
 		Short:        "get service status",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
+		PreRunE:      cli.TxPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doServiceStatus(cmd)
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addServiceFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -34,14 +34,12 @@ func serviceStatusCmd() *cobra.Command {
 }
 
 func doServiceStatus(cmd *cobra.Command) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
+	ctx := cmd.Context()
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
 		return err
 	}
-
-	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
@@ -51,22 +49,17 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
+	bid, err := cflags.BidIDFromFlags(cmd.Flags(), cflags.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}
 
-	bid, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+	paddr, err := sdk.AccAddressFromBech32(bid.Provider)
 	if err != nil {
 		return err
 	}
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}
@@ -76,5 +69,5 @@ func doServiceStatus(cmd *cobra.Command) error {
 		return showErrorToUser(err)
 	}
 
-	return cmdcommon.PrintJSON(cctx, result)
+	return cli.PrintJSON(cctx, result)
 }

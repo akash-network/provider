@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"math/big"
 
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
+	"go.etcd.io/bbolt"
+	berrors "go.etcd.io/bbolt/errors"
+
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"go.etcd.io/bbolt"
+
+	ctypes "pkg.akt.dev/go/node/cert/v1"
 
 	"github.com/akash-network/provider/tools/pconfig"
 )
@@ -29,24 +32,19 @@ var (
 
 var (
 	bucketAccounts     = []byte("accounts")
-	keyBuckets         = []byte("buckets")
+	bucketBidEngine    = []byte("bidengine")
 	keyPubKey          = []byte("pubkey")
 	bucketCertificates = []byte("certificates")
 	keyCertificate     = []byte("certificate")
+	keyNextKey         = []byte("nextkey")
 )
 
 type impl struct {
-	db *bbolt.DB
-	// db     *bolthold.Store
+	db     *bbolt.DB
 	closed chan struct{}
 }
 
 var _ pconfig.Storage = (*impl)(nil)
-
-type account struct {
-	Address sdk.Address `boltholdKey:"Address" boltholdUnique:"UniqueAddress"`
-	PubKey  cryptotypes.PubKey
-}
 
 func NewBBolt(path string) (pconfig.Storage, error) {
 	db, err := bbolt.Open(path, 0600, nil)
@@ -55,13 +53,21 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 	}
 
 	err = db.Update(func(tx *bbolt.Tx) error {
-		_, err := tx.CreateBucket(bucketAccounts)
+		_, err := tx.CreateBucketIfNotExists(bucketAccounts)
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+
+		_, err = tx.CreateBucketIfNotExists(bucketBidEngine)
 		if err != nil {
 			return fmt.Errorf("create bucket: %s", err)
 		}
 
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	b := &impl{
 		db:     db,
@@ -69,6 +75,10 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 	}
 
 	return b, nil
+}
+
+func (b *impl) BidEngine() pconfig.BidEngine {
+	return b
 }
 
 func (b *impl) Close() error {
@@ -102,7 +112,7 @@ func (b *impl) AddAccount(_ context.Context, acc sdk.Address, pubkey cryptotypes
 
 		account, err := accounts.CreateBucket(acc.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketExists) {
+			if errors.Is(err, berrors.ErrBucketExists) {
 				return pconfig.ErrAccountExists
 			}
 
@@ -137,7 +147,7 @@ func (b *impl) DelAccount(_ context.Context, acc sdk.Address) error {
 
 		err := accounts.DeleteBucket(acc.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketExists) {
+			if errors.Is(err, berrors.ErrBucketExists) {
 				return pconfig.ErrAccountNotExists
 			}
 
@@ -208,7 +218,7 @@ func (b *impl) AddAccountCertificate(_ context.Context, acc sdk.Address, cert *x
 
 		certBucket, err := certs.CreateBucket(cert.SerialNumber.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketExists) {
+			if errors.Is(err, berrors.ErrBucketExists) {
 				return pconfig.ErrCertificateExists
 			}
 			return err
@@ -262,7 +272,7 @@ func (b *impl) DelAccountCertificate(_ context.Context, acc sdk.Address, serial 
 
 		err := certs.DeleteBucket(serial.Bytes())
 		if err != nil {
-			if errors.Is(err, bbolt.ErrBucketNotFound) {
+			if errors.Is(err, berrors.ErrBucketNotFound) {
 				return pconfig.ErrCertificateNotExists
 			}
 
@@ -375,6 +385,58 @@ func (b *impl) GetAllCertificates(_ context.Context) ([]*x509.Certificate, error
 				return nil
 			})
 		})
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (b *impl) SetOrdersNextKey(_ context.Context, nextkey []byte) error {
+	select {
+	case <-b.closed:
+		return ErrDBClosed
+	default:
+	}
+
+	err := b.db.Update(func(tx *bbolt.Tx) error {
+		bidengine := tx.Bucket(bucketBidEngine)
+		if bidengine == nil {
+			return ErrUninitialized
+		}
+
+		err := bidengine.Put(keyNextKey, nextkey)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *impl) GetOrdersNextKey(_ context.Context) ([]byte, error) {
+	var res []byte
+
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		bidengine := tx.Bucket(bucketBidEngine)
+		if bidengine == nil {
+			return ErrUninitialized
+		}
+
+		val := bidengine.Get(keyNextKey)
+
+		res = make([]byte, len(val))
+		copy(res, val)
+
+		return nil
 	})
 
 	if err != nil {
