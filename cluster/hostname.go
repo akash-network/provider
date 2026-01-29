@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -370,10 +371,8 @@ func (hs *hostnameService) PrepareHostnamesForTransfer(ctx context.Context, host
 }
 
 func (hs *hostnameService) isHostnameBlocked(hostname string) error {
-	for _, blockedHostname := range hs.blockedHostnames {
-		if blockedHostname == hostname {
-			return fmt.Errorf("%w: %q is blocked by this provider", ErrHostnameNotAllowed, hostname)
-		}
+	if slices.Contains(hs.blockedHostnames, hostname) {
+		return fmt.Errorf("%w: %q is blocked by this provider", ErrHostnameNotAllowed, hostname)
 	}
 
 	for _, blockedDomain := range hs.blockedDomains {
