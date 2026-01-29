@@ -81,12 +81,42 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup environment
         uses: ./.github/actions/setup-ubuntu
+      - name: Generate coverage
+        run: make test-coverage
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: .cache/tests/coverage.txt
+
+  codegen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect required Go version
+        run: |
+          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
+          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "${{ env.GOVERSION }}"
+      - name: Setup direnv
+        uses: HatsuneMiku3939/direnv-action@v1
+      - name: Run codegen
+        run: make codegen
+      - name: Ensure no files changed/added/removed
+        run: |
+          git add .
+          git diff --exit-code --quiet HEAD --
+          exit_status=$?
+          if [[ $exit_status -ne 0 ]]; then
+              echo "codegen test resulted in code changes\n\n"
+              git status
+              exit 1
+          fi
 
   yamlcheck:
     runs-on: ubuntu-latest
@@ -116,6 +146,7 @@ jobs:
       - lint
       - release-dry-run
       - coverage
+      - codegen
       - yamlcheck
       - shellcheck
       - integration-tests
