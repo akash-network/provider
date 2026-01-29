@@ -2,24 +2,22 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
-
-	"github.com/pkg/errors"
 	tpubsub "github.com/troian/pubsub"
 
-	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/cosmos/cosmos-sdk/client"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/akash-network/node/pubsub"
+	aclient "pkg.akt.dev/go/node/client/discovery"
+	sclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
 
 	"github.com/akash-network/provider/bidengine"
-	aclient "github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/manifest"
@@ -27,6 +25,8 @@ import (
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
+
+	"pkg.akt.dev/go/util/pubsub"
 )
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
@@ -35,14 +35,11 @@ type ValidateClient interface {
 }
 
 // StatusClient is the interface which includes status of service
-//
-//go:generate mockery --name StatusClient
 type StatusClient interface {
 	Status(context.Context) (*apclient.ProviderStatus, error)
 	StatusV1(ctx context.Context) (*provider.Status, error)
 }
 
-//go:generate mockery --name Client
 type Client interface {
 	StatusClient
 	ValidateClient
@@ -108,7 +105,7 @@ func NewService(ctx context.Context,
 		cancel()
 		<-clusterSvc.Done()
 		<-bcSvc.lc.Done()
-		return nil, errors.Wrap(err, errmsg)
+		return nil, fmt.Errorf("%w: %s", err, errmsg)
 	}
 
 	manifestConfig := manifest.ServiceConfig{
@@ -177,7 +174,6 @@ func (s *service) ClusterService() cluster.Service {
 
 func (s *service) Close() error {
 	s.lc.Shutdown(nil)
-
 	return s.lc.Error()
 }
 
@@ -246,16 +242,16 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dt
 
 	// inv, err := s.cclient.Inventory(ctx)
 	// if err != nil {
-	// 	return ValidateGroupSpecResult{}, err
+	//	return ValidateGroupSpecResult{}, err
 	// }
 	//
 	// res := &reservation{
-	// 	resources:     nil,
-	// 	clusterParams: nil,
+	//	resources:     nil,
+	//	clusterParams: nil,
 	// }
 	//
 	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-	// 	return ValidateGroupSpecResult{}, err
+	//	return ValidateGroupSpecResult{}, err
 	// }
 
 	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
@@ -271,18 +267,31 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dt
 func (s *service) run() {
 	defer s.lc.ShutdownCompleted()
 
+	var shutdownErr error
+
 	// Wait for any service to finish
 	select {
-	case shutdownErr := <-s.lc.ShutdownRequest():
+	case shutdownErr = <-s.lc.ShutdownRequest():
 		s.session.Log().Info("received shutdown request", "err", shutdownErr)
 	case <-s.cluster.Done():
+		shutdownErr = s.cluster.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("cluster service terminated with error", "err", shutdownErr)
+		}
 	case <-s.bidengine.Done():
+		shutdownErr = s.bidengine.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("bidengine service terminated with error", "err", shutdownErr)
+		}
 	case <-s.manifest.Done():
+		shutdownErr = s.manifest.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("manifest service terminated with error", "err", shutdownErr)
+		}
 	}
 
 	s.session.Log().Info("shutting down services")
-	// Shut down all services
-	s.lc.ShutdownInitiated(nil)
+	s.lc.ShutdownInitiated(shutdownErr)
 	s.cancel()
 
 	// Wait for all services to finish
@@ -290,6 +299,10 @@ func (s *service) run() {
 	<-s.bidengine.Done()
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
+
+	if err := s.bc.Close(); err != nil {
+		s.session.Log().Error("balance checker had error", "err", err)
+	}
 
 	s.session.Log().Info("shutdown complete")
 }

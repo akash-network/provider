@@ -21,9 +21,10 @@ import (
 	"github.com/go-acme/lego/v4/providers/dns/gcloud"
 	"github.com/go-acme/lego/v4/registration"
 	"github.com/hashicorp/go-retryablehttp"
-	"github.com/tendermint/tendermint/libs/log"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+
+	"cosmossdk.io/log"
 )
 
 var (
@@ -111,12 +112,12 @@ func NewLego(ctx context.Context, log log.Logger, cfg Config) (CertIssuer, error
 	retryClient.Logger = nil
 	lcfg.HTTPClient = retryClient.StandardClient()
 
-	dnsProviders, err := initDNSProviders(cfg.DNSProviders)
+	client, err := lego.NewClient(lcfg)
 	if err != nil {
 		return nil, err
 	}
 
-	client, err := lego.NewClient(lcfg)
+	dnsProviders, err := initDNSProviders(cfg.DNSProviders)
 	if err != nil {
 		return nil, err
 	}
@@ -224,11 +225,10 @@ func (ci *certIssuer) Close() error {
 
 func (ci *certIssuer) obtainCert(domain string) (*certificate.Resource, ResourcesInfo, error) {
 	req := certificate.ObtainRequest{
-		Domains:    []string{domain},
-		PrivateKey: nil,
-		MustStaple: false,
-		// do not set email addresses or LetsEncrypt will reject the request
-		EmailAddresses:                 nil,
+		Domains:                        []string{domain},
+		PrivateKey:                     nil,
+		MustStaple:                     false,
+		EmailAddresses:                 nil, // do not set email addresses or LetsEncrypt will reject the request
 		Bundle:                         true,
 		PreferredChain:                 "",
 		AlwaysDeactivateAuthorizations: false,
@@ -296,7 +296,6 @@ func (ci *certIssuer) run() error {
 				ci.log.Error(fmt.Sprintf("failed to parse certificate %s", domain), "err", err)
 				continue
 			}
-
 			ci.pub.Pub(info, []string{fmt.Sprintf("domain-cert-%s", info.Domain)}, tpubsub.WithRetain())
 
 			resources = append(resources, resourceInfo{
@@ -370,7 +369,7 @@ func (ci *certIssuer) run() error {
 				}
 			}
 
-			renewCheckIn := earliestRenewAt.Sub(time.Now())
+			renewCheckIn := time.Until(earliestRenewAt)
 			if renewCheckIn >= time.Hour*24 {
 				renewCheckIn -= time.Hour * 24
 			} else if renewCheckIn <= 0 {

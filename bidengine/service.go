@@ -4,25 +4,25 @@ import (
 	"context"
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
 	"github.com/boz/go-lifecycle"
-	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 
-	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
-	"github.com/akash-network/node/pubsub"
-	mquery "github.com/akash-network/node/x/market/query"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
+	sclient "pkg.akt.dev/go/node/client/v1beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
+	mquery "pkg.akt.dev/node/x/market/query"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
-	"github.com/akash-network/provider/tools/pconfig"
 	ptypes "github.com/akash-network/provider/types"
 )
 
@@ -53,28 +53,6 @@ type Service interface {
 	Done() <-chan struct{}
 }
 
-type service struct {
-	session session.Session
-	cluster cluster.Cluster
-	cfg     Config
-
-	bus  pubsub.Bus
-	sub  pubsub.Subscriber
-	pcfg pconfig.StorageNextKey
-
-	statusch chan chan<- *apclient.BidEngineStatus
-	orders   map[string]*order
-	drainch  chan *order
-	ordersch chan []mtypes.OrderID
-
-	group  *errgroup.Group
-	cancel context.CancelFunc
-	lc     lifecycle.Lifecycle
-	pass   *providerAttrSignatureService
-
-	waiter waiter.OperatorWaiter
-}
-
 // NewService creates new service instance and returns error in case of failure
 func NewService(
 	pctx context.Context,
@@ -92,27 +70,19 @@ func NewService(
 		return nil, err
 	}
 
+	providerAttrService, err := newProviderAttrSignatureService(session, bus)
+	if err != nil {
+		return nil, err
+	}
+
 	ctx, cancel := context.WithCancel(pctx)
 	group, _ := errgroup.WithContext(ctx)
-
-	providerAttrService, err := newProviderAttrSignatureService(ctx, session, bus)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-
-	pcfg, err := fromctx.PersistentConfigFromCtx(pctx)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
 
 	s := &service{
 		session:  session,
 		cluster:  cluster,
 		bus:      bus,
 		sub:      sub,
-		pcfg:     pcfg,
 		statusch: make(chan chan<- *apclient.BidEngineStatus),
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
@@ -135,13 +105,29 @@ func NewService(
 	return s, nil
 }
 
+type service struct {
+	session session.Session
+	cluster cluster.Cluster
+	cfg     Config
+
+	bus pubsub.Bus
+	sub pubsub.Subscriber
+
+	statusch chan chan<- *apclient.BidEngineStatus
+	orders   map[string]*order
+	drainch  chan *order
+	ordersch chan []mtypes.OrderID
+
+	group  *errgroup.Group
+	cancel context.CancelFunc
+	lc     lifecycle.Lifecycle
+	pass   *providerAttrSignatureService
+
+	waiter waiter.OperatorWaiter
+}
+
 func (s *service) Close() error {
 	s.lc.Shutdown(nil)
-	// stop fetcher; ignore wait errors
-	if s.cancel != nil {
-		s.cancel()
-	}
-
 	return s.lc.Error()
 }
 
@@ -184,18 +170,20 @@ func (s *service) updateOrderManagerGauge() {
 }
 
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	nextKey, _ := s.pcfg.GetOrdersNextKey(ctx)
+	var nextKey []byte
 
-	limit := cap(s.ordersch)
+	pcfg, err := fromctx.PersistentConfigFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	nextKey, _ = pcfg.BidEngine().GetOrdersNextKey(ctx)
 
 	defer func() {
-		if len(nextKey) > 0 {
-			err := s.pcfg.SetOrdersNextKey(context.Background(), nextKey)
-			if err != nil {
-				s.session.Log().Error("saving next key", "err", err.Error())
-			}
-		}
+		_ = pcfg.BidEngine().SetOrdersNextKey(context.Background(), nextKey)
 	}()
+
+	limit := cap(s.ordersch)
 
 loop:
 	for {
@@ -204,20 +192,12 @@ loop:
 			Limit: uint64(limit),
 		}
 
-		resp, err := aqc.Orders(ctx, &mtypes.QueryOrdersRequest{
-			Filters: mtypes.OrderFilters{
-				State: mtypes.OrderOpen.String(),
+		resp, err := aqc.Market().Orders(ctx, &mvbeta.QueryOrdersRequest{
+			Filters: mvbeta.OrderFilters{
+				State: mvbeta.OrderOpen.String(),
 			},
 			Pagination: preq,
 		})
-		if resp != nil && resp.Pagination != nil {
-			nextKey = resp.Pagination.NextKey
-
-			if er := s.pcfg.SetOrdersNextKey(context.Background(), nextKey); er != nil {
-				s.session.Log().Error("saving next key", "err", er.Error())
-			}
-		}
-
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				break
@@ -229,7 +209,7 @@ loop:
 		var orders []mtypes.OrderID
 
 		for _, order := range resp.Orders {
-			orders = append(orders, order.OrderID)
+			orders = append(orders, order.ID)
 		}
 
 		select {
@@ -238,9 +218,15 @@ loop:
 			break loop
 		}
 
-		if len(nextKey) == 0 {
+		// if pagination (or next key) is empty indicates
+		// we're done with queries and it is time to quit
+		// we do not update nextKey with empty value, so on the next restart provider
+		// does not begin traversing orders from the beginning
+		if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
 			break loop
 		}
+
+		nextKey = resp.Pagination.NextKey
 	}
 
 	return ctx.Err()
@@ -276,7 +262,7 @@ loop:
 		select {
 		case shutdownErr := <-s.lc.ShutdownRequest():
 			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
-			s.lc.ShutdownInitiated(nil)
+			s.lc.ShutdownInitiated(shutdownErr)
 			break loop
 		case orders := <-s.ordersch:
 			for _, orderID := range orders {
@@ -292,7 +278,7 @@ loop:
 			}
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) { // nolint: gocritic
-			case mtypes.EventOrderCreated:
+			case *mtypes.EventOrderCreated:
 				// new order
 				key := mquery.OrderPath(ev.ID)
 

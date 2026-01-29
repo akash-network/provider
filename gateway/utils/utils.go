@@ -10,9 +10,10 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	ajwt "github.com/akash-network/akash-api/go/util/jwt"
-	atls "github.com/akash-network/akash-api/go/util/tls"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	ajwt "pkg.akt.dev/go/util/jwt"
+	atls "pkg.akt.dev/go/util/tls"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )
@@ -152,8 +153,10 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 				return nil, err
 			}
 
-			return pk, nil
-		}, jwt.WithValidMethods([]string{"ES256K"}))
+			verifier := ajwt.NewVerifier(pk, iss)
+
+			return verifier, nil
+		}, jwt.WithValidMethods([]string{"ES256K", "ES256KADR36"}))
 
 		if err == nil && !token.Valid {
 			err = ErrJWTInvalid

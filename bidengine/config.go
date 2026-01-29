@@ -4,14 +4,13 @@ import (
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	atttypes "pkg.akt.dev/go/node/types/attributes/v1"
 )
 
 type Config struct {
 	PricingStrategy BidPricingStrategy
 	Deposit         sdk.Coin
 	BidTimeout      time.Duration
-	Attributes      types.Attributes
+	Attributes      atttypes.Attributes
 	MaxGroupVolumes int
 }

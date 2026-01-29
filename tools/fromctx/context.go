@@ -8,11 +8,11 @@ import (
 	"github.com/boz/go-lifecycle"
 	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
-	cmblog "github.com/tendermint/tendermint/libs/log"
 	"github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
@@ -31,9 +31,8 @@ const (
 	CtxKeyPubSub             = Key("pubsub")
 	CtxKeyLifecycle          = Key("lifecycle")
 	CtxKeyErrGroup           = Key("errgroup")
-	CtxKeyLogc               = Key("logc")
+	CtxKeyLogc               = ctxlog.CtxKeyLog
 	CtxKeyStartupCh          = Key("startup-ch")
-	CtxKeyShutdownCh         = Key("shutdown-ch")
 	CtxKeyInventoryUnderTest = Key("inventory-under-test")
 	CtxKeyPersistentConfig   = Key("persistent-config")
 	CtxKeyCertIssuer         = Key("cert-issuer")
@@ -45,47 +44,8 @@ var (
 	ErrValueInvalidType = errors.New("fromctx: invalid type")
 )
 
-type options struct {
-	logName Key
-}
-
-type LogcOption func(*options) error
-
-type dummyLogger struct{}
-
-func (l *dummyLogger) Debug(_ string, _ ...interface{}) {}
-func (l *dummyLogger) Info(_ string, _ ...interface{})  {}
-func (l *dummyLogger) Error(_ string, _ ...interface{}) {}
-func (l *dummyLogger) With(_ ...interface{}) cmblog.Logger {
-	return &dummyLogger{}
-}
-
 func CmdSetContextValue(cmd *cobra.Command, key, val interface{}) {
 	cmd.SetContext(context.WithValue(cmd.Context(), key, val))
-}
-
-// WithLogc add logger object to the context
-// key defaults to the "log"
-// use WithLogName("<custom name>") to set custom key
-func WithLogc(ctx context.Context, lg cmblog.Logger, opts ...LogcOption) context.Context {
-	opt, _ := applyOptions(opts...)
-
-	ctx = context.WithValue(ctx, opt.logName, lg)
-
-	return ctx
-}
-
-func LogcFromCtx(ctx context.Context, opts ...LogcOption) cmblog.Logger {
-	opt, _ := applyOptions(opts...)
-
-	var logger cmblog.Logger
-	if lg, valid := ctx.Value(opt.logName).(cmblog.Logger); valid {
-		logger = lg
-	} else {
-		logger = &dummyLogger{}
-	}
-
-	return logger
 }
 
 func LogrFromCtx(ctx context.Context) logr.Logger {
@@ -107,31 +67,8 @@ func StartupChFromCtx(ctx context.Context) (chan<- struct{}, error) {
 	return res, nil
 }
 
-func ShutdownChFromCtx(ctx context.Context) (chan<- struct{}, error) {
-	val := ctx.Value(CtxKeyShutdownCh)
-	if val == nil {
-		return nil, fmt.Errorf("%w: context does not have shutdown channel set", ErrNotFound)
-	}
-
-	res, valid := val.(chan<- struct{})
-	if !valid {
-		return nil, ErrValueInvalidType
-	}
-
-	return res, nil
-}
-
 func MustStartupChFromCtx(ctx context.Context) chan<- struct{} {
 	val, err := StartupChFromCtx(ctx)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return val
-}
-
-func MustShutdownChFromCtx(ctx context.Context) chan<- struct{} {
-	val, err := ShutdownChFromCtx(ctx)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -389,21 +326,6 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	}
 
 	return false
-}
-
-func applyOptions(opts ...LogcOption) (options, error) {
-	obj := &options{}
-	for _, opt := range opts {
-		if err := opt(obj); err != nil {
-			return options{}, err
-		}
-	}
-
-	if obj.logName == "" {
-		obj.logName = CtxKeyLogc
-	}
-
-	return *obj, nil
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {

@@ -4,13 +4,14 @@ import (
 	"time"
 
 	"github.com/go-acme/lego/v4/lego"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+
+	sdkmath "cosmossdk.io/math"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-
-	"github.com/cosmos/cosmos-sdk/client/flags"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 
 	"github.com/akash-network/provider"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -19,9 +20,9 @@ import (
 func addRunFlags(cmd *cobra.Command) error {
 	cfg := provider.NewDefaultConfig()
 
-	cmd.Flags().String(flags.FlagChainID, "", "The network chain ID")
-	if err := viper.BindPFlag(flags.FlagChainID, cmd.Flags().Lookup(flags.FlagChainID)); err != nil {
-		panic(err)
+	cmd.Flags().StringP(cflags.FlagHome, "", cli.DefaultHome, "directory for config and data")
+	if err := viper.BindPFlag(cflags.FlagHome, cmd.Flags().Lookup(cflags.FlagHome)); err != nil {
+		return err
 	}
 
 	cmd.Flags().Bool(FlagClusterK8s, false, "Use Kubernetes cluster")
@@ -200,7 +201,7 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Uint64(FlagMinimumBalance, mparams.DefaultBidMinDeposit.Amount.Mul(sdk.NewIntFromUint64(2)).Uint64(), "minimum account balance at which withdrawal is started")
+	cmd.Flags().Uint64(FlagMinimumBalance, mvbeta.DefaultBidMinDeposit.Amount.Mul(sdkmath.NewIntFromUint64(2)).Uint64(), "minimum account balance at which withdrawal is started")
 	if err := viper.BindPFlag(FlagMinimumBalance, cmd.Flags().Lookup(FlagMinimumBalance)); err != nil {
 		return err
 	}

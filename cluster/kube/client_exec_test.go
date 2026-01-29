@@ -17,9 +17,9 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -115,8 +115,8 @@ func withExecTestScaffold(t *testing.T, changePod func(pod *corev1.Pod) error, t
 	require.NoError(t, err)
 	require.NotNil(t, s.crdManifest)
 
-	s.akashFake = akashclient.NewSimpleClientset(s.crdManifest)
-	s.kubeFake = kubefake.NewSimpleClientset()
+	s.akashFake = akashclient.NewClientset(s.crdManifest)
+	s.kubeFake = kubefake.NewClientset()
 
 	pod := &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{},

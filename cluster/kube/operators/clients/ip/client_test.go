@@ -5,19 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cosmos/cosmos-sdk/server"
-
-	"github.com/akash-network/node/testutil"
+	"pkg.akt.dev/go/testutil"
 
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 )
@@ -83,12 +81,14 @@ func fakeIPOperatorHandler() *fakeOperator {
 }
 
 func TestIPOperatorClient(t *testing.T) {
-	_, port, err := server.FreeTCPAddr()
+	ports, err := testutil.GetUsablePorts(1)
 	require.NoError(t, err)
 
 	fake := fakeIPOperatorHandler()
+
+	port := ports.MustGetPort()
 	fakeServer := &http.Server{
-		Addr:         "localhost:" + port,
+		Addr:         fmt.Sprintf("localhost:%d", port),
 		Handler:      fake.mux,
 		ReadTimeout:  1 * time.Second,
 		WriteTimeout: 1 * time.Second,
@@ -108,12 +108,10 @@ func TestIPOperatorClient(t *testing.T) {
 	time.Sleep(time.Second)
 
 	logger := testutil.Logger(t)
-	portNumber, err := strconv.Atoi(port)
-	require.NoError(t, err)
 
 	srv := net.SRV{
 		Target:   "localhost",
-		Port:     uint16(portNumber), // nolint: gosec
+		Port:     uint16(port), // nolint: gosec
 		Priority: 0,
 		Weight:   0,
 	}

@@ -25,8 +25,7 @@ var (
 type StorageR interface {
 	GetAccountPublicKey(context.Context, sdk.Address) (cryptotypes.PubKey, error)
 	GetAccountCertificate(context.Context, sdk.Address, *big.Int) (*x509.Certificate, crypto.PublicKey, error)
-	GetAllCertificates(ctx context.Context) ([]*x509.Certificate, error)
-	GetOrdersNextKey(ctx context.Context) ([]byte, error)
+	GetAllCertificates(context.Context) ([]*x509.Certificate, error)
 }
 
 type StorageW interface {
@@ -34,18 +33,16 @@ type StorageW interface {
 	DelAccount(context.Context, sdk.Address) error
 	AddAccountCertificate(context.Context, sdk.Address, *x509.Certificate, crypto.PublicKey) error
 	DelAccountCertificate(context.Context, sdk.Address, *big.Int) error
-	SetOrdersNextKey(ctx context.Context, key []byte) error
-	DelOrdersNextKey(ctx context.Context) error
+}
+
+type BidEngine interface {
+	SetOrdersNextKey(context.Context, []byte) error
+	GetOrdersNextKey(context.Context) ([]byte, error)
 }
 
 type Storage interface {
 	StorageR
 	StorageW
+	BidEngine() BidEngine
 	Close() error
-}
-
-type StorageNextKey interface {
-	SetOrdersNextKey(ctx context.Context, key []byte) error
-	DelOrdersNextKey(ctx context.Context) error
-	GetOrdersNextKey(ctx context.Context) ([]byte, error)
 }

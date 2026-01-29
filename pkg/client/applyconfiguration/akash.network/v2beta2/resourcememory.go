@@ -19,14 +19,14 @@ limitations under the License.
 package v2beta2
 
 import (
-	v1beta3 "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	v1 "pkg.akt.dev/go/node/types/attributes/v1"
 )
 
 // ResourceMemoryApplyConfiguration represents a declarative configuration of the ResourceMemory type for use
 // with apply.
 type ResourceMemoryApplyConfiguration struct {
-	Size       *string             `json:"size,omitempty"`
-	Attributes *v1beta3.Attributes `json:"attributes,omitempty"`
+	Size       *string        `json:"size,omitempty"`
+	Attributes *v1.Attributes `json:"attributes,omitempty"`
 }
 
 // ResourceMemoryApplyConfiguration constructs a declarative configuration of the ResourceMemory type for use with
@@ -46,7 +46,7 @@ func (b *ResourceMemoryApplyConfiguration) WithSize(value string) *ResourceMemor
 // WithAttributes sets the Attributes field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Attributes field is set to the value of the last call.
-func (b *ResourceMemoryApplyConfiguration) WithAttributes(value v1beta3.Attributes) *ResourceMemoryApplyConfiguration {
+func (b *ResourceMemoryApplyConfiguration) WithAttributes(value v1.Attributes) *ResourceMemoryApplyConfiguration {
 	b.Attributes = &value
 	return b
 }

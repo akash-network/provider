@@ -56,8 +56,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("%w: invalid ca dir url", ErrConfig)
 	}
 
-	if c.HTTPChallengePort != 0 && (c.HTTPChallengePort < 1 || c.HTTPChallengePort > int(math.MaxUint16)) {
-		return fmt.Errorf("%w: invalid port value %d for http-01 challenge. allowed: 1..65535 or 0 to disable", ErrConfig, c.HTTPChallengePort)
+	if c.HTTPChallengePort != 0 && (c.HTTPChallengePort < 1 || c.HTTPChallengePort > math.MaxUint16) {
+		return fmt.Errorf("%w: invalid port value \"%d\" for http-01 challenge. allowed range 1..65535", ErrConfig, c.HTTPChallengePort)
 	}
 
 	if c.TLSChallengePort != 0 && (c.TLSChallengePort < 1 || c.TLSChallengePort > int(math.MaxUint16)) {

@@ -6,18 +6,22 @@ import (
 	"time"
 
 	"github.com/boz/go-lifecycle"
+
+	"cosmossdk.io/log"
+	tmrpc "github.com/cometbft/cometbft/rpc/core/types"
+
+	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
-	tmrpc "github.com/tendermint/tendermint/rpc/core/types"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
-	"github.com/akash-network/node/pubsub"
-	netutil "github.com/akash-network/node/util/network"
-	"github.com/akash-network/node/util/runner"
-	"github.com/akash-network/node/x/escrow/client/util"
+	"pkg.akt.dev/go/util/pubsub"
+	netutil "pkg.akt.dev/node/util/network"
+	"pkg.akt.dev/node/util/runner"
+	"pkg.akt.dev/node/x/escrow/client/util"
 
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
@@ -100,6 +104,11 @@ func newBalanceChecker(
 	return bc, nil
 }
 
+func (bc *balanceChecker) Close() error {
+	bc.lc.Shutdown(nil)
+	return bc.lc.Error()
+}
+
 func (bc *balanceChecker) runEscrowCheck(ctx context.Context, lid mtypes.LeaseID, scheduledWithdraw bool, res chan<- leaseCheckResponse) {
 	go func() {
 		select {
@@ -131,10 +140,10 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	}
 
 	var dResp *dtypes.QueryDeploymentResponse
-	var lResp *mtypes.QueryLeasesResponse
+	var lResp *mvbeta.QueryLeasesResponse
 
 	// Fetch the balance of the escrow account
-	dResp, resp.err = bc.aqc.Deployment(ctx, &dtypes.QueryDeploymentRequest{
+	dResp, resp.err = bc.aqc.Deployment().Deployment(ctx, &dtypes.QueryDeploymentRequest{
 		ID: lid.DeploymentID(),
 	})
 
@@ -142,7 +151,7 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 		return resp
 	}
 
-	lResp, resp.err = bc.aqc.Leases(ctx, &mtypes.QueryLeasesRequest{
+	lResp, resp.err = bc.aqc.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
 		Filters: mtypes.LeaseFilters{
 			Owner: lid.Owner,
 			DSeq:  lid.DSeq,
@@ -154,14 +163,14 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 		return resp
 	}
 
-	totalLeaseAmount := sdk.NewDec(0)
+	totalLeaseAmount := sdkmath.LegacyNewDec(0)
 	for _, lease := range lResp.Leases {
 		totalLeaseAmount = totalLeaseAmount.Add(lease.Lease.Price.Amount)
 	}
 
-	balanceRemain := util.LeaseCalcBalanceRemain(dResp.EscrowAccount.TotalBalance().Amount,
+	balanceRemain := util.LeaseCalcBalanceRemain(dResp.EscrowAccount.State.Funds[0].Amount,
 		syncInfo.LatestBlockHeight,
-		dResp.EscrowAccount.SettledAt,
+		dResp.EscrowAccount.State.SettledAt,
 		totalLeaseAmount)
 
 	blocksRemain := util.LeaseCalcBlocksRemain(balanceRemain, totalLeaseAmount)
@@ -186,11 +195,11 @@ func (bc *balanceChecker) startWithdraw(ctx context.Context, lid mtypes.LeaseID)
 	ctx, cancel := context.WithTimeout(ctx, withdrawTimeout)
 	defer cancel()
 
-	msg := &mtypes.MsgWithdrawLease{
-		LeaseID: lid,
+	msg := &mvbeta.MsgWithdrawLease{
+		ID: lid,
 	}
 
-	_, err := bc.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+	_, err := bc.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 	return err
 }
 
@@ -226,7 +235,7 @@ loop:
 		select {
 		case shutdownErr := <-bc.lc.ShutdownRequest():
 			bc.log.Debug("received shutdown request", "err", shutdownErr)
-			bc.lc.ShutdownInitiated(nil)
+			bc.lc.ShutdownInitiated(shutdownErr)
 			cancel()
 			break loop
 		case evt := <-subscriber.Events():

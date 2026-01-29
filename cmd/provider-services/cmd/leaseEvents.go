@@ -1,18 +1,15 @@
 package cmd
 
 import (
+	"errors"
 	"sync"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	cmdcommon "github.com/akash-network/node/cmd/common"
-
-	aclient "github.com/akash-network/provider/client"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func leaseEventsCmd() *cobra.Command {
@@ -21,11 +18,13 @@ func leaseEventsCmd() *cobra.Command {
 		Short:        "get lease events",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseEvents(cmd)
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addServiceFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -36,27 +35,17 @@ func leaseEventsCmd() *cobra.Command {
 }
 
 func doLeaseEvents(cmd *cobra.Command) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	dseq, err := dseqFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -79,15 +68,14 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	streams := make([]result, 0, len(leases))
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
-	if err != nil {
-		return err
-	}
-
 	for _, lid := range leases {
 		stream := result{lid: lid}
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+		if err != nil {
+			return err
+		}
+
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), paddr, true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {
@@ -107,7 +95,7 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	go func() {
 		for evt := range outch {
-			_ = cmdcommon.PrintJSON(cctx, evt)
+			_ = cli.PrintJSON(cctx, evt)
 		}
 	}()
 

@@ -9,13 +9,13 @@ import (
 
 	"github.com/boz/go-lifecycle"
 
-	"github.com/akash-network/node/pubsub"
+	"pkg.akt.dev/go/util/pubsub"
 
 	"github.com/akash-network/provider/session"
 
-	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	atypes "pkg.akt.dev/go/node/audit/v1"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	atrtypes "pkg.akt.dev/go/node/types/attributes/v1"
 )
 
 const (
@@ -30,30 +30,30 @@ var (
 )
 
 type attrRequest struct {
-	successCh chan<- types.Attributes
+	successCh chan<- atrtypes.Attributes
 	errCh     chan<- error
 }
 
 type auditedAttrRequest struct {
 	auditor   string
-	successCh chan<- []atypes.Provider
+	successCh chan<- atypes.AuditedProviders
 	errCh     chan<- error
 }
 
 type providerAttrEntry struct {
-	providerAttr []atypes.Provider
+	providerAttr atypes.AuditedProviders
 	at           time.Time
 }
 
 type auditedAttrResult struct {
 	auditor      string
-	providerAttr []atypes.Provider
+	providerAttr atypes.AuditedProviders
 	err          error
 }
 
 type ProviderAttrSignatureService interface {
-	GetAuditorAttributeSignatures(auditor string) ([]atypes.Provider, error)
-	GetAttributes() (types.Attributes, error)
+	GetAuditorAttributeSignatures(auditor string) (atypes.AuditedProviders, error)
+	GetAttributes() (atrtypes.Attributes, error)
 }
 
 type providerAttrSignatureService struct {
@@ -62,11 +62,11 @@ type providerAttrSignatureService struct {
 	requests     chan auditedAttrRequest
 
 	reqAttr         chan attrRequest
-	currAttr        chan types.Attributes
+	currAttr        chan atrtypes.Attributes
 	fetchAttr       chan struct{}
 	pushAttr        chan struct{}
 	fetchInProgress chan struct{}
-	newAttr         chan types.Attributes
+	newAttr         chan atrtypes.Attributes
 	errFetchAttr    chan error
 
 	session session.Session
@@ -82,14 +82,14 @@ type providerAttrSignatureService struct {
 
 	ttl time.Duration
 
-	attr types.Attributes
+	attr atrtypes.Attributes
 }
 
-func newProviderAttrSignatureService(ctx context.Context, s session.Session, bus pubsub.Bus) (*providerAttrSignatureService, error) {
-	return newProviderAttrSignatureServiceInternal(ctx, s, bus, 18*time.Hour)
+func newProviderAttrSignatureService(s session.Session, bus pubsub.Bus) (*providerAttrSignatureService, error) {
+	return newProviderAttrSignatureServiceInternal(s, bus, 18*time.Hour)
 }
 
-func newProviderAttrSignatureServiceInternal(ctx context.Context, s session.Session, bus pubsub.Bus, ttl time.Duration) (*providerAttrSignatureService, error) {
+func newProviderAttrSignatureServiceInternal(s session.Session, bus pubsub.Bus, ttl time.Duration) (*providerAttrSignatureService, error) {
 	subscriber, err := bus.Subscribe()
 	if err != nil {
 		return nil, err
@@ -105,18 +105,17 @@ func newProviderAttrSignatureServiceInternal(ctx context.Context, s session.Sess
 		inProgress:   make(map[string]struct{}),
 
 		reqAttr:         make(chan attrRequest, 1),
-		currAttr:        make(chan types.Attributes, 1),
+		currAttr:        make(chan atrtypes.Attributes, 1),
 		fetchAttr:       make(chan struct{}, 1),
 		pushAttr:        make(chan struct{}, 1),
 		fetchInProgress: make(chan struct{}, 1),
-		newAttr:         make(chan types.Attributes),
+		newAttr:         make(chan atrtypes.Attributes),
 		errFetchAttr:    make(chan error, 1),
 
 		sub: subscriber,
 		ttl: ttl,
 	}
 
-	go retval.lc.WatchContext(ctx)
 	go retval.run()
 
 	return retval, nil
@@ -197,15 +196,15 @@ func (pass *providerAttrSignatureService) pushCurrAttributes() {
 func (pass *providerAttrSignatureService) handleEvent(ev pubsub.Event) {
 	switch ev := ev.(type) {
 	case atypes.EventTrustedAuditorCreated:
-		if ev.Owner.String() == pass.providerAddr {
-			pass.purgeAuditor(ev.Auditor.String())
+		if ev.Owner == pass.providerAddr {
+			pass.purgeAuditor(ev.Auditor)
 		}
 	case atypes.EventTrustedAuditorDeleted:
-		if ev.Owner.String() == pass.providerAddr {
-			pass.purgeAuditor(ev.Auditor.String())
+		if ev.Owner == pass.providerAddr {
+			pass.purgeAuditor(ev.Auditor)
 		}
 	case ptypes.EventProviderUpdated:
-		if ev.Owner.String() == pass.providerAddr {
+		if ev.Owner == pass.providerAddr {
 			pass.fetchAttributes()
 		}
 	default:
@@ -221,7 +220,7 @@ func (pass *providerAttrSignatureService) failAllPending(auditor string, err err
 	delete(pass.pending, auditor)
 }
 
-func (pass *providerAttrSignatureService) completeAllPending(auditor string, result []atypes.Provider) {
+func (pass *providerAttrSignatureService) completeAllPending(auditor string, result atypes.AuditedProviders) {
 	pendingForAuditor := pass.pending[auditor]
 	delete(pass.pending, auditor)
 
@@ -239,7 +238,7 @@ func (pass *providerAttrSignatureService) completeAllPending(auditor string, res
 	pass.trimCache()
 }
 
-func providerAttrSize(entries []atypes.Provider) int {
+func providerAttrSize(entries atypes.AuditedProviders) int {
 	size := 0
 	for _, x := range entries {
 		size += len(x.Attributes)
@@ -319,7 +318,7 @@ func (pass *providerAttrSignatureService) fetch(ctx context.Context, auditor str
 	}
 
 	pass.session.Log().Info("fetching provider auditor attributes", "auditor", req.Auditor, "provider", req.Owner)
-	result, err := pass.session.Client().Query().ProviderAuditorAttributes(ctx, req)
+	result, err := pass.session.Client().Query().Audit().ProviderAuditorAttributes(ctx, req)
 	if err != nil {
 		// Error type is always "errors.fundamental" so use pattern matching here
 		if invalidProviderPattern.MatchString(err.Error()) {
@@ -356,8 +355,8 @@ func (pass *providerAttrSignatureService) addRequest(request auditedAttrRequest)
 	return true
 }
 
-func (pass *providerAttrSignatureService) GetAuditorAttributeSignatures(auditor string) ([]atypes.Provider, error) {
-	successCh := make(chan []atypes.Provider, 1)
+func (pass *providerAttrSignatureService) GetAuditorAttributeSignatures(auditor string) (atypes.AuditedProviders, error) {
+	successCh := make(chan atypes.AuditedProviders, 1)
 	errCh := make(chan error, 1)
 	req := auditedAttrRequest{
 		auditor:   auditor,
@@ -381,8 +380,8 @@ func (pass *providerAttrSignatureService) GetAuditorAttributeSignatures(auditor 
 	}
 }
 
-func (pass *providerAttrSignatureService) GetAttributes() (types.Attributes, error) {
-	successCh := make(chan types.Attributes, 1)
+func (pass *providerAttrSignatureService) GetAttributes() (atrtypes.Attributes, error) {
+	successCh := make(chan atrtypes.Attributes, 1)
 	errCh := make(chan error, 1)
 
 	req := attrRequest{
@@ -424,7 +423,7 @@ func (pass *providerAttrSignatureService) tryFetchAttributes(ctx context.Context
 				Owner: pass.providerAddr,
 			}
 
-			result, err = pass.session.Client().Query().Provider(ctx, req)
+			result, err = pass.session.Client().Query().Provider().Provider(ctx, req)
 			if err != nil {
 				pass.session.Log().Error("fetching provider attributes", "provider", req.Owner)
 				return

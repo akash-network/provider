@@ -5,6 +5,10 @@ env:
   - GO111MODULE=on
   - DOCKER_CLI_EXPERIMENTAL="enabled"
   - CGO_ENABLED=1
+before:
+  hooks:
+    - apt update
+    - apt install -y pkg-config libudev-dev:amd64 libudev-dev:arm64
 builds:
   - id: provider-services-darwin-arm64
     binary: provider-services
@@ -98,7 +102,7 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread --static"
+      - -extldflags "-lc -lrt -lpthread"
   - id: provider-services-linux-amd64
     binary: provider-services
     main: ./cmd/provider-services
@@ -117,7 +121,7 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread --static"
+      - -extldflags "-lc -lrt -lpthread"
   - id: provider-services-linux-arm64-debug
     binary: provider-services
     main: ./cmd/provider-services
@@ -135,7 +139,7 @@ builds:
     ldflags:
       - "{{ .Env.BUILD_VARS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread --static"
+      - -extldflags "-lc -lrt -lpthread"
     gcflags:
       - "all=-N -l"
   - id: provider-services-linux-amd64-debug
@@ -155,7 +159,7 @@ builds:
     ldflags:
       - "{{ .Env.BUILD_VARS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread --static"
+      - -extldflags "-lc -lrt -lpthread"
     gcflags:
       - "all=-N -l"
 universal_binaries:
@@ -173,43 +177,47 @@ universal_binaries:
     name_template: "provider-services"
 archives:
   - id: provider-services-version
-    builds:
+    ids:
       - darwin-universal
       - provider-services-linux-arm64
       - provider-services-linux-amd64
     name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
   - id: provider-services
-    builds:
+    ids:
       - darwin-universal
       - provider-services-linux-arm64
       - provider-services-linux-amd64
     name_template: "provider-services_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
   - id: provider-services-version-debug
-    builds:
+    ids:
       - darwin-universal-debug
       - provider-services-linux-arm64-debug
       - provider-services-linux-amd64-debug
     name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}_debug"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
   - id: provider-services-debug
-    builds:
+    ids:
       - darwin-universal-debug
       - provider-services-linux-arm64-debug
       - provider-services-linux-amd64-debug
     name_template: "provider-services_{{ .Os }}_{{ .Arch }}_debug"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
 checksum:
