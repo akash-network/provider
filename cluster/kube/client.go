@@ -235,6 +235,20 @@ type previousObj struct {
 func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac akashclient.Interface) []error {
 	var errs []error
 
+	// Recover RBAC resources first
+	if err := kc.RbacV1().RoleBindings(p.nns.Name).Delete(ctx, builder.AkashRoleBinding, metav1.DeleteOptions{}); err != nil {
+		if !kerrors.IsNotFound(err) {
+			errs = append(errs, err)
+		}
+	}
+
+	if err := kc.RbacV1().Roles(p.nns.Name).Delete(ctx, builder.AkashRoleName, metav1.DeleteOptions{}); err != nil {
+		if !kerrors.IsNotFound(err) {
+			errs = append(errs, err)
+		}
+	}
+
+	// Recover other resources
 	for _, val := range slices.Backward(p.nGlobalServices) {
 		if err := kc.CoreV1().Services(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
 			errs = append(errs, err)
@@ -352,8 +366,33 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 	lid := cdeployment.LeaseID()
 	group := cdeployment.ManifestGroup()
+	ns := builder.LidNS(lid)
 
 	po := &previousObj{}
+
+	// Create namespace first
+	applies.ns = builder.BuildNS(settings, cdeployment)
+	po.nns, po.uns, po.ons, err = applyNS(ctx, c.kc, applies.ns)
+	if err != nil {
+		c.log.Error("applying namespace", "err", err, "lease", lid)
+		return err
+	}
+
+	// Create RBAC resources
+
+	role := builder.CreateRole(ns, group.Name)
+	if _, err := c.kc.RbacV1().Roles(ns).Create(ctx, role, metav1.CreateOptions{}); err != nil {
+		if !kerrors.IsAlreadyExists(err) {
+			return fmt.Errorf("error creating role: %w", err)
+		}
+	}
+
+	binding := builder.CreateRoleBinding(ns)
+	if _, err := c.kc.RbacV1().RoleBindings(ns).Create(ctx, binding, metav1.CreateOptions{}); err != nil {
+		if !kerrors.IsAlreadyExists(err) {
+			return fmt.Errorf("error creating role binding: %w", err)
+		}
+	}
 
 	defer func() {
 		tmpErr := err
@@ -652,23 +691,40 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 	c.log.Info("tearing down lease", "lease", lid)
+	ns := builder.LidNS(lid)
 
+	// Delete RBAC resources first
+	if err := c.kc.RbacV1().RoleBindings(ns).Delete(ctx, builder.AkashRoleBinding, metav1.DeleteOptions{}); err != nil {
+		if !kerrors.IsNotFound(err) {
+			c.log.Error("teardown lease: unable to delete role binding", "ns", ns, "error", err)
+		}
+	}
+
+	if err := c.kc.RbacV1().Roles(ns).Delete(ctx, builder.AkashRoleName, metav1.DeleteOptions{}); err != nil {
+		if !kerrors.IsNotFound(err) {
+			c.log.Error("teardown lease: unable to delete role", "ns", ns, "error", err)
+		}
+	}
+
+	// Delete namespace
 	_, result := wrapKubeCall("namespaces-delete", func() (interface{}, error) {
-		return nil, c.kc.CoreV1().Namespaces().Delete(ctx, builder.LidNS(lid), metav1.DeleteOptions{})
+		return nil, c.kc.CoreV1().Namespaces().Delete(ctx, ns, metav1.DeleteOptions{})
 	})
 
 	if result != nil {
-		c.log.Error("teardown lease: unable to delete namespace", "ns", builder.LidNS(lid), "error", result)
+		c.log.Error("teardown lease: unable to delete namespace", "ns", ns, "error", result)
 		if kerrors.IsNotFound(result) {
 			result = nil
 		}
 	}
+
+	// Delete manifest
 	_, err := wrapKubeCall("manifests-delete", func() (interface{}, error) {
-		return nil, c.ac.AkashV2beta2().Manifests(c.ns).Delete(ctx, builder.LidNS(lid), metav1.DeleteOptions{})
+		return nil, c.ac.AkashV2beta2().Manifests(c.ns).Delete(ctx, ns, metav1.DeleteOptions{})
 	})
 
 	if err != nil {
-		c.log.Error("teardown lease: unable to delete manifest", "ns", builder.LidNS(lid), "error", err)
+		c.log.Error("teardown lease: unable to delete manifest", "ns", ns, "error", err)
 	}
 
 	return result
