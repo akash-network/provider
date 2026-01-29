@@ -67,14 +67,17 @@ Or if it does not conflict with other local rules, use a wildcard for localhost:
 The following steps will bring up a network and allow for interacting
 with it.
 
-Running through the entire runbook requires two terminals.
-Each command is marked __t1__-__t2__ to indicate a suggested terminal number.
+Running through the entire runbook requires three terminals.
+Each command is marked __t1__-__t3__ to indicate a suggested terminal number.
+
+> **❗ Important Note:**  
+> Make sure you run all commands from the `./_run/kube` directory.
 
 If at any time you'd like to start over with a fresh chain, simply run:
 
 __t1__
 ```sh
-make clean kind-cluster-clean
+make clean kube-cluster-delete-kind
 ```
 
 ### Initialize Cluster
@@ -89,10 +92,10 @@ Pick one of the following commands:
 __t1__
 ```sh
 # Standard Networking
-make kind-cluster-setup
+make kube-cluster-setup
 
 # Calico Network Manger
-KIND_CONFIG=calico make kind-cluster-setup
+KIND_CONFIG=calico make kube-cluster-setup
 ```
 
 Check all pods in kube-system and ingress-nginx namespaces are in Running state.
