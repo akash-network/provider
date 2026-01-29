@@ -104,6 +104,11 @@ func newBalanceChecker(
 	return bc, nil
 }
 
+func (bc *balanceChecker) Close() error {
+	bc.lc.Shutdown(nil)
+	return bc.lc.Error()
+}
+
 func (bc *balanceChecker) runEscrowCheck(ctx context.Context, lid mtypes.LeaseID, scheduledWithdraw bool, res chan<- leaseCheckResponse) {
 	go func() {
 		select {
@@ -230,7 +235,7 @@ loop:
 		select {
 		case shutdownErr := <-bc.lc.ShutdownRequest():
 			bc.log.Debug("received shutdown request", "err", shutdownErr)
-			bc.lc.ShutdownInitiated(nil)
+			bc.lc.ShutdownInitiated(shutdownErr)
 			cancel()
 			break loop
 		case evt := <-subscriber.Events():
