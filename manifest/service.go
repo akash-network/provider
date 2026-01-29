@@ -55,11 +55,12 @@ type Client interface {
 	IsActive(context.Context, dtypes.DeploymentID) (bool, error)
 }
 
-// Service is the interface that includes StatusClient and Handler interfaces. It also wraps Done method
+// Service is the interface that includes StatusClient and Handler interfaces. It also wraps Done and Close methods
 type Service interface {
 	StatusClient
 	Client
 	Done() <-chan struct{}
+	Close() error
 }
 
 // NewService creates and returns new Service instance
@@ -196,6 +197,11 @@ func (s *service) Submit(ctx context.Context, did dtypes.DeploymentID, mani mani
 
 func (s *service) Done() <-chan struct{} {
 	return s.lc.Done()
+}
+
+func (s *service) Close() error {
+	s.lc.Shutdown(nil)
+	return s.lc.Error()
 }
 
 func (s *service) Status(ctx context.Context) (*apclient.ManifestStatus, error) {
