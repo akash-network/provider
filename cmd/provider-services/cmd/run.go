@@ -16,6 +16,7 @@ import (
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	kruntime "k8s.io/apimachinery/pkg/util/runtime"
+	aclient "pkg.akt.dev/go/node/client/discovery"
 
 	"cosmossdk.io/log"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -130,6 +131,48 @@ var (
 	errInvalidConfig = errors.New("invalid configuration")
 )
 
+func TxPersistentPreRunE(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
+
+	rpcURI, _ := cmd.Flags().GetString(cflags.FlagNode)
+	if rpcURI != "" {
+		ctx = context.WithValue(ctx, cli.ContextTypeRPCURI, rpcURI)
+		cmd.SetContext(ctx)
+	}
+
+	cctx, err := cli.GetClientTxContext(cmd)
+	if err != nil {
+		return err
+	}
+
+	if cctx.Codec == nil {
+		return errors.New("codec is not initialized")
+	}
+
+	if cctx.LegacyAmino == nil {
+		return errors.New("legacy amino codec is not initialized")
+	}
+
+	if _, err = cli.ClientFromContext(ctx); err != nil {
+		opts, err := cflags.ClientOptionsFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		cctx = cctx.WithSkipConfirmation(true)
+		cl, err := aclient.DiscoverClient(ctx, cctx, opts...)
+		if err != nil {
+			return err
+		}
+
+		ctx = context.WithValue(ctx, cli.ContextTypeClient, cl)
+
+		cmd.SetContext(ctx)
+	}
+
+	return nil
+}
+
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -137,7 +180,7 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
-			err := cli.TxPersistentPreRunE(cmd, args)
+			err := TxPersistentPreRunE(cmd, args)
 			if err != nil {
 				return err
 			}
@@ -457,7 +500,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	group := fromctx.MustErrGroupFromCtx(ctx)
 
 	cl := cli.MustClientFromContext(ctx)
-	cctx := cl.ClientContext().WithSkipConfirmation(true)
+	cctx := cl.ClientContext()
 
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
 	grpcaddr := viper.GetString(FlagGatewayGRPCListenAddress)
@@ -619,6 +662,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Monitor accountQuerier lifecycle and propagate errors from internal errgroup
+	group.Go(func() error {
+		<-ctx.Done()
+		return accQuerier.Close()
+	})
+
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, accQuerier)
 
 	gwRest, err := gwrest.NewServer(
@@ -647,7 +696,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group.Go(func() error {
 		<-service.Done()
-		return nil
+		return service.Close()
 	})
 
 	group.Go(func() error {
@@ -687,6 +736,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	hostnameOperatorClient.Stop()
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("provider shutdown with error", "err", err)
 		return err
 	}
 

@@ -22,11 +22,17 @@ type account struct {
 	pubkey cryptotypes.PubKey
 	certs  map[string]certificate
 }
+
+type bidengine struct {
+	nextkey []byte
+}
+
 type impl struct {
 	closed chan struct{}
 
-	lock     sync.RWMutex
-	accounts map[string]account
+	lock      sync.RWMutex
+	accounts  map[string]account
+	bidengine bidengine
 }
 
 var _ pconfig.Storage = (*impl)(nil)
@@ -38,6 +44,10 @@ func NewMemory() (pconfig.Storage, error) {
 	}
 
 	return b, nil
+}
+
+func (i *impl) BidEngine() pconfig.BidEngine {
+	return i
 }
 
 func (i *impl) AddAccount(_ context.Context, address sdk.Address, pubkey cryptotypes.PubKey) error {
@@ -186,4 +196,23 @@ func (i *impl) Close() error {
 	}
 
 	return nil
+}
+
+func (i *impl) SetOrdersNextKey(_ context.Context, nextkey []byte) error {
+	defer i.lock.Unlock()
+	i.lock.Lock()
+
+	i.bidengine.nextkey = nextkey
+
+	return nil
+}
+
+func (i *impl) GetOrdersNextKey(_ context.Context) ([]byte, error) {
+	defer i.lock.RUnlock()
+	i.lock.RLock()
+
+	res := make([]byte, len(i.bidengine.nextkey))
+	copy(res, i.bidengine.nextkey)
+
+	return res, nil
 }

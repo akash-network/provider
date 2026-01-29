@@ -32,6 +32,12 @@ jobs:
           fetch-depth: 0
           set-safe-directory: true
           path: go/src/github.com/akash-network/provider
+      - name: Install dependencies
+        # Shell must explicitly specify the shell for each step. https://github.com/orgs/community/discussions/18597
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config make direnv unzip lz4 wget curl jq pv coreutils libudev-dev
       - name: Detect required Go version
         working-directory: "${{ env.GOPATH }}/src/github.com/akash-network/provider"
         run: |

@@ -32,9 +32,11 @@ var (
 
 var (
 	bucketAccounts     = []byte("accounts")
+	bucketBidEngine    = []byte("bidengine")
 	keyPubKey          = []byte("pubkey")
 	bucketCertificates = []byte("certificates")
 	keyCertificate     = []byte("certificate")
+	keyNextKey         = []byte("nextkey")
 )
 
 type impl struct {
@@ -56,6 +58,11 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 			return fmt.Errorf("create bucket: %s", err)
 		}
 
+		_, err = tx.CreateBucketIfNotExists(bucketBidEngine)
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -68,6 +75,10 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 	}
 
 	return b, nil
+}
+
+func (b *impl) BidEngine() pconfig.BidEngine {
+	return b
 }
 
 func (b *impl) Close() error {
@@ -374,6 +385,58 @@ func (b *impl) GetAllCertificates(_ context.Context) ([]*x509.Certificate, error
 				return nil
 			})
 		})
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (b *impl) SetOrdersNextKey(_ context.Context, nextkey []byte) error {
+	select {
+	case <-b.closed:
+		return ErrDBClosed
+	default:
+	}
+
+	err := b.db.Update(func(tx *bbolt.Tx) error {
+		bidengine := tx.Bucket(bucketBidEngine)
+		if bidengine == nil {
+			return ErrUninitialized
+		}
+
+		err := bidengine.Put(keyNextKey, nextkey)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (b *impl) GetOrdersNextKey(_ context.Context) ([]byte, error) {
+	var res []byte
+
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		bidengine := tx.Bucket(bucketBidEngine)
+		if bidengine == nil {
+			return ErrUninitialized
+		}
+
+		val := bidengine.Get(keyNextKey)
+
+		res = make([]byte, len(val))
+		copy(res, val)
+
+		return nil
 	})
 
 	if err != nil {
