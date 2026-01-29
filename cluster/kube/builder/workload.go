@@ -8,10 +8,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	"github.com/akash-network/node/sdl"
-	sdlutil "github.com/akash-network/node/sdl/util"
+	"pkg.akt.dev/go/sdl"
+	sdlutil "pkg.akt.dev/go/sdl/util"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -43,12 +43,22 @@ func NewWorkloadBuilder(
 	log log.Logger,
 	settings Settings,
 	deployment IClusterDeployment,
-	serviceIdx int) Workload {
-	res := Workload{
+	mani *crd.Manifest,
+	serviceIdx int,
+) (*Workload, error) {
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	if err != nil {
+		return nil, err
+	}
+
+	res := &Workload{
 		builder: builder{
 			settings:   settings,
 			log:        log.With("module", "kube-builder"),
 			deployment: deployment,
+			mani:       mani,
+			group:      group,
+			sparams:    sparams,
 		},
 		serviceIdx: serviceIdx,
 	}
@@ -57,7 +67,7 @@ func NewWorkloadBuilder(
 	res.pvcsObjs = res.persistentVolumeClaims()
 	res.secretsRefs = res.imagePullSecrets()
 
-	return res
+	return res, nil
 }
 
 func (b *Workload) Name() string {
@@ -71,8 +81,8 @@ func (b *Workload) NS() string {
 func (b *Workload) container() corev1.Container {
 	falseValue := false
 
-	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
-	sparams := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
+	service := &b.group.Services[b.serviceIdx]
+	sparams := b.sparams[b.serviceIdx]
 
 	kcontainer := corev1.Container{
 		Name:    service.Name,
@@ -127,12 +137,13 @@ func (b *Workload) container() corev1.Container {
 		class, _ := attr.AsString()
 
 		if !persistent {
-			if class == "" {
+			switch class {
+			case "ram":
+				requestedMem += ephemeral.Quantity.Value()
+			case "":
 				requestedStorage := sdlutil.ComputeCommittedResources(b.settings.StorageCommitLevel, ephemeral.Quantity)
 				kcontainer.Resources.Requests[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(requestedStorage.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
 				kcontainer.Resources.Limits[corev1.ResourceEphemeralStorage] = resource.NewQuantity(int64(ephemeral.Quantity.Value()), resource.DecimalSI).DeepCopy() // nolint: gosec
-			} else if class == "ram" {
-				requestedMem += ephemeral.Quantity.Value()
 			}
 		}
 	}
@@ -181,7 +192,7 @@ func (b *Workload) container() corev1.Container {
 func (b *Workload) volumes() []corev1.Volume {
 	var volumes []corev1.Volume // nolint:prealloc
 
-	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	service := &b.group.Services[b.serviceIdx]
 
 	for _, storage := range service.Resources.Storage {
 		// Only RAM volumes
@@ -215,7 +226,7 @@ func (b *Workload) volumes() []corev1.Volume {
 func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	var pvcs []corev1.PersistentVolumeClaim // nolint:prealloc
 
-	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	service := &b.group.Services[b.serviceIdx]
 
 	for _, storage := range service.Resources.Storage {
 		attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
@@ -254,7 +265,8 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 }
 
 func (b *Workload) runtimeClass() *string {
-	params := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
+	params := b.sparams[b.serviceIdx]
+
 	var effectiveRuntimeClassName *string
 
 	if params != nil {
@@ -276,8 +288,8 @@ func (b *Workload) replicas() *int32 {
 }
 
 func (b *Workload) affinity() *corev1.Affinity {
-	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
-	svc := b.deployment.ClusterParams().SchedulerParams[b.serviceIdx]
+	service := &b.group.Services[b.serviceIdx]
+	params := b.sparams[b.serviceIdx]
 
 	selectors := []corev1.NodeSelectorRequirement{
 		{
@@ -289,8 +301,8 @@ func (b *Workload) affinity() *corev1.Affinity {
 		},
 	}
 
-	if svc != nil && svc.Resources != nil {
-		selectors = append(selectors, nodeSelectorsFromResources(svc.Resources)...)
+	if params != nil && params.Resources != nil {
+		selectors = append(selectors, nodeSelectorsFromResources(params.Resources)...)
 	}
 
 	for _, storage := range service.Resources.Storage {
@@ -385,9 +397,9 @@ func (b *Workload) selectorLabels() map[string]string {
 func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
 	sname := b.settings.DockerImagePullSecretsName
 
-	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	service := &b.group.Services[b.serviceIdx]
 	if service.Credentials != nil {
-		sname = NewServiceCredentials(*b, service.Credentials).Name()
+		sname = NewServiceCredentials(b, service.Credentials).Name()
 	}
 
 	if sname == "" {

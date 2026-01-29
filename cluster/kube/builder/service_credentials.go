@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 type ServiceCredentials interface {
@@ -18,13 +18,11 @@ type ServiceCredentials interface {
 }
 
 type serviceCredentials struct {
-	Workload
-	// ns          string
-	// serviceName string
-	credentials *mani.ServiceImageCredentials
+	*Workload
+	credentials *mani.ImageCredentials
 }
 
-func NewServiceCredentials(workload Workload, credentials *mani.ServiceImageCredentials) ServiceCredentials {
+func NewServiceCredentials(workload *Workload, credentials *mani.ImageCredentials) ServiceCredentials {
 	return &serviceCredentials{
 		Workload:    workload,
 		credentials: credentials,
@@ -65,14 +63,16 @@ func (b serviceCredentials) Update(obj *corev1.Secret) (*corev1.Secret, error) {
 		return nil, err
 	}
 
-	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj := obj.DeepCopy()
 
-	obj.Data = map[string][]byte{
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+
+	uobj.Data = map[string][]byte{
 		corev1.DockerConfigJsonKey: data,
 	}
-	obj.Type = corev1.SecretTypeDockerConfigJson
+	uobj.Type = corev1.SecretTypeDockerConfigJson
 
-	return obj, nil
+	return uobj, nil
 }
 
 type dockerCredentialsEntry struct {

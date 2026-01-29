@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	v1 "github.com/akash-network/akash-api/go/inventory/v1"
+	v1 "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -234,10 +234,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 		}
 
 		tctx, tcancel := context.WithTimeout(ctx, time.Second)
-
-		select {
-		case <-tctx.Done():
-		}
+		<-tctx.Done()
 
 		tcancel()
 		if !errors.Is(tctx.Err(), context.DeadlineExceeded) {
@@ -347,7 +344,7 @@ initloop:
 func isPodAllocated(status corev1.PodStatus) bool {
 	for _, condition := range status.Conditions {
 		if condition.Type == corev1.PodScheduled {
-			return (condition.Status == corev1.ConditionTrue) && (status.Phase == corev1.PodRunning)
+			return condition.Status == corev1.ConditionTrue
 		}
 	}
 
@@ -418,11 +415,7 @@ func (dp *nodeDiscovery) monitor() error {
 		currLabels = copyManagedLabels(knode.Labels)
 	}
 
-	node, err := dp.initNodeInfo(gpusIDs, knode)
-	if err != nil {
-		log.Error(err, "unable to init node info")
-		return err
-	}
+	node := dp.initNodeInfo(gpusIDs, knode)
 
 	restartPodsWatcher := func() error {
 		if podsWatch != nil {
@@ -529,7 +522,6 @@ func (dp *nodeDiscovery) monitor() error {
 					switch evt.Type {
 					case watch.Modified:
 						if nodeAllocatableChanged(knode, obj) {
-							// podsWatch.Stop()
 							updateNodeInfo(obj, &node)
 							if err = restartPodsWatcher(); err != nil {
 								return err
@@ -642,7 +634,7 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	return changed
 }
 
-func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node) (v1.Node, error) {
+func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node) v1.Node {
 	cpuInfo := dp.parseCPUInfo(dp.ctx)
 	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIDs)
 
@@ -669,7 +661,7 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 
 	updateNodeInfo(knode, &res)
 
-	return res, nil
+	return res
 }
 
 func updateNodeInfo(knode *corev1.Node, node *v1.Node) {

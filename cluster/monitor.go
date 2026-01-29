@@ -5,17 +5,19 @@ import (
 	"math/rand"
 	"time"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	mv1 "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/tendermint/tendermint/libs/log"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/util/runner"
+	"cosmossdk.io/log"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/node/util/runner"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -116,7 +118,6 @@ loop:
 
 				deploymentHealthCheckCounter.WithLabelValues("down").Inc()
 				m.log.Info("check result", "ok", false, "attempt", m.attempts)
-
 			}
 
 			if currStatus != prevStatus {
@@ -194,10 +195,11 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Result {
 	return runner.Do(func() runner.Result {
 		// TODO: retry, timeout
-		msg := &mtypes.MsgCloseBid{
-			BidID: m.deployment.LeaseID().BidID(),
+		msg := &mvbeta.MsgCloseBid{
+			ID:     m.deployment.LeaseID().BidID(),
+			Reason: mv1.LeaseClosedReasonUnstable,
 		}
-		res, err := m.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+		res, err := m.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 		if err != nil {
 			m.log.Error("closing deployment", "err", err)
 		} else {

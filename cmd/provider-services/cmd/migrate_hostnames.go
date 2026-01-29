@@ -1,17 +1,11 @@
 package cmd
 
 import (
-	"crypto/tls"
 	"errors"
 
 	"github.com/spf13/cobra"
-
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	cutils "github.com/akash-network/node/x/cert/utils"
-
-	aclient "github.com/akash-network/provider/client"
-	gwrest "github.com/akash-network/provider/gateway/rest"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 )
 
 var errEmptyHostnames = errors.New("hostnames cannot be empty")
@@ -21,29 +15,17 @@ func migrateHostnames(cmd *cobra.Command, args []string) error {
 	if len(hostnames) == 0 {
 		return errEmptyHostnames
 	}
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
 
 	ctx := cmd.Context()
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	paddr, err := providerFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
-	gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}
@@ -71,11 +53,15 @@ func MigrateHostnamesCmd() *cobra.Command {
 		Use:          "migrate-hostnames",
 		Short:        "migrate hostnames between deployments on the same provider",
 		SilenceUsage: true,
+		PreRunE:      cli.TxPersistentPreRunE,
 		RunE:         migrateHostnames,
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addCmdFlags(cmd)
-	cmd.Flags().Uint32(FlagGSeq, 1, "group sequence")
+	addAuthFlags(cmd)
+
+	cmd.Flags().Uint32(cflags.FlagGSeq, 1, "group sequence")
 
 	return cmd
 }

@@ -15,8 +15,8 @@ package hostname
 // 	"k8s.io/client-go/kubernetes"
 // 	kfake "k8s.io/client-go/kubernetes/fake"
 //
-// 	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-// 	"github.com/akash-network/node/testutil"
+// 	mtypes "pkg.akt.dev/go/node/market/v1beta4"
+// 	"pkg.akt.dev/go/testutil"
 //
 // 	"github.com/akash-network/provider/cluster/mocks"
 // 	cluster "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -123,8 +123,8 @@ package hostname
 //
 // func makeHostnameOperatorScaffold(t *testing.T) *hostnameOperatorScaffold {
 // 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*20)
-// 	kc := kfake.NewSimpleClientset()
-// 	ac := afake.NewSimpleClientset()
+// 	kc := kfake.NewClientset()
+// 	ac := afake.NewClientset()
 //
 // 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 // 	ctx = context.WithValue(ctx, fromctx.CtxKeyAkashClientSet, aclient.Interface(ac))

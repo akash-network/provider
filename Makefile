@@ -7,7 +7,7 @@ include make/init.mk
 
 DOCKER_RUN             := docker run --rm -v $(shell pwd):/workspace -w /workspace
 GOLANGCI_LINT_RUN      := $(GOLANGCI_LINT) run
-LINT                    = $(GOLANGCI_LINT_RUN) ./... --disable-all --deadline=5m --enable
+LINT                    = $(GOLANGCI_LINT_RUN) ./...
 
 GORELEASER_CONFIG      ?= .goreleaser.yaml
 
@@ -48,13 +48,18 @@ ifeq (,$(findstring nostrip,$(BUILD_OPTIONS)))
 	GORELEASER_STRIP_FLAGS += -s -w
 endif
 
+ifeq ($(UNAME_OS_LOWER), darwin)
+	ldflags += -extldflags=-Wl,-ld_classic
+endif
+
 ldflags += $(LDFLAGS)
 ldflags := $(strip $(ldflags))
 
-BUILD_FLAGS := -mod=$(GO_MOD) -tags='$(BUILD_TAGS)' -ldflags '$(ldflags)'
+BUILD_FLAGS := -mod=$(GO_MOD) -tags='$(BUILD_TAGS)' -ldflags='$(ldflags)'
 
 include make/releasing.mk
 include make/mod.mk
 include make/lint.mk
 include make/test-integration.mk
 include make/codegen.mk
+# tools.mk and changelog.mk are already included above

@@ -12,14 +12,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"pkg.akt.dev/go/cli"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	clitestutil "github.com/akash-network/node/testutil/cli"
-	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
+	clitestutil "pkg.akt.dev/go/cli/testutil"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
@@ -41,48 +39,61 @@ func (s *E2EPersistentStorageDefault) TestDefaultStorageClass() {
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(100),
 	}
 
+	cctx := s.cctx
+
 	// Create Deployments
-	res, err := deploycli.TxCreateDeploymentExec(
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
-	)
-	s.Require().NoError(err)
-	s.Require().NoError(s.waitForBlocksCommitted(7))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
-
-	bidID := mtypes.MakeBidID(
-		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
-		s.keyProvider.GetAddress(),
-	)
-
-	_, err = mcli.QueryBidExec(s.validator.ClientCtx, bidID)
-	s.Require().NoError(err)
-
-	_, err = mcli.TxCreateLeaseExec(
-		s.validator.ClientCtx,
-		bidID,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
+
+	bidID := mtypes.MakeBidID(
+		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
+		s.addrProvider,
+	)
+
+	err = s.waitForBlockchainEvent(&mtypes.EventBidCreated{ID: bidID})
+	s.Require().NoError(err)
+
+	_, err = clitestutil.ExecQueryBid(s.ctx, cctx, cli.TestFlags().WithBidID(bidID)...)
+	s.Require().NoError(err)
+
+	_, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithBidID(bidID).
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(s.waitForBlocksCommitted(2))
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	lid := bidID.LeaseID()
 
 	// Send Manifest to Provider ----------------------------------------------
-	_, err = ptestutil.TestSendManifest(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
@@ -142,48 +153,61 @@ func (s *E2EPersistentStorageBeta2) TestDedicatedStorageClass() {
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(100),
 	}
 
+	cctx := s.cctx
+
 	// Create Deployments
-	res, err := deploycli.TxCreateDeploymentExec(
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(7))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	bidID := mtypes.MakeBidID(
 		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
-		s.keyProvider.GetAddress(),
+		s.addrProvider,
 	)
 
-	_, err = mcli.QueryBidExec(s.validator.ClientCtx, bidID)
+	err = s.waitForBlockchainEvent(&mtypes.EventBidCreated{ID: bidID})
 	s.Require().NoError(err)
 
-	_, err = mcli.TxCreateLeaseExec(
-		s.validator.ClientCtx,
-		bidID,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+	_, err = clitestutil.ExecQueryBid(s.ctx, cctx, cli.TestFlags().WithBidID(bidID)...)
+	s.Require().NoError(err)
+
+	_, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithBidID(bidID).
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	lid := bidID.LeaseID()
 
 	// Send Manifest to Provider ----------------------------------------------
-	_, err = ptestutil.TestSendManifest(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
@@ -243,64 +267,75 @@ func (s *E2EPersistentStorageDeploymentUpdate) TestPersistentStorageDeploymentUp
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(102),
 	}
 
+	cctx := s.cctx
+
 	// Create Deployments
-	res, err := deploycli.TxCreateDeploymentExec(
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(3))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	bidID := mtypes.MakeBidID(
 		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
-		s.keyProvider.GetAddress(),
+		s.addrProvider,
 	)
-	// check bid
-	_, err = mcli.QueryBidExec(s.validator.ClientCtx, bidID)
+
+	err = s.waitForBlockchainEvent(&mtypes.EventBidCreated{ID: bidID})
 	s.Require().NoError(err)
 
-	// create lease
-	_, err = mcli.TxCreateLeaseExec(
-		s.validator.ClientCtx,
-		bidID,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+	// check bid
+	_, err = clitestutil.ExecQueryBid(s.ctx, cctx, cli.TestFlags().WithBidID(bidID)...)
+	s.Require().NoError(err)
+
+	_, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithBidID(bidID).
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	// Assert provider made bid and created lease; test query leases ---------
-	resp, err := mcli.QueryLeasesExec(s.validator.ClientCtx.WithOutputFormat("json"))
+	resp, err := clitestutil.ExecQueryLeases(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 
-	leaseRes := &mtypes.QueryLeasesResponse{}
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(resp.Bytes(), leaseRes)
+	leaseRes := &mvbeta.QueryLeasesResponse{}
+	err = cctx.Codec.UnmarshalJSON(resp.Bytes(), leaseRes)
 	s.Require().NoError(err)
 
 	s.Require().Len(leaseRes.Leases, 1)
 
 	lease := newestLease(leaseRes.Leases)
-	lid := lease.LeaseID
-	did := lease.GetLeaseID().DeploymentID()
-	s.Require().Equal(s.keyProvider.GetAddress().String(), lid.Provider)
+	lid := lease.ID
+	s.Require().Equal(s.addrProvider.String(), lid.Provider)
 
 	// Send Manifest to Provider
-	_, err = ptestutil.TestSendManifest(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
-
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
 
@@ -310,23 +345,30 @@ func (s *E2EPersistentStorageDeploymentUpdate) TestPersistentStorageDeploymentUp
 	deploymentPath, err = filepath.Abs("../testdata/deployment/deployment-v2-storage-updateB.yaml")
 	s.Require().NoError(err)
 
-	res, err = deploycli.TxUpdateDeploymentExec(s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--owner=%s", lease.GetLeaseID().Owner),
-			fmt.Sprintf("--dseq=%v", did.GetDSeq()))...,
+	res, err = clitestutil.ExecDeploymentUpdate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lease.GetID().DSeq).
+			WithOwner(lease.GetID().Owner).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	// Send Updated Manifest to Provider
-	_, err = ptestutil.TestSendManifest(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))

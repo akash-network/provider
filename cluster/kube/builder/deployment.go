@@ -14,22 +14,22 @@ type Deployment interface {
 }
 
 type deployment struct {
-	Workload
+	*Workload
 }
 
 var _ Deployment = (*deployment)(nil)
 
-func NewDeployment(workload Workload) Deployment {
+func NewDeployment(workload *Workload) Deployment {
 	ss := &deployment{
 		Workload: workload,
 	}
 
-	ss.Workload.log = ss.Workload.log.With("object", "deployment", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "deployment", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
 
-func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unparam
+func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:unparam
 	falseValue := false
 
 	revisionHistoryLimit := int32(10)
@@ -77,15 +77,18 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:golint,unp
 	return kdeployment, nil
 }
 
-func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:golint,unparam
-	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
-	obj.Spec.Selector.MatchLabels = b.selectorLabels()
-	obj.Spec.Replicas = b.replicas()
-	obj.Spec.Template.Labels = b.labels()
-	obj.Spec.Template.Spec.Affinity = b.affinity()
-	obj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
-	obj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
-	obj.Spec.Template.Spec.ImagePullSecrets = b.imagePullSecrets()
+func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) { // nolint:unparam
+	uobj := obj.DeepCopy()
 
-	return obj, nil
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj.Spec.Selector.MatchLabels = b.selectorLabels()
+	uobj.Spec.Replicas = b.replicas()
+	uobj.Spec.Template.Labels = b.labels()
+	uobj.Spec.Template.Spec.Affinity = b.affinity()
+	uobj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
+	uobj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
+	uobj.Spec.Template.Spec.ImagePullSecrets = b.secretsRefs
+	uobj.Spec.Template.Spec.Volumes = b.volumesObjs
+
+	return uobj, nil
 }

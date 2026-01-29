@@ -25,7 +25,7 @@ func (b *ns) labels() map[string]string {
 	return AppendLeaseLabels(b.deployment.LeaseID(), b.builder.labels())
 }
 
-func (b *ns) Create() (*corev1.Namespace, error) { // nolint:golint,unparam
+func (b *ns) Create() (*corev1.Namespace, error) { // nolint,unparam
 	return &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   b.NS(),
@@ -34,9 +34,11 @@ func (b *ns) Create() (*corev1.Namespace, error) { // nolint:golint,unparam
 	}, nil
 }
 
-func (b *ns) Update(obj *corev1.Namespace) (*corev1.Namespace, error) { // nolint:golint,unparam
-	obj.Name = b.NS()
-	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
+func (b *ns) Update(obj *corev1.Namespace) (*corev1.Namespace, error) { // nolint,unparam
+	uobj := obj.DeepCopy()
 
-	return obj, nil
+	uobj.Name = b.NS()
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+
+	return uobj, nil
 }

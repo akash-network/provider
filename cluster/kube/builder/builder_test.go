@@ -8,10 +8,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/testutil"
+	manitypes "pkg.akt.dev/go/manifest/v2beta3"
+	"pkg.akt.dev/go/testutil"
 
-	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const testKubeClientNs = "nstest1111"
@@ -23,8 +23,8 @@ func TestLidNsSanity(t *testing.T) {
 	cdep := &ClusterDeployment{
 		Lid:   testutil.LeaseID(t),
 		Group: &manitypes.Group{},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{},
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: []*crd.SchedulerParams{},
 		},
 	}
 
@@ -74,23 +74,42 @@ func TestGlobalServiceBuilder(t *testing.T) {
 	myLog := testutil.Logger(t)
 	mySettings := NewDefaultSettings()
 
-	cdep := &ClusterDeployment{
-		Lid: testutil.LeaseID(t),
-		Group: &manitypes.Group{
-			Services: manitypes.Services{
-				manitypes.Service{
-					Name: "myservice",
+	mani := &crd.Manifest{
+		Spec: crd.ManifestSpec{
+			Group: crd.ManifestGroup{
+				Name: "testgroup",
+				Services: []crd.ManifestService{
+					{
+						Name:            "myservice",
+						Image:           "",
+						Command:         nil,
+						Args:            nil,
+						Env:             nil,
+						Resources:       crd.Resources{},
+						Count:           0,
+						Expose:          nil,
+						Params:          nil,
+						SchedulerParams: nil,
+						Credentials:     nil,
+					},
 				},
-			},
-		},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{
-				nil,
 			},
 		},
 	}
 
-	workload := NewWorkloadBuilder(myLog, mySettings, cdep, 0)
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &group,
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: sparams,
+		},
+	}
+
+	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
+	require.NoError(t, err)
 	serviceBuilder := BuildService(workload, true)
 	require.NotNil(t, serviceBuilder)
 	// Should have name ending with suffix
@@ -102,23 +121,45 @@ func TestGlobalServiceBuilder(t *testing.T) {
 func TestLocalServiceBuilder(t *testing.T) {
 	myLog := testutil.Logger(t)
 	mySettings := NewDefaultSettings()
-	cdep := &ClusterDeployment{
-		Lid: testutil.LeaseID(t),
-		Group: &manitypes.Group{
-			Services: manitypes.Services{
-				manitypes.Service{
-					Name: "myservice",
+
+	mani := &crd.Manifest{
+		Spec: crd.ManifestSpec{
+			Group: crd.ManifestGroup{
+				Name: "testgroup",
+				Services: []crd.ManifestService{
+					{
+						Name:            "myservice",
+						Image:           "",
+						Command:         nil,
+						Args:            nil,
+						Env:             nil,
+						Resources:       crd.Resources{},
+						Count:           0,
+						Expose:          nil,
+						Params:          nil,
+						SchedulerParams: nil,
+						Credentials:     nil,
+					},
 				},
-			},
-		},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{
-				nil,
 			},
 		},
 	}
 
-	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), false)
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &group,
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: sparams,
+		},
+	}
+
+	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
+	require.NoError(t, err)
+
+	serviceBuilder := BuildService(workload, false)
 	require.NotNil(t, serviceBuilder)
 	// Should have name verbatim
 	require.Equal(t, "myservice", serviceBuilder.Name())
@@ -128,29 +169,51 @@ func TestLocalServiceBuilder(t *testing.T) {
 
 func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	exposesServices := make([]manitypes.ServiceExpose, 1)
-	exposesServices[0].Global = false
 
 	mySettings := NewDefaultSettings()
 
-	cdep := &ClusterDeployment{
-		Lid: testutil.LeaseID(t),
-		Group: &manitypes.Group{
-			Services: manitypes.Services{
-				manitypes.Service{
-					Name:   "myservice",
-					Expose: exposesServices,
+	mani := &crd.Manifest{
+		Spec: crd.ManifestSpec{
+			Group: crd.ManifestGroup{
+				Name: "testgroup",
+				Services: []crd.ManifestService{
+					{
+						Name:      "myservice",
+						Image:     "",
+						Command:   nil,
+						Args:      nil,
+						Env:       nil,
+						Resources: crd.Resources{},
+						Count:     0,
+						Expose: []crd.ManifestServiceExpose{
+							{
+								Global: false,
+							},
+						},
+						Params:          nil,
+						SchedulerParams: nil,
+						Credentials:     nil,
+					},
 				},
-			},
-		},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{
-				nil,
 			},
 		},
 	}
 
-	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), true)
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &group,
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: sparams,
+		},
+	}
+
+	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
+	require.NoError(t, err)
+
+	serviceBuilder := BuildService(workload, true)
 
 	// Should not have any work to do
 	require.False(t, serviceBuilder.Any())
@@ -158,40 +221,59 @@ func TestGlobalServiceBuilderWithoutGlobalServices(t *testing.T) {
 
 func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	exposesServices := make([]manitypes.ServiceExpose, 2)
-	exposesServices[0] = manitypes.ServiceExpose{
-		Global:       true,
-		Proto:        "TCP",
-		Port:         1000,
-		ExternalPort: 1001,
-	}
-	exposesServices[1] = manitypes.ServiceExpose{
-		Global:       false,
-		Proto:        "TCP",
-		Port:         2000,
-		ExternalPort: 2001,
-	}
-
 	mySettings := NewDefaultSettings()
 
-	cdep := &ClusterDeployment{
-		Lid: testutil.LeaseID(t),
-		Group: &manitypes.Group{
-			Services: manitypes.Services{
-				manitypes.Service{
-					Name:   "myservice",
-					Expose: exposesServices,
+	mani := &crd.Manifest{
+		Spec: crd.ManifestSpec{
+			Group: crd.ManifestGroup{
+				Name: "testgroup",
+				Services: []crd.ManifestService{
+					{
+						Name:      "myservice",
+						Image:     "",
+						Command:   nil,
+						Args:      nil,
+						Env:       nil,
+						Resources: crd.Resources{},
+						Count:     0,
+						Expose: []crd.ManifestServiceExpose{
+							{
+								Global:       true,
+								Proto:        "TCP",
+								Port:         1000,
+								ExternalPort: 1001,
+							},
+							{
+								Global:       false,
+								Proto:        "TCP",
+								Port:         2000,
+								ExternalPort: 2001,
+							},
+						},
+						Params:          nil,
+						SchedulerParams: nil,
+						Credentials:     nil,
+					},
 				},
 			},
 		},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{
-				nil,
-			},
+	}
+
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &group,
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: sparams,
 		},
 	}
 
-	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), true)
+	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
+	require.NoError(t, err)
+
+	serviceBuilder := BuildService(workload, true)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())
@@ -208,28 +290,50 @@ func TestGlobalServiceBuilderWithGlobalServices(t *testing.T) {
 
 func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	exposesServices := make([]manitypes.ServiceExpose, 1)
-	exposesServices[0].Global = true
-
 	mySettings := NewDefaultSettings()
-	cdep := &ClusterDeployment{
-		Lid: testutil.LeaseID(t),
-		Group: &manitypes.Group{
-			Services: manitypes.Services{
-				manitypes.Service{
-					Name:   "myservice",
-					Expose: exposesServices,
+
+	mani := &crd.Manifest{
+		Spec: crd.ManifestSpec{
+			Group: crd.ManifestGroup{
+				Name: "testgroup",
+				Services: []crd.ManifestService{
+					{
+						Name:      "myservice",
+						Image:     "",
+						Command:   nil,
+						Args:      nil,
+						Env:       nil,
+						Resources: crd.Resources{},
+						Count:     0,
+						Expose: []crd.ManifestServiceExpose{
+							{
+								Global: true,
+							},
+						},
+						Params:          nil,
+						SchedulerParams: nil,
+						Credentials:     nil,
+					},
 				},
-			},
-		},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{
-				nil,
 			},
 		},
 	}
 
-	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), false)
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &group,
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: sparams,
+		},
+	}
+
+	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
+	require.NoError(t, err)
+
+	serviceBuilder := BuildService(workload, false)
 
 	// Should have work to do
 	require.False(t, serviceBuilder.Any())
@@ -237,39 +341,59 @@ func TestLocalServiceBuilderWithoutLocalServices(t *testing.T) {
 
 func TestLocalServiceBuilderWithLocalServices(t *testing.T) {
 	myLog := testutil.Logger(t)
-	exposesServices := make([]manitypes.ServiceExpose, 2)
-	exposesServices[0] = manitypes.ServiceExpose{
-		Global:       true,
-		Proto:        "TCP",
-		Port:         1000,
-		ExternalPort: 1001,
-	}
-	exposesServices[1] = manitypes.ServiceExpose{
-		Global:       false,
-		Proto:        "TCP",
-		Port:         2000,
-		ExternalPort: 2001,
-	}
-
 	mySettings := NewDefaultSettings()
-	cdep := &ClusterDeployment{
-		Lid: testutil.LeaseID(t),
-		Group: &manitypes.Group{
-			Services: manitypes.Services{
-				manitypes.Service{
-					Name:   "myservice",
-					Expose: exposesServices,
+
+	mani := &crd.Manifest{
+		Spec: crd.ManifestSpec{
+			Group: crd.ManifestGroup{
+				Name: "testgroup",
+				Services: []crd.ManifestService{
+					{
+						Name:      "myservice",
+						Image:     "",
+						Command:   nil,
+						Args:      nil,
+						Env:       nil,
+						Resources: crd.Resources{},
+						Count:     0,
+						Expose: []crd.ManifestServiceExpose{
+							{
+								Global:       true,
+								Proto:        "TCP",
+								Port:         1000,
+								ExternalPort: 1001,
+							},
+							{
+								Global:       false,
+								Proto:        "TCP",
+								Port:         2000,
+								ExternalPort: 2001,
+							},
+						},
+						Params:          nil,
+						SchedulerParams: nil,
+						Credentials:     nil,
+					},
 				},
 			},
 		},
-		Sparams: v2beta2.ClusterSettings{
-			SchedulerParams: []*v2beta2.SchedulerParams{
-				nil,
-			},
+	}
+
+	group, sparams, err := mani.Spec.Group.FromCRD()
+	require.NoError(t, err)
+
+	cdep := &ClusterDeployment{
+		Lid:   testutil.LeaseID(t),
+		Group: &group,
+		Sparams: crd.ClusterSettings{
+			SchedulerParams: sparams,
 		},
 	}
 
-	serviceBuilder := BuildService(NewWorkloadBuilder(myLog, mySettings, cdep, 0), false)
+	workload, err := NewWorkloadBuilder(myLog, mySettings, cdep, mani, 0)
+	require.NoError(t, err)
+
+	serviceBuilder := BuildService(workload, false)
 
 	// Should have work to do
 	require.True(t, serviceBuilder.Any())

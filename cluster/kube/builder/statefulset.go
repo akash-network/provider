@@ -14,22 +14,22 @@ type StatefulSet interface {
 }
 
 type statefulSet struct {
-	Workload
+	*Workload
 }
 
 var _ StatefulSet = (*statefulSet)(nil)
 
-func BuildStatefulSet(workload Workload) StatefulSet {
+func BuildStatefulSet(workload *Workload) StatefulSet {
 	ss := &statefulSet{
 		Workload: workload,
 	}
 
-	ss.Workload.log = ss.Workload.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
 
-func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,unparam
+func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:unparam
 	falseValue := false
 
 	revisionHistoryLimit := int32(1)
@@ -78,16 +78,19 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 	return kdeployment, nil
 }
 
-func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:golint,unparam
-	obj.Labels = updateAkashLabels(obj.Labels, b.labels())
-	obj.Spec.Replicas = b.replicas()
-	obj.Spec.Selector.MatchLabels = b.selectorLabels()
-	obj.Spec.Template.Labels = b.labels()
-	obj.Spec.Template.Spec.Affinity = b.affinity()
-	obj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
-	obj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
-	obj.Spec.Template.Spec.ImagePullSecrets = b.imagePullSecrets()
-	obj.Spec.VolumeClaimTemplates = b.persistentVolumeClaims()
+func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:unparam
+	uobj := obj.DeepCopy()
 
-	return obj, nil
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj.Spec.Replicas = b.replicas()
+	uobj.Spec.Selector.MatchLabels = b.selectorLabels()
+	uobj.Spec.Template.Labels = b.labels()
+	uobj.Spec.Template.Spec.Affinity = b.affinity()
+	uobj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
+	uobj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
+	uobj.Spec.Template.Spec.ImagePullSecrets = b.secretsRefs
+	uobj.Spec.Template.Spec.Volumes = b.volumesObjs
+	uobj.Spec.VolumeClaimTemplates = b.pvcsObjs
+
+	return uobj, nil
 }

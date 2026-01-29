@@ -6,20 +6,23 @@ import (
 	"regexp"
 	"time"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
+	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	"github.com/boz/go-lifecycle"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	atypes "github.com/akash-network/akash-api/go/node/audit/v1beta3"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	metricsutils "github.com/akash-network/node/util/metrics"
-	"github.com/akash-network/node/util/runner"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	atypes "pkg.akt.dev/go/node/audit/v1"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	deposit "pkg.akt.dev/go/node/types/deposit/v1"
+	metricsutils "pkg.akt.dev/go/util/metrics"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/go/util/runner"
 
 	"github.com/akash-network/provider/cluster"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -27,19 +30,36 @@ import (
 	"github.com/akash-network/provider/session"
 )
 
-// order manages bidding and general lifecycle handling of an order.
+// order manages bidding and general lifecycle handling of an order. The lifecycle includes:
 type order struct {
+	// orderID is the unique identifier for this order from the blockchain
 	orderID mtypes.OrderID
-	cfg     Config
 
-	session                    session.Session
-	cluster                    cluster.Cluster
-	bus                        pubsub.Bus
-	sub                        pubsub.Subscriber
+	// cfg holds configuration parameters for bid engine (pricing, deposits, timeouts etc).
+	cfg Config
+
+	// session provides blockchain client and provider info.
+	session session.Session
+
+	// cluster interface to the provider's compute cluster for resource management.
+	cluster cluster.Cluster
+
+	// bus is the event bus for publishing lease events.
+	bus pubsub.Bus
+
+	// sub is the subscriber for receiving blockchain events.
+	sub pubsub.Subscriber
+
+	// reservationFulfilledNotify is the channel to notify when resources are reserved.
 	reservationFulfilledNotify chan<- int
 
-	log  log.Logger
-	lc   lifecycle.Lifecycle
+	// log is the logger instance
+	log log.Logger
+
+	// lc contains the lifecycle management for graceful startup/shutdown
+	lc lifecycle.Lifecycle
+
+	// pass is the service for validating provider attributes and signatures
 	pass ProviderAttrSignatureService
 }
 
@@ -136,7 +156,7 @@ func (o *order) getBidTimeout() <-chan time.Time {
 	return nil
 }
 
-func (o *order) isStaleBid(bid mtypes.Bid) bool {
+func (o *order) isStaleBid(bid mvbeta.Bid) bool {
 	if !o.bidTimeoutEnabled() {
 		return false
 	}
@@ -156,35 +176,42 @@ func (o *order) run(checkForExistingBid bool) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var (
-		// channels for async operations.
-		groupch       <-chan runner.Result
+		// Channel for receiving group details query result.
+		groupch <-chan runner.Result
+		// Channel for storing group details result while checking existing bid.
 		storedGroupCh <-chan runner.Result
-		clusterch     <-chan runner.Result
-		bidch         <-chan runner.Result
-		pricech       <-chan runner.Result
-		queryBidCh    <-chan runner.Result
-		shouldBidCh   <-chan runner.Result
-		bidTimeout    <-chan time.Time
+		// Channel for receiving cluster reservation result.
+		clusterch <-chan runner.Result
+		// Channel for receiving bid creation transaction result.
+		bidch <-chan runner.Result
+		// Channel for receiving bid price calculation result.
+		pricech <-chan runner.Result
+		// Channel for receiving existing bid query result.
+		queryBidCh <-chan runner.Result
+		// Channel for receiving result of bid eligibility check.
+		shouldBidCh <-chan runner.Result
+		// Channel that triggers when bid timeout is reached.
+		bidTimeout <-chan time.Time
 
 		group       *dtypes.Group
 		reservation ctypes.Reservation
 
 		won bool
-		msg *mtypes.MsgCreateBid
+		msg *mvbeta.MsgCreateBid
 	)
 
 	// Begin fetching group details immediately.
 	groupch = runner.Do(func() runner.Result {
-		res, err := o.session.Client().Query().Group(ctx, &dtypes.QueryGroupRequest{ID: o.orderID.GroupID()})
+		res, err := o.session.Client().Query().Deployment().Group(ctx, &dtypes.QueryGroupRequest{ID: o.orderID.GroupID()})
 		return runner.NewResult(res.GetGroup(), err)
 	})
 
 	// Load existing bid if needed
 	if checkForExistingBid {
 		queryBidCh = runner.Do(func() runner.Result {
-			return runner.NewResult(o.session.Client().Query().Bid(
+			return runner.NewResult(o.session.Client().Query().Market().Bid(
 				ctx,
-				&mtypes.QueryBidRequest{
+				&mvbeta.QueryBidRequest{
 					ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
 				},
 			))
@@ -209,17 +236,17 @@ loop:
 				if matchBidNotFound.MatchString(err.Error()) {
 					bidFound = false
 				} else {
-					o.session.Log().Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
+					o.session.Log().Error("could not get existing bid", "error", err, "errtype", fmt.Sprintf("%T", err))
 					break loop
 				}
 			}
 
 			if bidFound {
 				o.session.Log().Info("found existing bid")
-				bidResponse := queryBid.Value().(*mtypes.QueryBidResponse)
+				bidResponse := queryBid.Value().(*mvbeta.QueryBidResponse)
 				bid := bidResponse.GetBid()
 				bidState := bid.GetState()
-				if bidState != mtypes.BidOpen {
+				if bidState != mvbeta.BidOpen {
 					o.session.Log().Error("bid in unexpected state", "bid-state", bidState)
 					break loop
 				}
@@ -237,8 +264,7 @@ loop:
 
 		case ev := <-o.sub.Events():
 			switch ev := ev.(type) {
-			case mtypes.EventLeaseCreated:
-
+			case *mtypes.EventLeaseCreated:
 				// different group
 				if !o.orderID.GroupID().Equals(ev.ID.GroupID()) {
 					o.log.Debug("ignoring group", "group", ev.ID.GroupID())
@@ -267,8 +293,7 @@ loop:
 				won = true
 
 				break loop
-
-			case mtypes.EventOrderClosed:
+			case *mtypes.EventOrderClosed:
 				// different deployment
 				if !ev.ID.Equals(o.orderID) {
 					break
@@ -277,8 +302,7 @@ loop:
 				o.log.Info("order closed")
 				orderCompleteCounter.WithLabelValues("order-closed").Inc()
 				break loop
-
-			case mtypes.EventBidClosed:
+			case *mtypes.EventBidClosed:
 				if won {
 					// Ignore any event after LeaseCreated
 					continue
@@ -299,7 +323,6 @@ loop:
 				orderCompleteCounter.WithLabelValues("bid-closed-external").Inc()
 				break loop
 			}
-
 		case result := <-groupch:
 			// Group details fetched.
 
@@ -307,7 +330,7 @@ loop:
 			o.log.Info("group fetched")
 
 			if result.Error() != nil {
-				o.log.Error("fetching group", "err", result.Error())
+				o.log.Error("fetching group", "error", result.Error())
 				break loop
 			}
 
@@ -323,7 +346,7 @@ loop:
 
 			if result.Error() != nil {
 				shouldBidCounter.WithLabelValues(metricsutils.FailLabel).Inc()
-				o.log.Error("failure during checking should bid", "err", result.Error())
+				o.log.Error("failure during checking should bid", "error", result.Error())
 				break loop
 			}
 
@@ -346,7 +369,7 @@ loop:
 
 			if result.Error() != nil {
 				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel)
-				o.log.Error("reserving resources", "err", result.Error())
+				o.log.Error("reserving resources", "error", result.Error())
 				break loop
 			}
 
@@ -372,7 +395,7 @@ loop:
 			pricech = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
 				// Calculate price & bid
 				priceReq := Request{
-					Owner:              group.GroupID.Owner,
+					Owner:              group.ID.Owner,
 					GSpec:              &group.GroupSpec,
 					PricePrecision:     DefaultPricePrecision,
 					AllocatedResources: reservation.GetAllocatedResources(),
@@ -382,7 +405,7 @@ loop:
 		case result := <-pricech:
 			pricech = nil
 			if result.Error() != nil {
-				o.log.Error("error calculating price", "err", result.Error())
+				o.log.Error("error calculating price", "error", result.Error())
 				break loop
 			}
 
@@ -401,19 +424,22 @@ loop:
 
 			o.log.Debug("submitting fulfillment", "price", price)
 
-			offer := mtypes.ResourceOfferFromRU(reservation.GetAllocatedResources())
+			offer := mvbeta.ResourceOfferFromRU(reservation.GetAllocatedResources())
 
 			// Begin submitting fulfillment
-			msg = mtypes.NewMsgCreateBid(o.orderID, o.session.Provider().Address(), price, o.cfg.Deposit, offer)
+			msg = mvbeta.NewMsgCreateBid(mtypes.MakeBidID(o.orderID, o.session.Provider().Address()), price, deposit.Deposit{
+				Amount:  o.cfg.Deposit,
+				Sources: deposit.Sources{deposit.SourceBalance},
+			}, offer)
 			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 			})
 
 		case result := <-bidch:
 			bidch = nil
 			if result.Error() != nil {
 				bidCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
-				o.log.Error("bid failed", "err", result.Error())
+				o.log.Error("bid failed", "error", result.Error())
 				break loop
 			}
 
@@ -448,7 +474,7 @@ loop:
 		if reservation != nil {
 			o.log.Debug("unreserving reservation")
 			if err := o.cluster.Unreserve(reservation.OrderID()); err != nil {
-				o.log.Error("error unreserving reservation", "err", err)
+				o.log.Error("error unreserving reservation", "error", err)
 				reservationCounter.WithLabelValues("close", metricsutils.FailLabel)
 			} else {
 				reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel)
@@ -458,13 +484,14 @@ loop:
 		if bidPlaced {
 			o.log.Debug("closing bid", "order-id", o.orderID)
 
-			msg := &mtypes.MsgCloseBid{
-				BidID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+			msg := &mvbeta.MsgCloseBid{
+				ID:     mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				Reason: mtypes.LeaseClosedReasonUnspecified,
 			}
 
-			_, err := o.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 			if err != nil {
-				o.log.Error("closing bid", "err", err)
+				o.log.Error("closing bid", "error", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
 			} else {
 				o.log.Info("bid closed", "order-id", o.orderID)
@@ -514,16 +541,16 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 	}
 
 	for _, resources := range group.GroupSpec.GetResourceUnits() {
-		if len(resources.Resources.Storage) > o.cfg.MaxGroupVolumes {
-			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Resources.Storage), o.cfg.MaxGroupVolumes))
+		if len(resources.Storage) > o.cfg.MaxGroupVolumes {
+			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Storage), o.cfg.MaxGroupVolumes))
 			return false, nil
 		}
 	}
 	signatureRequirements := group.GroupSpec.Requirements.SignedBy
 	if signatureRequirements.Size() != 0 {
 		// Check that the signature requirements are met for each attribute
-		var provAttr []atypes.Provider
-		ownAttrs := atypes.Provider{
+		var provAttr atypes.AuditedProviders
+		ownAttrs := atypes.AuditedProvider{
 			Owner:      o.session.Provider().Owner,
 			Auditor:    "",
 			Attributes: o.session.Provider().Attributes,
@@ -556,7 +583,7 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 
 	if err := group.GroupSpec.ValidateBasic(); err != nil {
 		o.log.Error("unable to fulfill: group validation error",
-			"err", err)
+			"error", err)
 		return false, nil
 	}
 	return true, nil

@@ -8,3 +8,7 @@ kubetypes: $(K8S_KUBE_CODEGEN)
 
 .PHONY: codegen
 codegen: generate kubetypes
+
+.PHONY: mocks
+mocks: $(MOCKERY)
+	$(MOCKERY)

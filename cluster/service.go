@@ -2,22 +2,20 @@ package cluster
 
 import (
 	"context"
+	"errors"
 
 	"github.com/boz/go-lifecycle"
-	tpubsub "github.com/troian/pubsub"
-
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tpubsub "github.com/troian/pubsub"
 
-	"github.com/tendermint/tendermint/libs/log"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
+	"cosmossdk.io/log"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
-	"github.com/akash-network/node/pubsub"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -28,7 +26,7 @@ import (
 	ptypes "github.com/akash-network/provider/types"
 )
 
-// ErrNotRunning is the error when service is not running
+// ErrNotRunning is an error when service is not running
 var (
 	ErrNotRunning      = errors.New("not running")
 	ErrInvalidResource = errors.New("invalid resource")
@@ -54,7 +52,7 @@ type service struct {
 	hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
-	statusch                       chan chan<- *ctypes.Status
+	statusch                       chan chan<- *apclient.ClusterStatus
 	statusV1ch                     chan chan<- uint32
 	managers                       map[mtypes.LeaseID]*deploymentManager
 
@@ -86,7 +84,7 @@ type Cluster interface {
 
 // StatusClient is the interface which includes status of service
 type StatusClient interface {
-	Status(context.Context) (*ctypes.Status, error)
+	Status(context.Context) (*apclient.ClusterStatus, error)
 	StatusV1(context.Context) (*provider.ClusterStatus, error)
 	FindActiveLease(ctx context.Context, owner sdktypes.Address, dseq uint64, gseq uint32) (bool, mtypes.LeaseID, crd.ManifestGroup, error)
 }
@@ -159,7 +157,7 @@ func NewService(
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
-		statusch:                       make(chan chan<- *ctypes.Status),
+		statusch:                       make(chan chan<- *apclient.ClusterStatus),
 		statusV1ch:                     make(chan chan<- uint32),
 		managers:                       make(map[mtypes.LeaseID]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
@@ -243,13 +241,13 @@ func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, 
 	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort)
 }
 
-func (s *service) Status(ctx context.Context) (*ctypes.Status, error) {
+func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {
 	istatus, err := s.inventory.status(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ch := make(chan *ctypes.Status, 1)
+	ch := make(chan *apclient.ClusterStatus, 1)
 
 	select {
 	case <-s.lc.Done():
@@ -382,12 +380,12 @@ loop:
 				s.managers[key] = newDeploymentManager(s, deployment, true)
 
 				trySignal()
-			case mtypes.EventLeaseClosed:
+			case *mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
 			}
 		case ch := <-s.statusch:
-			ch <- &ctypes.Status{
+			ch <- &apclient.ClusterStatus{
 				Leases: uint32(len(s.managers)), // nolint: gosec
 			}
 		case ch := <-s.statusV1ch:

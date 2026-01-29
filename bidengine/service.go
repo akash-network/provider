@@ -3,23 +3,21 @@ package bidengine
 import (
 	"context"
 	"errors"
-	"fmt"
-	"io"
-	"os"
 
-	sclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
+	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/boz/go-lifecycle"
-
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
-	"github.com/akash-network/node/pubsub"
-	mquery "github.com/akash-network/node/x/market/query"
+	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
+	sclient "pkg.akt.dev/go/node/client/v1beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
+	mquery "pkg.akt.dev/node/x/market/query"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/operator/waiter"
@@ -28,29 +26,25 @@ import (
 	ptypes "github.com/akash-network/provider/types"
 )
 
-var (
-	ordersCounter = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "provider_order_handler",
-		Help: "The total number of orders created",
-	}, []string{"action"})
-)
+var ordersCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "provider_order_handler",
+	Help: "The total number of orders created",
+}, []string{"action"})
 
 // ErrNotRunning declares new error with message "not running"
 var ErrNotRunning = errors.New("not running")
 
 // StatusClient interface predefined with Status method
 type StatusClient interface {
-	Status(context.Context) (*Status, error)
+	Status(context.Context) (*apclient.BidEngineStatus, error)
 	StatusV1(ctx context.Context) (*provider.BidEngineStatus, error)
 }
 
-var (
-	orderManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
-		Name:        "provider_order_manager",
-		Help:        "",
-		ConstLabels: nil,
-	})
-)
+var orderManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
+	Name:        "provider_order_manager",
+	Help:        "",
+	ConstLabels: nil,
+})
 
 // Service handles bidding on orders.
 type Service interface {
@@ -60,7 +54,15 @@ type Service interface {
 }
 
 // NewService creates new service instance and returns error in case of failure
-func NewService(pctx context.Context, aqc sclient.QueryClient, session session.Session, cluster cluster.Cluster, bus pubsub.Bus, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
+func NewService(
+	pctx context.Context,
+	aqc sclient.QueryClient,
+	session session.Session,
+	cluster cluster.Cluster,
+	bus pubsub.Bus,
+	waiter waiter.OperatorWaiter,
+	cfg Config,
+) (Service, error) {
 	session = session.ForModule("bidengine-service")
 
 	sub, err := bus.Subscribe()
@@ -81,10 +83,10 @@ func NewService(pctx context.Context, aqc sclient.QueryClient, session session.S
 		cluster:  cluster,
 		bus:      bus,
 		sub:      sub,
-		statusch: make(chan chan<- *Status),
+		statusch: make(chan chan<- *apclient.BidEngineStatus),
 		orders:   make(map[string]*order),
 		drainch:  make(chan *order),
-		ordersch: make(chan []mtypes.OrderID, 100),
+		ordersch: make(chan []mtypes.OrderID, 1000),
 		group:    group,
 		cancel:   cancel,
 		lc:       lifecycle.New(),
@@ -93,37 +95,48 @@ func NewService(pctx context.Context, aqc sclient.QueryClient, session session.S
 		waiter:   waiter,
 	}
 
-	go s.lc.WatchContext(ctx)
+	go s.lc.WatchContext(pctx)
 	go s.run(pctx)
+
 	group.Go(func() error {
-		err := s.ordersFetcher(ctx, aqc)
-
-		<-ctx.Done()
-
-		return err
+		return s.ordersFetcher(ctx, aqc)
 	})
 
 	return s, nil
 }
 
+// service manages the lifecycle and coordination of order processing and bid creation.
 type service struct {
+	// session provides blockchain client and provider info.
 	session session.Session
+	// cluster interface to the provider's compute cluster for resource management.
 	cluster cluster.Cluster
-	cfg     Config
+	// cfg holds configuration parameters for bid engine (pricing, deposits, timeouts etc).
+	cfg Config
 
+	// bus is the event bus for publishing lease events.
 	bus pubsub.Bus
+	// sub is the subscriber for receiving blockchain events.
 	sub pubsub.Subscriber
 
-	statusch chan chan<- *Status
-	orders   map[string]*order
-	drainch  chan *order
+	// statusch receives requests for bid engine status.
+	statusch chan chan<- *apclient.BidEngineStatus
+	// orders tracks all active order processing.
+	orders map[string]*order
+	// drainch receives completed orders for cleanup.
+	drainch chan *order
+	// ordersch receives new orders to process from the blockchain.
 	ordersch chan []mtypes.OrderID
 
-	group  *errgroup.Group
+	group *errgroup.Group
+	// cancel holds the cancel function of the service context.
 	cancel context.CancelFunc
-	lc     lifecycle.Lifecycle
-	pass   *providerAttrSignatureService
+	// lc manages graceful startup/shutdown.
+	lc lifecycle.Lifecycle
+	// pass validates provider attributes and signatures.
+	pass *providerAttrSignatureService
 
+	// waiter coordinates operator startup dependencies.
 	waiter waiter.OperatorWaiter
 }
 
@@ -136,8 +149,8 @@ func (s *service) Done() <-chan struct{} {
 	return s.lc.Done()
 }
 
-func (s *service) Status(ctx context.Context) (*Status, error) {
-	ch := make(chan *Status, 1)
+func (s *service) Status(ctx context.Context) (*apclient.BidEngineStatus, error) {
+	ch := make(chan *apclient.BidEngineStatus, 1)
 
 	select {
 	case <-s.lc.Done():
@@ -171,35 +184,20 @@ func (s *service) updateOrderManagerGauge() {
 }
 
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	homeDir := fmt.Sprintf("%s/provider", aqc.ClientContext().HomeDir)
-	err := os.MkdirAll(homeDir, os.ModePerm)
-	if err != nil {
-		s.session.Log().Error("unable to create provider caching dir", "error", err)
-	}
-
 	var nextKey []byte
 
-	cacheFile, err := os.OpenFile(fmt.Sprintf("%s/orders_cache", homeDir), os.O_RDWR|os.O_CREATE, 0666)
-	if err == nil {
-		nextKey, _ = io.ReadAll(cacheFile)
-
-		_ = cacheFile.Truncate(0)
+	pcfg, err := fromctx.PersistentConfigFromCtx(ctx)
+	if err != nil {
+		return err
 	}
 
-	totalOrders := 0
-
-	limit := 3000
+	nextKey, _ = pcfg.BidEngine().GetOrdersNextKey(ctx)
 
 	defer func() {
-		if cacheFile != nil {
-			if len(nextKey) > 0 {
-				s.session.Log().Info("caching next key")
-				_, _ = cacheFile.Write(nextKey)
-			}
-
-			_ = cacheFile.Close()
-		}
+		_ = pcfg.BidEngine().SetOrdersNextKey(context.Background(), nextKey)
 	}()
+
+	limit := cap(s.ordersch)
 
 loop:
 	for {
@@ -208,8 +206,10 @@ loop:
 			Limit: uint64(limit),
 		}
 
-		resp, err := aqc.Orders(ctx, &mtypes.QueryOrdersRequest{
-			Filters:    mtypes.OrderFilters{},
+		resp, err := aqc.Market().Orders(ctx, &mvbeta.QueryOrdersRequest{
+			Filters: mvbeta.OrderFilters{
+				State: mvbeta.OrderOpen.String(),
+			},
 			Pagination: preq,
 		})
 		if err != nil {
@@ -220,19 +220,10 @@ loop:
 			continue
 		}
 
-		if resp.Pagination != nil {
-			nextKey = resp.Pagination.NextKey
-		}
-
-		totalOrders += len(resp.Orders)
-
 		var orders []mtypes.OrderID
 
 		for _, order := range resp.Orders {
-			if order.State != mtypes.OrderOpen {
-				continue
-			}
-			orders = append(orders, order.OrderID)
+			orders = append(orders, order.ID)
 		}
 
 		select {
@@ -241,12 +232,16 @@ loop:
 			break loop
 		}
 
-		if len(resp.Orders) < limit {
-			break
+		// if pagination (or next key) is empty indicates
+		// we're done with queries and it is time to quit
+		// we do not update nextKey with empty value, so on the next restart provider
+		// does not begin traversing orders from the beginning
+		if resp.Pagination == nil || len(resp.Pagination.NextKey) == 0 {
+			break loop
 		}
-	}
 
-	s.session.Log().Info("total orders", "orders", totalOrders)
+		nextKey = resp.Pagination.NextKey
+	}
 
 	return ctx.Err()
 }
@@ -256,10 +251,9 @@ func (s *service) run(ctx context.Context) {
 	defer s.sub.Close()
 	s.updateOrderManagerGauge()
 
-	// wait for configured operators to be online & responsive before proceeding
+	// wait for configured operators to be online and responsive before proceeding
 	err := s.waiter.WaitForAll(ctx)
 	if err != nil {
-		s.cancel()
 		s.lc.ShutdownInitiated(err)
 		return
 	}
@@ -281,9 +275,8 @@ loop:
 	for {
 		select {
 		case shutdownErr := <-s.lc.ShutdownRequest():
-			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
-			s.lc.ShutdownInitiated(nil)
-			s.cancel()
+			s.session.Log().Debug("received shutdown request", "error", shutdownErr)
+			s.lc.ShutdownInitiated(shutdownErr)
 			break loop
 		case orders := <-s.ordersch:
 			for _, orderID := range orders {
@@ -291,7 +284,7 @@ loop:
 				s.session.Log().Debug("creating catchup order", "order", key)
 				order, err := newOrder(s, orderID, s.cfg, s.pass, true)
 				if err != nil {
-					s.session.Log().Error("creating catchup order", "order", key, "err", err)
+					s.session.Log().Error("creating catchup order", "order", key, "error", err)
 					continue
 				}
 				s.orders[key] = order
@@ -299,7 +292,7 @@ loop:
 			}
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) { // nolint: gocritic
-			case mtypes.EventOrderCreated:
+			case *mtypes.EventOrderCreated:
 				// new order
 				key := mquery.OrderPath(ev.ID)
 
@@ -313,7 +306,7 @@ loop:
 				// create an order object for managing the bid process and order lifecycle
 				order, err := newOrder(s, ev.ID, s.cfg, s.pass, false)
 				if err != nil {
-					s.session.Log().Error("handling order", "order", key, "err", err)
+					s.session.Log().Error("handling order", "order", key, "error", err)
 					break
 				}
 
@@ -322,7 +315,7 @@ loop:
 				trySignal()
 			}
 		case ch := <-s.statusch:
-			ch <- &Status{
+			ch <- &apclient.BidEngineStatus{
 				Orders: uint32(len(s.orders)), // nolint: gosec
 			}
 		case order := <-s.drainch:
@@ -336,8 +329,6 @@ loop:
 		}
 		s.updateOrderManagerGauge()
 	}
-
-	_ = s.group.Wait()
 
 	s.pass.lc.ShutdownAsync(nil)
 

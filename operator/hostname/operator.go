@@ -11,18 +11,19 @@ import (
 	"strings"
 	"time"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
 	netv1 "k8s.io/api/networking/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
+
+	"cosmossdk.io/log"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
@@ -239,7 +240,7 @@ func errorIsKubernetesResourceNotFound(failure error) bool {
 	// otherwise simple errors like network issues could wind up with all CRDs
 	// being ignored
 
-	if kubeErrors.IsNotFound(failure) {
+	if kerrors.IsNotFound(failure) {
 		return true
 	}
 
@@ -474,10 +475,10 @@ func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context
 			}
 			rule := ingress.Spec.Rules[0]
 
-			if len(rule.IngressRuleValue.HTTP.Paths) != 1 {
-				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.IngressRuleValue.HTTP.Paths))
+			if len(rule.HTTP.Paths) != 1 {
+				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.HTTP.Paths))
 			}
-			rulePath := rule.IngressRuleValue.HTTP.Paths[0]
+			rulePath := rule.HTTP.Paths[0]
 			results = append(results, leaseIDHostnameConnection{
 				leaseID:      ingressLeaseID,
 				hostname:     rule.Host,
@@ -512,7 +513,7 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 		return nil, err
 	}
 
-	op.log.Info("starting hostname watch") // , "resourceVersion", lastResourceVersion)
+	op.log.Info("starting hostname watch")
 	watcher, err := op.ac.AkashV2beta2().ProviderHosts(op.ns).Watch(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
@@ -653,7 +654,7 @@ func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, ho
 		Continue:             "",
 	})
 
-	if err != nil && allowMissing && kubeErrors.IsNotFound(err) {
+	if err != nil && allowMissing && kerrors.IsNotFound(err) {
 		return nil
 	}
 
@@ -690,7 +691,7 @@ func (op *hostnameOperator) connectHostnameToDeployment(ctx context.Context, dir
 		obj.ResourceVersion = foundEntry.ResourceVersion
 		_, err = op.kc.NetworkingV1().Ingresses(ns).Update(ctx, obj, metav1.UpdateOptions{})
 		// metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "networking-ingresses-update", err)
-	case kubeErrors.IsNotFound(err):
+	case kerrors.IsNotFound(err):
 		_, err = op.kc.NetworkingV1().Ingresses(ns).Create(ctx, obj, metav1.CreateOptions{})
 		// metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "networking-ingresses-create", err)
 	}

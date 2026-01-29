@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -10,7 +11,6 @@ import (
 	"github.com/troian/pubsub"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 
@@ -101,8 +101,8 @@ func OperatorsCmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.Flags().String(common.FlagRESTAddress, "0.0.0.0", "listen address for REST server")
-	if err := viper.BindPFlag(common.FlagRESTAddress, cmd.Flags().Lookup(common.FlagRESTAddress)); err != nil {
+	cmd.PersistentFlags().String(common.FlagRESTAddress, "0.0.0.0", "listen address for REST server")
+	if err := viper.BindPFlag(common.FlagRESTAddress, cmd.PersistentFlags().Lookup(common.FlagRESTAddress)); err != nil {
 		panic(err)
 	}
 

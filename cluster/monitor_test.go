@@ -7,11 +7,13 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/testutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	apclient "pkg.akt.dev/go/provider/client"
+	"pkg.akt.dev/go/testutil"
+	"pkg.akt.dev/go/util/pubsub"
 
-	"github.com/akash-network/provider/cluster/mocks"
+	cmocks "github.com/akash-network/provider/mocks/cluster"
+
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
@@ -21,13 +23,13 @@ func TestMonitorInstantiate(t *testing.T) {
 	myLog := testutil.Logger(t)
 	bus := pubsub.NewBus()
 
-	client := &mocks.Client{}
+	client := &cmocks.Client{}
 	deployment := &ctypes.Deployment{
 		Lid:    testutil.LeaseID(t),
 		MGroup: &manifest.Group{},
 	}
 
-	statusResult := &ctypes.LeaseStatus{}
+	statusResult := &apclient.LeaseStatus{}
 	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
@@ -59,13 +61,13 @@ func TestMonitorSendsClusterDeploymentPending(t *testing.T) {
 	group.Services[0].Expose[0].ExternalPort = 2000
 	group.Services[0].Expose[0].Proto = manifest.TCP
 	group.Services[0].Expose[0].Port = 40000
-	client := &mocks.Client{}
+	client := &cmocks.Client{}
 	deployment := &ctypes.Deployment{
 		Lid:    testutil.LeaseID(t),
 		MGroup: group,
 	}
 
-	statusResult := make(map[string]*ctypes.ServiceStatus)
+	statusResult := make(map[string]*apclient.ServiceStatus)
 	client.On("LeaseStatus", mock.Anything, deployment.LeaseID()).Return(statusResult, nil)
 	mySession := session.New(myLog, nil, nil, -1)
 
@@ -105,14 +107,14 @@ func TestMonitorSendsClusterDeploymentDeployed(t *testing.T) {
 	group.Services[0].Expose[0].Proto = manifest.TCP
 	group.Services[0].Expose[0].Port = 40000
 	group.Services[0].Count = 3
-	client := &mocks.Client{}
+	client := &cmocks.Client{}
 	deployment := &ctypes.Deployment{
 		Lid:    testutil.LeaseID(t),
 		MGroup: group,
 	}
 
-	statusResult := make(map[string]*ctypes.ServiceStatus)
-	statusResult[serviceName] = &ctypes.ServiceStatus{
+	statusResult := make(map[string]*apclient.ServiceStatus)
+	statusResult[serviceName] = &apclient.ServiceStatus{
 		Name:               serviceName,
 		Available:          3,
 		Total:              3,

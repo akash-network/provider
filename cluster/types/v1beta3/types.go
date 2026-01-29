@@ -3,16 +3,16 @@ package v1beta3
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"strings"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 	eventsv1 "k8s.io/api/events/v1"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
 type ProviderResourceEvent string
@@ -120,41 +120,34 @@ type ExecResult interface {
 	ExitCode() int
 }
 
-// Status stores current leases and inventory statuses
-type Status struct {
-	Leases    uint32                       `json:"leases"`
-	Inventory inventoryV1.InventoryMetrics `json:"inventory"`
-}
+// // ServiceStatus stores the current status of service
+// type ServiceStatus struct {
+// 	Name      string   `json:"name"`
+// 	Available int32    `json:"available"`
+// 	Total     int32    `json:"total"`
+// 	URIs      []string `json:"uris"`
+//
+// 	ObservedGeneration int64 `json:"observed_generation"`
+// 	Replicas           int32 `json:"replicas"`
+// 	UpdatedReplicas    int32 `json:"updated_replicas"`
+// 	ReadyReplicas      int32 `json:"ready_replicas"`
+// 	AvailableReplicas  int32 `json:"available_replicas"`
+// }
+//
+// type ForwardedPortStatus struct {
+// 	Host         string                   `json:"host,omitempty"`
+// 	Port         uint16                   `json:"port"`
+// 	ExternalPort uint16                   `json:"externalPort"`
+// 	Proto        manifest.ServiceProtocol `json:"proto"`
+// 	Name         string                   `json:"name"`
+// }
+//
+// // LeaseStatus includes list of services with their status
+// type LeaseStatus struct {
+// 	Services       map[string]*ServiceStatus        `json:"services"`
+// 	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
+// }
 
-// ServiceStatus stores the current status of service
-type ServiceStatus struct {
-	Name      string   `json:"name"`
-	Available int32    `json:"available"`
-	Total     int32    `json:"total"`
-	URIs      []string `json:"uris"`
-
-	ObservedGeneration int64 `json:"observed_generation"`
-	Replicas           int32 `json:"replicas"`
-	UpdatedReplicas    int32 `json:"updated_replicas"`
-	ReadyReplicas      int32 `json:"ready_replicas"`
-	AvailableReplicas  int32 `json:"available_replicas"`
-}
-
-type ForwardedPortStatus struct {
-	Host         string                   `json:"host,omitempty"`
-	Port         uint16                   `json:"port"`
-	ExternalPort uint16                   `json:"externalPort"`
-	Proto        manifest.ServiceProtocol `json:"proto"`
-	Name         string                   `json:"name"`
-}
-
-// LeaseStatus includes list of services with their status
-type LeaseStatus struct {
-	Services       map[string]*ServiceStatus        `json:"services"`
-	ForwardedPorts map[string][]ForwardedPortStatus `json:"forwarded_ports"` // Container services that are externally accessible
-}
-
-//go:generate mockery --name HostnameServiceClient --output ./mocks
 type HostnameServiceClient interface {
 	ReserveHostnames(ctx context.Context, hostnames []string, leaseID mtypes.LeaseID) ([]string, error)
 	ReleaseHostnames(leaseID mtypes.LeaseID) error

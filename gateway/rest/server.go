@@ -2,17 +2,14 @@ package rest
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/tls"
 	"net"
 	"net/http"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	gcontext "github.com/gorilla/context"
-	"github.com/tendermint/tendermint/libs/log"
 
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
+	"cosmossdk.io/log"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"github.com/akash-network/provider"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
@@ -24,12 +21,12 @@ func NewServer(
 	ctx context.Context,
 	log log.Logger,
 	pclient provider.Client,
-	cquery ctypes.QueryClient,
+	cquery gwutils.CertGetter,
+	sni string,
 	address string,
 	pid sdk.Address,
-	certs []tls.Certificate,
-	clusterConfig map[interface{}]interface{}) (*http.Server, error) {
-
+	clusterConfig map[interface{}]interface{},
+) (*http.Server, error) {
 	restMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gcontext.Set(r, fromctx.CtxKeyKubeConfig, fromctx.MustKubeConfigFromCtx(ctx))
@@ -47,66 +44,19 @@ func NewServer(
 		})
 	}
 
-	// fixme ovrclk/engineering#609
-	// nolint: gosec
-	srv := &http.Server{
-		Addr:    address,
-		Handler: newRouter(log, pid, pclient, clusterConfig, restMiddleware),
-		BaseContext: func(_ net.Listener) context.Context {
-			return ctx
-		},
-	}
-
-	var err error
-
-	srv.TLSConfig, err = gwutils.NewServerTLSConfig(context.Background(), certs, cquery)
+	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, sni)
 	if err != nil {
 		return nil, err
 	}
 
-	return srv, nil
-}
-
-func NewJwtServer(ctx context.Context,
-	cquery ctypes.QueryClient,
-	jwtGatewayAddr string,
-	providerAddr sdk.Address,
-	cert tls.Certificate,
-	certSerialNumber string,
-	jwtExpiresAfter time.Duration,
-) (*http.Server, error) {
-	// fixme ovrclk/engineering#609
-	// nolint: gosec
 	srv := &http.Server{
-		Addr:    jwtGatewayAddr,
-		Handler: newJwtServerRouter(providerAddr, cert.PrivateKey, jwtExpiresAfter, certSerialNumber),
+		Addr:              address,
+		ReadHeaderTimeout: 3 * time.Second,
+		Handler:           newRouter(log, pid, pclient, clusterConfig, restMiddleware),
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},
-	}
-
-	var err error
-	srv.TLSConfig, err = gwutils.NewServerTLSConfig(ctx, []tls.Certificate{cert}, cquery)
-	if err != nil {
-		return nil, err
-	}
-
-	return srv, nil
-}
-
-func NewResourceServer(ctx context.Context,
-	log log.Logger,
-	serverAddr string,
-	providerAddr sdk.Address,
-	pubkey *ecdsa.PublicKey,
-	lokiGwAddr string,
-) (*http.Server, error) {
-	// fixme ovrclk/engineering#609
-	// nolint: gosec
-	srv := &http.Server{
-		Addr:        serverAddr,
-		Handler:     newResourceServerRouter(log, providerAddr, pubkey, lokiGwAddr),
-		BaseContext: func(_ net.Listener) context.Context { return ctx },
+		TLSConfig: tlsCfg,
 	}
 
 	return srv, nil
