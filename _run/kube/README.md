@@ -1,4 +1,8 @@
-# Dev Environment: "Kube" configuration
+# Local Kind Cluster Development Environment
+
+## Overview
+
+The local Kind cluster runbook creates a complete development environment on your local machine using Docker and Kind (Kubernetes in Docker). This is the most common development setup and requires no external resources.
 
 The _Kube_ dev environment builds:
 
@@ -6,20 +10,9 @@ The _Kube_ dev environment builds:
 * An Akash Provider Services Daemon (PSD) for bidding and running workloads.
 * A Kubernetes cluster for the PSD to run workloads on.
 
-The [instructions](#runbook) below will illustrate how to run a network with a single, local node and execute workloads in [kind](https://kind.sigs.k8s.io/):
-
-* [Initialize blockchain node and client](#initialize)
-* [Run a single-node network](#run-local-network)
-* [Query objects on the network](#run-query)
-* [Create a provider](#create-a-provider)
-* [Run provider services](#run-provider-services)
-* [Create a deployment](#create-a-deployment)
-* [Bid on an order](#create-a-bid)
-* [Terminate a lease](#terminate-lease)
-
 ## Setup
 
-Four keys and accounts are created.  The key names are:
+Four keys and accounts are created. The key names are:
 
 | Key Name    | Use                                              |
 |-------------|--------------------------------------------------|
@@ -28,9 +21,7 @@ Four keys and accounts are created.  The key names are:
 | `validator` | The sole validator for the created network       |
 | `other`     | Misc. account to (receives tokens, etc...)       |
 
-Most `make` commands are configurable and have defaults to make it
-such that you don't need to override them for a simple pass-through of
-this example.
+Most `make` commands are configurable and have defaults to make it such that you don't need to override them for a simple pass-through of this example.
 
 | Name                | Default    | Description                     |
 |---------------------|------------|---------------------------------|
@@ -41,253 +32,224 @@ this example.
 | `OSEQ`              | 1          | order sequence                  |
 | `PRICE`             | 10uakt     | price to bid                    |
 
-# Runbook
+## Cleanup and Restart
 
-The following steps will bring up a network and allow for interacting
-with it.
+If at any point something goes wrong and you need to start from the beginning:
 
-Running through the entire runbook requires three terminals.
-Each command is marked __t1__-__t3__ to indicate a suggested terminal number.
-
-> **❗ Important Note:**  
-> Make sure you run all commands from the `./_run/kube` directory.
-
-If at any time you'd like to start over with a fresh chain, simply run:
-
-__t1 run__
-```sh
-make clean kube-cluster-delete-kind
+```shell
+cd provider/_run/kube
+make kube-cluster-delete
+make clean
 make init
 ```
 
-### __t1 Step: 1__ (Initialize)
+## Runbook Steps
 
-Start and initialize kind.
+> _**NOTE**_ - this runbook requires three simultaneous terminals
 
-Kubernetes ingress objects present some difficulties for creating development
-environments.  Two options are offered below - the first (random port) is less error-prone
-and can have multiple instances run concurrently, while the second option arguably
-has a better payoff.
+For the purpose of documentation clarity we will refer to these terminal sessions as:
 
-**note**: this step waits for Kubernetes metrics to be available, which can take some time.
-The counter on the left side of the messages is regularly in the 120 range.  If it goes beyond 250,
-there may be a problem.
+* terminal1
+* terminal2
+* terminal3
 
+### STEP 1 - Open Runbook
 
-| Option                                            | __t1 Step: 1__                                             | Explanation                                                                                                                                                        |
-|---------------------------------------------------|------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Map random local port to port 80 of your workload | `make kube-cluster-setup`                                  | This is less error-prone, but makes it difficult to access your app through the browser.                                                                           |
-| Map localhost port 80 to workload                 | `KIND_CONFIG=kind-config-80.yaml make kube-cluster-setup` | If anything else is listening on port 80 (any other web server), this method will fail.  If it does succeed, you will be able to browse your app from the browser. |
+> _**NOTE**_ - run the commands in this step on terminal1, terminal2, and terminal3
 
-## Build Akash binaries and initialize network
+Run this step on all three terminal sessions to ensure we are in the correct directory for later steps.
 
-Initialize keys and accounts:
-
-### __t1 Step: 2__
-```sh
-make init
+```
+cd ~/go/src/github.com/akash-network/provider/_run/kube
 ```
 
-## Run local network
+### STEP 2 - Create and Provision Local Kind Kubernetes Cluster
 
-In a separate terminal, the following command will run the `akash` node:
+> _**NOTE**_ - run this command in this step on terminal1 only
 
-### __t2 Step: 3__
-```sh
+> _**NOTE**_ - this step may take several minutes to complete
+
+```
+make kube-cluster-setup
+```
+
+#### Possible Timed Out Waiting for the Condition Error
+
+If the following error is encountered when running `make kube-cluster-setup`:
+
+```
+Waiting for deployment "ingress-nginx-controller" rollout to finish: 0 out of 1 new replicas have been updated...
+Waiting for deployment "ingress-nginx-controller" rollout to finish: 0 of 1 updated replicas are available...
+error: timed out waiting for the condition
+make: *** [../common-kube.mk:120: kube-setup-ingress-default] Error 1
+```
+
+This is an indication that the Kubernetes ingress-controller did not initialize within the default timeout period.  In such cases, re-execute `make kube-cluster-setup` with a custom timeout period such as the example below.  This step is NOT necessary if `make kube-cluster-setup` completed on first run with no errors encountered.
+
+```
+cd provider/_run/kube
+make kube-cluster-delete
+make clean
+make init
+KUBE_ROLLOUT_TIMEOUT=300 make kube-cluster-setup
+```
+
+#### Goreleaser Issue
+
+If build fails due to:
+
+```
+Unable to find image 'ghcr.io/goreleaser/goreleaser-cross:v' locally
+```
+
+This is likely due to `GOVERSION_SEMVER` environment variable not set properly.  Can use following as temp workaround and to proceed:
+
+```
+# Set the correct version based on your Go installation - use your locally installed Go version and replace below
+export GOVERSION_SEMVER=v1.24.2
+
+# Verify it's set correctly
+echo "GOVERSION_SEMVER is now: $GOVERSION_SEMVER"
+
+# Now retry your make command
+KUBE_ROLLOUT_TIMEOUT=300 make kube-cluster-setup
+```
+
+
+### STEP 3 - Start Akash Node
+
+> _**NOTE**_ - run this command in this step on terminal2 only
+
+```
 make node-run
 ```
 
-You can check the status of the network with:
+### STEP 4 - Create an Akash Provider
 
-__t1 status__
-```sh
-make node-status
+> _**NOTE**_ - run this command in this step on terminal1 only
+
 ```
-
-You should see blocks being produced - the block height should be increasing.
-
-You can now view genesis accounts that were created:
-
-__t1 status__
-```sh
-make query-accounts
-```
-
-## Create a provider
-
-Create a provider on the network with the following command:
-
-### __t1 Step: 4__
-```sh
 make provider-create
 ```
 
-View the on-chain representation of the provider with:
+#### Note on Keys
 
-__t1 status__
-```sh
-make query-provider
+Each configuration creates four keys: The keys are assigned to the targets and under normal circumstances there is no need to alter it. However, it can be done with setting KEY_NAME:
+
+```
+# create provider from **provider** key
+make provider-create
+
+# create provider from custom key
+KEY_NAME=other make provider-create
 ```
 
-## Run Provider
+### STEP 5 - Start the Akash Provider
 
-To run Provider as a simple binary connecting to the cluster, in a third terminal, run the command:
+> _**NOTE**_ - run this command in this step on terminal3 only
 
-### __t3 Step: 5__
-```sh
+```
 make provider-run
 ```
 
-Query the provider service gateway for its status:
+### STEP 6 - Create and Verify Test Deployment
 
-__t1 status__
-```sh
-make provider-status
+> _**NOTE**_ - run the commands in this step on terminal1 only
+
+#### Create the Deployment
+
+* Take note of the deplpyment ID (DSEQ) generated for use in subsequent steps
+
 ```
-
-## Create a deployment
-
-Create a deployment from the `main` account with:
-
-### __t1 run Step: 6__
-```sh
 make deployment-create
 ```
 
-This particular deployment is created from the sdl file in this directory ([`deployment.yaml`](deployment.yaml)).
+#### Query Deployments
 
-Check that the deployment was created.  Take note of the `dseq` - deployment sequence:
-
-__t1 status__
-```sh
+```
 make query-deployments
 ```
 
-After a short time, you should see an order created for this deployment with the following command:
+#### Query Orders
 
-```sh
+* Steps ensure that an order is created for the deployment after a short period of time
+
+```
 make query-orders
 ```
 
-The Provider Services Daemon should see this order and bid on it.
+#### Query Bids
 
-```sh
+* Step ensures the Provider services daemon bids on the test deployment
+
+```
 make query-bids
 ```
 
-When a bid has been created, you may create a lease:
+### STEP 7 - Test Lease Creation for the Test Deployment
 
+> _**NOTE**_ - run the commands in this step on terminal1 only
 
-### __t1 run Step: 7__
+#### Create Lease
 
-To create a lease, run
-
-```sh
+```
 make lease-create
 ```
 
-You can see the lease with:
+#### Query Lease
 
-```sh
+```
 make query-leases
 ```
 
-You should now see "pending" inventory in the provider status:
+#### Ensure Provider Received Lease Create Message
 
-```sh
+* Should see "pending" inventory in the provider status and for the test deployment
+
+```
 make provider-status
 ```
 
-## Distribute Manifest
+### STEP 8 - Send Manifest
 
-Now that you have a lease with a provider, you need to send your
-workload configuration to that provider by sending it the manifest:
+> _**NOTE**_ - run the commands in this step on terminal1 only
 
-### __t1 Step: 8__
-```sh
+#### Send the Manifest to the Provider
+
+```
 make send-manifest
 ```
 
-You can check the status of your deployment with:
+#### Check Status of  Deployment
 
-__t1 status__
-```sh
+```
 make provider-lease-status
 ```
 
-You can reach your app with the following (Note: `Host:` header tomfoolery abound)
+#### Ping the Deplpyment to Ensure Liveness
 
-__t1 status__
-```sh
-make provider-lease-ping
+```
+ make provider-lease-ping
 ```
 
-Get service status
+### STEP 9 - Verify Service Status
 
-__t1 service status__
-```sh
+> _**NOTE**_ - run the commands in this step on terminal1 only
+
+#### Query Lease Status
+
+```
 make provider-lease-status
 ```
 
-Fetch logs from deployed service (all pods)
+#### Fetch Pod Logs
 
-__t1 service logs__
-```sh
+* Note that this will fetch the logs for all pods in the Kubernetes cluster.  Filter/search for the test deployment's ID (DSEQ) for related activities.
+
+```
 make provider-lease-logs
 ```
 
-If you chose to use port 80 when setting up kind, you can browse to your
-deployed workload at http://hello.localhost
+## Additional Operations
 
-## Update Deployment
-
-Updating active Deployments is a two step process. First edit the `deployment.yaml` with whatever changes are desired. Example; update the `image` field.
- 1. Update the Akash Network to inform the Provider that a new Deployment declaration is expected.
-   * `make deployment-update`
- 2. Send the updated manifest to the Provider to run.
-   * `make send-manifest`
-
-Between the first and second step, the prior deployment's containers will continue to run until the new manifest file is received, validated, and new container group operational. After health checks on updated group are passing; the prior containers will be terminated.
-
-#### Limitations
-
-Akash Groups are translated into Kubernetes Deployments, this means that only a few fields from the Akash SDL are mutable. For example `image`, `command`, `args`, `env` and exposed ports can be modified, but compute resources and placement criteria cannot.
-
-## Terminate lease
-
-There are a number of ways that a lease can be terminated.
-
-#### Provider closes the bid:
-
-__t1 teardown__
-```sh
-make bid-close
-```
-
-#### Tenant closes the lease
-
-__t1 teardown__
-```sh
-make lease-close
-```
-
-#### Tenant pauses the group
-
-__t1 teardown__
-```sh
-make group-pause
-```
-
-#### Tenant closes the group
-
-__t1 teardown__
-```sh
-make group-pause
-```
-
-#### Tenant closes the deployment
-
-__t1 teardown__
-```sh
-make deployment-close
-```
+For information on updating deployments and terminating leases, see [OPERATIONS.md](./OPERATIONS.md).
