@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/akash-api/go/util/units"
-
-	"github.com/akash-network/node/sdl"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/util/units"
 )
 
 type GPUModelAttributes struct {
@@ -35,26 +34,26 @@ func (m GPUModels) ExistsOrWildcard(model string) (*GPUModelAttributes, bool) {
 	return attr, exists
 }
 
-func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
+func ParseGPUAttributes(attrs attrtypes.Attributes) (GPUAttributes, error) {
 	nvidia := make(GPUModels)
 	amd := make(GPUModels)
 
 	for _, attr := range attrs {
 		tokens := strings.Split(attr.Key, "/")
 		if len(tokens) < 4 || len(tokens)%2 != 0 {
-			return GPUAttributes{}, fmt.Errorf("invalid GPU attribute") // nolint: goerr113
+			return GPUAttributes{}, fmt.Errorf("invalid GPU attribute") // nolint: err113
 		}
 
 		switch tokens[0] {
 		case "vendor":
 		default:
-			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[0]) // nolint: goerr113
+			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[0]) // nolint: err113
 		}
 
 		switch tokens[2] {
 		case "model":
 		default:
-			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[2]) // nolint: goerr113
+			return GPUAttributes{}, fmt.Errorf("unexpected GPU attribute type (%s)", tokens[2]) // nolint: err113
 		}
 
 		vendor := tokens[1]
@@ -84,7 +83,7 @@ func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
 					case "pcie":
 					case "sxm":
 					default:
-						return GPUAttributes{}, fmt.Errorf("unsupported GPU interface (%s)", val) // nolint: goerr113
+						return GPUAttributes{}, fmt.Errorf("unsupported GPU interface (%s)", val) // nolint: err113
 					}
 
 					mattrs.Interface = val
@@ -99,7 +98,7 @@ func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
 		case "amd":
 			amd[model] = mattrs
 		default:
-			return GPUAttributes{}, fmt.Errorf("unsupported GPU vendor (%s)", vendor) // nolint: goerr113
+			return GPUAttributes{}, fmt.Errorf("unsupported GPU vendor (%s)", vendor) // nolint: err113
 		}
 
 	}
@@ -116,14 +115,14 @@ func ParseGPUAttributes(attrs types.Attributes) (GPUAttributes, error) {
 	return res, nil
 }
 
-func ParseStorageAttributes(attrs types.Attributes) (StorageAttributes, error) {
+func ParseStorageAttributes(attrs attrtypes.Attributes) (StorageAttributes, error) {
 	attr := attrs.Find(sdl.StorageAttributePersistent)
 	persistent, _ := attr.AsBool()
 	attr = attrs.Find(sdl.StorageAttributeClass)
 	class, _ := attr.AsString()
 
 	if persistent && (class == "" || class == "ram") {
-		return StorageAttributes{}, fmt.Errorf("persistent volume must specify storage class") // nolint: goerr113
+		return StorageAttributes{}, fmt.Errorf("persistent volume must specify storage class") // nolint: err113
 	}
 
 	res := StorageAttributes{

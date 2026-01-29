@@ -1,14 +1,14 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	manitypes "github.com/akash-network/akash-api/go/manifest/v2beta2"
+	manitypes "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 type Service interface {
@@ -19,19 +19,19 @@ type Service interface {
 }
 
 type service struct {
-	Workload
+	*Workload
 	requireNodePort bool
 }
 
 var _ Service = (*service)(nil)
 
-func BuildService(workload Workload, requireNodePort bool) Service {
+func BuildService(workload *Workload, requireNodePort bool) Service {
 	ss := &service{
 		Workload:        workload,
 		requireNodePort: requireNodePort,
 	}
 
-	ss.Workload.log = ss.Workload.log.With("object", "service", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "service", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
@@ -51,7 +51,7 @@ func (b *service) workloadServiceType() corev1.ServiceType {
 	return corev1.ServiceTypeClusterIP
 }
 
-func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
+func (b *service) Create() (*corev1.Service, error) { // nolint:unparam
 	ports, err := b.ports()
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     b.workloadServiceType(),
-			Selector: b.labels(),
+			Selector: b.selectorLabels(),
 			Ports:    ports,
 		},
 	}
@@ -71,9 +71,11 @@ func (b *service) Create() (*corev1.Service, error) { // nolint:golint,unparam
 	return svc, nil
 }
 
-func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // nolint:golint,unparam
-	obj.Labels = b.labels()
-	obj.Spec.Selector = b.labels()
+func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // nolint:unparam
+	uobj := obj.DeepCopy()
+
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj.Spec.Selector = b.selectorLabels()
 	ports, err := b.ports()
 	if err != nil {
 		return nil, err
@@ -81,7 +83,6 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 
 	// retain provisioned NodePort values
 	if b.requireNodePort {
-
 		// for each newly-calculated port
 		for i, port := range ports {
 
@@ -100,8 +101,9 @@ func (b *service) Update(obj *corev1.Service) (*corev1.Service, error) { // noli
 		}
 	}
 
-	obj.Spec.Ports = ports
-	return obj, nil
+	uobj.Spec.Ports = ports
+
+	return uobj, nil
 }
 
 func (b *service) Any() bool {
@@ -123,14 +125,14 @@ func (b *service) Any() bool {
 	return false
 }
 
-var errUnsupportedProtocol = errors.New("Unsupported protocol for service")
+var errUnsupportedProtocol = errors.New("unsupported protocol for service")
 var errInvalidServiceBuilder = errors.New("service builder invalid")
 
 func (b *service) ports() ([]corev1.ServicePort, error) {
 	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
 
 	ports := make([]corev1.ServicePort, 0, len(service.Expose))
-	portsAdded := make(map[int32]struct{})
+	portsAdded := make(map[uint32]struct{})
 	for i, expose := range service.Expose {
 		if expose.Global == b.requireNodePort || (!b.requireNodePort && expose.IsIngress()) {
 			if b.requireNodePort && expose.IsIngress() {
@@ -152,8 +154,8 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 				portsAdded[externalPort] = struct{}{}
 				ports = append(ports, corev1.ServicePort{
 					Name:       fmt.Sprintf("%d-%d", i, int(externalPort)),
-					Port:       externalPort,
-					TargetPort: intstr.FromInt(int(expose.Port)),
+					Port:       int32(externalPort),                  //nolint: gosec
+					TargetPort: intstr.FromInt32(int32(expose.Port)), //nolint: gosec
 					Protocol:   exposeProtocol,
 				})
 			}

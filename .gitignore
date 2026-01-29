@@ -22,6 +22,8 @@ dist
 .idea/
 *.iml
 .vscode
+*.code-workspace
+
 coverage.txt
 
 go.work

@@ -19,115 +19,35 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-
 	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	schema "k8s.io/apimachinery/pkg/runtime/schema"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/applyconfiguration/akash.network/v2beta2"
+	typedakashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeInventoryRequests implements InventoryRequestInterface
-type FakeInventoryRequests struct {
+// fakeInventoryRequests implements InventoryRequestInterface
+type fakeInventoryRequests struct {
+	*gentype.FakeClientWithListAndApply[*v2beta2.InventoryRequest, *v2beta2.InventoryRequestList, *akashnetworkv2beta2.InventoryRequestApplyConfiguration]
 	Fake *FakeAkashV2beta2
 }
 
-var inventoryrequestsResource = schema.GroupVersionResource{Group: "akash.network", Version: "v2beta2", Resource: "inventoryrequests"}
-
-var inventoryrequestsKind = schema.GroupVersionKind{Group: "akash.network", Version: "v2beta2", Kind: "InventoryRequest"}
-
-// Get takes name of the inventoryRequest, and returns the corresponding inventoryRequest object, and an error if there is any.
-func (c *FakeInventoryRequests) Get(ctx context.Context, name string, options v1.GetOptions) (result *v2beta2.InventoryRequest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(inventoryrequestsResource, name), &v2beta2.InventoryRequest{})
-	if obj == nil {
-		return nil, err
+func newFakeInventoryRequests(fake *FakeAkashV2beta2) typedakashnetworkv2beta2.InventoryRequestInterface {
+	return &fakeInventoryRequests{
+		gentype.NewFakeClientWithListAndApply[*v2beta2.InventoryRequest, *v2beta2.InventoryRequestList, *akashnetworkv2beta2.InventoryRequestApplyConfiguration](
+			fake.Fake,
+			"",
+			v2beta2.SchemeGroupVersion.WithResource("inventoryrequests"),
+			v2beta2.SchemeGroupVersion.WithKind("InventoryRequest"),
+			func() *v2beta2.InventoryRequest { return &v2beta2.InventoryRequest{} },
+			func() *v2beta2.InventoryRequestList { return &v2beta2.InventoryRequestList{} },
+			func(dst, src *v2beta2.InventoryRequestList) { dst.ListMeta = src.ListMeta },
+			func(list *v2beta2.InventoryRequestList) []*v2beta2.InventoryRequest {
+				return gentype.ToPointerSlice(list.Items)
+			},
+			func(list *v2beta2.InventoryRequestList, items []*v2beta2.InventoryRequest) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v2beta2.InventoryRequest), err
-}
-
-// List takes label and field selectors, and returns the list of InventoryRequests that match those selectors.
-func (c *FakeInventoryRequests) List(ctx context.Context, opts v1.ListOptions) (result *v2beta2.InventoryRequestList, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(inventoryrequestsResource, inventoryrequestsKind, opts), &v2beta2.InventoryRequestList{})
-	if obj == nil {
-		return nil, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v2beta2.InventoryRequestList{ListMeta: obj.(*v2beta2.InventoryRequestList).ListMeta}
-	for _, item := range obj.(*v2beta2.InventoryRequestList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested inventoryRequests.
-func (c *FakeInventoryRequests) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(inventoryrequestsResource, opts))
-}
-
-// Create takes the representation of a inventoryRequest and creates it.  Returns the server's representation of the inventoryRequest, and an error, if there is any.
-func (c *FakeInventoryRequests) Create(ctx context.Context, inventoryRequest *v2beta2.InventoryRequest, opts v1.CreateOptions) (result *v2beta2.InventoryRequest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(inventoryrequestsResource, inventoryRequest), &v2beta2.InventoryRequest{})
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.InventoryRequest), err
-}
-
-// Update takes the representation of a inventoryRequest and updates it. Returns the server's representation of the inventoryRequest, and an error, if there is any.
-func (c *FakeInventoryRequests) Update(ctx context.Context, inventoryRequest *v2beta2.InventoryRequest, opts v1.UpdateOptions) (result *v2beta2.InventoryRequest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(inventoryrequestsResource, inventoryRequest), &v2beta2.InventoryRequest{})
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.InventoryRequest), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeInventoryRequests) UpdateStatus(ctx context.Context, inventoryRequest *v2beta2.InventoryRequest, opts v1.UpdateOptions) (*v2beta2.InventoryRequest, error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(inventoryrequestsResource, "status", inventoryRequest), &v2beta2.InventoryRequest{})
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.InventoryRequest), err
-}
-
-// Delete takes name of the inventoryRequest and deletes it. Returns an error if one occurs.
-func (c *FakeInventoryRequests) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(inventoryrequestsResource, name, opts), &v2beta2.InventoryRequest{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeInventoryRequests) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(inventoryrequestsResource, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v2beta2.InventoryRequestList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched inventoryRequest.
-func (c *FakeInventoryRequests) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v2beta2.InventoryRequest, err error) {
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(inventoryrequestsResource, name, pt, data, subresources...), &v2beta2.InventoryRequest{})
-	if obj == nil {
-		return nil, err
-	}
-	return obj.(*v2beta2.InventoryRequest), err
 }

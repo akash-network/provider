@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
@@ -13,7 +14,7 @@ import (
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -39,29 +40,39 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 	labels := map[string]string{
 		builder.AkashManagedLabelName: "true",
 	}
+
 	builder.AppendLeaseLabels(lID, labels)
 
-	foundEntry, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).Get(ctx, host, metav1.GetOptions{})
-	exists := true
-	var resourceVersion string
-
+	update := true
+	obj, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).Get(ctx, host, metav1.GetOptions{})
 	if err != nil {
-		if kubeErrors.IsNotFound(err) {
-			exists = false
+		if kerrors.IsNotFound(err) {
+			update = false
 		} else {
 			return err
 		}
-	} else {
-		resourceVersion = foundEntry.ObjectMeta.ResourceVersion
 	}
 
-	obj := crd.ProviderHost{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:            host, // Name is always the hostname, to prevent duplicates
-			Labels:          labels,
-			ResourceVersion: resourceVersion,
-		},
-		Spec: crd.ProviderHostSpec{
+	if !update {
+		obj = &crd.ProviderHost{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   host, // Name is always the hostname, to prevent duplicates
+				Labels: labels,
+			},
+			Spec: crd.ProviderHostSpec{
+				Hostname:     host,
+				Owner:        lID.GetOwner(),
+				Dseq:         lID.GetDSeq(),
+				Oseq:         lID.GetOSeq(),
+				Gseq:         lID.GetGSeq(),
+				Provider:     lID.GetProvider(),
+				ServiceName:  serviceName,
+				ExternalPort: externalPort,
+			},
+		}
+	} else {
+		obj.Labels = labels
+		obj.Spec = crd.ProviderHostSpec{
 			Hostname:     host,
 			Owner:        lID.GetOwner(),
 			Dseq:         lID.GetDSeq(),
@@ -70,18 +81,27 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 			Provider:     lID.GetProvider(),
 			ServiceName:  serviceName,
 			ExternalPort: externalPort,
-		},
+		}
+	}
+	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)
+
+	if obj.Annotations == nil {
+		obj.Annotations = make(map[string]string)
 	}
 
-	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)
-	// Create or update the entry
-	if exists {
-		_, err = c.ac.AkashV2beta2().ProviderHosts(c.ns).Update(ctx, &obj, metav1.UpdateOptions{})
+	obj.Annotations[builder.AkashLeaseUpdatedAt] = time.Now().UTC().Format(time.RFC3339)
+
+	if update {
+		_, err = c.ac.AkashV2beta2().ProviderHosts(c.ns).Update(ctx, obj, metav1.UpdateOptions{})
 	} else {
-		obj.ResourceVersion = ""
-		_, err = c.ac.AkashV2beta2().ProviderHosts(c.ns).Create(ctx, &obj, metav1.CreateOptions{})
+		_, err = c.ac.AkashV2beta2().ProviderHosts(c.ns).Create(ctx, obj, metav1.CreateOptions{})
 	}
-	return err
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *client) PurgeDeclaredHostname(ctx context.Context, lID mtypes.LeaseID, hostname string) error {

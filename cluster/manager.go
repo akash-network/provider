@@ -7,16 +7,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-
 	"github.com/avast/retry-go/v4"
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
+	errorsmod "cosmossdk.io/errors"
+	"cosmossdk.io/log"
+
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	mv1 "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	"pkg.akt.dev/go/util/pubsub"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -35,8 +37,6 @@ const (
 	dsTeardownPending  deploymentState = "teardown-pending"
 	dsTeardownComplete deploymentState = "teardown-complete"
 )
-
-const uncleanShutdownGracePeriod = 30 * time.Second
 
 type deploymentState string
 
@@ -67,7 +67,9 @@ type deploymentManager struct {
 	lc                  lifecycle.Lifecycle
 	hostnameService     ctypes.HostnameServiceClient
 	config              Config
+	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
+	messages            []string
 }
 
 func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease bool) *deploymentManager {
@@ -90,6 +92,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		hostnameService:     s.HostnameService(),
 		config:              s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
+		isNewLease:          isNewLease,
 		currentHostnames:    make(map[string]struct{}),
 	}
 
@@ -162,8 +165,8 @@ loop:
 	for {
 		select {
 		case shutdownErr = <-dm.lc.ShutdownRequest():
+			dm.log.Debug("received shutdown request", "err", shutdownErr)
 			break loop
-
 		case deployment := <-dm.updatech:
 			dm.deployment = deployment
 			newch := dm.handleUpdate(ctx)
@@ -178,13 +181,16 @@ loop:
 			}
 			switch dm.state {
 			case dsDeployActive:
+				// regardless of error from deploy, mark as complete
+				// save the last error if any for user to retrieve status of the deployment
+				dm.log.Debug("deploy complete")
+				dm.state = dsDeployComplete
+				dm.startMonitor()
+
 				if result != nil {
-					// Run the teardown code to get rid of anything created that might be hanging out
-					runch = dm.startTeardown()
+					dm.messages = []string{result.Error()}
 				} else {
-					dm.log.Debug("deploy complete")
-					dm.state = dsDeployComplete
-					dm.startMonitor()
+					dm.messages = nil
 				}
 			case dsDeployPending:
 				if result != nil {
@@ -232,12 +238,12 @@ loop:
 	dm.log.Debug("waiting on dm.wg")
 	dm.wg.Wait()
 
-	if dm.state < dsDeployComplete {
-		dm.log.Info("shutting down unclean, running teardown now")
-		ctx, cancel := context.WithTimeout(context.Background(), uncleanShutdownGracePeriod)
-		defer cancel()
-		teardownErr = dm.doTeardown(ctx)
-	}
+	// if dm.isNewLease && (dm.state < dsDeployComplete) {
+	// 	dm.log.Info("shutting down unclean, running teardown now")
+	// 	ctx, cancel := context.WithTimeout(context.Background(), uncleanShutdownGracePeriod)
+	// 	defer cancel()
+	// 	teardownErr = dm.doTeardown(ctx)
+	// }
 
 	if teardownErr != nil {
 		dm.log.Error("lease teardown failed", "err", teardownErr)
@@ -299,6 +305,7 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 
 		close(chErr)
 	}()
+
 	return chErr
 }
 
@@ -316,7 +323,7 @@ type serviceExposeWithServiceName struct {
 	name   string
 }
 
-func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, error) {
+func (dm *deploymentManager) doDeploy(pctx context.Context) ([]string, []string, error) {
 	cleanupHelper := newDeployCleanupHelper(dm.deployment.LeaseID(), dm.client, dm.log)
 	var err error
 	ctx, cancel := context.WithCancel(context.Background())
@@ -337,7 +344,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		cancel()
 	}()
 
-	if err = dm.checkLeaseActive(ctx); err != nil {
+	if err = dm.checkLeaseActive(pctx); err != nil {
 		return nil, nil, err
 	}
 
@@ -441,7 +448,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 	}
 
 	for host, serviceExpose := range hosts {
-		externalPort := uint32(serviceExpose.GetExternalPort())
+		externalPort := uint32(serviceExpose.GetExternalPort()) // nolint: gosec
 		err = dm.client.DeclareHostname(ctx, dm.deployment.LeaseID(), host, hostToServiceName[host], externalPort)
 		if err != nil {
 			// TODO - counter
@@ -457,7 +464,7 @@ func (dm *deploymentManager) doDeploy(ctx context.Context) ([]string, []string, 
 		externalPort := serviceExpose.expose.GetExternalPort()
 		port := serviceExpose.expose.Port
 
-		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false)
+		err = dm.client.DeclareIP(ctx, dm.deployment.LeaseID(), serviceExpose.name, port, uint32(externalPort), serviceExpose.expose.Proto, sharingKey, false) // nolint: gosec
 		if err != nil {
 			if !errors.Is(err, kubeclienterrors.ErrAlreadyExists) {
 				dm.log.Error("failed adding IP declaration", "service", serviceExpose.name, "port", externalPort, "endpoint", serviceExpose.expose.IP, "err", err)
@@ -560,17 +567,19 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 }
 
 func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
-	var lease *mtypes.QueryLeaseResponse
+	var lease *mvbeta.QueryLeaseResponse
 
 	err := retry.Do(func() error {
 		var err error
-		lease, err = dm.session.Client().Query().Lease(ctx, &mtypes.QueryLeaseRequest{
+		lease, err = dm.session.Client().Query().Market().Lease(ctx, &mvbeta.QueryLeaseRequest{
 			ID: dm.deployment.LeaseID(),
 		})
-		if err != nil {
-			dm.log.Error("lease query failed", "err")
+		//
+		if err != nil && !errorsmod.IsOf(err, mv1.ErrLeaseNotFound) {
+			dm.log.Error("lease query failed", "err", err)
+			return err
 		}
-		return err
+		return nil
 	},
 		retry.Attempts(50),
 		retry.Delay(100*time.Millisecond),
@@ -582,7 +591,7 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 		return err
 	}
 
-	if lease.GetLease().State != mtypes.LeaseActive {
+	if lease.GetLease().State != mv1.LeaseActive {
 		dm.log.Error("lease not active, not deploying")
 		return fmt.Errorf("%w: %s", ErrLeaseInactive, dm.deployment.LeaseID())
 	}

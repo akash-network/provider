@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	clusterutil "github.com/akash-network/provider/cluster/util"
 )
@@ -131,7 +131,7 @@ func (il *ignoreList) Prune() bool {
 	deleted := false
 	// do not let the ignore list grow unbounded, it would eventually
 	// consume 100% of available memory otherwise
-	if len(il.entries) > int(il.cfg.EntryLimit) {
+	if len(il.entries) > int(il.cfg.EntryLimit) { // nolint: gosec
 		var toDelete []mtypes.LeaseID
 
 		for leaseID, entry := range il.entries {
@@ -149,7 +149,7 @@ func (il *ignoreList) Prune() bool {
 		// if enough entries have not been selected for deletion then just remove entries
 		// until we get to enough removed
 		for leaseID := range il.entries {
-			if len(il.entries)-len(toDelete) <= int(il.cfg.EntryLimit) {
+			if len(il.entries)-len(toDelete) <= int(il.cfg.EntryLimit) { // nolint: gosec
 				break
 			}
 			toDelete = append(toDelete, leaseID)

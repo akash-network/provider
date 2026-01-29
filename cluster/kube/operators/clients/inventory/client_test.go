@@ -8,8 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -26,10 +24,13 @@ import (
 	kfake "k8s.io/client-go/kubernetes/fake"
 	k8stest "k8s.io/client-go/testing"
 
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -38,8 +39,8 @@ import (
 )
 
 type testReservation struct {
-	resources         dtypes.GroupSpec
-	adjustedResources dtypes.ResourceUnits
+	resources         dvbeta.GroupSpec
+	adjustedResources dvbeta.ResourceUnits
 	cparams           interface{}
 }
 
@@ -64,15 +65,15 @@ func (r *testReservation) OrderID() mtypes.OrderID {
 	return mtypes.OrderID{}
 }
 
-func (r *testReservation) Resources() dtypes.ResourceGroup {
+func (r *testReservation) Resources() dvbeta.ResourceGroup {
 	return r.resources
 }
 
-func (r *testReservation) SetAllocatedResources(val dtypes.ResourceUnits) {
+func (r *testReservation) SetAllocatedResources(val dvbeta.ResourceUnits) {
 	r.adjustedResources = val
 }
 
-func (r *testReservation) GetAllocatedResources() dtypes.ResourceUnits {
+func (r *testReservation) GetAllocatedResources() dvbeta.ResourceUnits {
 	return r.adjustedResources
 }
 
@@ -118,7 +119,7 @@ func (sf *inventoryScaffold) createFakeOperator(t *testing.T) {
 				{
 					Name:       "grpc",
 					Protocol:   "tcp",
-					Port:       int32(sf.ports[0]),
+					Port:       int32(sf.ports[0]), // nolint: gosec
 					TargetPort: intstr.FromString("grpc"),
 				},
 			},
@@ -144,7 +145,7 @@ func (sf *inventoryScaffold) createFakeOperator(t *testing.T) {
 							Ports: []corev1.ContainerPort{
 								{
 									Name:          "grpc",
-									ContainerPort: int32(sf.ports[0]),
+									ContainerPort: int32(sf.ports[0]), // nolint: gosec
 								},
 							},
 						},
@@ -168,7 +169,7 @@ func (sf *inventoryScaffold) createFakeOperator(t *testing.T) {
 					Ports: []corev1.ContainerPort{
 						{
 							Name:          "grpc",
-							ContainerPort: int32(sf.ports[0]),
+							ContainerPort: int32(sf.ports[0]), // nolint: gosec
 						},
 					},
 				},
@@ -207,11 +208,8 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 
 	group, ctx := errgroup.WithContext(context.Background())
 
-	kc := kfake.NewSimpleClientset()
+	kc := kfake.NewClientset()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
-	// ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kc.Discovery().RESTClient())
-	// ctx = context.WithValue(ctx, fromctx.CtxKeyKubeConfig, kubernetes.Interface(kc))
-
 	ctx = context.WithValue(ctx, fromctx.CtxKeyInventoryUnderTest, true)
 
 	gSrv := setupInventoryGRPC(ctx, group, ports[0])
@@ -230,8 +228,8 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 }
 
 // QueryCluster does not need to be implemented as provider only uses stream
-func (gm *testInventoryServer) QueryCluster(ctx context.Context, _ *emptypb.Empty) (*inventoryV1.Cluster, error) {
-	return nil, errors.New("unimplemented") // nolint: goerr113
+func (gm *testInventoryServer) QueryCluster(_ context.Context, _ *emptypb.Empty) (*inventoryV1.Cluster, error) {
+	return nil, errors.New("unimplemented") // nolint: err113
 }
 
 func (gm *testInventoryServer) StreamCluster(_ *emptypb.Empty, stream inventoryV1.ClusterRPC_StreamClusterServer) error {
@@ -333,17 +331,17 @@ func TestInventorySingleNodeNoPods(t *testing.T) {
 				Name: "test",
 				Resources: inventoryV1.NodeResources{
 					CPU: inventoryV1.CPU{
-						Quantity: inventoryV1.NewResourcePair(expectedCPU, 0, "m"),
+						Quantity: inventoryV1.NewResourcePair(expectedCPU, expectedCPU, 0, "m"),
 					},
 					Memory: inventoryV1.Memory{
-						Quantity: inventoryV1.NewResourcePair(expectedMemory, 0, "M"),
+						Quantity: inventoryV1.NewResourcePair(expectedMemory, expectedMemory, 0, "M"),
 					},
 					GPU: inventoryV1.GPU{
-						Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 					},
-					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, 0, "M"),
-					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, expectedStorage, 0, "M"),
+					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
 				Capabilities: inventoryV1.NodeCapabilities{},
 			},
@@ -383,17 +381,17 @@ func TestInventorySingleNodeWithPods(t *testing.T) {
 				Name: "test",
 				Resources: inventoryV1.NodeResources{
 					CPU: inventoryV1.CPU{
-						Quantity: inventoryV1.NewResourcePair(expectedCPU, cpuPerContainer*totalContainers, "m"),
+						Quantity: inventoryV1.NewResourcePair(expectedCPU, expectedCPU, cpuPerContainer*totalContainers, "m"),
 					},
 					Memory: inventoryV1.Memory{
-						Quantity: inventoryV1.NewResourcePair(expectedMemory, memoryPerContainer*totalContainers, "M"),
+						Quantity: inventoryV1.NewResourcePair(expectedMemory, expectedMemory, memoryPerContainer*totalContainers, "M"),
 					},
 					GPU: inventoryV1.GPU{
-						Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+						Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 					},
-					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, storagePerContainer*totalContainers, "M"),
-					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					EphemeralStorage: inventoryV1.NewResourcePair(expectedStorage, expectedStorage, storagePerContainer*totalContainers, "M"),
+					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
 				Capabilities: inventoryV1.NodeCapabilities{},
 			},
@@ -620,30 +618,30 @@ func multipleReplicasGenNodes() inventoryV1.Nodes {
 			Name: "node1",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 51020, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 51020, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 8589934592, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 8589934592, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 		{
 			Name: "node2",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 51000, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 51000, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(2, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(2, 2, 0, resource.DecimalSI),
 					Info: inventoryV1.GPUInfoS{
 						{
 							Vendor:     "nvidia",
@@ -663,78 +661,78 @@ func multipleReplicasGenNodes() inventoryV1.Nodes {
 						},
 					},
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 8589934592, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 8589934592, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 		{
 			Name: "node3",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 275, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 275, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 0, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 0, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 		{
 			Name: "node4",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(119800, 305, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(119800, 119800, 305, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(457317732352, 17495527424, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(457317732352, 457317732352, 17495527424, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 0, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(7760751097705, 7760751097705, 0, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 		},
 	}
 }
 
 func multipleReplicasGenReservations(cpuUnits, gpuUnits uint64, count uint32) *testReservation {
-	var gpuAttributes atypes.Attributes
+	var gpuAttributes attrtypes.Attributes
 	if gpuUnits > 0 {
-		gpuAttributes = append(gpuAttributes, atypes.Attribute{
+		gpuAttributes = append(gpuAttributes, attrtypes.Attribute{
 			Key:   "vendor/nvidia/model/a100",
 			Value: "true",
 		})
 	}
 	return &testReservation{
-		resources: dtypes.GroupSpec{
+		resources: dvbeta.GroupSpec{
 			Name:         "bla",
-			Requirements: atypes.PlacementRequirements{},
-			Resources: dtypes.ResourceUnits{
+			Requirements: attrtypes.PlacementRequirements{},
+			Resources: dvbeta.ResourceUnits{
 				{
-					Resources: atypes.Resources{
+					Resources: rtypes.Resources{
 						ID: 1,
-						CPU: &atypes.CPU{
-							Units: atypes.NewResourceValue(cpuUnits),
+						CPU: &rtypes.CPU{
+							Units: rtypes.NewResourceValue(cpuUnits),
 						},
-						GPU: &atypes.GPU{
-							Units:      atypes.NewResourceValue(gpuUnits),
+						GPU: &rtypes.GPU{
+							Units:      rtypes.NewResourceValue(gpuUnits),
 							Attributes: gpuAttributes,
 						},
-						Memory: &atypes.Memory{
-							Quantity: atypes.NewResourceValue(16 * unit.Gi),
+						Memory: &rtypes.Memory{
+							Quantity: rtypes.NewResourceValue(16 * unit.Gi),
 						},
-						Storage: []atypes.Storage{
+						Storage: []rtypes.Storage{
 							{
 								Name:     "default",
-								Quantity: atypes.NewResourceValue(8 * unit.Gi),
+								Quantity: rtypes.NewResourceValue(8 * unit.Gi),
 							},
 						},
 					},
@@ -746,56 +744,56 @@ func multipleReplicasGenReservations(cpuUnits, gpuUnits uint64, count uint32) *t
 }
 
 func multipleSvcReplicasGenReservations(cpuUnits, gpuUnits uint64, count uint32) *testReservation {
-	var gpuAttributes atypes.Attributes
+	var gpuAttributes attrtypes.Attributes
 	if gpuUnits > 0 {
-		gpuAttributes = append(gpuAttributes, atypes.Attribute{
+		gpuAttributes = append(gpuAttributes, attrtypes.Attribute{
 			Key:   "vendor/nvidia/model/a100",
 			Value: "true",
 		})
 	}
 	return &testReservation{
-		resources: dtypes.GroupSpec{
+		resources: dvbeta.GroupSpec{
 			Name:         "bla",
-			Requirements: atypes.PlacementRequirements{},
-			Resources: dtypes.ResourceUnits{
+			Requirements: attrtypes.PlacementRequirements{},
+			Resources: dvbeta.ResourceUnits{
 				{
-					Resources: atypes.Resources{
+					Resources: rtypes.Resources{
 						ID: 1,
-						CPU: &atypes.CPU{
-							Units: atypes.NewResourceValue(cpuUnits),
+						CPU: &rtypes.CPU{
+							Units: rtypes.NewResourceValue(cpuUnits),
 						},
-						GPU: &atypes.GPU{
-							Units: atypes.NewResourceValue(0),
+						GPU: &rtypes.GPU{
+							Units: rtypes.NewResourceValue(0),
 						},
-						Memory: &atypes.Memory{
-							Quantity: atypes.NewResourceValue(16 * unit.Gi),
+						Memory: &rtypes.Memory{
+							Quantity: rtypes.NewResourceValue(16 * unit.Gi),
 						},
-						Storage: []atypes.Storage{
+						Storage: []rtypes.Storage{
 							{
 								Name:     "default",
-								Quantity: atypes.NewResourceValue(8 * unit.Gi),
+								Quantity: rtypes.NewResourceValue(8 * unit.Gi),
 							},
 						},
 					},
 					Count: count,
 				},
 				{
-					Resources: atypes.Resources{
+					Resources: rtypes.Resources{
 						ID: 2,
-						CPU: &atypes.CPU{
-							Units: atypes.NewResourceValue(cpuUnits),
+						CPU: &rtypes.CPU{
+							Units: rtypes.NewResourceValue(cpuUnits),
 						},
-						GPU: &atypes.GPU{
-							Units:      atypes.NewResourceValue(gpuUnits),
+						GPU: &rtypes.GPU{
+							Units:      rtypes.NewResourceValue(gpuUnits),
 							Attributes: gpuAttributes,
 						},
-						Memory: &atypes.Memory{
-							Quantity: atypes.NewResourceValue(16 * unit.Gi),
+						Memory: &rtypes.Memory{
+							Quantity: rtypes.NewResourceValue(16 * unit.Gi),
 						},
-						Storage: []atypes.Storage{
+						Storage: []rtypes.Storage{
 							{
 								Name:     "default",
-								Quantity: atypes.NewResourceValue(8 * unit.Gi),
+								Quantity: rtypes.NewResourceValue(8 * unit.Gi),
 							},
 						},
 					},

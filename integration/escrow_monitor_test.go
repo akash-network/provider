@@ -7,14 +7,12 @@ import (
 	"io"
 	"path/filepath"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/stretchr/testify/assert"
+	"pkg.akt.dev/go/cli"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	clitestutil "github.com/akash-network/node/testutil/cli"
-	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
+	clitestutil "pkg.akt.dev/go/cli/testutil"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
@@ -30,50 +28,61 @@ func (s *E2EEscrowMonitor) TestE2EEscrowMonitor() {
 	s.Require().NoError(err)
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(1000),
 	}
 
 	// Create Deployments
-	res, err := deploycli.TxCreateDeploymentExec(
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
 		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		cliGlobalFlags(fmt.Sprintf("--dseq=%v", deploymentID.DSeq))...,
-	)
-	s.Require().NoError(err)
-	s.Require().NoError(s.waitForBlocksCommitted(7))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
-
-	bidID := mtypes.MakeBidID(
-		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
-		s.keyProvider.GetAddress(),
-	)
-
-	// check bid
-	_, err = mcli.QueryBidExec(s.validator.ClientCtx, bidID)
-	s.Require().NoError(err)
-
-	// create lease
-	_, err = mcli.TxCreateLeaseExec(
-		s.validator.ClientCtx,
-		bidID,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), s.validator.ClientCtx, res.Bytes())
+
+	bidID := mtypes.MakeBidID(
+		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
+		s.addrProvider,
+	)
+
+	err = s.waitForBlockchainEvent(&mtypes.EventBidCreated{ID: bidID})
+	s.Require().NoError(err)
+
+	// check bid
+	_, err = clitestutil.ExecQueryBid(s.ctx, s.validator.ClientCtx, cli.TestFlags().WithBidID(bidID)...)
+	s.Require().NoError(err)
+
+	// create lease
+	_, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		s.validator.ClientCtx,
+		cli.TestFlags().
+			WithBidID(bidID).
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(s.waitForBlocksCommitted(2))
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), s.validator.ClientCtx, res.Bytes())
 
 	lid := bidID.LeaseID()
 
 	// Send Manifest to Provider ----------------------------------------------
-	_, err = ptestutil.TestSendManifest(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		lid.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		s.validator.ClientCtx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(lid.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(2))
@@ -91,14 +100,13 @@ func (s *E2EEscrowMonitor) TestE2EEscrowMonitor() {
 	s.Require().NoError(s.waitForBlocksCommitted(5))
 
 	// Get the lease status
-	_, err = providerCmd.ProviderLeaseStatusExec(
+	_, err = providerCmd.ExecProviderLeaseStatus(
+		s.ctx,
 		s.validator.ClientCtx,
-		fmt.Sprintf("--%s=%v", "dseq", lid.DSeq),
-		fmt.Sprintf("--%s=%v", "gseq", lid.GSeq),
-		fmt.Sprintf("--%s=%v", "oseq", lid.OSeq),
-		fmt.Sprintf("--%s=%v", "provider", lid.Provider),
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+		cli.TestFlags().
+			WithBidID(lid.BidID()).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String())...,
 	)
 	assert.NoError(s.T(), err)
 	// data := ctypes.LeaseStatus{}

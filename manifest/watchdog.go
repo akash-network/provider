@@ -4,21 +4,23 @@ import (
 	"context"
 	"time"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
 	"github.com/boz/go-lifecycle"
+
+	"cosmossdk.io/log"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/tendermint/tendermint/libs/log"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/util/runner"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	"pkg.akt.dev/go/util/runner"
 
 	"github.com/akash-network/provider/session"
 )
 
 type watchdog struct {
-	leaseID types.LeaseID
+	leaseID mtypes.LeaseID
 	timeout time.Duration
 	lc      lifecycle.Lifecycle
 	sess    session.Session
@@ -26,7 +28,7 @@ type watchdog struct {
 	log     log.Logger
 }
 
-func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID types.LeaseID, timeout time.Duration) *watchdog {
+func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID mtypes.LeaseID, timeout time.Duration) *watchdog {
 	ctx, cancel := context.WithCancel(context.Background())
 	result := &watchdog{
 		leaseID: leaseID,
@@ -65,15 +67,16 @@ func (wd *watchdog) run() {
 	wd.log.Debug("watchdog start")
 	select {
 	case <-time.After(wd.timeout):
-		// Close the bid, since if this point is reached then a manifest has not been received
+		// Close the bid, since if this point is reached, then a manifest has not been received
 		wd.log.Info("watchdog closing bid")
 
 		runch = runner.Do(func() runner.Result {
-			msg := &types.MsgCloseBid{
-				BidID: types.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
+			msg := &mvbeta.MsgCloseBid{
+				ID:     mtypes.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
+				Reason: mtypes.LeaseClosedReasonManifestTimeout,
 			}
 
-			return runner.NewResult(wd.sess.Client().Tx().Broadcast(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 		})
 	case err = <-wd.lc.ShutdownRequest():
 	}

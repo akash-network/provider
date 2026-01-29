@@ -19,7 +19,7 @@ func Cmd() *cobra.Command {
 		Use:          "hostname",
 		Short:        "kubernetes operator interfacing with k8s nginx ingress",
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 			group := fromctx.MustErrGroupFromCtx(ctx)
 
@@ -34,7 +34,8 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			restAddr := fmt.Sprintf(":%d", restPort)
+			listenAddress := viper.GetString(common.FlagRESTAddress)
+			restAddr := fmt.Sprintf("%s:%d", listenAddress, restPort)
 
 			op, err := newHostnameOperator(ctx, logger, ns, config, common.IgnoreListConfigFromViper())
 			if err != nil {

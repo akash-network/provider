@@ -1,7 +1,12 @@
 include $(abspath $(CURDIR)/../../make/init.mk)
 
-AP_RUN_NAME := $(notdir $(CURDIR))
-AP_RUN_DIR  := $(DEVCACHE_RUN)/$(AP_RUN_NAME)
+ifeq ($(AP_RUN_NAME),)
+$(error "AP_RUN_NAME is not set")
+endif
+
+ifeq ($(AP_RUN_DIR),)
+$(error "AP_RUN_DIR is not set")
+endif
 
 ifneq ($(AKASH_HOME),)
 ifneq ($(DIRENV_FILE),$(CURDIR)/.envrc)
@@ -11,7 +16,7 @@ Ensure direnv is installed and hooked to your shell profile. Refer to the docume
 ")
 endif
 else
-export AKASH_HOME = $(DEVCACHE_RUN)/$(AP_RUN_NAME)/.akash
+$(error "AKASH_HOME is not set")
 endif
 
 .PHONY: bins

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"net/http"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
-
 	"github.com/spf13/viper"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	clusterClient "github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/operators/clients/metallb"
@@ -27,7 +27,7 @@ func Cmd() *cobra.Command {
 		Use:          "ip",
 		Short:        "kubernetes operator interfacing with Metal LB",
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ns := viper.GetString(providerflags.FlagK8sManifestNS)
 			poolName := viper.GetString(flagMetalLbPoolName)
 			logger := common.OpenLogger().With("operator", "ip")
@@ -60,7 +60,8 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			restAddr := fmt.Sprintf(":%d", restPort)
+			listenAddress := viper.GetString(common.FlagRESTAddress)
+			restAddr := fmt.Sprintf("%s:%d", listenAddress, restPort)
 
 			group := fromctx.MustErrGroupFromCtx(ctx)
 

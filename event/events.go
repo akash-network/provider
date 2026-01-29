@@ -3,9 +3,9 @@ package event
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
 // LeaseWon is the data structure that includes leaseID, group and price
@@ -39,6 +39,7 @@ func (ev ManifestReceived) ManifestGroup() *mani.Group {
 type ClusterDeploymentStatus string
 
 const (
+	ClusterDeploymentUnknown ClusterDeploymentStatus = "unknown"
 	// ClusterDeploymentUpdated is used whenever the deployment in the cluster is updated but may not be functional
 	ClusterDeploymentUpdated ClusterDeploymentStatus = "updated"
 	// ClusterDeploymentPending is used when cluster deployment status is pending

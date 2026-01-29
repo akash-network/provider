@@ -2,39 +2,39 @@ package rest
 
 import (
 	"bytes"
-	"crypto/tls"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"testing"
 	"time"
 
-	"github.com/pkg/errors"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 
+	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	qmock "github.com/akash-network/akash-api/go/node/client/v1beta2/mocks"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	types "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	manifestValidation "pkg.akt.dev/go/manifest/v2beta3"
+	qmock "pkg.akt.dev/go/mocks/node/client"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
+	ajwt "pkg.akt.dev/go/util/jwt"
 
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
-
-	"github.com/akash-network/provider"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	pcmock "github.com/akash-network/provider/cluster/mocks"
-	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
-	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
-	clmocks "github.com/akash-network/provider/cluster/types/v1beta3/mocks"
-	pmmock "github.com/akash-network/provider/manifest/mocks"
-	pmock "github.com/akash-network/provider/mocks"
+	pmock "github.com/akash-network/provider/mocks/client"
+	pcmock "github.com/akash-network/provider/mocks/cluster"
+	clmocks "github.com/akash-network/provider/mocks/cluster/types"
+	pmmock "github.com/akash-network/provider/mocks/manifest"
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	"github.com/akash-network/provider/version"
 )
@@ -42,6 +42,14 @@ import (
 const (
 	testSDL     = "../../testdata/sdl/simple.yaml"
 	serviceName = "database"
+)
+
+type routerTestAuth int
+
+const (
+	routerTestAuthNone routerTestAuth = iota
+	routerTestAuthCert
+	routerTestAuthJWT
 )
 
 var errGeneric = errors.New("generic test error")
@@ -59,30 +67,30 @@ func (fkse fakeKubernetesStatusError) Error() string {
 }
 
 type routerTest struct {
-	caddr          sdk.Address
-	paddr          sdk.Address
+	ckey           cryptotypes.PrivKey
+	pkey           cryptotypes.PrivKey
 	pmclient       *pmmock.Client
 	pcclient       *pcmock.Client
 	pclient        *pmock.Client
 	qclient        *qmock.QueryClient
 	clusterService *pcmock.Service
 	hostnameClient *clmocks.HostnameServiceClient
-	gwclient       *client
-	ccert          testutil.TestCertificate
-	pcert          testutil.TestCertificate
+	gwclient       apclient.Client
 	host           *url.URL
 }
 
 // TODO - add some tests in here to make sure the IP operator calls work as intended
-
-func runRouterTest(t *testing.T, authClient bool, fn func(*routerTest)) {
+func runRouterTest(t *testing.T, authTypes []routerTestAuth, fn func(*routerTest, http.Header)) {
 	t.Helper()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	mocks := createMocks()
 
 	mf := &routerTest{
-		caddr:          testutil.AccAddress(t),
-		paddr:          testutil.AccAddress(t),
+		ckey:           testutil.Key(t),
+		pkey:           testutil.Key(t),
 		pmclient:       mocks.pmclient,
 		pcclient:       mocks.pcclient,
 		pclient:        mocks.pclient,
@@ -91,31 +99,65 @@ func runRouterTest(t *testing.T, authClient bool, fn func(*routerTest)) {
 		clusterService: mocks.clusterService,
 	}
 
-	mf.ccert = testutil.Certificate(t, mf.caddr, testutil.CertificateOptionMocks(mocks.qclient))
-	mf.pcert = testutil.Certificate(
-		t,
-		mf.paddr,
-		testutil.CertificateOptionDomains([]string{"localhost", "127.0.0.1"}),
-		testutil.CertificateOptionMocks(mocks.qclient))
-
-	var certs []tls.Certificate
-	if authClient {
-		certs = mf.ccert.Cert
+	keys := []cryptotypes.PrivKey{
+		mf.pkey, mf.ckey,
 	}
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
-		var err error
-		mf.host, err = url.Parse(host)
-		require.NoError(t, err)
+	for _, authType := range authTypes {
+		withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
+			var err error
+			mf.host, err = url.Parse(host)
+			require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, certs)
-		require.NoError(t, err)
-		require.NotNil(t, gclient)
+			var opts []apclient.ClientOption
 
-		mf.gwclient = gclient.(*client)
+			hdr := make(http.Header)
 
-		fn(mf)
-	})
+			addr := sdk.AccAddress(mf.ckey.PubKey().Address())
+
+			switch authType {
+			case routerTestAuthCert:
+				cert := testutil.Certificate(t, addr, testutil.CertificateOptionMocks(mocks.cmocks), testutil.CertificateOptionCache(cquerier))
+				opts = append(opts,
+					apclient.WithAuthCerts(cert.Cert))
+			case routerTestAuthJWT:
+				signer := &testJwtSigner{
+					key:  mf.ckey,
+					addr: addr,
+				}
+
+				opts = append(opts, apclient.WithAuthJWTSigner(signer))
+
+				now := time.Now()
+
+				claims := ajwt.Claims{
+					RegisteredClaims: jwt.RegisteredClaims{
+						Issuer:    addr.String(),
+						IssuedAt:  jwt.NewNumericDate(now),
+						NotBefore: jwt.NewNumericDate(now),
+						ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
+					},
+					Version: "v1",
+					Leases:  ajwt.Leases{Access: ajwt.AccessTypeFull},
+				}
+
+				tok := jwt.NewWithClaims(ajwt.SigningMethodES256K, &claims)
+
+				tokString, err := tok.SignedString(signer)
+				require.NoError(t, err)
+
+				hdr.Set("Authorization", fmt.Sprintf("Bearer %s", tokString))
+			}
+
+			opts = append(opts, apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
+
+			mf.gwclient, err = apclient.NewClient(ctx, sdk.AccAddress(mf.pkey.PubKey().Address()), opts...)
+			require.NoError(t, err)
+			require.NotNil(t, mf.gwclient)
+
+			fn(mf, hdr)
+		})
+	}
 }
 
 func testCertHelper(t *testing.T, test *routerTest) {
@@ -126,9 +168,9 @@ func testCertHelper(t *testing.T, test *routerTest) {
 		mock.AnythingOfType("v2beta2.Manifest"),
 	).Return(nil)
 
-	dseq := uint64(testutil.RandRangeInt(1, 1000))
+	dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
 
-	uri, err := makeURI(test.host, submitManifestPath(dseq))
+	uri, err := apclient.MakeURI(test.host, apclient.SubmitManifestPath(dseq))
 	require.NoError(t, err)
 
 	sdl, err := sdl.ReadFile(testSDL)
@@ -145,43 +187,40 @@ func testCertHelper(t *testing.T, test *routerTest) {
 
 	req.Header.Set("Content-Type", contentTypeJSON)
 
-	_, err = test.gwclient.hclient.Do(req)
-	require.Error(t, err)
-	// return error message looks like
-	// Put "https://127.0.0.1:58536/deployment/652/manifest": tls: unable to verify certificate: x509: cannot validate certificate for 127.0.0.1 because it doesn't contain any IP SANs
-	require.Regexp(t, "^(Put|Get) (\".*\": )tls: unable to verify certificate: .*$", err.Error())
+	rCl := test.gwclient.NewReqClient(context.Background())
+	resp, err := rCl.Do(req)
+	require.NoError(t, err)
+
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
 func TestRouteNotActiveClientCert(t *testing.T) {
 	mocks := createMocks()
 
 	mf := &routerTest{
-		caddr:    testutil.AccAddress(t),
-		paddr:    testutil.AccAddress(t),
+		ckey:     testutil.Key(t),
+		pkey:     testutil.Key(t),
 		pmclient: mocks.pmclient,
 		pcclient: mocks.pcclient,
 		pclient:  mocks.pclient,
 		qclient:  mocks.qclient,
 	}
 
-	mf.ccert = testutil.Certificate(
-		t,
-		mf.caddr,
-		testutil.CertificateOptionMocks(mocks.qclient),
-		testutil.CertificateOptionNotBefore(time.Now().Add(time.Hour*24)),
-	)
-	mf.pcert = testutil.Certificate(t, mf.paddr, testutil.CertificateOptionMocks(mocks.qclient))
+	keys := []cryptotypes.PrivKey{
+		mf.pkey, mf.ckey,
+	}
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
 		require.NoError(t, err)
-		require.NotNil(t, gclient)
-
-		mf.gwclient = gclient.(*client)
+		require.NotNil(t, mf.gwclient)
 
 		testCertHelper(t, mf)
 	})
@@ -191,33 +230,29 @@ func TestRouteExpiredClientCert(t *testing.T) {
 	mocks := createMocks()
 
 	mf := &routerTest{
-		caddr:    testutil.AccAddress(t),
-		paddr:    testutil.AccAddress(t),
+		ckey:     testutil.Key(t),
+		pkey:     testutil.Key(t),
 		pmclient: mocks.pmclient,
 		pcclient: mocks.pcclient,
 		pclient:  mocks.pclient,
 		qclient:  mocks.qclient,
 	}
 
-	mf.ccert = testutil.Certificate(
-		t,
-		mf.caddr,
-		testutil.CertificateOptionMocks(mocks.qclient),
-		testutil.CertificateOptionNotBefore(time.Now().Add(time.Hour*(-48))),
-		testutil.CertificateOptionNotAfter(time.Now().Add(time.Hour*(-24))),
-	)
-	mf.pcert = testutil.Certificate(t, mf.paddr, testutil.CertificateOptionMocks(mocks.qclient))
+	keys := []cryptotypes.PrivKey{
+		mf.pkey, mf.ckey,
+	}
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
 		require.NoError(t, err)
-		require.NotNil(t, gclient)
-
-		mf.gwclient = gclient.(*client)
+		require.NotNil(t, mf.gwclient)
 
 		testCertHelper(t, mf)
 	})
@@ -227,36 +262,29 @@ func TestRouteNotActiveServerCert(t *testing.T) {
 	mocks := createMocks()
 
 	mf := &routerTest{
-		caddr:    testutil.AccAddress(t),
-		paddr:    testutil.AccAddress(t),
+		ckey:     testutil.Key(t),
+		pkey:     testutil.Key(t),
 		pmclient: mocks.pmclient,
 		pcclient: mocks.pcclient,
 		pclient:  mocks.pclient,
 		qclient:  mocks.qclient,
 	}
 
-	mf.ccert = testutil.Certificate(
-		t,
-		mf.caddr,
-		testutil.CertificateOptionMocks(mocks.qclient),
-	)
-	mf.pcert = testutil.Certificate(
-		t,
-		mf.paddr,
-		testutil.CertificateOptionMocks(mocks.qclient),
-		testutil.CertificateOptionNotBefore(time.Now().Add(time.Hour*24)),
-	)
+	keys := []cryptotypes.PrivKey{
+		mf.pkey, mf.ckey,
+	}
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
 		require.NoError(t, err)
-		require.NotNil(t, gclient)
-
-		mf.gwclient = gclient.(*client)
+		require.NotNil(t, mf.gwclient)
 
 		testCertHelper(t, mf)
 	})
@@ -266,60 +294,55 @@ func TestRouteExpiredServerCert(t *testing.T) {
 	mocks := createMocks()
 
 	mf := &routerTest{
-		caddr:    testutil.AccAddress(t),
-		paddr:    testutil.AccAddress(t),
+		ckey:     testutil.Key(t),
+		pkey:     testutil.Key(t),
 		pmclient: mocks.pmclient,
 		pcclient: mocks.pcclient,
 		pclient:  mocks.pclient,
 		qclient:  mocks.qclient,
 	}
 
-	mf.ccert = testutil.Certificate(
-		t,
-		mf.caddr,
-		testutil.CertificateOptionMocks(mocks.qclient),
-	)
-	mf.pcert = testutil.Certificate(
-		t,
-		mf.paddr,
-		testutil.CertificateOptionMocks(mocks.qclient),
-		testutil.CertificateOptionNotBefore(time.Now().Add(time.Hour*(-48))),
-		testutil.CertificateOptionNotAfter(time.Now().Add(time.Hour*(-24))),
-	)
+	keys := []cryptotypes.PrivKey{
+		mf.pkey, mf.ckey,
+	}
 
-	withServer(t, mf.paddr, mocks.pclient, mocks.qclient, mf.pcert.Cert, func(host string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
 		var err error
 		mf.host, err = url.Parse(host)
 		require.NoError(t, err)
 
-		gclient, err := NewClient(mocks.qclient, mf.paddr, mf.ccert.Cert)
+		mf.gwclient, err = apclient.NewClient(context.Background(), sdk.AccAddress(mf.pkey.PubKey().Address()), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
 		require.NoError(t, err)
-		require.NotNil(t, gclient)
-
-		mf.gwclient = gclient.(*client)
+		require.NotNil(t, mf.gwclient)
 
 		testCertHelper(t, mf)
 	})
 }
 
 func TestRouteDoesNotExist(t *testing.T) {
-	runRouterTest(t, false, func(test *routerTest) {
-		uri, err := makeURI(test.host, "foobar")
+	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
+		uri, err := apclient.MakeURI(test.host, "foobar")
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
+
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 
 func TestRouteVersionOK(t *testing.T) {
-	runRouterTest(t, false, func(test *routerTest) {
+	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
 		// these are set at build time
 		version.Version = "akashTest"
 		version.Commit = "testCommit"
@@ -348,15 +371,16 @@ func TestRouteVersionOK(t *testing.T) {
 
 		test.pcclient.On("KubeVersion").Return(status.Kube, nil)
 
-		uri, err := makeURI(test.host, versionPath())
+		uri, err := apclient.MakeURI(test.host, apclient.VersionPath())
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
-
+		req.Header = hdr
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		var data versionInfo
@@ -371,8 +395,8 @@ func TestRouteVersionOK(t *testing.T) {
 }
 
 func TestRouteStatusOK(t *testing.T) {
-	runRouterTest(t, false, func(test *routerTest) {
-		status := &provider.Status{
+	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
+		status := &apclient.ProviderStatus{
 			Cluster:               nil,
 			Bidengine:             nil,
 			Manifest:              nil,
@@ -381,15 +405,17 @@ func TestRouteStatusOK(t *testing.T) {
 
 		test.pclient.On("Status", mock.Anything).Return(status, nil)
 
-		uri, err := makeURI(test.host, statusPath())
+		uri, err := apclient.MakeURI(test.host, apclient.StatusPath())
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		data := make(map[string]interface{})
@@ -403,17 +429,19 @@ func TestRouteStatusOK(t *testing.T) {
 }
 
 func TestRouteStatusFails(t *testing.T) {
-	runRouterTest(t, false, func(test *routerTest) {
+	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
 		test.pclient.On("Status", mock.Anything).Return(nil, errGeneric)
 
-		uri, err := makeURI(test.host, statusPath())
+		uri, err := apclient.MakeURI(test.host, apclient.StatusPath())
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
@@ -424,14 +452,14 @@ func TestRouteStatusFails(t *testing.T) {
 }
 
 func TestRouteValidateOK(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		validate := provider.ValidateGroupSpecResult{
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		validate := apclient.ValidateGroupSpecResult{
 			MinBidPrice: testutil.AkashDecCoin(t, 200),
 		}
 
 		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(validate, nil)
 
-		uri, err := makeURI(test.host, validatePath())
+		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
 		gspec := testutil.GroupSpec(t)
@@ -440,10 +468,12 @@ func TestRouteValidateOK(t *testing.T) {
 
 		req, err := http.NewRequest("GET", uri, bytes.NewReader(bgspec))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		data := make(map[string]interface{})
@@ -454,14 +484,14 @@ func TestRouteValidateOK(t *testing.T) {
 }
 
 func TestRouteValidateUnauthorized(t *testing.T) {
-	runRouterTest(t, false, func(test *routerTest) {
-		validate := provider.ValidateGroupSpecResult{
+	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
+		validate := apclient.ValidateGroupSpecResult{
 			MinBidPrice: testutil.AkashDecCoin(t, 200),
 		}
 
 		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(validate, nil)
 
-		uri, err := makeURI(test.host, validatePath())
+		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
 		gspec := testutil.GroupSpec(t)
@@ -470,20 +500,22 @@ func TestRouteValidateUnauthorized(t *testing.T) {
 
 		req, err := http.NewRequest("GET", uri, bytes.NewReader(bgspec))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }
 
 func TestRouteValidateFails(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(provider.ValidateGroupSpecResult{}, errGeneric)
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errGeneric)
 
-		uri, err := makeURI(test.host, validatePath())
+		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
 		gspec := testutil.GroupSpec(t)
@@ -492,9 +524,11 @@ func TestRouteValidateFails(t *testing.T) {
 
 		req, err := http.NewRequest("GET", uri, bytes.NewReader(bgspec))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 
@@ -505,17 +539,18 @@ func TestRouteValidateFails(t *testing.T) {
 }
 
 func TestRouteValidateFailsEmptyBody(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		test.pclient.On("Validate", mock.Anything, mock.Anything).Return(provider.ValidateGroupSpecResult{}, errGeneric)
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		test.pclient.On("Validate", mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errGeneric)
 
-		uri, err := makeURI(test.host, validatePath())
+		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
-
+		req.Header = hdr
 		req.Header.Set("Content-Type", contentTypeJSON)
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
@@ -526,19 +561,21 @@ func TestRouteValidateFailsEmptyBody(t *testing.T) {
 }
 
 func TestRoutePutManifestOK(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+
+		dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
 		test.pmclient.On(
 			"Submit",
 			mock.Anything,
 			dtypes.DeploymentID{
-				Owner: test.caddr.String(),
+				Owner: caddr.String(),
 				DSeq:  dseq,
 			},
-			mock.AnythingOfType("v2beta2.Manifest"),
+			mock.AnythingOfType("v2beta3.Manifest"),
 		).Return(nil)
 
-		uri, err := makeURI(test.host, submitManifestPath(dseq))
+		uri, err := apclient.MakeURI(test.host, apclient.SubmitManifestPath(dseq))
 		require.NoError(t, err)
 
 		sdl, err := sdl.ReadFile(testSDL)
@@ -552,10 +589,12 @@ func TestRoutePutManifestOK(t *testing.T) {
 
 		req, err := http.NewRequest("PUT", uri, bytes.NewBuffer(buf))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -567,19 +606,21 @@ func TestRoutePutManifestOK(t *testing.T) {
 
 func TestRoutePutInvalidManifest(t *testing.T) {
 	_ = dtypes.DeploymentID{}
-	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+
+		dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
 		test.pmclient.On("Submit",
 			mock.Anything,
 			dtypes.DeploymentID{
-				Owner: test.caddr.String(),
+				Owner: caddr.String(),
 				DSeq:  dseq,
 			},
 
-			mock.AnythingOfType("v2beta2.Manifest"),
+			mock.AnythingOfType("v2beta3.Manifest"),
 		).Return(manifestValidation.ErrInvalidManifest)
 
-		uri, err := makeURI(test.host, submitManifestPath(dseq))
+		uri, err := apclient.MakeURI(test.host, apclient.SubmitManifestPath(dseq))
 		require.NoError(t, err)
 
 		sdl, err := sdl.ReadFile(testSDL)
@@ -593,10 +634,12 @@ func TestRoutePutInvalidManifest(t *testing.T) {
 
 		req, err := http.NewRequest("PUT", uri, bytes.NewBuffer(buf))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 
@@ -607,8 +650,8 @@ func TestRoutePutInvalidManifest(t *testing.T) {
 }
 
 func mockManifestGroupsForRouterTest(rt *routerTest, leaseID mtypes.LeaseID) {
-	status := make(map[string]*ctypes.ServiceStatus)
-	status[testServiceName] = &ctypes.ServiceStatus{
+	status := make(map[string]*apclient.ServiceStatus)
+	status[testServiceName] = &apclient.ServiceStatus{
 		Name:               testServiceName,
 		Available:          8,
 		Total:              8,
@@ -666,13 +709,16 @@ func mockManifestGroupsForRouterTest(rt *routerTest, leaseID mtypes.LeaseID) {
 }
 
 func TestRouteLeaseStatusOk(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+
 		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = test.caddr.String()
-		leaseID.Provider = test.paddr.String()
+		leaseID.Owner = caddr.String()
+		leaseID.Provider = paddr.String()
 		mockManifestGroupsForRouterTest(test, leaseID)
 
-		uri, err := makeURI(test.host, leaseStatusPath(leaseID))
+		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
 		require.NoError(t, err)
 
 		parsedSDL, err := sdl.ReadFile(testSDL)
@@ -686,10 +732,12 @@ func TestRouteLeaseStatusOk(t *testing.T) {
 
 		req, err := http.NewRequest("GET", uri, bytes.NewBuffer(buf))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -701,10 +749,13 @@ func TestRouteLeaseStatusOk(t *testing.T) {
 }
 
 func TestRouteLeaseNotInKubernetes(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+
 		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = test.caddr.String()
-		leaseID.Provider = test.paddr.String()
+		leaseID.Owner = caddr.String()
+		leaseID.Provider = paddr.String()
 
 		kubeStatus := fakeKubernetesStatusError{
 			status: metav1.Status{
@@ -720,7 +771,7 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, kubeStatus)
 		mockManifestGroupsForRouterTest(test, leaseID)
 
-		uri, err := makeURI(test.host, leaseStatusPath(leaseID))
+		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
 		require.NoError(t, err)
 
 		parsedSDL, err := sdl.ReadFile(testSDL)
@@ -734,32 +785,39 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 
 		req, err := http.NewRequest("GET", uri, bytes.NewBuffer(buf))
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
 
 func TestRouteLeaseStatusErr(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+
 		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = test.caddr.String()
-		leaseID.Provider = test.paddr.String()
+		leaseID.Owner = caddr.String()
+		leaseID.Provider = paddr.String()
 		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, errGeneric)
 		mockManifestGroupsForRouterTest(test, leaseID)
 
-		uri, err := makeURI(test.host, leaseStatusPath(leaseID))
+		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
@@ -770,12 +828,15 @@ func TestRouteLeaseStatusErr(t *testing.T) {
 }
 
 func TestRouteServiceStatusOK(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
 
-		status := &clustertypes.ServiceStatus{
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
+
+		status := &apclient.ServiceStatus{
 			Name:               "",
 			Available:          0,
 			Total:              0,
@@ -786,30 +847,32 @@ func TestRouteServiceStatusOK(t *testing.T) {
 			ReadyReplicas:      0,
 			AvailableReplicas:  0,
 		}
-		test.pcclient.On("ServiceStatus", mock.Anything, types.LeaseID{
-			Owner:    test.caddr.String(),
+		test.pcclient.On("ServiceStatus", mock.Anything, mtypes.LeaseID{
+			Owner:    caddr.String(),
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}, serviceName).Return(status, nil)
 
-		lid := types.LeaseID{
+		lid := mtypes.LeaseID{
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}
 
-		uri, err := makeURI(test.host, serviceStatusPath(lid, serviceName))
+		uri, err := apclient.MakeURI(test.host, apclient.ServiceStatusPath(lid, serviceName))
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -821,35 +884,40 @@ func TestRouteServiceStatusOK(t *testing.T) {
 }
 
 func TestRouteServiceStatusNoDeployment(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
 
-		test.pcclient.On("ServiceStatus", mock.Anything, types.LeaseID{
-			Owner:    test.caddr.String(),
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
+
+		test.pcclient.On("ServiceStatus", mock.Anything, mtypes.LeaseID{
+			Owner:    caddr.String(),
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}, serviceName).Return(nil, kubeclienterrors.ErrNoDeploymentForLease)
 
-		lid := types.LeaseID{
+		lid := mtypes.LeaseID{
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}
 
-		uri, err := makeURI(test.host, serviceStatusPath(lid, serviceName))
+		uri, err := apclient.MakeURI(test.host, apclient.ServiceStatusPath(lid, serviceName))
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -860,10 +928,13 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 }
 
 func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
 
 		kubeStatus := fakeKubernetesStatusError{
 			status: metav1.Status{
@@ -877,30 +948,32 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 			},
 		}
 
-		test.pcclient.On("ServiceStatus", mock.Anything, types.LeaseID{
-			Owner:    test.caddr.String(),
+		test.pcclient.On("ServiceStatus", mock.Anything, mtypes.LeaseID{
+			Owner:    caddr.String(),
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}, serviceName).Return(nil, kubeStatus)
 
-		lid := types.LeaseID{
+		lid := mtypes.LeaseID{
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}
 
-		uri, err := makeURI(test.host, serviceStatusPath(lid, serviceName))
+		uri, err := apclient.MakeURI(test.host, apclient.ServiceStatusPath(lid, serviceName))
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -911,35 +984,40 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 }
 
 func TestRouteServiceStatusError(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
-		dseq := uint64(testutil.RandRangeInt(1, 1000))
-		oseq := uint32(testutil.RandRangeInt(2000, 3000))
-		gseq := uint32(testutil.RandRangeInt(4000, 5000))
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
 
-		test.pcclient.On("ServiceStatus", mock.Anything, types.LeaseID{
-			Owner:    test.caddr.String(),
+		dseq := uint64(testutil.RandRangeInt(1, 1000))    // nolint: gosec
+		oseq := uint32(testutil.RandRangeInt(2000, 3000)) // nolint: gosec
+		gseq := uint32(testutil.RandRangeInt(4000, 5000)) // nolint: gosec
+
+		test.pcclient.On("ServiceStatus", mock.Anything, mtypes.LeaseID{
+			Owner:    caddr.String(),
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}, serviceName).Return(nil, errGeneric)
 
-		lid := types.LeaseID{
+		lid := mtypes.LeaseID{
 			DSeq:     dseq,
 			GSeq:     gseq,
 			OSeq:     oseq,
-			Provider: test.paddr.String(),
+			Provider: paddr.String(),
 		}
 
-		uri, err := makeURI(test.host, serviceStatusPath(lid, serviceName))
+		uri, err := apclient.MakeURI(test.host, apclient.ServiceStatusPath(lid, serviceName))
 		require.NoError(t, err)
 
 		req, err := http.NewRequest("GET", uri, nil)
 		require.NoError(t, err)
+		req.Header = hdr
 
 		req.Header.Set("Content-Type", contentTypeJSON)
 
-		resp, err := test.gwclient.hclient.Do(req)
+		rCl := test.gwclient.NewReqClient(context.Background())
+		resp, err := rCl.Do(req)
 		require.NoError(t, err)
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)

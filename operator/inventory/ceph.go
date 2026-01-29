@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
 	"github.com/go-logr/logr"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
@@ -19,6 +18,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -361,7 +362,8 @@ func (c *ceph) run(startch chan<- struct{}) error {
 							result = append(result, inventory.Storage{
 								Quantity: inventory.ResourcePair{
 									Allocated:   &allocated,
-									Allocatable: resource.NewQuantity(int64(pool.Stats.MaxAvail), resource.DecimalSI),
+									Allocatable: resource.NewQuantity(int64(pool.Stats.MaxAvail), resource.DecimalSI), // nolint: gosec
+									Capacity:    resource.NewQuantity(int64(pool.Stats.MaxAvail), resource.DecimalSI), // nolint: gosec
 								},
 								Info: inventory.StorageInfo{
 									Class: class,

@@ -7,8 +7,8 @@ import (
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -63,8 +63,7 @@ func (b *barrier) waitUntilClear(ctx context.Context) error {
 	for {
 		select {
 		case <-ticker.C:
-			clear := 0 == atomic.LoadInt32(&b.active)
-			if clear {
+			if atomic.LoadInt32(&b.active) == 0 {
 				return nil
 			}
 		case <-ctx.Done():

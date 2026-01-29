@@ -11,9 +11,10 @@ import (
 	"strings"
 	"time"
 
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/sdl"
+	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/sdl"
 
 	"github.com/akash-network/provider/cluster/util"
 )
@@ -51,15 +52,15 @@ func MakeShellScriptPricing(path string, processLimit uint, runtimeLimit time.Du
 	return result, nil
 }
 
-func parseCPU(res *atypes.CPU) uint64 {
+func parseCPU(res *rtypes.CPU) uint64 {
 	return res.Units.Val.Uint64()
 }
 
-func parseMemory(res *atypes.Memory) uint64 {
+func parseMemory(res *rtypes.Memory) uint64 {
 	return res.Quantity.Val.Uint64()
 }
 
-func parseGPU(resource *atypes.GPU) gpuElement {
+func parseGPU(resource *rtypes.GPU) gpuElement {
 	res := gpuElement{
 		Units: resource.Units.Value(),
 		Attributes: gpuAttributes{
@@ -106,7 +107,7 @@ func parseGPU(resource *atypes.GPU) gpuElement {
 	return res
 }
 
-func parseStorage(resource atypes.Volumes) []storageElement {
+func parseStorage(resource rtypes.Volumes) []storageElement {
 	res := make([]storageElement, 0, len(resource))
 
 	for _, storage := range resource {
@@ -126,42 +127,11 @@ func parseStorage(resource atypes.Volumes) []storageElement {
 	return res
 }
 
-func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (sdk.DecCoin, error) {
+func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, r Request) (sdk.DecCoin, error) {
+	d := newDataForScript(r)
+
 	buf := &bytes.Buffer{}
-
-	dataForScript := &dataForScript{
-		Resources: make([]dataForScriptElement, len(req.GSpec.Resources)),
-		Price:     req.GSpec.Price(),
-	}
-
-	if req.PricePrecision > 0 {
-		dataForScript.PricePrecision = &req.PricePrecision
-	}
-
-	// iterate over everything & sum it up
-	for i, group := range req.GSpec.Resources {
-		groupCount := group.Count
-
-		cpuQuantity := parseCPU(group.Resources.CPU)
-		gpuQuantity := parseGPU(group.Resources.GPU)
-		memoryQuantity := parseMemory(group.Resources.Memory)
-		storageQuantity := parseStorage(group.Resources.Storage)
-		endpointQuantity := len(group.Resources.Endpoints)
-
-		dataForScript.Resources[i] = dataForScriptElement{
-			CPU:              cpuQuantity,
-			GPU:              gpuQuantity,
-			Memory:           memoryQuantity,
-			Storage:          storageQuantity,
-			Count:            groupCount,
-			EndpointQuantity: endpointQuantity,
-			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, atypes.Endpoint_LEASED_IP),
-		}
-	}
-
-	encoder := json.NewEncoder(buf)
-	err := encoder.Encode(dataForScript)
-	if err != nil {
+	if err := json.NewEncoder(buf).Encode(&d); err != nil {
 		return sdk.DecCoin{}, err
 	}
 
@@ -174,21 +144,21 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 
 	processCtx, cancel := context.WithTimeout(ctx, ssp.runtimeLimit)
 	defer cancel()
-	cmd := exec.CommandContext(processCtx, ssp.path) //nolint:gosec
+	cmd := exec.CommandContext(processCtx, ssp.path) // nolint: gosec
 	cmd.Stdin = buf
 	outputBuf := &bytes.Buffer{}
 	cmd.Stdout = outputBuf
 	stderrBuf := &bytes.Buffer{}
 	cmd.Stderr = stderrBuf
 
-	denom := req.GSpec.Price().Denom
+	denom := r.GSpec.Price().Denom
 
 	subprocEnv := os.Environ()
-	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", req.Owner))
+	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_OWNER=%s", r.Owner))
 	subprocEnv = append(subprocEnv, fmt.Sprintf("AKASH_DENOM=%s", denom))
 	cmd.Env = subprocEnv
 
-	err = cmd.Run()
+	err := cmd.Run()
 
 	if ctxErr := processCtx.Err(); ctxErr != nil {
 		return sdk.DecCoin{}, ctxErr
@@ -204,7 +174,7 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 		return sdk.DecCoin{}, fmt.Errorf("bid script must return amount:%w%w", io.EOF, ErrBidQuantityInvalid)
 	}
 
-	price, err := sdk.NewDecFromStr(valueStr)
+	price, err := sdkmath.LegacyNewDecFromStr(valueStr)
 	if err != nil {
 		return sdk.DecCoin{}, fmt.Errorf("%w%w", err, ErrBidQuantityInvalid)
 	}
@@ -218,4 +188,43 @@ func (ssp shellScriptPricing) CalculatePrice(ctx context.Context, req Request) (
 	}
 
 	return sdk.NewDecCoinFromDec(denom, price), nil
+}
+
+func newDataForScript(r Request) dataForScript {
+	d := dataForScript{
+		Resources: make([]dataForScriptElement, len(r.GSpec.Resources)),
+		Price:     r.GSpec.Price(),
+	}
+
+	if r.PricePrecision > 0 {
+		d.PricePrecision = &r.PricePrecision
+	}
+
+	resources := r.GSpec.Resources
+	if len(r.AllocatedResources) > 0 {
+		resources = r.AllocatedResources
+	}
+
+	// iterate over everything & sum it up
+	for i, group := range resources {
+		groupCount := group.Count
+
+		cpuQuantity := parseCPU(group.CPU)
+		gpuQuantity := parseGPU(group.GPU)
+		memoryQuantity := parseMemory(group.Memory)
+		storageQuantity := parseStorage(group.Storage)
+		endpointQuantity := len(group.Endpoints)
+
+		d.Resources[i] = dataForScriptElement{
+			CPU:              cpuQuantity,
+			GPU:              gpuQuantity,
+			Memory:           memoryQuantity,
+			Storage:          storageQuantity,
+			Count:            groupCount,
+			EndpointQuantity: endpointQuantity,
+			IPLeaseQuantity:  util.GetEndpointQuantityOfResourceUnits(group.Resources, rtypes.Endpoint_LEASED_IP),
+		}
+	}
+
+	return d
 }

@@ -5,19 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/cosmos/cosmos-sdk/server"
-
-	"github.com/akash-network/node/testutil"
+	"pkg.akt.dev/go/testutil"
 
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 )
@@ -34,16 +32,16 @@ type fakeOperator struct {
 }
 
 func (fio *fakeOperator) setHealthStatus(status int) {
-	atomic.StoreUint32(&fio.healthStatus, uint32(status))
+	atomic.StoreUint32(&fio.healthStatus, uint32(status)) // nolint: gosec
 }
 
 func (fio *fakeOperator) setIPLeaseStatusResponse(status int, body []byte) {
-	atomic.StoreUint32(&fio.ipLeaseStatusStatus, uint32(status))
+	atomic.StoreUint32(&fio.ipLeaseStatusStatus, uint32(status)) // nolint: gosec
 	fio.ipLeaseStatusResponse.Store(body)
 }
 
 func (fio *fakeOperator) setIPUsageResponse(status int, body []byte) {
-	atomic.StoreUint32(&fio.ipUsageStatus, uint32(status))
+	atomic.StoreUint32(&fio.ipUsageStatus, uint32(status)) // nolint: gosec
 	fio.ipUsageResponse.Store(body)
 }
 
@@ -58,12 +56,12 @@ func fakeIPOperatorHandler() *fakeOperator {
 	fake.ipUsageResponse.Store([]byte{})
 
 	fake.mux.HandleFunc("/health",
-		func(rw http.ResponseWriter, req *http.Request) {
+		func(rw http.ResponseWriter, _ *http.Request) {
 			status := atomic.LoadUint32(&fake.healthStatus)
 			rw.WriteHeader(int(status))
 		})
 
-	fake.mux.HandleFunc("/ip-lease-status/", func(rw http.ResponseWriter, req *http.Request) {
+	fake.mux.HandleFunc("/ip-lease-status/", func(rw http.ResponseWriter, _ *http.Request) {
 		status := atomic.LoadUint32(&fake.ipLeaseStatusStatus)
 		rw.WriteHeader(int(status))
 
@@ -71,7 +69,7 @@ func fakeIPOperatorHandler() *fakeOperator {
 		_, _ = io.Copy(rw, bytes.NewReader(body))
 	})
 
-	fake.mux.HandleFunc("/usage", func(rw http.ResponseWriter, req *http.Request) {
+	fake.mux.HandleFunc("/usage", func(rw http.ResponseWriter, _ *http.Request) {
 		status := atomic.LoadUint32(&fake.ipUsageStatus)
 		rw.WriteHeader(int(status))
 
@@ -83,12 +81,14 @@ func fakeIPOperatorHandler() *fakeOperator {
 }
 
 func TestIPOperatorClient(t *testing.T) {
-	_, port, err := server.FreeTCPAddr()
+	ports, err := testutil.GetUsablePorts(1)
 	require.NoError(t, err)
 
 	fake := fakeIPOperatorHandler()
+
+	port := ports.MustGetPort()
 	fakeServer := &http.Server{
-		Addr:         "localhost:" + port,
+		Addr:         fmt.Sprintf("localhost:%d", port),
 		Handler:      fake.mux,
 		ReadTimeout:  1 * time.Second,
 		WriteTimeout: 1 * time.Second,
@@ -108,12 +108,10 @@ func TestIPOperatorClient(t *testing.T) {
 	time.Sleep(time.Second)
 
 	logger := testutil.Logger(t)
-	portNumber, err := strconv.Atoi(port)
-	require.NoError(t, err)
 
 	srv := net.SRV{
 		Target:   "localhost",
-		Port:     uint16(portNumber),
+		Port:     uint16(port), // nolint: gosec
 		Priority: 0,
 		Weight:   0,
 	}

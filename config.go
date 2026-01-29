@@ -5,35 +5,28 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/akash-api/go/node/types/constants"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1beta5"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/node/types/constants"
 
 	"github.com/akash-network/provider/bidengine"
+	"github.com/akash-network/provider/cluster"
 )
 
 type Config struct {
-	ClusterWaitReadyDuration        time.Duration
-	ClusterPublicHostname           string
-	ClusterExternalPortQuantity     uint
-	InventoryResourcePollPeriod     time.Duration
-	InventoryResourceDebugFrequency uint
-	BidPricingStrategy              bidengine.BidPricingStrategy
-	BidDeposit                      sdk.Coin
-	CPUCommitLevel                  float64
-	MemoryCommitLevel               float64
-	StorageCommitLevel              float64
-	MaxGroupVolumes                 int
-	BlockedHostnames                []string
-	BidTimeout                      time.Duration
-	ManifestTimeout                 time.Duration
-	BalanceCheckerCfg               BalanceCheckerConfig
-	Attributes                      types.Attributes
-	DeploymentIngressStaticHosts    bool
-	DeploymentIngressDomain         string
-	ClusterSettings                 map[interface{}]interface{}
-	RPCQueryTimeout                 time.Duration
-	CachedResultMaxAge              time.Duration
+	ClusterWaitReadyDuration    time.Duration
+	ClusterPublicHostname       string
+	ClusterExternalPortQuantity uint
+	BidPricingStrategy          bidengine.BidPricingStrategy
+	BidDeposit                  sdk.Coin
+	BidTimeout                  time.Duration
+	ManifestTimeout             time.Duration
+	BalanceCheckerCfg           BalanceCheckerConfig
+	Attributes                  attrtypes.Attributes
+	MaxGroupVolumes             int
+	RPCQueryTimeout             time.Duration
+	CachedResultMaxAge          time.Duration
+	cluster.Config
 }
 
 func NewDefaultConfig() Config {
@@ -45,5 +38,6 @@ func NewDefaultConfig() Config {
 			WithdrawalPeriod:        24 * time.Hour,
 		},
 		MaxGroupVolumes: constants.DefaultMaxGroupVolumes,
+		Config:          cluster.NewDefaultConfig(),
 	}
 }

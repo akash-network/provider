@@ -14,9 +14,9 @@ PRICE          ?= 10uakt
 CERT_HOSTNAME  ?= localhost
 LEASE_SERVICES ?= web
 
-JWT_AUTH_HOSTNAME    ?= localhost
-JWT_AUTH_HOST        ?= $(JWT_AUTH_HOSTNAME):8444
 RESOURCE_SERVER_HOST ?= localhost:8445
+
+GW_AUTH_TYPE   ?= jwt
 
 .PHONY: multisig-send
 multisig-send:
@@ -80,7 +80,17 @@ send-manifest:
 	$(PROVIDER_SERVICES) send-manifest "$(SDL_PATH)" \
 		--dseq "$(DSEQ)"     \
 		--from "$(KEY_NAME)" \
-		--provider "$(PROVIDER_ADDRESS)"
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: get-manifest
+get-manifest:
+	$(PROVIDER_SERVICES) get-manifest \
+		--dseq "$(DSEQ)"     \
+		--from "$(KEY_NAME)" \
+		--provide   "$(PROVIDER_ADDRESS)" \
+		--auth-type "$(GW_AUTH_TYPE)"
+
 
 .PHONY: deployment-create
 deployment-create:
@@ -88,15 +98,9 @@ deployment-create:
 		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"
 
-.PHONY: deploy-create
-deploy-create:
-	$(AKASH) deploy create "$(SDL_PATH)" \
-		--dseq "$(DSEQ)" \
-		--from "$(KEY_NAME)"
-
 .PHONY: deployment-deposit
 deployment-deposit:
-	$(AKASH) tx deployment deposit "$(PRICE)" \
+	$(AKASH) tx escrow deposit deployment "$(PRICE)" \
 		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"
 
@@ -275,9 +279,10 @@ provider-lease-logs:
 	$(PROVIDER_SERVICES) lease-logs \
 		-f \
 		--service="$(LEASE_SERVICES)" \
-		--dseq "$(DSEQ)"     \
-		--from "$(KEY_NAME)" \
-		--provider "$(PROVIDER_ADDRESS)"
+		--dseq      "$(DSEQ)"     \
+		--from      "$(KEY_NAME)" \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: provider-lease-events
 provider-lease-events:
@@ -285,16 +290,18 @@ provider-lease-events:
 		-f \
 		--dseq "$(DSEQ)"     \
 		--from "$(KEY_NAME)" \
-		--provider "$(PROVIDER_ADDRESS)"
+		--provider "$(PROVIDER_ADDRESS)" \
+		--auth-type "$(GW_AUTH_TYPE)"
 
-PHONY: provider-lease-status
+.PHONY: provider-lease-status
 provider-lease-status:
 	$(PROVIDER_SERVICES) lease-status \
 		--dseq      "$(DSEQ)"        \
 		--gseq      "$(GSEQ)"        \
 		--oseq      "$(OSEQ)"        \
 		--from      "$(KEY_NAME)"    \
-		--provider  "$(PROVIDER_ADDRESS)"
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type=$(GW_AUTH_TYPE)
 
 .PHONY: provider-service-status
 provider-service-status:
@@ -303,4 +310,5 @@ provider-service-status:
 		--gseq      "$(GSEQ)"        \
 		--oseq      "$(OSEQ)"        \
 		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)"
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type "$(GW_AUTH_TYPE)"

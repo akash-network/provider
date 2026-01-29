@@ -2,23 +2,22 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/pkg/errors"
 	tpubsub "github.com/troian/pubsub"
 
 	"github.com/cosmos/cosmos-sdk/client"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	bankTypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
-
-	"github.com/akash-network/node/pubsub"
+	aclient "pkg.akt.dev/go/node/client/discovery"
+	sclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
 
 	"github.com/akash-network/provider/bidengine"
-	aclient "github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/manifest"
@@ -26,22 +25,21 @@ import (
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
+
+	"pkg.akt.dev/go/util/pubsub"
 )
 
 // ValidateClient is the interface to check if provider will bid on given groupspec
 type ValidateClient interface {
-	Validate(context.Context, sdk.Address, dtypes.GroupSpec) (ValidateGroupSpecResult, error)
+	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error)
 }
 
 // StatusClient is the interface which includes status of service
-//
-//go:generate mockery --name StatusClient
 type StatusClient interface {
-	Status(context.Context) (*Status, error)
+	Status(context.Context) (*apclient.ProviderStatus, error)
 	StatusV1(ctx context.Context) (*provider.Status, error)
 }
 
-//go:generate mockery --name Client
 type Client interface {
 	StatusClient
 	ValidateClient
@@ -60,11 +58,11 @@ type Service interface {
 	Done() <-chan struct{}
 }
 
-// NewService creates and returns new Service instance
+// NewService creates and returns a new Service instance
 // Simple wrapper around various services needed for running a provider.
 func NewService(ctx context.Context,
 	cctx client.Context,
-	accAddr sdk.AccAddress,
+	accAddr sdktypes.AccAddress,
 	session session.Session,
 	bus pubsub.Bus,
 	cclient cluster.Client,
@@ -74,39 +72,27 @@ func NewService(ctx context.Context,
 
 	session = session.ForModule("provider-service")
 
-	clusterConfig := cluster.NewDefaultConfig()
-	clusterConfig.InventoryResourcePollPeriod = cfg.InventoryResourcePollPeriod
-	clusterConfig.InventoryResourceDebugFrequency = cfg.InventoryResourceDebugFrequency
-	clusterConfig.InventoryExternalPortQuantity = cfg.ClusterExternalPortQuantity
-	clusterConfig.CPUCommitLevel = cfg.CPUCommitLevel
-	clusterConfig.MemoryCommitLevel = cfg.MemoryCommitLevel
-	clusterConfig.StorageCommitLevel = cfg.StorageCommitLevel
-	clusterConfig.BlockedHostnames = cfg.BlockedHostnames
-	clusterConfig.DeploymentIngressStaticHosts = cfg.DeploymentIngressStaticHosts
-	clusterConfig.DeploymentIngressDomain = cfg.DeploymentIngressDomain
-	clusterConfig.ClusterSettings = cfg.ClusterSettings
-
 	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 
-	bc, err := newBalanceChecker(ctx, bankTypes.NewQueryClient(cctx), cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
+	bcSvc, err := newBalanceChecker(ctx, cl, accAddr, session, bus, cfg.BalanceCheckerCfg)
 	if err != nil {
 		session.Log().Error("starting balance checker", "err", err)
 		cancel()
 		return nil, err
 	}
 
-	cluster, err := cluster.NewService(ctx, session, bus, cclient, waiter, clusterConfig)
+	clusterSvc, err := cluster.NewService(ctx, session, bus, cclient, waiter, cfg.Config)
 	if err != nil {
 		cancel()
-		<-bc.lc.Done()
+		<-bcSvc.lc.Done()
 		return nil, err
 	}
 
-	bidengine, err := bidengine.NewService(ctx, session, cluster, bus, waiter, bidengine.Config{
+	bidengineSvc, err := bidengine.NewService(ctx, cl, session, clusterSvc, bus, waiter, bidengine.Config{
 		PricingStrategy: cfg.BidPricingStrategy,
 		Deposit:         cfg.BidDeposit,
 		BidTimeout:      cfg.BidTimeout,
@@ -117,9 +103,9 @@ func NewService(ctx context.Context,
 		errmsg := "creating bidengine service"
 		session.Log().Error(errmsg, "err", err)
 		cancel()
-		<-cluster.Done()
-		<-bc.lc.Done()
-		return nil, errors.Wrap(err, errmsg)
+		<-clusterSvc.Done()
+		<-bcSvc.lc.Done()
+		return nil, fmt.Errorf("%w: %s", err, errmsg)
 	}
 
 	manifestConfig := manifest.ServiceConfig{
@@ -129,26 +115,27 @@ func NewService(ctx context.Context,
 		CachedResultMaxAge:                cfg.CachedResultMaxAge,
 	}
 
-	manifest, err := manifest.NewService(ctx, session, bus, cluster.HostnameService(), manifestConfig)
+	manifestSvc, err := manifest.NewService(ctx, session, bus, clusterSvc.HostnameService(), manifestConfig)
 	if err != nil {
 		session.Log().Error("creating manifest handler", "err", err)
 		cancel()
-		<-cluster.Done()
-		<-bidengine.Done()
-		<-bc.lc.Done()
+		<-clusterSvc.Done()
+		<-bidengineSvc.Done()
+		<-bcSvc.lc.Done()
 		return nil, err
 	}
 
 	svc := &service{
 		session:   session,
 		bus:       bus,
-		cluster:   cluster,
+		cluster:   clusterSvc,
+		aqc:       cl,
 		cclient:   cclient,
-		bidengine: bidengine,
-		manifest:  manifest,
+		bidengine: bidengineSvc,
+		manifest:  manifestSvc,
 		ctx:       ctx,
 		cancel:    cancel,
-		bc:        bc,
+		bc:        bcSvc,
 		lc:        lifecycle.New(),
 		config:    cfg,
 	}
@@ -165,6 +152,7 @@ type service struct {
 	session session.Session
 	bus     pubsub.Bus
 	cclient cluster.Client
+	aqc     sclient.QueryClient
 
 	cluster   cluster.Service
 	bidengine bidengine.Service
@@ -201,44 +189,44 @@ func (s *service) Cluster() cluster.Client {
 	return s.cclient
 }
 
-func (s *service) Status(ctx context.Context) (*Status, error) {
-	cluster, err := s.cluster.Status(ctx)
+func (s *service) Status(ctx context.Context) (*apclient.ProviderStatus, error) {
+	clusterSt, err := s.cluster.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	bidengine, err := s.bidengine.Status(ctx)
+	bidengineSt, err := s.bidengine.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := s.manifest.Status(ctx)
+	manifestSt, err := s.manifest.Status(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &Status{
-		Cluster:               cluster,
-		Bidengine:             bidengine,
-		Manifest:              manifest,
+	return &apclient.ProviderStatus{
+		Cluster:               clusterSt,
+		Bidengine:             bidengineSt,
+		Manifest:              manifestSt,
 		ClusterPublicHostname: s.config.ClusterPublicHostname,
 	}, nil
 }
 
 func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
-	cluster, err := s.cluster.StatusV1(ctx)
+	clusterSt, err := s.cluster.StatusV1(ctx)
 	if err != nil {
 		return nil, err
 	}
-	bidengine, err := s.bidengine.StatusV1(ctx)
+	bidengineSt, err := s.bidengine.StatusV1(ctx)
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := s.manifest.StatusV1(ctx)
+	manifestSt, err := s.manifest.StatusV1(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return &provider.Status{
-		Cluster:   cluster,
-		BidEngine: bidengine,
-		Manifest:  manifest,
+		Cluster:   clusterSt,
+		BidEngine: bidengineSt,
+		Manifest:  manifestSt,
 		PublicHostnames: []string{
 			s.config.ClusterPublicHostname,
 		},
@@ -246,8 +234,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	}, nil
 }
 
-func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.GroupSpec) (ValidateGroupSpecResult, error) {
-	// FUTURE - pass owner here
+func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error) {
 	req := bidengine.Request{
 		Owner: owner.String(),
 		GSpec: &gspec,
@@ -255,24 +242,24 @@ func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.
 
 	// inv, err := s.cclient.Inventory(ctx)
 	// if err != nil {
-	// 	return ValidateGroupSpecResult{}, err
+	//	return ValidateGroupSpecResult{}, err
 	// }
 	//
 	// res := &reservation{
-	// 	resources:     nil,
-	// 	clusterParams: nil,
+	//	resources:     nil,
+	//	clusterParams: nil,
 	// }
 	//
 	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-	// 	return ValidateGroupSpecResult{}, err
+	//	return ValidateGroupSpecResult{}, err
 	// }
 
 	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
 	if err != nil {
-		return ValidateGroupSpecResult{}, err
+		return apclient.ValidateGroupSpecResult{}, err
 	}
 
-	return ValidateGroupSpecResult{
+	return apclient.ValidateGroupSpecResult{
 		MinBidPrice: price,
 	}, nil
 }
@@ -280,16 +267,31 @@ func (s *service) Validate(ctx context.Context, owner sdk.Address, gspec dtypes.
 func (s *service) run() {
 	defer s.lc.ShutdownCompleted()
 
+	var shutdownErr error
+
 	// Wait for any service to finish
 	select {
-	case <-s.lc.ShutdownRequest():
+	case shutdownErr = <-s.lc.ShutdownRequest():
+		s.session.Log().Info("received shutdown request", "err", shutdownErr)
 	case <-s.cluster.Done():
+		shutdownErr = s.cluster.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("cluster service terminated with error", "err", shutdownErr)
+		}
 	case <-s.bidengine.Done():
+		shutdownErr = s.bidengine.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("bidengine service terminated with error", "err", shutdownErr)
+		}
 	case <-s.manifest.Done():
+		shutdownErr = s.manifest.Close()
+		if shutdownErr != nil {
+			s.session.Log().Error("manifest service terminated with error", "err", shutdownErr)
+		}
 	}
 
-	// Shut down all services
-	s.lc.ShutdownInitiated(nil)
+	s.session.Log().Info("shutting down services")
+	s.lc.ShutdownInitiated(shutdownErr)
 	s.cancel()
 
 	// Wait for all services to finish
@@ -297,6 +299,10 @@ func (s *service) run() {
 	<-s.bidengine.Done()
 	<-s.manifest.Done()
 	<-s.bc.lc.Done()
+
+	if err := s.bc.Close(); err != nil {
+		s.session.Log().Error("balance checker had error", "err", err)
+	}
 
 	s.session.Log().Info("shutdown complete")
 }

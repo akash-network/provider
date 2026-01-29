@@ -19,10 +19,10 @@ limitations under the License.
 package v2beta2
 
 import (
-	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/cache"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // InventoryRequestLister helps list InventoryRequests.
@@ -30,39 +30,19 @@ import (
 type InventoryRequestLister interface {
 	// List lists all InventoryRequests in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta2.InventoryRequest, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta2.InventoryRequest, err error)
 	// Get retrieves the InventoryRequest from the index for a given name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v2beta2.InventoryRequest, error)
+	Get(name string) (*akashnetworkv2beta2.InventoryRequest, error)
 	InventoryRequestListerExpansion
 }
 
 // inventoryRequestLister implements the InventoryRequestLister interface.
 type inventoryRequestLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*akashnetworkv2beta2.InventoryRequest]
 }
 
 // NewInventoryRequestLister returns a new InventoryRequestLister.
 func NewInventoryRequestLister(indexer cache.Indexer) InventoryRequestLister {
-	return &inventoryRequestLister{indexer: indexer}
-}
-
-// List lists all InventoryRequests in the indexer.
-func (s *inventoryRequestLister) List(selector labels.Selector) (ret []*v2beta2.InventoryRequest, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta2.InventoryRequest))
-	})
-	return ret, err
-}
-
-// Get retrieves the InventoryRequest from the index for a given name.
-func (s *inventoryRequestLister) Get(name string) (*v2beta2.InventoryRequest, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v2beta2.Resource("inventoryrequest"), name)
-	}
-	return obj.(*v2beta2.InventoryRequest), nil
+	return &inventoryRequestLister{listers.New[*akashnetworkv2beta2.InventoryRequest](indexer, akashnetworkv2beta2.Resource("inventoryrequest"))}
 }

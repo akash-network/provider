@@ -3,25 +3,27 @@ package bidengine
 import (
 	"context"
 	"crypto/rand"
+	"errors"
+	"fmt"
 	"math/big"
 
-	"github.com/pkg/errors"
+	sdkmath "cosmossdk.io/math"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/shopspring/decimal"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/sdl"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	"pkg.akt.dev/go/node/types/unit"
+	"pkg.akt.dev/go/sdl"
 
 	"github.com/akash-network/provider/cluster/util"
 )
 
 type Request struct {
-	Owner          string `json:"owner"`
-	GSpec          *dtypes.GroupSpec
-	PricePrecision int
+	Owner              string `json:"owner"`
+	GSpec              *dtypes.GroupSpec
+	AllocatedResources dtypes.ResourceUnits
+	PricePrecision     int
 }
 
 const (
@@ -89,8 +91,8 @@ func MakeScalePricing(
 	memoryScale decimal.Decimal,
 	storageScale Storage,
 	endpointScale decimal.Decimal,
-	ipScale decimal.Decimal) (BidPricingStrategy, error) {
-
+	ipScale decimal.Decimal,
+) (BidPricingStrategy, error) {
 	if cpuScale.IsZero() && memoryScale.IsZero() && storageScale.IsAnyZero() && endpointScale.IsZero() && ipScale.IsZero() {
 		return nil, errAllScalesZero
 	}
@@ -112,8 +114,8 @@ func MakeScalePricing(
 }
 
 var (
-	ErrBidQuantityInvalid = errors.New("A bid quantity is invalid")
-	ErrBidZero            = errors.New("A bid of zero was produced")
+	ErrBidQuantityInvalid = errors.New("a bid quantity is invalid")
+	ErrBidZero            = errors.New("a bid of zero was produced")
 )
 
 func ceilBigRatToBigInt(v *big.Rat) *big.Int {
@@ -143,21 +145,21 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 
 	endpointTotal := decimal.NewFromInt(0)
 	ipTotal := decimal.NewFromInt(0).Add(fp.ipScale)
-	ipTotal = ipTotal.Mul(decimal.NewFromInt(int64(util.GetEndpointQuantityOfResourceGroup(req.GSpec, atypes.Endpoint_LEASED_IP))))
+	ipTotal = ipTotal.Mul(decimal.NewFromInt(int64(util.GetEndpointQuantityOfResourceGroup(req.GSpec, rtypes.Endpoint_LEASED_IP)))) // nolint: gosec
 
 	// iterate over everything & sum it up
 	for _, group := range req.GSpec.Resources {
-		groupCount := decimal.NewFromInt(int64(group.Count)) // Expand uint32 to int64
+		groupCount := decimal.NewFromInt(int64(group.Count)) // // nolint: gosec
 
-		cpuQuantity := decimal.NewFromBigInt(group.Resources.CPU.Units.Val.BigInt(), 0)
+		cpuQuantity := decimal.NewFromBigInt(group.CPU.Units.Val.BigInt(), 0)
 		cpuQuantity = cpuQuantity.Mul(groupCount)
 		cpuTotal = cpuTotal.Add(cpuQuantity)
 
-		memoryQuantity := decimal.NewFromBigInt(group.Resources.Memory.Quantity.Val.BigInt(), 0)
+		memoryQuantity := decimal.NewFromBigInt(group.Memory.Quantity.Val.BigInt(), 0)
 		memoryQuantity = memoryQuantity.Mul(groupCount)
 		memoryTotal = memoryTotal.Add(memoryQuantity)
 
-		for _, storage := range group.Resources.Storage {
+		for _, storage := range group.Storage {
 			storageQuantity := decimal.NewFromBigInt(storage.Quantity.Val.BigInt(), 0)
 			storageQuantity = storageQuantity.Mul(groupCount)
 
@@ -173,7 +175,7 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 			total, exists := storageTotal[storageClass]
 
 			if !exists {
-				return sdk.DecCoin{}, errors.Wrapf(errNoPriceScaleForStorageClass, storageClass)
+				return sdk.DecCoin{}, fmt.Errorf("%w: %s", errNoPriceScaleForStorageClass, storageClass)
 			}
 
 			total = total.Add(storageQuantity)
@@ -181,7 +183,7 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 			storageTotal[storageClass] = total
 		}
 
-		endpointQuantity := decimal.NewFromInt(int64(len(group.Resources.Endpoints)))
+		endpointQuantity := decimal.NewFromInt(int64(len(group.Endpoints)))
 		endpointTotal = endpointTotal.Add(endpointQuantity)
 	}
 
@@ -230,12 +232,12 @@ func (fp scalePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCo
 		return sdk.DecCoin{}, ErrBidZero
 	}
 
-	costDec, err := sdk.NewDecFromStr(totalCost.String())
+	costDec, err := sdkmath.LegacyNewDecFromStr(totalCost.String())
 	if err != nil {
 		return sdk.DecCoin{}, err
 	}
 
-	if !costDec.LTE(sdk.MaxSortableDec) {
+	if !costDec.LTE(sdkmath.LegacyMaxSortableDec) {
 		return sdk.DecCoin{}, ErrBidQuantityInvalid
 	}
 
@@ -249,14 +251,14 @@ func MakeRandomRangePricing() (BidPricingStrategy, error) {
 }
 
 func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
-	min, max := calculatePriceRange(req.GSpec)
-	if min.IsEqual(max) {
-		return max, nil
+	minPrice, maxPrice := calculatePriceRange(req.GSpec)
+	if minPrice.IsEqual(maxPrice) {
+		return maxPrice, nil
 	}
 
 	const scale = 10000
 
-	delta := max.Amount.Sub(min.Amount).Mul(sdk.NewDec(scale))
+	delta := maxPrice.Amount.Sub(minPrice.Amount).Mul(sdkmath.LegacyNewDec(scale))
 
 	minbid := delta.TruncateInt64()
 	if minbid < 1 {
@@ -267,9 +269,9 @@ func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.De
 		return sdk.DecCoin{}, err
 	}
 
-	scaledValue := sdk.NewDecFromBigInt(val).QuoInt64(scale).QuoInt64(100)
-	amount := min.Amount.Add(scaledValue)
-	return sdk.NewDecCoinFromDec(min.Denom, amount), nil
+	scaledValue := sdkmath.LegacyNewDecFromBigInt(val).QuoInt64(scale).QuoInt64(100)
+	amount := minPrice.Amount.Add(scaledValue)
+	return sdk.NewDecCoinFromDec(minPrice.Denom, amount), nil
 }
 
 func calculatePriceRange(gspec *dtypes.GroupSpec) (sdk.DecCoin, sdk.DecCoin) {
@@ -281,11 +283,11 @@ func calculatePriceRange(gspec *dtypes.GroupSpec) (sdk.DecCoin, sdk.DecCoin) {
 	// assumption: all same denom (returned by gspec.Price())
 	// assumption: gspec.Price() > 0
 
-	mem := sdk.NewInt(0)
+	mem := sdkmath.NewInt(0)
 
 	for _, group := range gspec.Resources {
 		mem = mem.Add(
-			sdk.NewIntFromUint64(group.Resources.Memory.Quantity.Value()).
+			sdkmath.NewIntFromUint64(group.Resources.Memory.Quantity.Value()).
 				MulRaw(int64(group.Count)))
 	}
 
@@ -294,32 +296,34 @@ func calculatePriceRange(gspec *dtypes.GroupSpec) (sdk.DecCoin, sdk.DecCoin) {
 	const minGroupMemPrice = int64(50)
 	const maxGroupMemPrice = int64(1048576)
 
-	cmin := sdk.NewDecFromInt(mem.MulRaw(
+	cmin := sdkmath.LegacyNewDecFromInt(mem.MulRaw(
 		minGroupMemPrice).
-		Quo(sdk.NewInt(unit.Gi)))
+		Quo(sdkmath.NewInt(unit.Gi)))
 
-	cmax := sdk.NewDecFromInt(mem.MulRaw(
+	cmax := sdkmath.LegacyNewDecFromInt(mem.MulRaw(
 		maxGroupMemPrice).
-		Quo(sdk.NewInt(unit.Gi)))
+		Quo(sdkmath.NewInt(unit.Gi)))
 
 	if cmax.GT(rmax.Amount) {
 		cmax = rmax.Amount
 	}
 
 	if cmin.IsZero() {
-		cmin = sdk.NewDec(1)
+		cmin = sdkmath.LegacyNewDec(1)
 	}
 
 	if cmax.IsZero() {
-		cmax = sdk.NewDec(1)
+		cmax = sdkmath.LegacyNewDec(1)
 	}
 
 	return sdk.NewDecCoinFromDec(rmax.Denom, cmin), sdk.NewDecCoinFromDec(rmax.Denom, cmax)
 }
 
-var errPathEmpty = errors.New("script path cannot be the empty string")
-var errProcessLimitZero = errors.New("process limit must be greater than zero")
-var errProcessRuntimeLimitZero = errors.New("process runtime limit must be greater than zero")
+var (
+	errPathEmpty               = errors.New("script path cannot be the empty string")
+	errProcessLimitZero        = errors.New("process limit must be greater than zero")
+	errProcessRuntimeLimitZero = errors.New("process runtime limit must be greater than zero")
+)
 
 type storageElement struct {
 	Class string `json:"class"`

@@ -1,15 +1,24 @@
-FROM debian:bullseye
+FROM ubuntu:noble
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
 COPY provider-services /usr/bin/
+
+ENV DEBIAN_FRONTEND=noninteractive
 
 RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
     tini \
+    jq \
+    bc \
+    netcat-traditional \
+    mawk \
+    curl \
     ca-certificates \
     pci.ids \
  && rm -rf /var/lib/apt/lists/*
+
+ENV DEBIAN_FRONTEND=""
 
 # default port for provider API
 EXPOSE 8443

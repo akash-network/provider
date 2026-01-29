@@ -1,23 +1,20 @@
 package rest
 
 import (
-	"crypto/ecdsa"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v4"
 	"github.com/gorilla/context"
-	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
-	"github.com/pkg/errors"
+
+	ajwt "pkg.akt.dev/go/util/jwt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	mquery "github.com/akash-network/node/x/market/query"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mquery "pkg.akt.dev/node/x/market/query"
 )
 
 type contextKey int
@@ -31,6 +28,7 @@ const (
 	ownerContextKey
 	providerContextKey
 	servicesContextKey
+	claimsContextKey
 )
 
 func requestLeaseID(req *http.Request) mtypes.LeaseID {
@@ -61,59 +59,102 @@ func requestOwner(req *http.Request) sdk.Address {
 	return context.Get(req, ownerContextKey).(sdk.Address)
 }
 
+func requestClaims(req *http.Request) *ajwt.Claims {
+	return context.Get(req, claimsContextKey).(*ajwt.Claims)
+}
+
 func requestDeploymentID(req *http.Request) dtypes.DeploymentID {
 	return context.Get(req, deploymentContextKey).(dtypes.DeploymentID)
 }
 
-func requireOwner() mux.MiddlewareFunc {
+func requireEndpointScopeForDeploymentID(scope ajwt.PermissionScope) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.TLS == nil || len(r.TLS.PeerCertificates) == 0 {
-				http.Error(w, "", http.StatusUnauthorized)
+			claims := requestClaims(r)
+			did := requestDeploymentID(r)
+			provider := requestProvider(r)
+
+			if !claims.AuthorizeDeploymentIDForPermissionScope(did, provider, scope) {
+				DefaultErrorHandler(w, r, ErrUnauthorized)
 				return
 			}
 
-			// at this point client certificate has been validated
-			// so only thing left to do is get account id stored in the CommonName
-			owner, err := sdk.AccAddressFromBech32(r.TLS.PeerCertificates[0].Subject.CommonName)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusUnauthorized)
-				return
-			}
-
-			context.Set(r, ownerContextKey, owner)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func requireDeploymentID() mux.MiddlewareFunc {
+func requireEndpointScopeForLeaseID(scope ajwt.PermissionScope) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			id, err := parseDeploymentID(req)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			claims := requestClaims(r)
+			lid := requestLeaseID(r)
+
+			if !claims.AuthorizeLeaseIDForPermissionScope(lid, scope) {
+				DefaultErrorHandler(w, r, ErrUnauthorized)
 				return
 			}
-			context.Set(req, deploymentContextKey, id)
-			next.ServeHTTP(w, req)
+
+			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-func requireLeaseID() mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			id, err := parseLeaseID(req)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+func requireOwner(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims := requestClaims(r)
 
-			context.Set(req, leaseContextKey, id)
-			next.ServeHTTP(w, req)
-		})
-	}
+		if claims.IssuerAddress().Empty() {
+			DefaultErrorHandler(w, r, ErrUnauthorized)
+			return
+		}
+
+		context.Set(r, ownerContextKey, claims.IssuerAddress())
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// func requireDeploymentID() mux.MiddlewareFunc {
+func requireDeploymentID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, err := parseDeploymentID(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		claims := requestClaims(r)
+		provider := requestProvider(r)
+
+		if !claims.AuthorizeForDeploymentID(id, provider) {
+			DefaultErrorHandler(w, r, ErrUnauthorized)
+			return
+		}
+
+		context.Set(r, deploymentContextKey, id)
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func requireLeaseID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, err := parseLeaseID(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		claims := requestClaims(r)
+		if !claims.AuthorizeForLeaseID(id) {
+			DefaultErrorHandler(w, r, ErrUnauthorized)
+			return
+		}
+
+		context.Set(r, leaseContextKey, id)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func requireService() mux.MiddlewareFunc {
@@ -154,98 +195,59 @@ func parseLeaseID(req *http.Request) (mtypes.LeaseID, error) {
 	return mquery.ParseLeasePath(parts)
 }
 
-func requestStreamParams() mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			vars := req.URL.Query()
+func requestStreamParams(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		vars := req.URL.Query()
 
-			var err error
+		var err error
 
-			defer func() {
-				if err != nil {
-					http.Error(w, err.Error(), http.StatusBadRequest)
-					return
-				}
-			}()
-
-			var tailLines *int64
-
-			services := vars.Get("service")
-			if strings.HasSuffix(services, ",") {
-				err = errors.Errorf("parameter \"service\" must not contain trailing comma")
-				return
-			}
-
-			follow := false
-
-			if val := vars.Get("follow"); val != "" {
-				follow, err = strconv.ParseBool(val)
-				if err != nil {
-					return
-				}
-			}
-
-			vl := new(int64)
-			if val := vars.Get("tail"); val != "" {
-				*vl, err = strconv.ParseInt(val, 10, 32)
-				if err != nil {
-					return
-				}
-
-				if *vl < -1 {
-					err = errors.Errorf("parameter \"tail\" contains invalid value")
-					return
-				}
-			} else {
-				*vl = -1
-			}
-
-			if *vl > -1 {
-				tailLines = vl
-			}
-
-			context.Set(req, logFollowContextKey, follow)
-			context.Set(req, tailLinesContextKey, tailLines)
-			context.Set(req, servicesContextKey, services)
-
-			next.ServeHTTP(w, req)
-		})
-	}
-}
-
-func resourceServerAuth(log log.Logger, providerAddr sdk.Address, publicKey *ecdsa.PublicKey) mux.MiddlewareFunc {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// verify the provided JWT
-			token, err := jwt.ParseWithClaims(r.Header.Get("Authorization"), &ClientCustomClaims{}, func(token *jwt.Token) (interface{}, error) {
-				// return the public key to be used for JWT verification
-				return publicKey, nil
-			})
+		defer func() {
 			if err != nil {
-				log.Error("falied to parse JWT", "error", err)
-				http.Error(w, err.Error(), http.StatusUnauthorized)
+				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			// delete the Authorization header as it is no more needed
-			r.Header.Del("Authorization")
+		}()
 
-			// store the owner & provider address in request context to be used in later handlers
-			customClaims, ok := token.Claims.(*ClientCustomClaims)
-			if !ok {
-				log.Error("failed to parse JWT claims")
-				http.Error(w, "Invalid JWT", http.StatusUnauthorized)
-				return
-			}
-			ownerAddress, err := sdk.AccAddressFromBech32(customClaims.Subject)
+		var tailLines *int64
+
+		services := vars.Get("service")
+		if strings.HasSuffix(services, ",") {
+			err = fmt.Errorf("parameter \"service\" must not contain trailing comma")
+			return
+		}
+
+		follow := false
+
+		if val := vars.Get("follow"); val != "" {
+			follow, err = strconv.ParseBool(val)
 			if err != nil {
-				log.Error("failed parsing owner address", "error", err, "address", customClaims.Subject)
-				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
-			gcontext.Set(r, ownerContextKey, ownerAddress)
-			gcontext.Set(r, providerContextKey, providerAddr)
+		}
 
-			next.ServeHTTP(w, r)
-		})
-	}
+		vl := new(int64)
+		if val := vars.Get("tail"); val != "" {
+			*vl, err = strconv.ParseInt(val, 10, 32)
+			if err != nil {
+				return
+			}
+
+			if *vl < -1 {
+				err = fmt.Errorf("parameter \"tail\" contains invalid value")
+				return
+			}
+		} else {
+			*vl = -1
+		}
+
+		if *vl > -1 {
+			tailLines = vl
+		}
+
+		context.Set(req, logFollowContextKey, follow)
+		context.Set(req, tailLinesContextKey, tailLines)
+		context.Set(req, servicesContextKey, services)
+
+		next.ServeHTTP(w, req)
+	})
 }

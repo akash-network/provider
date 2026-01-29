@@ -2,13 +2,10 @@ package main
 
 import (
 	"context"
-	"errors"
 	"os"
 	"os/signal"
 
-	"github.com/cosmos/cosmos-sdk/server"
-
-	acmd "github.com/akash-network/node/cmd/akash/cmd"
+	acmd "pkg.akt.dev/node/cmd/akash/cmd"
 
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 )
@@ -25,10 +22,6 @@ func run() error {
 func main() {
 	err := run()
 	if err != nil {
-		if errors.As(err, &server.ErrorCode{}) {
-			os.Exit(err.(server.ErrorCode).Code)
-		}
-
 		os.Exit(1)
 	}
 }

@@ -11,7 +11,7 @@ type staticServiceDiscoveryAgent net.SRV
 
 func (staticServiceDiscoveryAgent) Stop()        {}
 func (staticServiceDiscoveryAgent) DiscoverNow() {}
-func (ssda staticServiceDiscoveryAgent) GetClient(ctx context.Context, isHTTPS, secure bool) (ServiceClient, error) {
+func (ssda staticServiceDiscoveryAgent) GetClient(_ context.Context, isHTTPS, secure bool) (ServiceClient, error) {
 	proto := "http"
 	if isHTTPS {
 		proto = "https"

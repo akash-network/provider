@@ -2,13 +2,26 @@ package waiter
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"testing"
 	"time"
 
-	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
+	"pkg.akt.dev/go/testutil"
 )
+
+type fakeWaiter struct {
+	failure error
+}
+
+func (fw fakeWaiter) Check(_ context.Context) error {
+	return fw.failure
+}
+
+func (fw fakeWaiter) String() string {
+	return "fakeWaiter"
+}
 
 func TestWaiterNoInput(t *testing.T) {
 	logger := testutil.Logger(t)
@@ -24,22 +37,11 @@ func TestWaiterContextCancelled(t *testing.T) {
 	logger := testutil.Logger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	// no objects passed
-	waiter := NewOperatorWaiter(ctx, logger)
+	waitable := fakeWaiter{failure: fmt.Errorf("test error")}
+
+	waiter := NewOperatorWaiter(ctx, logger, &waitable)
 	require.NotNil(t, waiter)
 	require.ErrorIs(t, waiter.WaitForAll(ctx), context.Canceled)
-}
-
-type fakeWaiter struct {
-	failure error
-}
-
-func (fw fakeWaiter) Check(ctx context.Context) error {
-	return fw.failure
-}
-
-func (fw fakeWaiter) String() string {
-	return "fakeWaiter"
 }
 
 func TestWaiterInputReady(t *testing.T) {

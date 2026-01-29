@@ -2,22 +2,20 @@ package cluster
 
 import (
 	"context"
+	"errors"
 
 	"github.com/boz/go-lifecycle"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	tpubsub "github.com/troian/pubsub"
-
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	tpubsub "github.com/troian/pubsub"
 
-	"github.com/tendermint/tendermint/libs/log"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
-
-	"github.com/akash-network/node/pubsub"
+	"cosmossdk.io/log"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	provider "pkg.akt.dev/go/provider/v1"
+	"pkg.akt.dev/go/util/pubsub"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -28,7 +26,7 @@ import (
 	ptypes "github.com/akash-network/provider/types"
 )
 
-// ErrNotRunning is the error when service is not running
+// ErrNotRunning is an error when service is not running
 var (
 	ErrNotRunning      = errors.New("not running")
 	ErrInvalidResource = errors.New("invalid resource")
@@ -54,7 +52,7 @@ type service struct {
 	hostnames *hostnameService
 
 	checkDeploymentExistsRequestCh chan checkDeploymentExistsRequest
-	statusch                       chan chan<- *ctypes.Status
+	statusch                       chan chan<- *apclient.ClusterStatus
 	statusV1ch                     chan chan<- uint32
 	managers                       map[mtypes.LeaseID]*deploymentManager
 
@@ -86,7 +84,7 @@ type Cluster interface {
 
 // StatusClient is the interface which includes status of service
 type StatusClient interface {
-	Status(context.Context) (*ctypes.Status, error)
+	Status(context.Context) (*apclient.ClusterStatus, error)
 	StatusV1(context.Context) (*provider.ClusterStatus, error)
 	FindActiveLease(ctx context.Context, owner sdktypes.Address, dseq uint64, gseq uint32) (bool, mtypes.LeaseID, crd.ManifestGroup, error)
 }
@@ -105,7 +103,14 @@ type Service interface {
 }
 
 // NewService returns new Service instance
-func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, client Client, waiter waiter.OperatorWaiter, cfg Config) (Service, error) {
+func NewService(
+	ctx context.Context,
+	session session.Session,
+	bus pubsub.Bus,
+	client Client,
+	waiter waiter.OperatorWaiter,
+	cfg Config,
+) (Service, error) {
 	log := session.Log().With("module", "provider-cluster", "cmp", "service")
 
 	lc := lifecycle.New()
@@ -115,7 +120,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 		return nil, err
 	}
 
-	deployments, err := findDeployments(ctx, log, client, session)
+	deployments, err := findDeployments(ctx, log, client)
 	if err != nil {
 		sub.Close()
 		return nil, err
@@ -152,7 +157,7 @@ func NewService(ctx context.Context, session session.Session, bus pubsub.Bus, cl
 		bus:                            bus,
 		sub:                            sub,
 		inventory:                      inventory,
-		statusch:                       make(chan chan<- *ctypes.Status),
+		statusch:                       make(chan chan<- *apclient.ClusterStatus),
 		statusV1ch:                     make(chan chan<- uint32),
 		managers:                       make(map[mtypes.LeaseID]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
@@ -236,13 +241,13 @@ func (s *service) TransferHostname(ctx context.Context, leaseID mtypes.LeaseID, 
 	return s.client.DeclareHostname(ctx, leaseID, hostname, serviceName, externalPort)
 }
 
-func (s *service) Status(ctx context.Context) (*ctypes.Status, error) {
+func (s *service) Status(ctx context.Context) (*apclient.ClusterStatus, error) {
 	istatus, err := s.inventory.status(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	ch := make(chan *ctypes.Status, 1)
+	ch := make(chan *apclient.ClusterStatus, 1)
 
 	select {
 	case <-s.lc.Done():
@@ -338,6 +343,7 @@ loop:
 	for {
 		select {
 		case err := <-s.lc.ShutdownRequest():
+			s.log.Debug("received shutdown request", "err", err)
 			s.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-s.sub.Events():
@@ -352,7 +358,6 @@ loop:
 				}
 
 				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
-
 				if err != nil {
 					s.log.Error("error looking up manifest", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
 					break
@@ -375,16 +380,16 @@ loop:
 				s.managers[key] = newDeploymentManager(s, deployment, true)
 
 				trySignal()
-			case mtypes.EventLeaseClosed:
+			case *mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
 			}
 		case ch := <-s.statusch:
-			ch <- &ctypes.Status{
-				Leases: uint32(len(s.managers)),
+			ch <- &apclient.ClusterStatus{
+				Leases: uint32(len(s.managers)), // nolint: gosec
 			}
 		case ch := <-s.statusV1ch:
-			ch <- uint32(len(s.managers))
+			ch <- uint32(len(s.managers)) // nolint: gosec
 		case <-signalch:
 			istatus, _ := s.inventory.statusV1(ctx)
 
@@ -393,12 +398,21 @@ loop:
 			}
 
 			msg := provider.ClusterStatus{
-				Leases:    provider.Leases{Active: uint32(len(s.managers))},
+				Leases:    provider.Leases{Active: uint32(len(s.managers))}, // nolint: gosec
 				Inventory: *istatus,
 			}
 			bus.Pub(msg, []string{ptypes.PubSubTopicClusterStatus}, tpubsub.WithRetain())
-		case <-inventorych:
-			trySignal()
+		case update := <-inventorych:
+			inv, valid := update.(*provider.Inventory)
+			if !valid {
+				continue
+			}
+
+			msg := provider.ClusterStatus{
+				Leases:    provider.Leases{Active: uint32(len(s.managers))}, // nolint: gosec
+				Inventory: *inv,
+			}
+			bus.Pub(msg, []string{ptypes.PubSubTopicClusterStatus}, tpubsub.WithRetain())
 		case dm := <-s.managerch:
 			s.log.Info("manager done", "lease", dm.deployment.LeaseID())
 
@@ -416,6 +430,7 @@ loop:
 		}
 		s.updateDeploymentManagerGauge()
 	}
+
 	s.log.Debug("draining deployment managers...", "qty", len(s.managers))
 	for _, manager := range s.managers {
 		if manager != nil {
@@ -458,11 +473,16 @@ func (s *service) teardownLease(lid mtypes.LeaseID) {
 	}
 }
 
-func findDeployments(ctx context.Context, log log.Logger, client Client, _ session.Session) ([]ctypes.IDeployment, error) {
+func findDeployments(
+	ctx context.Context,
+	log log.Logger,
+	client Client,
+) ([]ctypes.IDeployment, error) {
 	deployments, err := client.Deployments(ctx)
 	if err != nil {
 		log.Error("fetching deployments", "err", err)
 		return nil, err
 	}
+
 	return deployments, nil
 }

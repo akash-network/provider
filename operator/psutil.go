@@ -37,8 +37,7 @@ func cmdPsutil() *cobra.Command {
 		Short:        "dump node hardware spec",
 		Args:         cobra.ExactArgs(0),
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return nil
 		},
 	}
@@ -55,7 +54,7 @@ func cmdPsutilServe() *cobra.Command {
 		Short:        "dump node hardware spec via REST",
 		Args:         cobra.ExactArgs(0),
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			router := mux.NewRouter()
 
 			router.HandleFunc("/", infoHandler).Methods(http.MethodGet)
@@ -117,7 +116,7 @@ func cmdPsutilList() *cobra.Command {
 		Short:        "dump node hardware spec into stdout",
 		Args:         cobra.ExactArgs(1),
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			var res interface{}
 			var err error
 			switch args[0] {
@@ -130,7 +129,7 @@ func cmdPsutilList() *cobra.Command {
 			case "pci":
 				res, err = pci.New()
 			default:
-				return fmt.Errorf("invalid command \"%s\"", args[0]) // nolint: goerr113
+				return fmt.Errorf("invalid command \"%s\"", args[0]) // nolint: err113
 			}
 
 			if err != nil {

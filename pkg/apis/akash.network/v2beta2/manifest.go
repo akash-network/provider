@@ -4,12 +4,12 @@ import (
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 
-	mani "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	mani "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
-	ktypes "github.com/akash-network/provider/cluster/kube/types/v1beta2"
+	ktypes "github.com/akash-network/provider/cluster/kube/types/v1beta3"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 
@@ -171,7 +171,7 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 		return nil, err
 	}
 
-	group, schedulerParams, err := m.Spec.Group.fromCRD()
+	group, schedulerParams, err := m.Spec.Group.FromCRD()
 	if err != nil {
 		return nil, err
 	}
@@ -182,11 +182,12 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 		cparams: ClusterSettings{
 			SchedulerParams: schedulerParams,
 		},
+		resourceVersion: m.ResourceVersion,
 	}, nil
 }
 
-// toAkash returns akash group details formatted from manifest group
-func (m *ManifestGroup) fromCRD() (mani.Group, []*SchedulerParams, error) {
+// FromCRD returns akash group details formatted from manifest group
+func (m *ManifestGroup) FromCRD() (mani.Group, []*SchedulerParams, error) {
 	am := mani.Group{
 		Name:     m.Name,
 		Services: make([]mani.Service, 0, len(m.Services)),
@@ -243,6 +244,15 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 		Expose:    make([]mani.ServiceExpose, 0, len(ms.Expose)),
 	}
 
+	if ms.Credentials != nil {
+		ams.Credentials = &mani.ImageCredentials{
+			Host:     ms.Credentials.Host,
+			Email:    ms.Credentials.Email,
+			Username: ms.Credentials.Username,
+			Password: ms.Credentials.Password,
+		}
+	}
+
 	for _, expose := range ms.Expose {
 		value, err := expose.toAkash()
 		if err != nil {
@@ -251,8 +261,8 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 		ams.Expose = append(ams.Expose, value)
 
 		if len(value.IP) != 0 {
-			res.Endpoints = append(res.Endpoints, types.Endpoint{
-				Kind:           types.Endpoint_LEASED_IP,
+			res.Endpoints = append(res.Endpoints, rtypes.Endpoint{
+				Kind:           rtypes.Endpoint_LEASED_IP,
 				SequenceNumber: value.EndpointSequenceNumber,
 			})
 		}
@@ -357,8 +367,8 @@ func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
 
 func manifestServiceExposeFromAkash(amse mani.ServiceExpose) ManifestServiceExpose {
 	return ManifestServiceExpose{
-		Port:                   uint16(amse.Port),
-		ExternalPort:           uint16(amse.ExternalPort),
+		Port:                   uint16(amse.Port),         // nolint: gosec
+		ExternalPort:           uint16(amse.ExternalPort), // nolint: gosec
 		Proto:                  amse.Proto.ToString(),
 		Service:                amse.Service,
 		Global:                 amse.Global,

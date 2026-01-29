@@ -14,7 +14,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -154,7 +154,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 
 					if _, exists = pvMap[obj.Name]; !exists {
 						pvMap[obj.Name] = *obj
-						params.allocated += uint64(res.Value())
+						params.allocated += uint64(res.Value()) // nolint: gosec
 					}
 				case watch.Deleted:
 					res, exists := obj.Spec.Capacity[corev1.ResourceStorage]
@@ -163,7 +163,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 					}
 
 					delete(pvMap, obj.Name)
-					scs[obj.Spec.StorageClassName].allocated -= uint64(res.Value())
+					scs[obj.Spec.StorageClassName].allocated -= uint64(res.Value()) // nolint: gosec
 				}
 
 				tryScrape()
@@ -222,8 +222,14 @@ func (c *rancher) run(startch chan<- struct{}) error {
 									continue
 								}
 
-								params := scs[pv.Spec.StorageClassName]
-								params.allocated += uint64(capacity.Value())
+								params, exists := scs[pv.Spec.StorageClassName]
+								// pv can be created with non-existing storage class, so just skip it for now
+								// todo @troian may need to recount volume if storageclass is added later
+								if !exists {
+									continue
+								}
+
+								params.allocated += uint64(capacity.Value()) // nolint: gosec
 
 								pvMap[pv.Name] = pv
 							}
@@ -248,7 +254,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 			for class, params := range scs {
 				if params.isRancher && params.isAkashManaged {
 					res = append(res, inventory.Storage{
-						Quantity: inventory.NewResourcePair(allocatable, int64(params.allocated), resource.DecimalSI),
+						Quantity: inventory.NewResourcePair(allocatable, allocatable, int64(params.allocated), resource.DecimalSI), // nolint: gosec
 						Info: inventory.StorageInfo{
 							Class: class,
 						},

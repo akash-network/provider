@@ -19,10 +19,10 @@ limitations under the License.
 package v2beta2
 
 import (
-	v2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/client-go/tools/cache"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	labels "k8s.io/apimachinery/pkg/labels"
+	listers "k8s.io/client-go/listers"
+	cache "k8s.io/client-go/tools/cache"
 )
 
 // ProviderHostLister helps list ProviderHosts.
@@ -30,7 +30,7 @@ import (
 type ProviderHostLister interface {
 	// List lists all ProviderHosts in the indexer.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta2.ProviderHost, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta2.ProviderHost, err error)
 	// ProviderHosts returns an object that can list and get ProviderHosts.
 	ProviderHosts(namespace string) ProviderHostNamespaceLister
 	ProviderHostListerExpansion
@@ -38,25 +38,17 @@ type ProviderHostLister interface {
 
 // providerHostLister implements the ProviderHostLister interface.
 type providerHostLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*akashnetworkv2beta2.ProviderHost]
 }
 
 // NewProviderHostLister returns a new ProviderHostLister.
 func NewProviderHostLister(indexer cache.Indexer) ProviderHostLister {
-	return &providerHostLister{indexer: indexer}
-}
-
-// List lists all ProviderHosts in the indexer.
-func (s *providerHostLister) List(selector labels.Selector) (ret []*v2beta2.ProviderHost, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta2.ProviderHost))
-	})
-	return ret, err
+	return &providerHostLister{listers.New[*akashnetworkv2beta2.ProviderHost](indexer, akashnetworkv2beta2.Resource("providerhost"))}
 }
 
 // ProviderHosts returns an object that can list and get ProviderHosts.
 func (s *providerHostLister) ProviderHosts(namespace string) ProviderHostNamespaceLister {
-	return providerHostNamespaceLister{indexer: s.indexer, namespace: namespace}
+	return providerHostNamespaceLister{listers.NewNamespaced[*akashnetworkv2beta2.ProviderHost](s.ResourceIndexer, namespace)}
 }
 
 // ProviderHostNamespaceLister helps list and get ProviderHosts.
@@ -64,36 +56,15 @@ func (s *providerHostLister) ProviderHosts(namespace string) ProviderHostNamespa
 type ProviderHostNamespaceLister interface {
 	// List lists all ProviderHosts in the indexer for a given namespace.
 	// Objects returned here must be treated as read-only.
-	List(selector labels.Selector) (ret []*v2beta2.ProviderHost, err error)
+	List(selector labels.Selector) (ret []*akashnetworkv2beta2.ProviderHost, err error)
 	// Get retrieves the ProviderHost from the indexer for a given namespace and name.
 	// Objects returned here must be treated as read-only.
-	Get(name string) (*v2beta2.ProviderHost, error)
+	Get(name string) (*akashnetworkv2beta2.ProviderHost, error)
 	ProviderHostNamespaceListerExpansion
 }
 
 // providerHostNamespaceLister implements the ProviderHostNamespaceLister
 // interface.
 type providerHostNamespaceLister struct {
-	indexer   cache.Indexer
-	namespace string
-}
-
-// List lists all ProviderHosts in the indexer for a given namespace.
-func (s providerHostNamespaceLister) List(selector labels.Selector) (ret []*v2beta2.ProviderHost, err error) {
-	err = cache.ListAllByNamespace(s.indexer, s.namespace, selector, func(m interface{}) {
-		ret = append(ret, m.(*v2beta2.ProviderHost))
-	})
-	return ret, err
-}
-
-// Get retrieves the ProviderHost from the indexer for a given namespace and name.
-func (s providerHostNamespaceLister) Get(name string) (*v2beta2.ProviderHost, error) {
-	obj, exists, err := s.indexer.GetByKey(s.namespace + "/" + name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v2beta2.Resource("providerhost"), name)
-	}
-	return obj.(*v2beta2.ProviderHost), nil
+	listers.ResourceIndexer[*akashnetworkv2beta2.ProviderHost]
 }

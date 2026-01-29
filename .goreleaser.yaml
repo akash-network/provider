@@ -1,8 +1,14 @@
+---
+version: 2
 project_name: provider
 env:
   - GO111MODULE=on
   - DOCKER_CLI_EXPERIMENTAL="enabled"
   - CGO_ENABLED=1
+before:
+  hooks:
+    - apt update
+    - apt install -y pkg-config libudev-dev:amd64 libudev-dev:arm64
 builds:
   - id: provider-services-darwin-arm64
     binary: provider-services
@@ -40,6 +46,44 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
+  - id: provider-services-darwin-arm64-debug
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - arm64
+    goos:
+      - darwin
+    env:
+      - CC=oa64-clang
+      - CXX=oa64-clang++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+    gcflags:
+      - "all=-N -l"
+  - id: provider-services-darwin-amd64-debug
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - amd64
+    goos:
+      - darwin
+    env:
+      - CC=o64-clang
+      - CXX=o64-clang++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+    gcflags:
+      - "all=-N -l"
   - id: provider-services-linux-arm64
     binary: provider-services
     main: ./cmd/provider-services
@@ -58,7 +102,7 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread --static"
+      - -extldflags "-lc -lrt -lpthread"
   - id: provider-services-linux-amd64
     binary: provider-services
     main: ./cmd/provider-services
@@ -77,7 +121,47 @@ builds:
       - "{{ .Env.BUILD_VARS }}"
       - "{{ .Env.STRIP_FLAGS }}"
       - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread --static"
+      - -extldflags "-lc -lrt -lpthread"
+  - id: provider-services-linux-arm64-debug
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - arm64
+    goos:
+      - linux
+    env:
+      - CC=aarch64-linux-gnu-gcc
+      - CXX=aarch64-linux-gnu-g++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+      - -extldflags "-lc -lrt -lpthread"
+    gcflags:
+      - "all=-N -l"
+  - id: provider-services-linux-amd64-debug
+    binary: provider-services
+    main: ./cmd/provider-services
+    goarch:
+      - amd64
+    goos:
+      - linux
+    env:
+      - CC=x86_64-linux-gnu-gcc
+      - CXX=x86_64-linux-gnu-g++
+    flags:
+      - "-mod={{ .Env.MOD }}"
+      - "-tags={{ .Env.BUILD_TAGS }}"
+      - -trimpath
+    ldflags:
+      - "{{ .Env.BUILD_VARS }}"
+      - "-linkmode={{ .Env.LINKMODE }}"
+      - -extldflags "-lc -lrt -lpthread"
+    gcflags:
+      - "all=-N -l"
 universal_binaries:
   - id: darwin-universal
     ids:
@@ -85,25 +169,55 @@ universal_binaries:
       - provider-services-darwin-amd64
     replace: true
     name_template: "provider-services"
+  - id: darwin-universal-debug
+    ids:
+      - provider-services-darwin-arm64-debug
+      - provider-services-darwin-amd64-debug
+    replace: true
+    name_template: "provider-services"
 archives:
   - id: provider-services-version
-    builds:
+    ids:
       - darwin-universal
       - provider-services-linux-arm64
       - provider-services-linux-amd64
     name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
     files:
       - none*
   - id: provider-services
-    builds:
+    ids:
       - darwin-universal
       - provider-services-linux-arm64
       - provider-services-linux-amd64
     name_template: "provider-services_{{ .Os }}_{{ .Arch }}"
     wrap_in_directory: false
-    format: zip
+    formats:
+      - zip
+    files:
+      - none*
+  - id: provider-services-version-debug
+    ids:
+      - darwin-universal-debug
+      - provider-services-linux-arm64-debug
+      - provider-services-linux-amd64-debug
+    name_template: "provider-services_{{ .Version }}_{{ .Os }}_{{ .Arch }}_debug"
+    wrap_in_directory: false
+    formats:
+      - zip
+    files:
+      - none*
+  - id: provider-services-debug
+    ids:
+      - darwin-universal-debug
+      - provider-services-linux-arm64-debug
+      - provider-services-linux-amd64-debug
+    name_template: "provider-services_{{ .Os }}_{{ .Arch }}_debug"
+    wrap_in_directory: false
+    formats:
+      - zip
     files:
       - none*
 checksum:
@@ -113,6 +227,8 @@ checksum:
 
 dockers:
   - dockerfile: Dockerfile
+    ids:
+      - provider-services-linux-amd64
     use: buildx
     goarch: amd64
     goos: linux
@@ -131,6 +247,8 @@ dockers:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64"
       - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
   - dockerfile: Dockerfile
+    ids:
+      - provider-services-linux-arm64
     use: buildx
     goarch: arm64
     goos: linux
@@ -148,6 +266,46 @@ dockers:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64"
       - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
+  - dockerfile: Dockerfile.debug
+    ids:
+      - provider-services-linux-amd64-debug
+    use: buildx
+    goarch: amd64
+    goos: linux
+    build_flag_templates:
+      - --pull
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
+      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+    image_templates:
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
+  - dockerfile: Dockerfile.debug
+    ids:
+      - provider-services-linux-arm64-debug
+    use: buildx
+    goarch: arm64
+    goos: linux
+    build_flag_templates:
+      - --pull
+      - --platform=linux/arm64
+      - --label=org.opencontainers.image.title={{ .ProjectName }}
+      - --label=org.opencontainers.image.description={{ .ProjectName }}
+      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
+      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+    image_templates:
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
 docker_manifests:
   - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}"
     image_templates:
@@ -161,9 +319,25 @@ docker_manifests:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
       - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
+  - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-debug"
+    image_templates:
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64-debug"
+  - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-debug"
+    image_templates:
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64-debug"
+  - name_template: "{{ .Env.DOCKER_IMAGE }}:latest-debug"
+    image_templates:
+      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
+      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
+
 
 nfpms:
   - id: w/version
+    ids:
+      - provider-services-linux-amd64
+      - provider-services-linux-arm64
     vendor: "Akash Network"
     homepage: "https://akash.network"
     maintainer: "Akash Network <hello@akash.network>"
@@ -173,6 +347,9 @@ nfpms:
       - rpm
     license: Apache 2.0
   - id: wo/version
+    ids:
+      - provider-services-linux-amd64
+      - provider-services-linux-arm64
     vendor: "Akash Network"
     homepage: "https://akash.network"
     maintainer: "Akash Network <hello@akash.network>"

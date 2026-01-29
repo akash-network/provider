@@ -11,10 +11,14 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
+	"cosmossdk.io/log"
+	sdkmath "cosmossdk.io/math"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -24,27 +28,33 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/flowcontrol"
 	"k8s.io/client-go/util/homedir"
+	atypes "pkg.akt.dev/go/node/audit/v1"
+	"pkg.akt.dev/go/sdkutil"
+	"pkg.akt.dev/go/util/events"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/node/app"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	bankcli "github.com/cosmos/cosmos-sdk/x/bank/client/testutil"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	types "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	ttypes "github.com/akash-network/akash-api/go/node/take/v1beta3"
-
-	"github.com/akash-network/node/testutil"
-	clitestutil "github.com/akash-network/node/testutil/cli"
-	"github.com/akash-network/node/testutil/network"
-	ccli "github.com/akash-network/node/x/cert/client/cli"
-	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	"github.com/akash-network/node/x/provider/client/cli"
+	"pkg.akt.dev/go/cli"
+	clitestutil "pkg.akt.dev/go/cli/testutil"
+	arpcclient "pkg.akt.dev/go/node/client"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	ttypes "pkg.akt.dev/go/node/take/v1"
+	"pkg.akt.dev/go/testutil"
+	nodetestutil "pkg.akt.dev/node/testutil"
+	testnet "pkg.akt.dev/node/testutil/network"
 
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
+	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
+	operatorcommon "github.com/akash-network/provider/operator/common"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -54,16 +64,22 @@ import (
 type IntegrationTestSuite struct {
 	suite.Suite
 
-	cfg         network.Config
-	network     *network.Network
-	validator   *network.Validator
-	keyProvider keyring.Info
-	keyTenant   keyring.Info
+	cctx         sdkclient.Context
+	cfg          testnet.Config
+	network      *testnet.Network
+	validator    *testnet.Validator
+	keyProvider  *keyring.Record
+	keyTenant    *keyring.Record
+	addrProvider sdk.AccAddress
+	addrTenant   sdk.AccAddress
 
 	group     *errgroup.Group
 	ctx       context.Context
 	ctxCancel context.CancelFunc
 
+	ev                   events.Service
+	bus                  pubsub.Bus
+	sub                  pubsub.Subscriber
 	deploymentMinDeposit sdk.DecCoin
 
 	appHost string
@@ -84,20 +100,19 @@ var (
 	deploymentAxlUSDCDeposit = fmt.Sprintf("--deposit=%s", axlUSCDMinDeposit)
 )
 
-func cliGlobalFlags(args ...string) []string {
-	return append(args,
-		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
-		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastBlock),
-		fmt.Sprintf("--gas=%s", flags.GasFlagAuto),
-		fmt.Sprintf("--%s=%s", flags.FlagGasAdjustment, defaultGasAdjustment),
-		fmt.Sprintf("--%s=%s", flags.FlagGasPrices, defaultGasPrice))
-}
+var cliFlags = cli.TestFlags().
+	WithSkipConfirm().
+	WithBroadcastModeBlock().
+	WithGasAuto()
 
 func (s *IntegrationTestSuite) SetupSuite() {
 	s.appHost, s.appPort = appEnv(s.T())
 
+	encCfg := sdkutil.MakeEncodingConfig()
+	app.ModuleBasics().RegisterInterfaces(encCfg.InterfaceRegistry)
+
 	// Create a network for test
-	cfg := testutil.DefaultConfig(testutil.WithInterceptState(func(cdc codec.Codec, s string, istate json.RawMessage) json.RawMessage {
+	cfg := testnet.DefaultConfig(nodetestutil.NewTestNetworkFixture, testnet.WithInterceptState(func(cdc codec.Codec, s string, istate json.RawMessage) json.RawMessage {
 		var res json.RawMessage
 
 		switch s {
@@ -112,7 +127,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 			res = cdc.MustMarshalJSON(state)
 		case "deployment":
-			state := &dtypes.GenesisState{}
+			state := &dvbeta.GenesisState{}
 			cdc.MustUnmarshalJSON(istate, state)
 			state.Params.MinDeposits = append(state.Params.MinDeposits, sdk.NewInt64Coin(axlUSDCDenom, 5000000))
 
@@ -125,10 +140,22 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	cfg.NumValidators = 1
 	cfg.MinGasPrices = fmt.Sprintf("0%s", testutil.CoinDenom)
 	s.cfg = cfg
-	s.network = network.New(s.T(), cfg)
 
-	kb := s.network.Validators[0].ClientCtx.Keyring
-	_, _, err := kb.NewMnemonic("keyBar", keyring.English, sdk.FullFundraiserPath, "", hd.Secp256k1)
+	ctx := context.WithValue(context.Background(), cli.ContextTypeAddressCodec, encCfg.SigningOptions.AddressCodec)
+	s.ctx = context.WithValue(ctx, cli.ContextTypeValidatorCodec, encCfg.SigningOptions.ValidatorAddressCodec)
+	s.ctx = context.WithValue(ctx, fromctx.CtxKeyLogc, log.NewLogger(os.Stdout))
+
+	s.network = testnet.New(s.T(), cfg)
+
+	client, err := arpcclient.NewClient(s.ctx, s.network.Validators[0].RPCAddress)
+	require.NoError(s.T(), err)
+
+	s.cctx = s.network.Validators[0].ClientCtx.WithClient(client)
+
+	cctx := s.cctx
+
+	kb := cctx.Keyring
+	_, _, err = kb.NewMnemonic("keyBar", keyring.English, sdk.FullFundraiserPath, "", hd.Secp256k1)
 	s.Require().NoError(err)
 	_, _, err = kb.NewMnemonic("keyFoo", keyring.English, sdk.FullFundraiserPath, "", hd.Secp256k1)
 	s.Require().NoError(err)
@@ -137,53 +164,73 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	_, err = s.network.WaitForHeight(1)
 	s.Require().NoError(err)
 
-	//
+	s.bus = pubsub.NewBus()
+	s.sub, err = s.bus.Subscribe()
+	s.Require().NoError(err)
+
 	s.validator = s.network.Validators[0]
+
+	s.ev, err = events.NewEvents(s.ctx, s.validator.ClientCtx.Client, "e2e-tests", s.bus)
+	s.Require().NoError(err)
 
 	// Send coins value
 	sendTokens := sdk.Coins{
-		sdk.NewCoin(s.cfg.BondDenom, mtypes.DefaultBidMinDeposit.Amount.MulRaw(4)),
-		sdk.NewCoin(axlUSDCDenom, sdk.NewInt(axlUSCDMinDepositAmount*4)),
+		sdk.NewCoin(s.cfg.BondDenom, mvbeta.DefaultBidMinDeposit.Amount.MulRaw(4)),
+		sdk.NewCoin(axlUSDCDenom, sdkmath.NewInt(axlUSCDMinDepositAmount*4)),
 	}
 
 	// Setup a Provider key
 	s.keyProvider, err = s.validator.ClientCtx.Keyring.Key("keyFoo")
 	s.Require().NoError(err)
 
+	s.addrProvider, err = s.keyProvider.GetAddress()
+	s.Require().NoError(err)
+
+	s.Require().NoError(s.network.WaitForNextBlock())
+
 	// give provider some coins
-	res, err := bankcli.MsgSendExec(
-		s.validator.ClientCtx,
-		s.validator.Address,
-		s.keyProvider.GetAddress(),
-		sendTokens,
-		cliGlobalFlags()...,
+	res, err := clitestutil.ExecSend(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(
+				s.addrProvider.String(),
+				sendTokens.String()).
+			WithFrom(s.validator.Address.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	// Set up second tenant key
 	s.keyTenant, err = s.validator.ClientCtx.Keyring.Key("keyBar")
 	s.Require().NoError(err)
 
-	// give tenant some coins too
-	res, err = bankcli.MsgSendExec(
-		s.validator.ClientCtx,
-		s.validator.Address,
-		s.keyTenant.GetAddress(),
-		sendTokens,
-		cliGlobalFlags()...,
+	s.addrTenant, err = s.keyTenant.GetAddress()
+	s.Require().NoError(err)
+
+	// give the tenant some coins too
+	res, err = clitestutil.ExecSend(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(
+				s.addrTenant.String(),
+				sendTokens.String()).
+			WithFrom(s.validator.Address.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	numPorts := 3
+	numPorts := 4
 	if s.ipMarketplace {
-		numPorts++
+		numPorts += 2
 	}
 
-	ports, err := network.GetFreePorts(numPorts)
+	ports, err := testnet.GetFreePorts(numPorts)
 	s.Require().NoError(err)
 
 	// address for provider to listen on
@@ -192,24 +239,8 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		Host:   provHost,
 		Scheme: "https",
 	}
-	// address for JWT server to listen on
-	jwtHost := fmt.Sprintf("localhost:%d", ports[1])
-	jwtURL := url.URL{
-		Host:   jwtHost,
-		Scheme: "https",
-	}
 
-	hostnameOperatorPort := ports[2]
-	hostnameOperatorHost := fmt.Sprintf("localhost:%d", hostnameOperatorPort)
-
-	var ipOperatorHost string
-	var ipOperatorPort int
-	if s.ipMarketplace {
-		ipOperatorPort = ports[3]
-		ipOperatorHost = fmt.Sprintf("localhost:%d", ipOperatorPort)
-	}
-
-	provFileStr := fmt.Sprintf(providerTemplate, provURL.String(), jwtURL.String())
+	provFileStr := fmt.Sprintf(providerTemplate, provURL.String())
 	tmpFile, err := os.CreateTemp(s.network.BaseDir, "provider.yaml")
 	require.NoError(s.T(), err)
 
@@ -225,102 +256,102 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 
 	// create Provider blockchain declaration
-	_, err = cli.TxCreateProviderExec(
-		s.validator.ClientCtx,
-		s.keyProvider.GetAddress(),
-		fmt.Sprintf("%s/%s", s.network.BaseDir, fstat.Name()),
-		cliGlobalFlags()...,
+	_, err = clitestutil.ExecTxCreateProvider(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(fmt.Sprintf("%s/%s", s.network.BaseDir, fstat.Name())).
+			WithFrom(s.addrProvider.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	// Generate provider's certificate
-	_, err = ccli.TxGenerateServerExec(
-		context.Background(),
-		s.validator.ClientCtx,
-		s.keyProvider.GetAddress(),
-		"localhost",
+	_, err = clitestutil.TxGenerateServerExec(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With("localhost").
+			WithFrom(s.addrProvider.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 
 	// Publish provider's certificate
-	_, err = ccli.TxPublishServerExec(
-		context.Background(),
-		s.validator.ClientCtx,
-		s.keyProvider.GetAddress(),
-		cliGlobalFlags()...,
+	_, err = clitestutil.TxPublishServerExec(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithFrom(s.addrProvider.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
 	// Generate tenant's certificate
-	_, err = ccli.TxGenerateClientExec(
-		context.Background(),
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags(fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
-			fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastBlock))...,
+	_, err = clitestutil.TxGenerateClientExec(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 
 	// Publish tenant's certificate
-	_, err = ccli.TxPublishClientExec(
-		context.Background(),
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		cliGlobalFlags()...,
+	_, err = clitestutil.TxPublishClientExec(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	pemSrc := fmt.Sprintf("%s/%s.pem", s.validator.ClientCtx.HomeDir, s.keyProvider.GetAddress().String())
-	pemDst := fmt.Sprintf("%s/%s.pem", strings.Replace(s.validator.ClientCtx.HomeDir, "simd", "simcli", 1), s.keyProvider.GetAddress().String())
+	pemSrc := fmt.Sprintf("%s/%s.pem", s.cctx.HomeDir, s.addrProvider.String())
+	pemDst := fmt.Sprintf("%s/%s.pem", strings.Replace(s.cctx.HomeDir, "simd", "simcli", 1), s.addrProvider.String())
 	input, err := os.ReadFile(pemSrc)
 	s.Require().NoError(err)
 
 	err = os.WriteFile(pemDst, input, 0400)
 	s.Require().NoError(err)
 
-	pemSrc = fmt.Sprintf("%s/%s.pem", s.validator.ClientCtx.HomeDir, s.keyTenant.GetAddress().String())
-	pemDst = fmt.Sprintf("%s/%s.pem", strings.Replace(s.validator.ClientCtx.HomeDir, "simd", "simcli", 1), s.keyTenant.GetAddress().String())
+	pemSrc = fmt.Sprintf("%s/%s.pem", s.cctx.HomeDir, s.addrTenant.String())
+	pemDst = fmt.Sprintf("%s/%s.pem", strings.Replace(s.cctx.HomeDir, "simd", "simcli", 1), s.addrTenant.String())
 	input, err = os.ReadFile(pemSrc)
 	s.Require().NoError(err)
 
 	err = os.WriteFile(pemDst, input, 0400)
 	s.Require().NoError(err)
 
-	localCtx := s.validator.ClientCtx.WithOutputFormat("json")
 	// test query providers
-	resp, err := cli.QueryProvidersExec(localCtx)
+	resp, err := clitestutil.ExecQueryProviders(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 
-	out := &types.QueryProvidersResponse{}
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(resp.Bytes(), out)
+	out := &ptypes.QueryProvidersResponse{}
+	err = s.cctx.Codec.UnmarshalJSON(resp.Bytes(), out)
 	s.Require().NoError(err)
 	s.Require().Len(out.Providers, 1, "Provider Creation Failed")
 	providers := out.Providers
-	s.Require().Equal(s.keyProvider.GetAddress().String(), providers[0].Owner)
+	s.Require().Equal(s.addrProvider.String(), providers[0].Owner)
 
 	// test query provider
 	createdProvider := providers[0]
-	resp, err = cli.QueryProviderExec(localCtx, createdProvider.Owner)
+	resp, err = clitestutil.ExecQueryProvider(s.ctx, cctx, cli.TestFlags().With(createdProvider.Owner).WithOutputJSON()...)
 	s.Require().NoError(err)
 
-	var provider types.Provider
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(resp.Bytes(), &provider)
+	var provider ptypes.Provider
+	err = s.cctx.Codec.UnmarshalJSON(resp.Bytes(), &provider)
 	s.Require().NoError(err)
 	s.Require().Equal(createdProvider, provider)
 
-	// Run Provider service
-	keyName := s.keyProvider.GetName()
-
 	// Change the akash home directory for CLI to access the test keyring
-	cliHome := strings.Replace(s.validator.ClientCtx.HomeDir, "simd", "simcli", 1)
-
-	cctx := s.validator.ClientCtx
+	cliHome := strings.Replace(s.cctx.HomeDir, "simd", "simcli", 1)
 
 	// A context object to tie the lifetime of the provider & hostname operator to
 	ctx, cancel := context.WithCancel(context.Background())
@@ -350,63 +381,52 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.ctx = ctx
 	s.group = group
 
-	// all command use viper which is meant for use by a single goroutine only
+	hostnameOperatorPort := ports[1]
+	hostnameOperatorHost := fmt.Sprintf("localhost:%d", hostnameOperatorPort)
+
+	var ipOperatorHost string
+	var ipOperatorPort int
+
+	// all commands use Viper which is meant for use by a single goroutine only
 	// so wait for the provider to start before running the hostname operator
-	extraArgs := []string{
-		fmt.Sprintf("--%s=%s", flags.FlagFees, sdk.NewCoins(sdk.NewCoin(s.cfg.BondDenom, sdk.NewInt(20))).String()),
-		"--deployment-runtime-class=none", // do not use gvisor in test
-		fmt.Sprintf("--hostname-operator-endpoint=%s", hostnameOperatorHost),
-	}
+	pArgs := cli.TestFlags().
+		WithHome(cliHome).
+		WithFrom(s.addrProvider.String()).
+		WithGasAuto().
+		WithFlag(pcmd.FlagClusterK8s, true).
+		WithFlag(pcmd.FlagGatewayListenAddress, provURL.Host).
+		WithFlag(pcmd.FlagClusterPublicHostname, ptestutil.TestClusterPublicHostname).
+		WithFlag(pcmd.FlagClusterNodePortQuantity, ptestutil.TestClusterNodePortQuantity).
+		WithFlag(pcmd.FlagPersistentConfigBackend, "memory").
+		WithFlag("deployment-runtime-class", "none").
+		WithFlag("hostname-operator-endpoint", hostnameOperatorHost).
+		WithFlag(pcmd.FlagBidPricingStrategy, "randomRange")
 
 	if s.ipMarketplace {
-		extraArgs = append(extraArgs, fmt.Sprintf("--ip-operator-endpoint=%s", ipOperatorHost))
-		extraArgs = append(extraArgs, "--ip-operator")
+		ipOperatorPort = ports[2]
+		ipOperatorHost = fmt.Sprintf("localhost:%d", ipOperatorPort)
+
+		pArgs = pArgs.
+			WithFlag("ip-operator-endpoint", ipOperatorHost).
+			WithFlag("ip-operator", true)
 	}
-	s.group.Go(func() error {
-		_, err := ptestutil.RunLocalProvider(ctx,
-			cctx,
-			cctx.ChainID,
-			s.validator.RPCAddress,
-			cliHome,
-			keyName,
-			provURL.Host,
-			extraArgs...,
-		)
-
-		if err != nil {
-			s.T().Logf("provider exit %v", err)
-		}
-
-		return err
-	})
 
 	dialer := net.Dialer{
 		Timeout: time.Second * 3,
 	}
 
-	// Wait for the provider gateway to be up and running
-	s.T().Log("waiting for provider gateway")
-	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
-
-	// --- Start JWT Server
-	s.group.Go(func() error {
-		s.T().Logf("starting JWT server for test on %v", jwtURL.Host)
-		_, err := ptestutil.RunProviderJWTServer(s.ctx,
-			cctx,
-			keyName,
-			jwtURL.Host,
-		)
-		s.Assert().NoError(err)
-		return err
-	})
-
-	s.T().Log("waiting for JWT server")
-	waitForTCPSocket(s.ctx, dialer, jwtHost, s.T())
-
 	// --- Start hostname operator
 	s.group.Go(func() error {
 		s.T().Logf("starting hostname operator for test on %s", hostnameOperatorHost)
-		_, err := ptestutil.RunLocalHostnameOperator(s.ctx, cctx, hostnameOperatorPort)
+
+		_, err := ptestutil.RunLocalOperator(
+			s.ctx,
+			cctx,
+			cli.TestFlags().
+				With("hostname").
+				WithFlag(operatorcommon.FlagRESTAddress, "127.0.0.1").
+				WithFlag(operatorcommon.FlagRESTPort, hostnameOperatorPort)...,
+		)
 		s.Assert().NoError(err)
 		return err
 	})
@@ -417,7 +437,15 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	if s.ipMarketplace {
 		s.group.Go(func() error {
 			s.T().Logf("starting ip operator for test on %v", ipOperatorHost)
-			_, err := ptestutil.RunLocalIPOperator(s.ctx, cctx, ipOperatorPort, s.keyProvider.GetAddress())
+			_, err := ptestutil.RunLocalOperator(
+				s.ctx,
+				cctx,
+				cli.TestFlags().
+					With("ip").
+					WithFlag(operatorcommon.FlagRESTAddress, "127.0.0.1").
+					WithFlag(operatorcommon.FlagRESTPort, ipOperatorPort).
+					WithProvider(s.addrProvider.String())...,
+			)
 			s.Assert().NoError(err)
 			return err
 		})
@@ -425,6 +453,24 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		s.T().Log("waiting for IP operator")
 		waitForTCPSocket(s.ctx, dialer, ipOperatorHost, s.T())
 	}
+
+	s.group.Go(func() error {
+		_, err := ptestutil.RunLocalProvider(
+			ctx,
+			cctx,
+			pArgs...,
+		)
+
+		if err != nil {
+			s.T().Logf("provider stopped with error: %v", err)
+		}
+
+		return err
+	})
+
+	// Wait for the provider gateway to be up and running
+	s.T().Log("waiting for provider gateway")
+	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
 
 	s.Require().NoError(s.network.WaitForNextBlock())
 }
@@ -448,6 +494,9 @@ func waitForTCPSocket(ctx context.Context, dialer net.Dialer, host string, t *te
 
 			_, ok := err.(net.Error)
 			require.Truef(t, ok, "error should be net.Error not [%T] %v", err, err)
+
+			//var eerr net.Error
+			//require.ErrorAs(t, err, eerr, "error should be net.Error not [%T]", err)
 			time.Sleep(333 * time.Millisecond)
 			continue
 		}
@@ -462,12 +511,12 @@ func (s *IntegrationTestSuite) TearDownTest() {
 }
 
 func (s *IntegrationTestSuite) closeDeployments() int {
-	keyTenant, err := s.validator.ClientCtx.Keyring.Key("keyBar")
+	cctx := s.cctx
+
+	resp, err := clitestutil.ExecQueryDeployments(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
-	resp, err := deploycli.QueryDeploymentsExec(s.validator.ClientCtx.WithOutputFormat("json"))
-	s.Require().NoError(err)
-	deployResp := &dtypes.QueryDeploymentsResponse{}
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(resp.Bytes(), deployResp)
+	deployResp := &dvbeta.QueryDeploymentsResponse{}
+	err = s.cctx.Codec.UnmarshalJSON(resp.Bytes(), deployResp)
 	s.Require().NoError(err)
 
 	deployments := deployResp.Deployments
@@ -478,16 +527,18 @@ func (s *IntegrationTestSuite) closeDeployments() int {
 			continue
 		}
 		// teardown lease
-		res, err := deploycli.TxCloseDeploymentExec(
-			s.validator.ClientCtx,
-			keyTenant.GetAddress(),
-			cliGlobalFlags(
-				fmt.Sprintf("--owner=%s", createdDep.Groups[0].GroupID.Owner),
-				fmt.Sprintf("--dseq=%v", createdDep.Deployment.DeploymentID.DSeq))...,
+		res, err := clitestutil.ExecDeploymentClose(
+			s.ctx,
+			cctx,
+			cli.TestFlags().
+				WithFrom(s.addrTenant.String()).
+				WithGasAuto().
+				WithOwner(createdDep.Groups[0].ID.Owner).
+				WithDSeq(createdDep.Deployment.ID.DSeq)...,
 		)
 		s.Require().NoError(err)
 		s.Require().NoError(s.waitForBlocksCommitted(1))
-		clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+		clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 	}
 
 	return len(deployments)
@@ -496,17 +547,26 @@ func (s *IntegrationTestSuite) closeDeployments() int {
 func (s *IntegrationTestSuite) TearDownSuite() {
 	s.T().Log("Cleaning up after E2E suite")
 	n := s.closeDeployments()
+	s.Require().NoError(s.waitForBlocksCommitted(1))
+
+	cctx := s.cctx
+
 	// test query deployments with state filter closed
-	resp, err := deploycli.QueryDeploymentsExec(
-		s.validator.ClientCtx.WithOutputFormat("json"),
-		"--state=closed",
+	resp, err := clitestutil.ExecQueryDeployments(
+		s.ctx,
+		cctx,
+		cli.TestFlags().WithOutputJSON().
+			WithState("closed")...,
 	)
 	s.Require().NoError(err)
 
-	qResp := &dtypes.QueryDeploymentsResponse{}
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(resp.Bytes(), qResp)
+	qResp := &dvbeta.QueryDeploymentsResponse{}
+	err = s.cctx.Codec.UnmarshalJSON(resp.Bytes(), qResp)
 	s.Require().NoError(err)
 	s.Require().True(len(qResp.Deployments) == n, "Deployment Close Failed")
+
+	s.ev.Shutdown()
+	s.bus.Close()
 
 	s.network.Cleanup()
 
@@ -549,7 +609,7 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 	_ = s.group.Wait()
 }
 
-func newestLease(leases []mtypes.QueryLeaseResponse) mtypes.Lease {
+func newestLease(leases []mvbeta.QueryLeaseResponse) mtypes.Lease {
 	result := mtypes.Lease{}
 	assigned := false
 
@@ -557,7 +617,7 @@ func newestLease(leases []mtypes.QueryLeaseResponse) mtypes.Lease {
 		if !assigned {
 			result = lease.Lease
 			assigned = true
-		} else if result.GetLeaseID().DSeq < lease.Lease.GetLeaseID().DSeq {
+		} else if result.GetID().DSeq < lease.Lease.GetID().DSeq {
 			result = lease.Lease
 		}
 	}
@@ -577,13 +637,23 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EDeploymentUpdate))
 	suite.Run(t, new(E2EApp))
 	suite.Run(t, new(E2EPersistentStorageDefault))
+	suite.Run(t, new(E2EPersistentStorageDefault))
 	suite.Run(t, new(E2EPersistentStorageBeta2))
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
-	// suite.Run(t, new(E2EStorageClassRam))
+	suite.Run(t, new(E2EStorageClassRam))
 	suite.Run(t, new(E2EMigrateHostname))
-	suite.Run(t, new(E2EJWTServer))
 	suite.Run(t, new(E2ECustomCurrency))
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+}
+
+// TestQueryApp enables rapid testing of the querying functionality locally
+// Not for CI tests.
+func TestQueryApp(t *testing.T) {
+	integrationTestOnly(t)
+	host, appPort := appEnv(t)
+
+	appURL := fmt.Sprintf("http://%s:%s/", host, appPort)
+	queryApp(t, appURL, 1)
 }
 
 func (s *IntegrationTestSuite) waitForBlocksCommitted(height int) error {
@@ -601,12 +671,89 @@ func (s *IntegrationTestSuite) waitForBlocksCommitted(height int) error {
 	return nil
 }
 
-// TestQueryApp enables rapid testing of the querying functionality locally
-// Not for CI tests.
-func TestQueryApp(t *testing.T) {
-	integrationTestOnly(t)
-	host, appPort := appEnv(t)
+func (s *IntegrationTestSuite) waitForBlockchainEvent(expEv interface{}) error {
+	ctx, cancel := context.WithTimeout(s.ctx, 1*time.Minute)
+	defer cancel()
 
-	appURL := fmt.Sprintf("http://%s:%s/", host, appPort)
-	queryApp(t, appURL, 1)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev := <-s.sub.Events():
+			if reflect.TypeOf(ev) == reflect.TypeOf(expEv) {
+				switch pev := ev.(type) {
+				case *atypes.EventTrustedAuditorCreated:
+					ev1 := expEv.(*atypes.EventTrustedAuditorCreated)
+					if ev1.Equal(pev) {
+						return nil
+					}
+				case *atypes.EventTrustedAuditorDeleted:
+					ev1 := expEv.(*atypes.EventTrustedAuditorDeleted)
+					if ev1.Equal(pev) {
+						return nil
+					}
+				case *dtypes.EventDeploymentCreated:
+					ev1 := expEv.(*dtypes.EventDeploymentCreated)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *dtypes.EventDeploymentUpdated:
+					ev1 := expEv.(*dtypes.EventDeploymentUpdated)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *dtypes.EventDeploymentClosed:
+					ev1 := expEv.(*dtypes.EventDeploymentClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *dtypes.EventGroupStarted:
+					ev1 := expEv.(*dtypes.EventGroupClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *dtypes.EventGroupPaused:
+					ev1 := expEv.(*dtypes.EventGroupClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *dtypes.EventGroupClosed:
+					ev1 := expEv.(*dtypes.EventGroupClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *mtypes.EventOrderCreated:
+					ev1 := expEv.(*mtypes.EventOrderCreated)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *mtypes.EventOrderClosed:
+					ev1 := expEv.(*mtypes.EventOrderClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *mtypes.EventBidCreated:
+					ev1 := expEv.(*mtypes.EventBidCreated)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *mtypes.EventBidClosed:
+					ev1 := expEv.(*mtypes.EventBidClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *mtypes.EventLeaseCreated:
+					ev1 := expEv.(*mtypes.EventLeaseCreated)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				case *mtypes.EventLeaseClosed:
+					ev1 := expEv.(*mtypes.EventLeaseClosed)
+					if ev1.ID.Equals(pev.ID) {
+						return nil
+					}
+				}
+			}
+		}
+	}
 }

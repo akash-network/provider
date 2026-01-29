@@ -4,18 +4,18 @@ import (
 	"context"
 	"testing"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
-	"github.com/akash-network/node/testutil"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/rest"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
@@ -28,8 +28,8 @@ const testKubeClientNs = "nstest1111"
 func clientForTest(t *testing.T, kobjs []runtime.Object, aobjs []runtime.Object) Client {
 	myLog := testutil.Logger(t)
 
-	kc := fake.NewSimpleClientset(kobjs...)
-	ac := afake.NewSimpleClientset(aobjs...)
+	kc := fake.NewClientset(kobjs...)
+	ac := afake.NewClientset(aobjs...)
 
 	result := &client{
 		kc:                kc,
@@ -368,7 +368,7 @@ func TestServiceStatusNoDeployment(t *testing.T) {
 	clientInterface := clientForTest(t, []runtime.Object{lns, svc}, []runtime.Object{mani})
 
 	status, err := clientInterface.ServiceStatus(context.Background(), lid, serviceName)
-	require.True(t, kerrors.IsNotFound(err))
+	require.ErrorIs(t, err, kubeclienterrors.ErrNoServiceForLease)
 	require.Nil(t, status)
 }
 
@@ -479,7 +479,7 @@ func TestServiceStatusWithIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.Resources{},
+		Resources: rtypes.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -498,7 +498,7 @@ func TestServiceStatusWithIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.Resources{},
+		Resources: rtypes.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -565,7 +565,7 @@ func TestServiceStatusWithNoManifest(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.Resources{},
+		Resources: rtypes.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -584,7 +584,7 @@ func TestServiceStatusWithNoManifest(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.Resources{},
+		Resources: rtypes.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -636,7 +636,7 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.Resources{},
+		Resources: rtypes.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -655,7 +655,7 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 		Command:   nil,
 		Args:      nil,
 		Env:       nil,
-		Resources: types.Resources{},
+		Resources: rtypes.Resources{},
 		Count:     1,
 		Expose: []manifest.ServiceExpose{
 			{
@@ -679,7 +679,7 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 
 	m, err := crd.NewManifest(testKubeClientNs, lid, mg, cparams)
 	require.NoError(t, err)
-	// akashMock := akashclient_fake.NewSimpleClientset(m)
+	// akashMock := akashclient_fake.NewClientset(m)
 
 	clientInterface := clientForTest(t, []runtime.Object{lns, depl}, []runtime.Object{m})
 

@@ -66,7 +66,6 @@ ifeq (-1, $(__is_local_go_satisfies))
 $(error "unsupported local go$(__local_go) version . min required go1.21.0")
 endif
 
-GOWORK                       ?= on
 GO_MOD                       ?= readonly
 export GO                    := GO111MODULE=$(GO111MODULE) go
 GO_BUILD                     := $(GO) build -mod=$(GO_MOD)
@@ -81,18 +80,19 @@ endif
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 
-AKASHD_MODULE                := github.com/akash-network/node
+AKASHD_MODULE                := pkg.akt.dev/node
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
-AKASHD_SRC_IS_LOCAL          := $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
+AKASHD_SRC_IS_LOCAL          ?= $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
 AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")
 AKASHD_VERSION               := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(AKASHD_MODULE) | cut -c2-)
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
-GOLANGCI_LINT_VERSION        ?= v1.51.2
+GOLANGCI_LINT_VERSION        ?= v2.3.0
 STATIK_VERSION               ?= v0.1.7
 GIT_CHGLOG_VERSION           ?= v0.15.1
-MOCKERY_PACKAGE_NAME         := github.com/vektra/mockery/v2
+MOCKERY_PACKAGE_NAME         := github.com/vektra/mockery/v3
 MOCKERY_VERSION              ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(MOCKERY_PACKAGE_NAME))
-K8S_CODE_GEN_VERSION         ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
+K8S_CODEGEN_VERSION          ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
+SEMVER_VERSION               ?= v1.3.0
 
 AKASHD_BUILD_FROM_SRC        := false
 ifeq (false,$(AKASHD_SRC_IS_LOCAL))
@@ -122,17 +122,19 @@ endif
 STATIK_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/statik/$(STATIK_VERSION)
 GIT_CHGLOG_VERSION_FILE          := $(AP_DEVCACHE_VERSIONS)/git-chglog/$(GIT_CHGLOG_VERSION)
 MOCKERY_VERSION_FILE             := $(AP_DEVCACHE_VERSIONS)/mockery/v$(MOCKERY_VERSION)
-K8S_CODE_GEN_VERSION_FILE        := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODE_GEN_VERSION)
+K8S_CODEGEN_VERSION_FILE         := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODEGEN_VERSION)
 GOLANGCI_LINT_VERSION_FILE       := $(AP_DEVCACHE_VERSIONS)/golangci-lint/$(GOLANGCI_LINT_VERSION)
 AKASHD_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/akash/$(AKASHD_VERSION)
 KIND_VERSION_FILE                := $(AP_DEVCACHE_VERSIONS)/kind/$(KIND_VERSION)
+SEMVER_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/semver/$(SEMVER_VERSION)
 
 STATIK                           := $(AP_DEVCACHE_BIN)/statik
 GIT_CHGLOG                       := $(AP_DEVCACHE_BIN)/git-chglog
 MOCKERY                          := $(AP_DEVCACHE_BIN)/mockery
-K8S_KUBE_CODEGEN_FILE            := generate-groups.sh
+K8S_KUBE_CODEGEN_FILE            := kube_codegen.sh
 K8S_KUBE_CODEGEN                 := $(AP_DEVCACHE_BIN)/$(K8S_KUBE_CODEGEN_FILE)
 K8S_GO_TO_PROTOBUF               := $(AP_DEVCACHE_BIN)/go-to-protobuf
 GOLANGCI_LINT                    := $(AP_DEVCACHE_BIN)/golangci-lint
+SEMVER                           := $(AP_DEVCACHE_BIN)/semver
 
 include $(AP_ROOT)/make/setup-cache.mk

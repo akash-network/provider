@@ -8,24 +8,26 @@ import (
 	"sync/atomic"
 	"time"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	provider "github.com/akash-network/akash-api/go/provider/v1"
 	"github.com/boz/go-lifecycle"
 	"github.com/desertbit/timer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
 
+	"cosmossdk.io/log"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	atypes "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	atypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
+	provider "pkg.akt.dev/go/provider/v1"
 
-	"github.com/akash-network/node/pubsub"
-	sdlutil "github.com/akash-network/node/sdl/util"
-	"github.com/akash-network/node/util/runner"
+	sdlutil "pkg.akt.dev/go/sdl/util"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/node/util/runner"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
@@ -142,7 +144,10 @@ func newInventoryService(
 
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
-		reservations = append(reservations, newReservation(d.LeaseID().OrderID(), d.ManifestGroup()))
+		res := newReservation(d.LeaseID().OrderID(), d.ManifestGroup())
+		res.SetClusterParams(d.ClusterParams())
+
+		reservations = append(reservations, res)
 	}
 
 	go is.lc.WatchChannel(ctx.Done())
@@ -209,7 +214,7 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.Resou
 	}
 }
 
-func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint:golint,unparam
+func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint: unparam
 	ch := make(chan inventoryResponse, 1)
 	req := inventoryRequest{
 		order: order,
@@ -275,27 +280,27 @@ func (is *inventoryService) resourcesToCommit(rgroup dtypes.ResourceGroup) dtype
 	replacedResources := make(dtypes.ResourceUnits, 0)
 
 	for _, resource := range rgroup.GetResourceUnits() {
-		runits := atypes.Resources{
+		runits := rtypes.Resources{
 			ID: resource.ID,
-			CPU: &atypes.CPU{
-				Units:      sdlutil.ComputeCommittedResources(is.config.CPUCommitLevel, resource.Resources.GetCPU().GetUnits()),
-				Attributes: resource.Resources.GetCPU().GetAttributes(),
+			CPU: &rtypes.CPU{
+				Units:      sdlutil.ComputeCommittedResources(is.config.CPUCommitLevel, resource.GetCPU().GetUnits()),
+				Attributes: resource.GetCPU().GetAttributes(),
 			},
-			GPU: &atypes.GPU{
-				Units:      sdlutil.ComputeCommittedResources(is.config.GPUCommitLevel, resource.Resources.GetGPU().GetUnits()),
-				Attributes: resource.Resources.GetGPU().GetAttributes(),
+			GPU: &rtypes.GPU{
+				Units:      sdlutil.ComputeCommittedResources(is.config.GPUCommitLevel, resource.GetGPU().GetUnits()),
+				Attributes: resource.GetGPU().GetAttributes(),
 			},
-			Memory: &atypes.Memory{
-				Quantity:   sdlutil.ComputeCommittedResources(is.config.MemoryCommitLevel, resource.Resources.GetMemory().GetQuantity()),
-				Attributes: resource.Resources.GetMemory().GetAttributes(),
+			Memory: &rtypes.Memory{
+				Quantity:   sdlutil.ComputeCommittedResources(is.config.MemoryCommitLevel, resource.GetMemory().GetQuantity()),
+				Attributes: resource.GetMemory().GetAttributes(),
 			},
-			Endpoints: resource.Resources.GetEndpoints(),
+			Endpoints: resource.GetEndpoints(),
 		}
 
-		storage := make(atypes.Volumes, 0, len(resource.Resources.GetStorage()))
+		storage := make(rtypes.Volumes, 0, len(resource.GetStorage()))
 
-		for _, volume := range resource.Resources.GetStorage() {
-			storage = append(storage, atypes.Storage{
+		for _, volume := range resource.GetStorage() {
+			storage = append(storage, rtypes.Storage{
 				Name:       volume.Name,
 				Quantity:   sdlutil.ComputeCommittedResources(is.config.StorageCommitLevel, volume.GetQuantity()),
 				Attributes: volume.GetAttributes(),
@@ -374,10 +379,10 @@ func updateReservationMetrics(reservations []*reservation) {
 			endpointsTotal = &activeEndpointsTotal
 		}
 		for _, resource := range reservation.Resources().GetResourceUnits() {
-			*cpuTotal += float64(resource.Resources.GetCPU().GetUnits().Value() * uint64(resource.Count))
-			*gpuTotal += float64(resource.Resources.GetGPU().GetUnits().Value() * uint64(resource.Count))
-			*memoryTotal += float64(resource.Resources.GetMemory().Quantity.Value() * uint64(resource.Count))
-			*endpointsTotal += float64(len(resource.Resources.GetEndpoints()))
+			*cpuTotal += float64(resource.GetCPU().GetUnits().Value() * uint64(resource.Count))
+			*gpuTotal += float64(resource.GetGPU().GetUnits().Value() * uint64(resource.Count))
+			*memoryTotal += float64(resource.GetMemory().Quantity.Value() * uint64(resource.Count))
+			*endpointsTotal += float64(len(resource.GetEndpoints()))
 		}
 	}
 
@@ -454,7 +459,6 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	state.reservations = append(state.reservations, reservation)
 	req.ch <- inventoryResponse{value: reservation}
 	inventoryRequestsCounter.WithLabelValues("reserve", "create").Inc()
-
 }
 
 func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservation) {
@@ -483,23 +487,23 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	invupch := make(chan ctypes.Inventory, 1)
 
 	invch := is.clients.inventory.ResultChan()
-	var reserveChLocal <-chan inventoryRequest
+	var reservech <-chan inventoryRequest
 
 	resumeProcessingReservations := func() {
-		reserveChLocal = is.reservech
+		reservech = is.reservech
 	}
 
 	t := timer.NewStoppedTimer()
 
 	updateIPs := func() {
 		if is.clients.ip != nil {
-			reserveChLocal = nil
+			reservech = nil
 			if runch == nil {
 				t.Stop()
 				runch = is.runCheck(rctx, state)
 			}
-		} else if reserveChLocal == nil && state.inventory != nil {
-			reserveChLocal = is.reservech
+		} else if reservech == nil && state.inventory != nil {
+			reservech = is.reservech
 		}
 	}
 
@@ -513,11 +517,11 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		default:
 		}
 	}
-
 loop:
 	for {
 		select {
 		case err := <-is.lc.ShutdownRequest():
+			is.log.Debug("received shutdown request", "error", err)
 			is.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-is.sub.Events():
@@ -563,7 +567,7 @@ loop:
 			}
 		case <-t.C:
 			updateIPs()
-		case req := <-reserveChLocal:
+		case req := <-reservech:
 			is.handleRequest(req, state)
 		case req := <-is.lookupch:
 			// lookup registration
@@ -609,14 +613,21 @@ loop:
 			inventoryRequestsCounter.WithLabelValues("unreserve", "not-found").Inc()
 			req.ch <- inventoryResponse{err: errReservationNotFound}
 		case responseCh := <-is.statusch:
-			responseCh <- is.getStatus(state)
+			select {
+			case responseCh <- is.getStatus(state):
+			default:
+			}
 			inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
 		case responseCh := <-is.statusV1ch:
 			resp, err := is.getStatusV1(state)
-			responseCh <- invSnapshotResp{
+			select {
+			case responseCh <- invSnapshotResp{
 				res: resp,
 				err: err,
+			}:
+			default:
 			}
+
 			if err == nil {
 				inventoryRequestsCounter.WithLabelValues("status", "success").Inc()
 			} else {
@@ -628,14 +639,15 @@ loop:
 			}
 
 			select {
-			case invupch <- inv:
+			case <-invupch:
 			default:
-				<-invupch
-				invupch <- inv
 			}
+
+			invupch <- inv
 		case inv := <-invupch:
 			currinv = inv.Dup()
 			state.inventory = inv
+
 			updateIPs()
 
 			metrics := state.inventory.Metrics()
@@ -652,13 +664,13 @@ loop:
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
-					// FIXME check is call for Adjust actually needed to be here
 					if err := state.inventory.Adjust(r); err != nil {
 						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
 					}
 				}
 			}
-			// updateInventory(inv)
+
+			trySignal()
 		case run := <-runch:
 			runch = nil
 			t.Reset(5 * time.Second)
@@ -677,14 +689,19 @@ loop:
 					}
 				}
 			} else {
-				is.log.Error("checking IP addresses", "err", err)
+				is.log.Error("checking IP addresses", "error", err)
 			}
 
 			resumeProcessingReservations()
 
 			trySignal()
 		case <-signalch:
-			bus.Pub(state.inventory.Snapshot(), []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
+			inv, err := is.getStatusV1(state)
+			if err != nil {
+				continue
+			}
+
+			bus.Pub(inv, []string{ptypes.PubSubTopicInventoryStatus}, tpubsub.WithRetain())
 		}
 
 		updateReservationMetrics(state.reservations)
@@ -770,7 +787,7 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) inventoryV1.
 
 	for _, reservation := range state.reservations {
 		total := inventoryV1.MetricTotal{
-			Storage: make(map[string]int64),
+			Storage: make(map[string]uint64),
 		}
 
 		for _, resources := range reservation.Resources().GetResourceUnits() {
@@ -784,12 +801,10 @@ func (is *inventoryService) getStatus(state *inventoryServiceState) inventoryV1.
 		}
 	}
 
-	for _, nd := range state.inventory.Metrics().Nodes {
-		status.Available.Nodes = append(status.Available.Nodes, nd)
-	}
+	status.Available.Nodes = append(status.Available.Nodes, state.inventory.Metrics().Nodes...)
 
 	for class, size := range state.inventory.Metrics().TotalAvailable.Storage {
-		status.Available.Storage = append(status.Available.Storage, inventoryV1.StorageStatus{Class: class, Size: size})
+		status.Available.Storage = append(status.Available.Storage, inventoryV1.StorageStatus{Class: class, Size: int64(size)}) //nolint: gosec
 	}
 
 	return status
@@ -835,8 +850,8 @@ func reservationCountEndpoints(reservation *reservation) uint {
 	// Count the number of endpoints per resource. The number of instances does not affect
 	// the number of ports
 	for _, resource := range resources {
-		for _, endpoint := range resource.Resources.Endpoints {
-			if endpoint.Kind == atypes.Endpoint_RANDOM_PORT {
+		for _, endpoint := range resource.Endpoints {
+			if endpoint.Kind == rtypes.Endpoint_RANDOM_PORT {
 				externalPortCount++
 			}
 		}

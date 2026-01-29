@@ -15,7 +15,7 @@ Restricted PSP source: https://raw.githubusercontent.com/kubernetes/website/mast
 
 These polices are applied by the Provider in [provider/cluster/kube/builder.go](https://github.com/akash-network/node/blob/master/provider/cluster/kube/builder.go).
 
-```
+```yaml
 apiVersion: policy/v1beta1
 kind: PodSecurityPolicy
 metadata:

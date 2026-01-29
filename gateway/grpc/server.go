@@ -1,27 +1,26 @@
 package grpc
 
 import (
-	"crypto/tls"
+	"context"
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"net"
 	"time"
 
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"pkg.akt.dev/go/util/ctxlog"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
-	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	providerv1 "pkg.akt.dev/go/provider/v1"
+	ajwt "pkg.akt.dev/go/util/jwt"
 
 	"github.com/akash-network/provider"
+	gwutils "github.com/akash-network/provider/gateway/utils"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
 )
@@ -29,8 +28,7 @@ import (
 type ContextKey string
 
 const (
-	ContextKeyQueryClient = ContextKey("query-client")
-	ContextKeyOwner       = ContextKey("owner")
+	ContextKeyClaims = ContextKey("owner")
 )
 
 type grpcProviderV1 struct {
@@ -40,36 +38,23 @@ type grpcProviderV1 struct {
 
 var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
 
-func QueryClientFromCtx(ctx context.Context) ctypes.QueryClient {
-	val := ctx.Value(ContextKeyQueryClient)
+func ContextWithClaims(ctx context.Context, claims *ajwt.Claims) context.Context {
+	return context.WithValue(ctx, ContextKeyClaims, claims)
+}
+
+func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
+	val := ctx.Value(ContextKeyClaims)
 	if val == nil {
-		panic("context does not have pubsub set")
+		return &ajwt.Claims{}
 	}
 
-	return val.(ctypes.QueryClient)
+	return val.(*ajwt.Claims)
 }
 
-func ContextWithOwner(ctx context.Context, address sdk.Address) context.Context {
-	return context.WithValue(ctx, ContextKeyOwner, address)
-}
-
-func OwnerFromCtx(ctx context.Context) sdk.Address {
-	val := ctx.Value(ContextKeyOwner)
-	if val == nil {
-		return sdk.AccAddress{}
-	}
-
-	return val.(sdk.Address)
-}
-
-func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient) error {
-	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
-	// certificate validation and authentication performed later in mtlsHandler
-	tlsConfig := &tls.Config{
-		Certificates:       certs,
-		ClientAuth:         tls.RequestClientCert,
-		InsecureSkipVerify: true, // nolint: gosec
-		MinVersion:         tls.VersionTLS13,
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
+	if err != nil {
+		return err
 	}
 
 	group, err := fromctx.ErrGroupFromCtx(ctx)
@@ -77,12 +62,12 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 		return err
 	}
 
-	log := fromctx.LogcFromCtx(ctx)
+	log := ctxlog.LogcFromCtx(ctx)
 
-	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 		MinTime:             30 * time.Second,
 		PermitWithoutStream: false,
-	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
+	}), grpc.ChainUnaryInterceptor(authInterceptor()))
 
 	pRPC := &grpcProviderV1{
 		ctx:    ctx,
@@ -114,74 +99,30 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 	return nil
 }
 
-func mtlsInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+func authInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		var tokString string
+		var peerCerts []*x509.Certificate
+
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				certificates := mtls.State.PeerCertificates
-
-				if len(certificates) > 0 {
-					if len(certificates) != 1 {
-						return nil, fmt.Errorf("tls: invalid certificate chain") // nolint: goerr113
-					}
-
-					cquery := QueryClientFromCtx(ctx)
-
-					cert := certificates[0]
-
-					// validation
-					var owner sdk.Address
-					if owner, err = sdk.AccAddressFromBech32(cert.Subject.CommonName); err != nil {
-						return nil, fmt.Errorf("tls: invalid certificate's subject common name: %w", err)
-					}
-
-					// 1. CommonName in issuer and Subject must match and be as Bech32 format
-					if cert.Subject.CommonName != cert.Issuer.CommonName {
-						return nil, fmt.Errorf("tls: invalid certificate's issuer common name: %w", err)
-					}
-
-					// 2. serial number must be in
-					if cert.SerialNumber == nil {
-						return nil, fmt.Errorf("tls: invalid certificate serial number: %w", err)
-					}
-
-					// 3. look up certificate on chain
-					var resp *ctypes.QueryCertificatesResponse
-					resp, err = cquery.Certificates(
-						ctx,
-						&ctypes.QueryCertificatesRequest{
-							Filter: ctypes.CertificateFilter{
-								Owner:  owner.String(),
-								Serial: cert.SerialNumber.String(),
-								State:  "valid",
-							},
-						},
-					)
-					if err != nil {
-						return nil, fmt.Errorf("tls: unable to fetch certificate from chain: %w", err)
-					}
-					if (len(resp.Certificates) != 1) || !resp.Certificates[0].Certificate.IsState(ctypes.CertificateValid) {
-						return nil, errors.New("tls: attempt to use non-existing or revoked certificate") // nolint: goerr113
-					}
-
-					clientCertPool := x509.NewCertPool()
-					clientCertPool.AddCert(cert)
-
-					opts := x509.VerifyOptions{
-						Roots:                     clientCertPool,
-						CurrentTime:               time.Now(),
-						KeyUsages:                 []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-						MaxConstraintComparisions: 0,
-					}
-
-					if _, err = cert.Verify(opts); err != nil {
-						return nil, fmt.Errorf("tls: unable to verify certificate: %w", err)
-					}
-
-					ctx = ContextWithOwner(ctx, owner)
-				}
+				peerCerts = mtls.State.PeerCertificates
 			}
 		}
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			tokens := md["authorization"]
+			if len(tokens) == 1 {
+				tokString = tokens[1]
+			}
+		}
+
+		claims, err := gwutils.AuthProcess(ctx, peerCerts, tokString)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx = ContextWithClaims(ctx, claims)
 
 		return handler(ctx, req)
 	}

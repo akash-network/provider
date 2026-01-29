@@ -1,9 +1,8 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
-	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,34 +10,31 @@ import (
 	"strings"
 	"time"
 
-	cltypes "github.com/akash-network/akash-api/go/node/client/types"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-	"github.com/pkg/errors"
 	"github.com/shopspring/decimal"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
-	"k8s.io/client-go/kubernetes"
+	kruntime "k8s.io/apimachinery/pkg/util/runtime"
+	aclient "pkg.akt.dev/go/node/client/discovery"
 
-	"github.com/tendermint/tendermint/libs/log"
-
-	"github.com/cosmos/cosmos-sdk/client/flags"
+	"cosmossdk.io/log"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
-	mparams "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	ptypes "github.com/akash-network/akash-api/go/node/provider/v1beta3"
-	"github.com/akash-network/node/cmd/common"
-	"github.com/akash-network/node/events"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/sdl"
-	cutils "github.com/akash-network/node/x/cert/utils"
-	config2 "github.com/akash-network/node/x/provider/config"
+	"k8s.io/client-go/kubernetes"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
+	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
+	apclient "pkg.akt.dev/go/provider/client"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/util/ctxlog"
+	"pkg.akt.dev/go/util/events"
+	"pkg.akt.dev/go/util/pubsub"
+	xpconfig "pkg.akt.dev/node/x/provider/config"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"
-	"github.com/akash-network/provider/client"
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -49,17 +45,20 @@ import (
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
 	gwgrpc "github.com/akash-network/provider/gateway/grpc"
 	gwrest "github.com/akash-network/provider/gateway/rest"
 	"github.com/akash-network/provider/operator/waiter"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/session"
+	"github.com/akash-network/provider/tools/certissuer"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/pconfig"
+	"github.com/akash-network/provider/tools/pconfig/bbolt"
+	"github.com/akash-network/provider/tools/pconfig/memory"
 )
 
 const (
-	// FlagClusterK8s informs the provider to scan and utilize localized kubernetes client configuration
+	// FlagClusterK8s informs the provider to scan and use localized kubernetes client configuration
 	FlagClusterK8s = "cluster-k8s"
 
 	// FlagGatewayListenAddress determines listening address for Manifests
@@ -102,6 +101,25 @@ const (
 	FlagBidPriceIPScale                  = "bid-price-ip-scale"
 	FlagEnableIPOperator                 = "ip-operator"
 	FlagTxBroadcastTimeout               = "tx-broadcast-timeout"
+	FlagMonitorMaxRetries                = "monitor-max-retries"
+	FlagMonitorRetryPeriod               = "monitor-retry-period"
+	FlagMonitorRetryPeriodJitter         = "monitor-retry-period-jitter"
+	FlagMonitorHealthcheckPeriod         = "monitor-healthcheck-period"
+	FlagMonitorHealthcheckPeriodJitter   = "monitor-healthcheck-period-jitter"
+	FlagPersistentConfigBackend          = "persistent-config-backend"
+	FlagPersistentConfigPath             = "persistent-config-path"
+	FlagGatewayTLSCert                   = "gateway-tls-cert"
+	FlagGatewayTLSKey                    = "gateway-tls-key"
+	FlagCertIssuerEnabled                = "cert-issuer-enabled"
+	FlagCertIssuerKID                    = "cert-issuer-kid"
+	FlagCertIssuerHMAC                   = "cert-issuer-hmac"
+	FlagCertIssuerStorageDir             = "cert-issuer-storage-dir"
+	FlagCertIssuerCADirURL               = "cert-issuer-ca-dir-url"
+	FlagCertIssuerHTTPChallengePort      = "cert-issuer-http-challenge-port"
+	FlagCertIssuerTLSChallengePort       = "cert-issuer-tls-challenge-port"
+	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
+	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
+	FlagCertIssuerEmail                  = "cert-issuer-email"
 )
 
 const (
@@ -110,8 +128,50 @@ const (
 )
 
 var (
-	errInvalidConfig = errors.New("Invalid configuration")
+	errInvalidConfig = errors.New("invalid configuration")
 )
+
+func TxPersistentPreRunE(cmd *cobra.Command, _ []string) error {
+	ctx := cmd.Context()
+
+	rpcURI, _ := cmd.Flags().GetString(cflags.FlagNode)
+	if rpcURI != "" {
+		ctx = context.WithValue(ctx, cli.ContextTypeRPCURI, rpcURI)
+		cmd.SetContext(ctx)
+	}
+
+	cctx, err := cli.GetClientTxContext(cmd)
+	if err != nil {
+		return err
+	}
+
+	if cctx.Codec == nil {
+		return errors.New("codec is not initialized")
+	}
+
+	if cctx.LegacyAmino == nil {
+		return errors.New("legacy amino codec is not initialized")
+	}
+
+	if _, err = cli.ClientFromContext(ctx); err != nil {
+		opts, err := cflags.ClientOptionsFromFlags(cmd.Flags())
+		if err != nil {
+			return err
+		}
+
+		cctx = cctx.WithSkipConfirmation(true)
+		cl, err := aclient.DiscoverClient(ctx, cctx, opts...)
+		if err != nil {
+			return err
+		}
+
+		ctx = context.WithValue(ctx, cli.ContextTypeClient, cl)
+
+		cmd.SetContext(ctx)
+	}
+
+	return nil
+}
 
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
@@ -120,25 +180,71 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			err := TxPersistentPreRunE(cmd, args)
+			if err != nil {
+				return err
+			}
+
 			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
 
 			if leaseFundsMonInterval < time.Minute || leaseFundsMonInterval > 24*time.Hour {
-				return errors.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: goerr113
+				return fmt.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
-				return errors.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: goerr113
+				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
-			group, ctx := errgroup.WithContext(cmd.Context())
-			cmd.SetContext(ctx)
+			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
+				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorRetryPeriod, 4*time.Second) // nolint: err113
+			}
+
+			if viper.GetDuration(FlagMonitorHealthcheckPeriod) < 4*time.Second {
+				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
+			}
+
+			pconfigBackend := viper.GetString(FlagPersistentConfigBackend)
+			pconfigPath := viper.GetString(FlagPersistentConfigPath)
+
+			cctx, err := sdkclient.GetClientTxContext(cmd)
+			if err != nil {
+				return err
+			}
+
+			var pstorage pconfig.Storage
+
+			switch pconfigBackend {
+			case "bbolt":
+				if pconfigPath == "" {
+					pconfigPath = fmt.Sprintf("%s/pconfig.db", cctx.HomeDir)
+				}
+
+				var err error
+				pstorage, err = bbolt.NewBBolt(pconfigPath)
+				if err != nil {
+					return err
+				}
+			case "memory":
+				var err error
+				pstorage, err = memory.NewMemory()
+				if err != nil {
+					return err
+				}
+			default:
+				return fmt.Errorf("unsupport persistent-config backend \"%s\"", pconfigBackend)
+			}
 
 			if err := clientcommon.SetKubeConfigToCmd(cmd); err != nil {
 				return err
 			}
 
-			kubecfg := fromctx.MustKubeConfigFromCtx(cmd.Context())
+			pctx := cmd.Context()
+
+			group, ctx := errgroup.WithContext(pctx)
+			cmd.SetContext(ctx)
+
+			kubecfg := fromctx.MustKubeConfigFromCtx(pctx)
 
 			kc, err := kubernetes.NewForConfig(kubecfg)
 			if err != nil {
@@ -150,17 +256,77 @@ func RunCmd() *cobra.Command {
 				return err
 			}
 
+			logger := log.NewLogger(os.Stderr)
+
+			kubeLog := logger.With("component", "k8s")
+
+			// ideally following instantiation shall be placed within init function.
+			// however, the goal here to log under provider's context
+			kruntime.ErrorHandlers = []kruntime.ErrorHandler{
+				func(_ context.Context, err error, msg string, keysAndValues ...interface{}) {
+					if err != nil && (strings.Contains(err.Error(), "use of closed network connection") || errors.Is(err, io.EOF)) {
+						return
+					}
+
+					kubeLog.Error(msg, "err", err, keysAndValues)
+				},
+			}
+
+			bus := tpubsub.New(pctx, 1000)
+
+			if viper.GetBool(FlagCertIssuerEnabled) {
+				var certIssuer certissuer.CertIssuer
+
+				storageDir := viper.GetString(FlagCertIssuerStorageDir)
+				if storageDir == "" {
+					storageDir = fmt.Sprintf("%s/.certissuer", cctx.HomeDir)
+				}
+
+				ciCfg := certissuer.Config{
+					Bus:               bus,
+					Owner:             cctx.FromAddress,
+					KID:               viper.GetString(FlagCertIssuerKID),
+					HMAC:              viper.GetString(FlagCertIssuerHMAC),
+					StorageDir:        storageDir,
+					CADirURL:          viper.GetString(FlagCertIssuerCADirURL),
+					Email:             viper.GetString(FlagCertIssuerEmail),
+					HTTPChallengePort: viper.GetInt(FlagCertIssuerHTTPChallengePort),
+					TLSChallengePort:  viper.GetInt(FlagCertIssuerTLSChallengePort),
+					DNSProviders:      viper.GetStringSlice(FlagCertIssuerDNSProviders),
+					DNSResolvers:      viper.GetStringSlice(FlagCertIssuerDNSResolvers),
+					Domains: []string{
+						viper.GetString(FlagClusterPublicHostname),
+					},
+				}
+
+				if err = ciCfg.Validate(); err != nil {
+					return err
+				}
+
+				certIssuer, err = certissuer.NewLego(ctx, logger, ciCfg)
+				if err != nil {
+					return err
+				}
+
+				go func() {
+					<-ctx.Done()
+					_ = certIssuer.Close()
+				}()
+
+				fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyCertIssuer, certIssuer)
+			}
+
 			startupch := make(chan struct{}, 1)
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, cmdutil.OpenLogger().With("cmp", "provider"))
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, logger)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPersistentConfig, pstorage)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, bus)
 
-			pctx, pcancel := context.WithCancel(context.Background())
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPubSub, tpubsub.New(pctx, 1000))
-
+			ctx, pcancel := context.WithCancel(context.Background())
 			go func() {
 				defer pcancel()
 
@@ -173,235 +339,24 @@ func RunCmd() *cobra.Command {
 				_ = group.Wait()
 			}()
 
+			go func() {
+				<-ctx.Done()
+
+				_ = pstorage.Close()
+			}()
+
 			return nil
 		},
+
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return common.RunForeverWithContext(cmd.Context(), func(ctx context.Context) error {
+			return cli.RunForeverWithContext(cmd.Context(), func(ctx context.Context) error {
 				return doRunCmd(ctx, cmd, args)
 			})
 		},
 	}
 
-	cmd.Flags().String(flags.FlagChainID, "", "The network chain ID")
-	if err := viper.BindPFlag(flags.FlagChainID, cmd.Flags().Lookup(flags.FlagChainID)); err != nil {
-		panic(err)
-	}
-
-	flags.AddTxFlagsToCmd(cmd)
-
-	cfg := provider.NewDefaultConfig()
-
-	cmd.Flags().Bool(FlagClusterK8s, false, "Use Kubernetes cluster")
-	if err := viper.BindPFlag(FlagClusterK8s, cmd.Flags().Lookup(FlagClusterK8s)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(providerflags.FlagK8sManifestNS, "lease", "Cluster manifest namespace")
-	if err := viper.BindPFlag(providerflags.FlagK8sManifestNS, cmd.Flags().Lookup(providerflags.FlagK8sManifestNS)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagGatewayListenAddress, "0.0.0.0:8443", "Gateway listen address")
-	if err := viper.BindPFlag(FlagGatewayListenAddress, cmd.Flags().Lookup(FlagGatewayListenAddress)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagGatewayGRPCListenAddress, "0.0.0.0:8444", "Gateway listen address")
-	if err := viper.BindPFlag(FlagGatewayGRPCListenAddress, cmd.Flags().Lookup(FlagGatewayGRPCListenAddress)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPricingStrategy, "scale", "Pricing strategy to use")
-	if err := viper.BindPFlag(FlagBidPricingStrategy, cmd.Flags().Lookup(FlagBidPricingStrategy)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceCPUScale, "0", "cpu pricing scale in uakt per millicpu")
-	if err := viper.BindPFlag(FlagBidPriceCPUScale, cmd.Flags().Lookup(FlagBidPriceCPUScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceMemoryScale, "0", "memory pricing scale in uakt per megabyte")
-	if err := viper.BindPFlag(FlagBidPriceMemoryScale, cmd.Flags().Lookup(FlagBidPriceMemoryScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceStorageScale, "0", "storage pricing scale in uakt per megabyte")
-	if err := viper.BindPFlag(FlagBidPriceStorageScale, cmd.Flags().Lookup(FlagBidPriceStorageScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceEndpointScale, "0", "endpoint pricing scale in uakt")
-	if err := viper.BindPFlag(FlagBidPriceEndpointScale, cmd.Flags().Lookup(FlagBidPriceEndpointScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceIPScale, "0", "leased ip pricing scale in uakt")
-	if err := viper.BindPFlag(FlagBidPriceIPScale, cmd.Flags().Lookup(FlagBidPriceIPScale)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidPriceScriptPath, "", "path to script to run for computing bid price")
-	if err := viper.BindPFlag(FlagBidPriceScriptPath, cmd.Flags().Lookup(FlagBidPriceScriptPath)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagBidPriceScriptProcessLimit, 32, "limit to the number of scripts run concurrently for bid pricing")
-	if err := viper.BindPFlag(FlagBidPriceScriptProcessLimit, cmd.Flags().Lookup(FlagBidPriceScriptProcessLimit)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagBidPriceScriptTimeout, time.Second*10, "execution timelimit for bid pricing as a duration")
-	if err := viper.BindPFlag(FlagBidPriceScriptTimeout, cmd.Flags().Lookup(FlagBidPriceScriptTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagBidDeposit, cfg.BidDeposit.String(), "Bid deposit amount")
-	if err := viper.BindPFlag(FlagBidDeposit, cmd.Flags().Lookup(FlagBidDeposit)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagClusterPublicHostname, "", "The public IP of the Kubernetes cluster")
-	if err := viper.BindPFlag(FlagClusterPublicHostname, cmd.Flags().Lookup(FlagClusterPublicHostname)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagClusterNodePortQuantity, 1, "The number of node ports available on the Kubernetes cluster")
-	if err := viper.BindPFlag(FlagClusterNodePortQuantity, cmd.Flags().Lookup(FlagClusterNodePortQuantity)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagClusterWaitReadyDuration, time.Second*5, "The time to wait for the cluster to be available")
-	if err := viper.BindPFlag(FlagClusterWaitReadyDuration, cmd.Flags().Lookup(FlagClusterWaitReadyDuration)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagInventoryResourcePollPeriod, time.Second*5, "The period to poll the cluster inventory")
-	if err := viper.BindPFlag(FlagInventoryResourcePollPeriod, cmd.Flags().Lookup(FlagInventoryResourcePollPeriod)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint(FlagInventoryResourceDebugFrequency, 10, "The rate at which to log all inventory resources")
-	if err := viper.BindPFlag(FlagInventoryResourceDebugFrequency, cmd.Flags().Lookup(FlagInventoryResourceDebugFrequency)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagDeploymentIngressStaticHosts, false, "")
-	if err := viper.BindPFlag(FlagDeploymentIngressStaticHosts, cmd.Flags().Lookup(FlagDeploymentIngressStaticHosts)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagDeploymentIngressDomain, "", "")
-	if err := viper.BindPFlag(FlagDeploymentIngressDomain, cmd.Flags().Lookup(FlagDeploymentIngressDomain)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagDeploymentIngressExposeLBHosts, false, "")
-	if err := viper.BindPFlag(FlagDeploymentIngressExposeLBHosts, cmd.Flags().Lookup(FlagDeploymentIngressExposeLBHosts)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagDeploymentNetworkPoliciesEnabled, true, "Enable network policies")
-	if err := viper.BindPFlag(FlagDeploymentNetworkPoliciesEnabled, cmd.Flags().Lookup(FlagDeploymentNetworkPoliciesEnabled)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagDockerImagePullSecretsName, "", "Name of the local image pull secret configured with kubectl")
-	if err := viper.BindPFlag(FlagDockerImagePullSecretsName, cmd.Flags().Lookup(FlagDockerImagePullSecretsName)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagOvercommitPercentMemory, 0, "Percentage of memory overcommit")
-	if err := viper.BindPFlag(FlagOvercommitPercentMemory, cmd.Flags().Lookup(FlagOvercommitPercentMemory)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagOvercommitPercentCPU, 0, "Percentage of CPU overcommit")
-	if err := viper.BindPFlag(FlagOvercommitPercentCPU, cmd.Flags().Lookup(FlagOvercommitPercentCPU)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagOvercommitPercentStorage, 0, "Percentage of storage overcommit")
-	if err := viper.BindPFlag(FlagOvercommitPercentStorage, cmd.Flags().Lookup(FlagOvercommitPercentStorage)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().StringSlice(FlagDeploymentBlockedHostnames, nil, "hostnames blocked for deployments")
-	if err := viper.BindPFlag(FlagDeploymentBlockedHostnames, cmd.Flags().Lookup(FlagDeploymentBlockedHostnames)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagAuthPem, "", "")
-
-	if err := providerflags.AddKubeConfigPathFlag(cmd); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagDeploymentRuntimeClass, "gvisor", "kubernetes runtime class for deployments, use none for no specification")
-	if err := viper.BindPFlag(FlagDeploymentRuntimeClass, cmd.Flags().Lookup(FlagDeploymentRuntimeClass)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagBidTimeout, 5*time.Minute, "time after which bids are cancelled if no lease is created")
-	if err := viper.BindPFlag(FlagBidTimeout, cmd.Flags().Lookup(FlagBidTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagManifestTimeout, 5*time.Minute, "time after which bids are cancelled if no manifest is received")
-	if err := viper.BindPFlag(FlagManifestTimeout, cmd.Flags().Lookup(FlagManifestTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagMetricsListener, "", "ip and port to start the metrics listener on")
-	if err := viper.BindPFlag(FlagMetricsListener, cmd.Flags().Lookup(FlagMetricsListener)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagWithdrawalPeriod, time.Hour*24, "period at which withdrawals are made from the escrow accounts")
-	if err := viper.BindPFlag(FlagWithdrawalPeriod, cmd.Flags().Lookup(FlagWithdrawalPeriod)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagLeaseFundsMonitorInterval, time.Minute*10, "interval at which lease is checked for funds available on the escrow accounts. >= 1m")
-	if err := viper.BindPFlag(FlagLeaseFundsMonitorInterval, cmd.Flags().Lookup(FlagLeaseFundsMonitorInterval)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Uint64(FlagMinimumBalance, mparams.DefaultBidMinDeposit.Amount.Mul(sdk.NewIntFromUint64(2)).Uint64(), "minimum account balance at which withdrawal is started")
-	if err := viper.BindPFlag(FlagMinimumBalance, cmd.Flags().Lookup(FlagMinimumBalance)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().String(FlagProviderConfig, "", "provider configuration file path")
-	if err := viper.BindPFlag(FlagProviderConfig, cmd.Flags().Lookup(FlagProviderConfig)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagRPCQueryTimeout, time.Minute, "timeout for requests made to the RPC node")
-	if err := viper.BindPFlag(FlagRPCQueryTimeout, cmd.Flags().Lookup(FlagRPCQueryTimeout)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagCachedResultMaxAge, 5*time.Second, "max. cache age for results from the RPC node")
-	if err := viper.BindPFlag(FlagCachedResultMaxAge, cmd.Flags().Lookup(FlagCachedResultMaxAge)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Bool(FlagEnableIPOperator, false, "enable usage of the IP operator to lease IP addresses")
-	if err := viper.BindPFlag(FlagEnableIPOperator, cmd.Flags().Lookup(FlagEnableIPOperator)); err != nil {
-		panic(err)
-	}
-
-	cmd.Flags().Duration(FlagTxBroadcastTimeout, 30*time.Second, "tx broadcast timeout. defaults to 30s")
-	if err := viper.BindPFlag(FlagTxBroadcastTimeout, cmd.Flags().Lookup(FlagTxBroadcastTimeout)); err != nil {
-		panic(err)
-	}
-
-	if err := providerflags.AddServiceEndpointFlag(cmd, serviceHostnameOperator); err != nil {
-		panic(err)
-	}
-
-	if err := providerflags.AddServiceEndpointFlag(cmd, serviceIPOperator); err != nil {
+	cflags.AddTxFlagsToCmd(cmd)
+	if err := addRunFlags(cmd); err != nil {
 		panic(err)
 	}
 
@@ -420,9 +375,9 @@ var allowedBidPricingStrategies = [...]string{
 	bidPricingStrategyShellScript,
 }
 
-var errNoSuchBidPricingStrategy = fmt.Errorf("No such bid pricing strategy. Allowed: %v", allowedBidPricingStrategies)
+var errNoSuchBidPricingStrategy = fmt.Errorf("no such bid pricing strategy. Allowed: %v", allowedBidPricingStrategies)
 var errInvalidValueForBidPrice = errors.New("not a valid bid price")
-var errBidPriceNegative = errors.New("Bid price cannot be a negative number")
+var errBidPriceNegative = errors.New("bid price cannot be a negative number")
 
 func strToBidPriceScale(val string) (decimal.Decimal, error) {
 	v, err := decimal.NewFromString(val)
@@ -522,13 +477,20 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	cachedResultMaxAge := viper.GetDuration(FlagCachedResultMaxAge)
 	rpcQueryTimeout := viper.GetDuration(FlagRPCQueryTimeout)
 	enableIPOperator := viper.GetBool(FlagEnableIPOperator)
+	monitorMaxRetries := viper.GetUint(FlagMonitorMaxRetries)
+	monitorRetryPeriod := viper.GetDuration(FlagMonitorRetryPeriod)
+	monitorRetryPeriodJitter := viper.GetDuration(FlagMonitorRetryPeriodJitter)
+	monitorHealthcheckPeriod := viper.GetDuration(FlagMonitorHealthcheckPeriod)
+	monitorHealthcheckPeriodJitter := viper.GetDuration(FlagMonitorHealthcheckPeriodJitter)
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
 		return err
 	}
 
-	logger := fromctx.LogcFromCtx(cmd.Context())
+	logger := ctxlog.LogcFromCtx(cmd.Context())
+
+	logger.Info("starting provider service")
 
 	var metricsRouter http.Handler
 	if len(metricsListener) != 0 {
@@ -537,58 +499,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group := fromctx.MustErrGroupFromCtx(ctx)
 
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
-	cctx = cctx.WithSkipConfirmation(true)
-
-	opts, err := cltypes.ClientOptionsFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	cl, err := client.DiscoverClient(ctx, cctx, opts...)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
 	gwaddr := viper.GetString(FlagGatewayListenAddress)
 	grpcaddr := viper.GetString(FlagGatewayGRPCListenAddress)
 
-	var certFromFlag io.Reader
-	if val := cmd.Flag(FlagAuthPem).Value.String(); val != "" {
-		certFromFlag = bytes.NewBufferString(val)
-	}
-
-	kpm, err := cutils.NewKeyPairManager(cl.ClientContext(), cctx.FromAddress)
-	if err != nil {
-		return err
-	}
-
-	x509cert, tlsCert, err := kpm.ReadX509KeyPair(certFromFlag)
-	if err != nil {
-		return err
-	}
-
-	// Check that the certificate exists on chain and is not revoked
-	cresp, err := cl.Query().Certificates(cmd.Context(), &ctypes.QueryCertificatesRequest{
-		Filter: ctypes.CertificateFilter{
-			Owner:  cctx.FromAddress.String(),
-			Serial: x509cert.SerialNumber.String(),
-			State:  "valid",
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	if len(cresp.Certificates) == 0 {
-		return errors.Errorf("no valid found on chain certificate for account %s", cctx.FromAddress)
-	}
-
-	res, err := cl.Query().Provider(
+	res, err := cl.Query().Provider().Provider(
 		cmd.Context(),
 		&ptypes.QueryProviderRequest{Owner: cctx.FromAddress.String()},
 	)
@@ -620,26 +537,20 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		builder.SettingsKey: kubeSettings,
 	}
 
-	cclient, err := createClusterClient(cmd.Context(), logger, cmd)
+	cclient, err := createClusterClient(ctx, logger, cmd)
 	if err != nil {
 		return err
 	}
 
-	statusResult, err := cctx.Client.Status(cmd.Context())
+	statusResult, err := cctx.Client.Status(ctx)
 	if err != nil {
 		return err
 	}
 	currentBlockHeight := statusResult.SyncInfo.LatestBlockHeight
-	session := session.New(logger, cl, pinfo, currentBlockHeight)
-
-	if err := cctx.Client.Start(); err != nil {
-		return err
-	}
+	sessionMgr := session.New(logger, cl, pinfo, currentBlockHeight)
 
 	bus := pubsub.NewBus()
 	defer bus.Close()
-
-	// group, ctx := errgroup.WithContext(clCtx)
 
 	// Provider service creation
 	config := provider.NewDefaultConfig()
@@ -656,9 +567,14 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
 	config.ManifestTimeout = manifestTimeout
+	config.MonitorMaxRetries = monitorMaxRetries
+	config.MonitorRetryPeriod = monitorRetryPeriod
+	config.MonitorRetryPeriodJitter = monitorRetryPeriodJitter
+	config.MonitorHealthcheckPeriod = monitorHealthcheckPeriod
+	config.MonitorHealthcheckPeriodJitter = monitorHealthcheckPeriodJitter
 
 	if len(providerConfig) != 0 {
-		pConf, err := config2.ReadConfigPath(providerConfig)
+		pConf, err := xpconfig.ReadConfigPath(providerConfig)
 		if err != nil {
 			return err
 		}
@@ -706,7 +622,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	ctx = context.WithValue(ctx, clfromctx.CtxKeyClientInventory, hostnameOperatorClient)
+	ctx = context.WithValue(ctx, clfromctx.CtxKeyClientHostname, hostnameOperatorClient)
 
 	inventory, err := kubeinventory.NewClient(ctx)
 	if err != nil {
@@ -723,41 +639,64 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		ctx = context.WithValue(ctx, clfromctx.CtxKeyClientIP, ipOperatorClient)
 	}
 
-	operatorWaiter := waiter.NewOperatorWaiter(cmd.Context(), logger, waitClients...)
+	operatorWaiter := waiter.NewOperatorWaiter(ctx, logger, waitClients...)
 
-	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, session, bus, cclient, operatorWaiter, config)
+	service, err := provider.NewService(ctx, cctx, cctx.FromAddress, sessionMgr, bus, cclient, operatorWaiter, config)
 	if err != nil {
 		return err
 	}
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
+	var acQuerierOpts []AccountQuerierOption
+
+	if _, err := fromctx.CertIssuerFromCtx(ctx); err == nil {
+		acQuerierOpts = append(acQuerierOpts, WithTLSDomainWatch(clusterPublicHostname))
+	} else if certFile := viper.GetString(FlagGatewayTLSCert); certFile != "" {
+		keyFile := viper.GetString(FlagGatewayTLSKey)
+		acQuerierOpts = append(acQuerierOpts, WithTLSCert(certFile, keyFile))
+	}
+
+	accQuerier, err := newAccountQuerier(ctx, cctx, logger, bus, cl, acQuerierOpts...)
+	if err != nil {
+		return err
+	}
+
+	// Monitor accountQuerier lifecycle and propagate errors from internal errgroup
+	group.Go(func() error {
+		<-ctx.Done()
+		return accQuerier.Close()
+	})
+
+	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, accQuerier)
+
 	gwRest, err := gwrest.NewServer(
 		ctx,
 		logger,
 		service,
-		cl.Query(),
+		accQuerier,
+		clusterPublicHostname,
 		gwaddr,
 		cctx.FromAddress,
-		[]tls.Certificate{tlsCert},
 		clusterSettings,
 	)
 	if err != nil {
 		return err
 	}
 
-	err = gwgrpc.NewServer(ctx, grpcaddr, []tls.Certificate{tlsCert}, service)
+	err = gwgrpc.NewServer(ctx, grpcaddr, accQuerier, service)
+	if err != nil {
+		return err
+	}
+
+	evtSvc, err := events.NewEvents(ctx, cctx.Client, "provider-cli", bus)
 	if err != nil {
 		return err
 	}
 
 	group.Go(func() error {
-		return events.Publish(ctx, cctx.Client, "provider-cli", bus)
-	})
-
-	group.Go(func() error {
 		<-service.Done()
-		return nil
+		return service.Close()
 	})
 
 	group.Go(func() error {
@@ -767,12 +706,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	group.Go(func() error {
 		<-ctx.Done()
+		evtSvc.Shutdown()
 		return gwRest.Close()
 	})
 
 	if metricsRouter != nil {
 		group.Go(func() error {
-			// fixme ovrclk/engineering#609
 			// nolint: gosec
 			srv := http.Server{Addr: metricsListener, Handler: metricsRouter}
 			go func() {
@@ -797,6 +736,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	hostnameOperatorClient.Stop()
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
+		logger.Error("provider shutdown with error", "err", err)
 		return err
 	}
 
@@ -818,12 +758,11 @@ func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command) 
 
 func showErrorToUser(err error) error {
 	// If the error has a complete message associated with it then show it
-	// terr := &gwrest.ClientResponseError{}
-	// errors.As(err, terr)
-	clientResponseError, ok := err.(gwrest.ClientResponseError)
-	if ok && 0 != len(clientResponseError.Message) {
-		_, _ = fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", clientResponseError.Message)
-		err = nil
+	terr := &apclient.ClientResponseError{}
+
+	if errors.As(err, terr) && len(terr.Message) != 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "provider error messsage:\n%v\n", terr.Message)
+		err = terr
 	}
 
 	return err

@@ -4,6 +4,6 @@ import (
 	"testing"
 )
 
-func TestHostnameOperatorClient(t *testing.T) {
+func TestHostnameOperatorClient(_ *testing.T) {
 	// TODO: tests here
 }

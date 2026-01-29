@@ -13,7 +13,6 @@ import (
 	"sync"
 
 	"github.com/prometheus/common/expfmt"
-	"github.com/tendermint/tendermint/libs/log"
 	corev1 "k8s.io/api/core/v1"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,8 +21,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	"cosmossdk.io/log"
+
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
@@ -47,7 +48,6 @@ var (
 	errInvalidLeaseService = fmt.Errorf("%w lease service error", errMetalLB)
 )
 
-//go:generate mockery --name Client --structname MetalLBClient --filename metallb_client.go --output ./mocks
 type Client interface {
 	GetIPAddressUsage(ctx context.Context) (uint, uint, error)
 	GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.LeaseID) ([]cip.LeaseState, error)
@@ -271,23 +271,23 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 
 			loadBalancerIngress := service.Status.LoadBalancer.Ingress
 			// Logs something like this : │ load balancer status                         cmp=provider client=kube service=web-ip-80-tcp lb-ingress="[{IP:24.0.0.1 Hostname: Ports:[]}]"
-			c.log.Debug("load balancer status", "service", service.ObjectMeta.Name, "lb-ingress", loadBalancerIngress)
+			c.log.Debug("load balancer status", "service", service.Name, "lb-ingress", loadBalancerIngress)
 
 			// There is no mechanism that would assign more than one IP to a single service entry
 			if len(loadBalancerIngress) != 1 {
-				return fmt.Errorf("%w: service %q has %d load balancers and is invalid", errInvalidLeaseService, service.ObjectMeta.Name, len(loadBalancerIngress))
+				return fmt.Errorf("%w: service %q has %d load balancers and is invalid", errInvalidLeaseService, service.Name, len(loadBalancerIngress))
 			}
 
 			ingress := loadBalancerIngress[0]
 
 			if len(service.Spec.Ports) != 1 {
-				return fmt.Errorf("%w: service %q has %d port specs and is invalid", errInvalidLeaseService, service.ObjectMeta.Name, len(service.Spec.Ports))
+				return fmt.Errorf("%w: service %q has %d port specs and is invalid", errInvalidLeaseService, service.Name, len(service.Spec.Ports))
 			}
 			port := service.Spec.Ports[0]
 
 			proto, err := manifest.ServiceProtocolFromKube(port.Protocol)
 			if err != nil {
-				return fmt.Errorf("%w: service %q has invalid protocol %v", errInvalidLeaseService, service.ObjectMeta.Name, err)
+				return fmt.Errorf("%w: service %q has invalid protocol %v", errInvalidLeaseService, service.Name, err)
 			}
 
 			selectedServiceName := service.Spec.Selector[builder.AkashManifestServiceLabelName]
@@ -297,9 +297,9 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 				leaseID:      leaseID,
 				ip:           ingress.IP,
 				serviceName:  selectedServiceName,
-				externalPort: uint32(port.Port),
-				port:         uint32(port.TargetPort.IntValue()),
-				sharingKey:   service.ObjectMeta.Annotations[metalLbAllowSharedIP],
+				externalPort: uint32(port.Port),                  // nolint: gosec
+				port:         uint32(port.TargetPort.IntValue()), // nolint: gosec
+				sharingKey:   service.Annotations[metalLbAllowSharedIP],
 				protocol:     proto,
 			})
 
@@ -373,7 +373,7 @@ func (c *client) CreateIPPassthrough(ctx context.Context, directive cip.ClusterI
 	port := corev1.ServicePort{
 		Name:       portName,
 		Protocol:   proto,
-		Port:       int32(directive.ExternalPort),
+		Port:       int32(directive.ExternalPort), // nolint: gosec
 		TargetPort: intstr.FromInt(int(directive.Port)),
 	}
 
@@ -437,20 +437,20 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]cip.Passthrough, erro
 		func(obj runtime.Object) error {
 			service := obj.(*corev1.Service)
 
-			_, hasOwner := service.ObjectMeta.Labels[builder.AkashLeaseOwnerLabelName]
+			_, hasOwner := service.Labels[builder.AkashLeaseOwnerLabelName]
 			if !hasOwner {
 				// Not a service related to a running deployment, so probably internal services
 				return nil
 			}
 
 			if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
-				return fmt.Errorf("%w: resource %q wrong type in service definition %v", errMetalLB, service.ObjectMeta.Name, service.Spec.Type)
+				return fmt.Errorf("%w: resource %q wrong type in service definition %v", errMetalLB, service.Name, service.Spec.Type)
 			}
 
 			ports := service.Spec.Ports
 			const expectedNumberOfPorts = 1
 			if len(ports) != expectedNumberOfPorts {
-				return fmt.Errorf("%w: resource %q  wrong number of ports in load balancer service definition. expected %d, got %d", errMetalLB, service.ObjectMeta.Name, expectedNumberOfPorts, len(ports))
+				return fmt.Errorf("%w: resource %q  wrong number of ports in load balancer service definition. expected %d, got %d", errMetalLB, service.Name, expectedNumberOfPorts, len(ports))
 			}
 
 			portDefn := ports[0]
@@ -459,12 +459,12 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]cip.Passthrough, erro
 
 			leaseID, err := clientcommon.RecoverLeaseIDFromLabels(service.Labels)
 			if err != nil {
-				return fmt.Errorf("%w: service %q has invalid leease labels %v", err, service.ObjectMeta.Name, service.Labels)
+				return fmt.Errorf("%w: service %q has invalid leease labels %v", err, service.Name, service.Labels)
 			}
 
 			mproto, err := manifest.ServiceProtocolFromKube(proto)
 			if err != nil {
-				return fmt.Errorf("%w: service %q has invalid protocol %v", err, service.ObjectMeta.Name, proto)
+				return fmt.Errorf("%w: service %q has invalid protocol %v", err, service.Name, proto)
 			}
 
 			serviceSelector := service.Spec.Selector
@@ -473,12 +473,12 @@ func (c *client) GetIPPassthroughs(ctx context.Context) ([]cip.Passthrough, erro
 				return fmt.Errorf("%w: service has empty selector", errMetalLB)
 			}
 
-			sharingKey := service.ObjectMeta.Annotations[metalLbAllowSharedIP]
+			sharingKey := service.Annotations[metalLbAllowSharedIP]
 
 			v := ipPassthrough{
 				lID:          leaseID,
 				serviceName:  serviceName,
-				externalPort: uint32(port),
+				externalPort: uint32(port), // nolint: gosec
 				sharingKey:   sharingKey,
 				protocol:     mproto,
 			}

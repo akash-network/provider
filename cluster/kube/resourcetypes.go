@@ -3,10 +3,10 @@ package kube
 import (
 	"math"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkmath "cosmossdk.io/math"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 )
 
 type resourcePair struct {
@@ -48,17 +48,17 @@ type resourcePair struct {
 // 	}
 // }
 
-func (rp *resourcePair) subMilliNLZ(val types.ResourceValue) bool {
+func (rp *resourcePair) subMilliNLZ(val rtypes.ResourceValue) bool {
 	avail := rp.available()
 
-	res := sdk.NewInt(avail.MilliValue())
+	res := sdkmath.NewInt(avail.MilliValue())
 	res = res.Sub(val.Val)
 	if res.IsNegative() {
 		return false
 	}
 
 	allocated := rp.allocated.DeepCopy()
-	allocated.Add(*resource.NewMilliQuantity(int64(val.Value()), resource.DecimalSI))
+	allocated.Add(*resource.NewMilliQuantity(int64(val.Value()), resource.DecimalSI)) // nolint: gosec
 
 	*rp = resourcePair{
 		allocatable: rp.allocatable.DeepCopy(),
@@ -68,10 +68,10 @@ func (rp *resourcePair) subMilliNLZ(val types.ResourceValue) bool {
 	return true
 }
 
-func (rp *resourcePair) subNLZ(val types.ResourceValue) bool {
+func (rp *resourcePair) subNLZ(val rtypes.ResourceValue) bool {
 	avail := rp.available()
 
-	res := sdk.NewInt(avail.Value())
+	res := sdkmath.NewInt(avail.Value())
 	res = res.Sub(val.Val)
 
 	if res.IsNegative() {
@@ -79,7 +79,7 @@ func (rp *resourcePair) subNLZ(val types.ResourceValue) bool {
 	}
 
 	allocated := rp.allocated.DeepCopy()
-	allocated.Add(*resource.NewQuantity(int64(val.Value()), resource.DecimalSI))
+	allocated.Add(*resource.NewQuantity(int64(val.Value()), resource.DecimalSI)) // nolint: gosec
 
 	*rp = resourcePair{
 		allocatable: rp.allocatable.DeepCopy(),
