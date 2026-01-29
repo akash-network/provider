@@ -1,12 +1,12 @@
 package builder
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 
-	vutil "github.com/akash-network/node/util/validation"
+	vutil "pkg.akt.dev/node/util/validation"
 )
 
 // Settings configures k8s object generation such that it is customized to the
@@ -50,7 +50,7 @@ var ErrSettingsValidation = errors.New("settings validation")
 func ValidateSettings(settings Settings) error {
 	if settings.DeploymentIngressStaticHosts {
 		if settings.DeploymentIngressDomain == "" {
-			return errors.Wrap(ErrSettingsValidation, "empty ingress domain")
+			return fmt.Errorf("%w: empty ingress domain", ErrSettingsValidation)
 		}
 
 		if !vutil.IsDomainName(settings.DeploymentIngressDomain) {

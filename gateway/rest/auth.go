@@ -21,30 +21,6 @@ var (
 	ErrUnauthorized   = errors.New("unauthorized")
 )
 
-// invalidError handles wrapping a JWT validation error with
-// the concrete error ErrJWTInvalid. We do not expose this
-// publicly because the interface methods of Is and Unwrap
-// should give the user all they need.
-type invalidError struct {
-	details error
-}
-
-// Is allows the error to support equality to ErrJWTInvalid.
-func (e invalidError) Is(target error) bool {
-	return target == ErrJWTInvalid
-}
-
-// Error returns a string representation of the error.
-func (e invalidError) Error() string {
-	return fmt.Sprintf("%s: %s", ErrJWTInvalid, e.details)
-}
-
-// Unwrap allows the error to support equality to the
-// underlying error and not just ErrJWTInvalid.
-func (e invalidError) Unwrap() error {
-	return e.details
-}
-
 // AuthHeaderTokenExtractor is a TokenExtractor that takes a request
 // and extracts the token from the Authorization header.
 func AuthHeaderTokenExtractor(r *http.Request) (string, error) {
@@ -79,7 +55,7 @@ func DefaultErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 		_, _ = w.Write([]byte(`{"message":"invalid request"}`))
 	default:
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"message":"unknown error while processing JWT. %s"}`, err.Error())))
+		_, _ = fmt.Fprintf(w, `{"message":"unknown error while processing JWT. %s"}`, err.Error())
 	}
 }
 

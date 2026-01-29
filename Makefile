@@ -7,7 +7,7 @@ include make/init.mk
 
 DOCKER_RUN             := docker run --rm -v $(shell pwd):/workspace -w /workspace
 GOLANGCI_LINT_RUN      := $(GOLANGCI_LINT) run
-LINT                    = $(GOLANGCI_LINT_RUN) ./... --disable-all --deadline=5m --enable
+LINT                    = $(GOLANGCI_LINT_RUN) ./...
 
 GORELEASER_CONFIG      ?= .goreleaser.yaml
 

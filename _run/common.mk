@@ -1,3 +1,12 @@
+OPTIONS ?=
+
+SKIP_BUILD := false
+
+# check for nostrip option
+ifneq (,$(findstring nobuild,$(OPTIONS)))
+	SKIP_BUILD := true
+endif
+
 include ../common-base.mk
 
 # https://stackoverflow.com/a/7531247
@@ -5,8 +14,6 @@ include ../common-base.mk
 null  := 
 space := $(null) #
 comma := ,
-
-SKIP_BUILD  ?= false
 
 export AKASH_KEYRING_BACKEND    = test
 export AKASH_GAS_ADJUSTMENT     = 2
@@ -82,7 +89,7 @@ node-init: node-init-genesis node-init-genesis-accounts node-init-genesis-certs 
 
 .INTERMEDIATE: node-init-genesis
 node-init-genesis:
-	$(AKASH) init node0
+	$(AKASH) genesis init node0
 	cp "$(GENESIS_PATH)" "$(GENESIS_PATH).orig"
 	cat "$(GENESIS_PATH).orig" | \
 		jq -M '.app_state.gov.voting_params.voting_period = "30s"' | \
@@ -106,23 +113,22 @@ node-init-genesis-server-cert-%:
 
 .INTERMEDIATE: node-init-genesis-accounts
 node-init-genesis-accounts: $(patsubst %,node-init-genesis-account-%,$(GENESIS_ACCOUNTS))
-	$(AKASH) validate-genesis
+	$(AKASH) genesis validate
 
 .INTERMEDIATE: $(patsubst %,node-init-genesis-account-%,$(GENESIS_ACCOUNTS))
 node-init-genesis-account-%:
-	$(AKASH) add-genesis-account \
+	$(AKASH) genesis add-account \
 		"$(shell $(AKASH) $(KEY_OPTS) keys show "$(@:node-init-genesis-account-%=%)" -a)" \
 		"$(CHAIN_MIN_DEPOSIT)$(CHAIN_TOKEN_DENOM)"
 
 .INTERMEDIATE: node-init-gentx
-node-init-gentx: AKASH_GAS='' AKASH_GAS_PRICES=''
 node-init-gentx:
-	$(AKASH) gentx validator "$(CHAIN_VALIDATOR_DELEGATE)$(CHAIN_TOKEN_DENOM)"
+	$(AKASH) genesis gentx validator "$(CHAIN_VALIDATOR_DELEGATE)$(CHAIN_TOKEN_DENOM)" --min-self-delegation=1 --gas=auto --gas-prices=0.025uakt
 
 .INTERMEDIATE: node-init-finalize
 node-init-finalize:
-	$(AKASH) collect-gentxs
-	$(AKASH) validate-genesis
+	$(AKASH) genesis collect
+	$(AKASH) genesis validate
 
 .PHONY: node-run
 node-run:

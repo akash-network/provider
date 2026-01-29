@@ -3,12 +3,12 @@ package cmd
 import (
 	"errors"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
+	pclient "github.com/akash-network/provider/client"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	aclient "github.com/akash-network/provider/client"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 var errEmptyEndpoints = errors.New("endpoints cannot be empty")
@@ -19,17 +19,9 @@ func migrateEndpoints(cmd *cobra.Command, args []string) error {
 		return errEmptyEndpoints
 	}
 
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
 	prov, err := providerFromFlags(cmd.Flags())
 	if err != nil {
@@ -41,7 +33,8 @@ func migrateEndpoints(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	opts = append(opts, apclient.WithCertQuerier(pclient.NewCertificateQuerier(cl.Query())))
+	gclient, err := apclient.NewClient(ctx, prov, opts...)
 	if err != nil {
 		return err
 	}
@@ -76,7 +69,7 @@ func MigrateEndpointsCmd() *cobra.Command {
 	addCmdFlags(cmd)
 	addAuthFlags(cmd)
 
-	cmd.Flags().Uint32(FlagGSeq, 1, "group sequence")
+	cmd.Flags().Uint32(cflags.FlagGSeq, 1, "group sequence")
 
 	return cmd
 }

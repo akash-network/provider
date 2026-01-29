@@ -14,7 +14,7 @@ import (
 
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -71,7 +71,7 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 			},
 		}
 	} else {
-		obj.ObjectMeta.Labels = labels
+		obj.Labels = labels
 		obj.Spec = crd.ProviderHostSpec{
 			Hostname:     host,
 			Owner:        lID.GetOwner(),

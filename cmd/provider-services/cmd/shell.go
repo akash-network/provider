@@ -10,7 +10,7 @@ import (
 	"sync"
 	"syscall"
 
-	apclient "github.com/akash-network/akash-api/go/provider/client"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/go-andiamo/splitter"
 	dockerterm "github.com/moby/term"
 	"github.com/spf13/cobra"
@@ -18,12 +18,8 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 	"k8s.io/kubectl/pkg/util/term"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
-
-	dcli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
-
-	aclient "github.com/akash-network/provider/client"
+	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 )
 
 const (
@@ -39,12 +35,14 @@ var (
 func LeaseShellCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Args:         cobra.MinimumNArgs(2),
-		Use:          "lease-shell",
+		Use:          "lease-shell <service-name> <command>",
 		Short:        "do lease shell",
 		SilenceUsage: true,
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE:         doLeaseShell,
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addLeaseFlags(cmd)
 	addAuthFlags(cmd)
 
@@ -101,35 +99,28 @@ func doLeaseShell(cmd *cobra.Command, args []string) error {
 		tty.Raw = true
 	}
 
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	prov, err := providerFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	bidID, err := mcli.BidIDFromFlags(cmd.Flags(), dcli.WithOwner(cctx.FromAddress))
+	bidID, err := cflags.BidIDFromFlags(cmd.Flags(), cflags.WithOwner(cctx.FromAddress))
 	if err != nil {
 		return err
 	}
 	lID := bidID.LeaseID()
 
-	opts, err := loadAuthOpts(ctx, cctx, cmd.Flags())
+	paddr, err := sdk.AccAddressFromBech32(lID.Provider)
 	if err != nil {
 		return err
 	}
 
-	gclient, err := apclient.NewClient(ctx, cl, prov, opts...)
+	gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 	if err != nil {
 		return err
 	}
