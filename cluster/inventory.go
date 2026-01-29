@@ -459,7 +459,6 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	state.reservations = append(state.reservations, reservation)
 	req.ch <- inventoryResponse{value: reservation}
 	inventoryRequestsCounter.WithLabelValues("reserve", "create").Inc()
-
 }
 
 func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservation) {
@@ -522,7 +521,7 @@ loop:
 	for {
 		select {
 		case err := <-is.lc.ShutdownRequest():
-			is.log.Debug("received shutdown request", "err", err)
+			is.log.Debug("received shutdown request", "error", err)
 			is.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-is.sub.Events():
@@ -690,7 +689,7 @@ loop:
 					}
 				}
 			} else {
-				is.log.Error("checking IP addresses", "err", err)
+				is.log.Error("checking IP addresses", "error", err)
 			}
 
 			resumeProcessingReservations()
