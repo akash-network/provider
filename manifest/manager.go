@@ -4,19 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/pkg/errors"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"cosmossdk.io/log"
 
-	maniv2beta2 "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/util/runner"
+	maniv2beta2 "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/go/util/runner"
 
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -74,7 +76,7 @@ type manager struct {
 	manifestch chan manifestRequest
 	updatech   chan []byte
 
-	data            dtypes.QueryDeploymentResponse
+	data            dvbeta.QueryDeploymentResponse
 	requests        []manifestRequest
 	pendingRequests []manifestRequest
 	manifests       []*maniv2beta2.Manifest
@@ -132,7 +134,7 @@ func (m *manager) handleUpdate(version []byte) {
 func (m *manager) clearFetched() {
 	m.fetchedAt = time.Time{}
 	m.fetched = false
-	m.data = dtypes.QueryDeploymentResponse{}
+	m.data = dvbeta.QueryDeploymentResponse{}
 	m.localLeases = nil
 }
 
@@ -163,8 +165,11 @@ loop:
 
 		case ev := <-m.leasech:
 			m.log.Info("new lease", "lease", ev.LeaseID)
+
+			// fetch owner's public key
 			m.clearFetched()
 			m.maybeScheduleStop()
+
 			runch = m.maybeFetchData(ctx, runch)
 		case id := <-m.rmleasech:
 			m.log.Info("lease removed", "lease", id)
@@ -201,7 +206,7 @@ loop:
 			m.data = fetchResult.deployment
 			m.localLeases = fetchResult.leases
 
-			m.log.Info("data received", "version", hex.EncodeToString(m.data.Deployment.Version))
+			m.log.Info("data received", "version", hex.EncodeToString(m.data.Deployment.Hash))
 
 			m.validateRequests()
 			m.emitReceivedEvents()
@@ -246,19 +251,18 @@ func (m *manager) fetchData(ctx context.Context) <-chan runner.Result {
 }
 
 type manifestManagerFetchDataResult struct {
-	deployment dtypes.QueryDeploymentResponse
+	deployment dvbeta.QueryDeploymentResponse
 	leases     []event.LeaseWon
 }
 
 func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResult, error) {
 	subctx, cancel := context.WithTimeout(ctx, m.config.RPCQueryTimeout)
 	defer cancel()
-	deploymentResponse, err := m.session.Client().Query().Deployment(subctx, &dtypes.QueryDeploymentRequest{ID: m.daddr})
+	deploymentResponse, err := m.session.Client().Query().Deployment().Deployment(subctx, &dvbeta.QueryDeploymentRequest{ID: m.daddr})
 	if err != nil {
 		return manifestManagerFetchDataResult{}, err
 	}
-
-	leasesResponse, err := m.session.Client().Query().Leases(subctx, &mtypes.QueryLeasesRequest{
+	leasesResponse, err := m.session.Client().Query().Market().Leases(subctx, &mvbeta.QueryLeasesRequest{
 		Filters: mtypes.LeaseFilters{
 			Owner:    m.daddr.Owner,
 			DSeq:     m.daddr.DSeq,
@@ -269,20 +273,19 @@ func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResu
 		},
 		Pagination: nil,
 	})
-
 	if err != nil {
 		return manifestManagerFetchDataResult{}, err
 	}
 
-	groups := make(map[uint32]dtypes.Group)
+	groups := make(map[uint32]dvbeta.Group)
 	for _, g := range deploymentResponse.GetGroups() {
-		groups[g.ID().GSeq] = g
+		groups[g.ID.GSeq] = g
 	}
 
 	leases := make([]event.LeaseWon, len(leasesResponse.Leases))
 	for i, leaseEntry := range leasesResponse.Leases {
 		lease := leaseEntry.GetLease()
-		leaseID := lease.GetLeaseID()
+		leaseID := lease.ID
 		groupForLease, foundGroup := groups[leaseID.GetGSeq()]
 		if !foundGroup {
 			return manifestManagerFetchDataResult{}, fmt.Errorf("%w: could not locate group %v ", errNoGroupForLease, leaseID)
@@ -302,7 +305,7 @@ func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResu
 	}, nil
 }
 
-func (m *manager) maybeScheduleStop() bool { // nolint:golint,unparam
+func (m *manager) maybeScheduleStop() bool { // nolint:unparam
 	if len(m.localLeases) > 0 || len(m.manifests) > 0 {
 		if m.stoptimer != nil {
 			m.log.Info("stopping stop timer")
@@ -346,7 +349,7 @@ func (m *manager) emitReceivedEvents() {
 
 	latestManifest := m.manifests[len(m.manifests)-1]
 	m.log.Debug("publishing manifest received", "num-leases", len(m.localLeases))
-	copyOfData := new(dtypes.QueryDeploymentResponse)
+	copyOfData := new(dvbeta.QueryDeploymentResponse)
 	*copyOfData = m.data
 	for _, lease := range m.localLeases {
 		m.log.Debug("publishing manifest received for lease", "lease_id", lease.LeaseID)
@@ -381,7 +384,7 @@ func (m *manager) validateRequests() {
 		default:
 		}
 		if err := m.validateRequest(req); err != nil {
-			m.log.Error("invalid manifest: %s", err.Error())
+			m.log.Error("invalid manifest", "error", err.Error())
 			req.ch <- err
 			continue
 		}
@@ -408,6 +411,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	default:
 	}
 
+	err := req.value.Manifest.Validate()
+	if err != nil {
+		return err
+	}
+
 	// ensure that an uploaded manifest matches the hash declared on
 	// the Akash Deployment.Version
 	version, err := req.value.Manifest.Version()
@@ -420,11 +428,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	if len(m.versions) != 0 {
 		versionExpected = m.versions[len(m.versions)-1]
 	} else {
-		versionExpected = m.data.Deployment.Version
+		versionExpected = m.data.Deployment.Hash
 	}
 
 	if !bytes.Equal(version, versionExpected) {
-		m.log.Info("deployment version mismatch", "expected", m.data.Deployment.Version, "got", version)
+		m.log.Info("deployment version mismatch", "expected", m.data.Deployment.Hash, "got", version)
 		return ErrManifestVersion
 	}
 
@@ -448,7 +456,7 @@ func (m *manager) validateRequest(req manifestRequest) error {
 
 func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest, groupNames []string) error {
 	// Check if the hostnames are available. Do not block forever
-	ownerAddr, err := m.data.GetDeployment().DeploymentID.GetOwnerAddress()
+	ownerAddr, err := m.data.GetDeployment().ID.GetOwnerAddress()
 	if err != nil {
 		return err
 	}

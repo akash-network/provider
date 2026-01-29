@@ -5,17 +5,19 @@ import (
 	"math/rand"
 	"time"
 
-	aclient "github.com/akash-network/akash-api/go/node/client/v1beta2"
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	mv1 "pkg.akt.dev/go/node/market/v1"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/tendermint/tendermint/libs/log"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/pubsub"
-	"github.com/akash-network/node/util/runner"
+	"cosmossdk.io/log"
+	sdk "github.com/cosmos/cosmos-sdk/types"
+
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	"pkg.akt.dev/go/util/pubsub"
+	"pkg.akt.dev/node/util/runner"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
@@ -79,11 +81,12 @@ func (m *deploymentMonitor) run() {
 
 	tickch := m.scheduleRetry()
 
+	prevStatus := event.ClusterDeploymentUnknown
+
 loop:
 	for {
 		select {
 		case err := <-m.lc.ShutdownRequest():
-			m.log.Debug("shutting down")
 			m.lc.ShutdownInitiated(err)
 			break loop
 
@@ -99,34 +102,40 @@ loop:
 				m.log.Error("monitor check", "err", err)
 			}
 
-			ok := result.Value().(bool)
+			var currStatus event.ClusterDeploymentStatus
 
-			m.log.Info("check result", "ok", ok, "attempt", m.attempts)
+			healthy := result.Value().(bool)
 
-			if ok {
-				// healthy
+			if healthy {
+				currStatus = event.ClusterDeploymentDeployed
+
 				m.attempts = 0
 				tickch = m.scheduleHealthcheck()
-				m.publishStatus(event.ClusterDeploymentDeployed)
+
 				deploymentHealthCheckCounter.WithLabelValues("up").Inc()
-
-				break
 			} else {
+				currStatus = event.ClusterDeploymentPending
+
 				deploymentHealthCheckCounter.WithLabelValues("down").Inc()
+				m.log.Info("check result", "ok", false, "attempt", m.attempts)
 			}
 
-			m.publishStatus(event.ClusterDeploymentPending)
-
-			if m.attempts <= m.config.MonitorMaxRetries {
-				// unhealthy.  retry
-				tickch = m.scheduleRetry()
-				break
+			if currStatus != prevStatus {
+				m.publishStatus(currStatus)
+				prevStatus = currStatus
 			}
 
-			m.log.Error("deployment failed.  closing lease.")
-			deploymentHealthCheckCounter.WithLabelValues("failed").Inc()
-			closech = m.runCloseLease(ctx)
+			if !healthy {
+				if m.attempts <= m.config.MonitorMaxRetries {
+					// unhealthy.  retry
+					tickch = m.scheduleRetry()
+					break
+				}
 
+				m.log.Error("deployment failed.  closing lease.")
+				deploymentHealthCheckCounter.WithLabelValues("failed").Inc()
+				closech = m.runCloseLease(ctx)
+			}
 		case <-closech:
 			closech = nil
 		}
@@ -134,23 +143,16 @@ loop:
 	cancel()
 
 	if runch != nil {
-		m.log.Debug("read runch")
 		<-runch
 	}
 
 	if closech != nil {
-		m.log.Debug("read closech")
 		<-closech
 	}
-
-	// TODO
-	// Check that we got here
-	m.log.Debug("shutdown complete")
 }
 
 func (m *deploymentMonitor) runCheck(ctx context.Context) <-chan runner.Result {
 	m.attempts++
-	m.log.Debug("running check", "attempt", m.attempts)
 	return runner.Do(func() runner.Result {
 		return runner.NewResult(m.doCheck(ctx))
 	})
@@ -193,10 +195,11 @@ func (m *deploymentMonitor) doCheck(ctx context.Context) (bool, error) {
 func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Result {
 	return runner.Do(func() runner.Result {
 		// TODO: retry, timeout
-		msg := &mtypes.MsgCloseBid{
-			BidID: m.deployment.LeaseID().BidID(),
+		msg := &mvbeta.MsgCloseBid{
+			ID:     m.deployment.LeaseID().BidID(),
+			Reason: mv1.LeaseClosedReasonUnstable,
 		}
-		res, err := m.session.Client().Tx().Broadcast(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+		res, err := m.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 		if err != nil {
 			m.log.Error("closing deployment", "err", err)
 		} else {

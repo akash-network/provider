@@ -11,11 +11,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 	"time"
 
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
 	"github.com/fsnotify/fsnotify"
 	"github.com/gorilla/mux"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
@@ -29,6 +28,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/informers"
+
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -128,10 +130,12 @@ func Cmd() *cobra.Command {
 
 			ctx = cmd.Context()
 
+			listenAddress := viper.GetString(common.FlagRESTAddress)
 			apiTimeout := viper.GetDuration(FlagAPITimeout)
 			queryTimeout := viper.GetDuration(FlagQueryTimeout)
-			restEndpoint := fmt.Sprintf(":%d", restPort)
-			grpcEndpoint := fmt.Sprintf(":%d", grpcPort)
+
+			restEndpoint := fmt.Sprintf("%s:%d", listenAddress, restPort)
+			grpcEndpoint := fmt.Sprintf("%s:%d", listenAddress, grpcPort)
 
 			restSrv := &http.Server{
 				Addr:    restEndpoint,
@@ -222,6 +226,11 @@ func Cmd() *cobra.Command {
 				bus,
 				factory.Core().V1().Nodes().Informer(),
 				topicKubeNodes)
+
+			InformKubeObjects(ctx,
+				bus,
+				factory.Core().V1().Pods().Informer(),
+				topicKubePods)
 
 			fromctx.MustStartupChFromCtx(ctx) <- struct{}{}
 			err = group.Wait()
@@ -541,6 +550,13 @@ func newServiceRouter(apiTimeout, queryTimeout time.Duration) *serviceRouter {
 	metricsRouter.HandleFunc("/health", rt.healthHandler).GetHandler()
 	metricsRouter.HandleFunc("/ready", rt.readyHandler)
 
+	debugRouter := mRouter.PathPrefix("/debug").Subrouter()
+	debugRouter.HandleFunc("/pprof/", pprof.Index)
+	debugRouter.HandleFunc("/pprof/cmdline", pprof.Cmdline)
+	debugRouter.HandleFunc("/pprof/profile", pprof.Profile)
+	debugRouter.HandleFunc("/pprof/symbol", pprof.Symbol)
+	debugRouter.HandleFunc("/pprof/trace", pprof.Trace)
+
 	return rt
 }
 
@@ -565,8 +581,6 @@ func (rt *serviceRouter) healthHandler(w http.ResponseWriter, req *http.Request)
 		err = ErrMetricsUnsupportedRequest
 		return
 	}
-
-	return
 }
 
 func (rt *serviceRouter) readyHandler(w http.ResponseWriter, req *http.Request) {
@@ -590,8 +604,6 @@ func (rt *serviceRouter) readyHandler(w http.ResponseWriter, req *http.Request) 
 		err = ErrMetricsUnsupportedRequest
 		return
 	}
-
-	return
 }
 
 func (rt *serviceRouter) inventoryHandler(w http.ResponseWriter, req *http.Request) {

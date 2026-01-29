@@ -4,25 +4,20 @@ package integration
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
-	"github.com/cosmos/cosmos-sdk/client/flags"
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	clitestutil "github.com/akash-network/node/testutil/cli"
-	deploycli "github.com/akash-network/node/x/deployment/client/cli"
-	mcli "github.com/akash-network/node/x/market/client/cli"
+	"pkg.akt.dev/go/cli"
+	clitestutil "pkg.akt.dev/go/cli/testutil"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	apclient "pkg.akt.dev/go/provider/client"
 
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
-	gwrest "github.com/akash-network/provider/gateway/rest"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 )
 
@@ -35,88 +30,69 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 	deploymentPath, err := filepath.Abs("../testdata/deployment/deployment-v2-ip-endpoint.yaml")
 	s.Require().NoError(err)
 
-	cctxJSON := s.validator.ClientCtx.WithOutputFormat("json")
+	cctx := s.cctx
 
 	deploymentID := dtypes.DeploymentID{
-		Owner: s.keyTenant.GetAddress().String(),
+		Owner: s.addrTenant.String(),
 		DSeq:  uint64(105),
 	}
 
 	// Create Deployments and assert query to assert
-	res, err := deploycli.TxCreateDeploymentExec(
-		s.validator.ClientCtx,
-		s.keyTenant.GetAddress(),
-		deploymentPath,
-		fmt.Sprintf("--%s", flags.FlagSkipConfirmation),
-		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastBlock),
-		fmt.Sprintf("--%s=%s", flags.FlagFees, sdk.NewCoins(sdk.NewCoin(s.cfg.BondDenom, sdk.NewInt(20))).String()),
-		fmt.Sprintf("--gas=%d", flags.DefaultGasLimit),
-		fmt.Sprintf("--dseq=%v", deploymentID.DSeq),
+	res, err := clitestutil.ExecDeploymentCreate(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(deploymentID.DSeq).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.network.WaitForNextBlock())
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	// Wait for then EndBlock to handle bidding and creating lease
-	s.Require().NoError(s.waitForBlocksCommitted(15))
+	bidID := mtypes.MakeBidID(
+		mtypes.MakeOrderID(dtypes.MakeGroupID(deploymentID, 1), 1),
+		s.addrProvider,
+	)
 
-	// Assert provider made bid and created lease; test query leases
-	res, err = mcli.QueryBidsExec(cctxJSON)
+	err = s.waitForBlockchainEvent(&mtypes.EventBidCreated{ID: bidID})
 	s.Require().NoError(err)
-	bidsRes := &mtypes.QueryBidsResponse{}
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), bidsRes)
-	s.Require().NoError(err)
-	selectedIdx := -1
-	for i, bidEntry := range bidsRes.Bids {
-		bid := bidEntry.GetBid()
-		if bid.GetBidID().DeploymentID().Equals(deploymentID) {
-			selectedIdx = i
-			break
-		}
-	}
-	s.Require().NotEqual(selectedIdx, -1)
-	bid := bidsRes.Bids[selectedIdx].GetBid()
 
-	res, err = mcli.TxCreateLeaseExec(
-		cctxJSON,
-		bid.BidID,
-		s.keyTenant.GetAddress(),
-		fmt.Sprintf("--%s=true", flags.FlagSkipConfirmation),
-		fmt.Sprintf("--%s=%s", flags.FlagBroadcastMode, flags.BroadcastBlock),
-		fmt.Sprintf("--%s=%s", flags.FlagFees, sdk.NewCoins(sdk.NewCoin(s.cfg.BondDenom, sdk.NewInt(10))).String()),
-		fmt.Sprintf("--gas=%d", flags.DefaultGasLimit),
+	// check bid
+	_, err = clitestutil.ExecQueryBid(s.ctx, cctx, cli.TestFlags().WithBidID(bidID)...)
+	s.Require().NoError(err)
+
+	res, err = clitestutil.ExecCreateLease(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithBidID(bidID).
+			WithFrom(s.addrTenant.String()).
+			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)
-	s.Require().NoError(s.waitForBlocksCommitted(6))
-	clitestutil.ValidateTxSuccessful(s.T(), s.validator.ClientCtx, res.Bytes())
+	s.Require().NoError(s.waitForBlocksCommitted(2))
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	res, err = mcli.QueryLeasesExec(cctxJSON)
+	leaseID := mtypes.MakeLeaseID(bidID)
+
+	err = s.waitForBlockchainEvent(&mtypes.EventLeaseCreated{ID: leaseID})
 	s.Require().NoError(err)
 
-	leaseRes := &mtypes.QueryLeasesResponse{}
-	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), leaseRes)
+	res, err = clitestutil.ExecQueryLease(s.ctx, cctx, cli.TestFlags().WithLeaseID(leaseID).WithOutputJSON()...)
 	s.Require().NoError(err)
-	selectedIdx = -1
-	for idx, leaseEntry := range leaseRes.Leases {
-		lease := leaseEntry.GetLease()
-		if lease.GetLeaseID().DeploymentID().Equals(deploymentID) {
-			selectedIdx = idx
-			break
-		}
-	}
-	s.Require().NotEqual(selectedIdx, -1)
-
-	lease := leaseRes.Leases[selectedIdx].GetLease()
-	leaseID := lease.LeaseID
-	s.Require().Equal(s.keyProvider.GetAddress().String(), leaseID.Provider)
 
 	// Send Manifest to Provider ----------------------------------------------
-	_, err = ptestutil.TestSendManifest(
-		cctxJSON,
-		leaseID.BidID(),
-		deploymentPath,
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	_, err = ptestutil.ExecSendManifest(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(deploymentPath).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String()).
+			WithDSeq(leaseID.DSeq).
+			WithOutputJSON()...,
 	)
 	s.Require().NoError(err)
 
@@ -130,13 +106,12 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 			s.T().Fatal("timed out waiting on lease to be stood up by provider")
 		default:
 		}
-		cmdResult, err := providerCmd.ProviderStatusExec(s.validator.ClientCtx, leaseID.Provider)
+		cmdResult, err := providerCmd.ExecProviderStatus(s.ctx, cctx, cli.TestFlags().With(leaseID.Provider)...)
 		require.NoError(s.T(), err)
 		data := make(map[string]interface{})
 		err = json.Unmarshal(cmdResult.Bytes(), &data)
 		require.NoError(s.T(), err)
 		leaseCount, ok := data["cluster"].(map[string]interface{})["leases"]
-		s.T().Logf("lease count: %v", leaseCount)
 		if ok && leaseCount == float64(1) {
 			break
 		}
@@ -151,18 +126,20 @@ func (s *E2EIPAddress) TestIPAddressLease() {
 	time.Sleep(30 * time.Second) // TODO - replace with polling
 
 	// Get the lease status and confirm IP is present
-	cmdResult, err := providerCmd.ProviderLeaseStatusExec(
-		s.validator.ClientCtx,
-		fmt.Sprintf("--%s=%v", "dseq", leaseID.DSeq),
-		fmt.Sprintf("--%s=%v", "gseq", leaseID.GSeq),
-		fmt.Sprintf("--%s=%v", "oseq", leaseID.OSeq),
-		fmt.Sprintf("--%s=%v", "provider", leaseID.Provider),
-		fmt.Sprintf("--%s=%s", flags.FlagFrom, s.keyTenant.GetAddress().String()),
-		fmt.Sprintf("--%s=%s", flags.FlagHome, s.validator.ClientCtx.HomeDir),
+	cmdResult, err := providerCmd.ExecProviderLeaseStatus(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			WithDSeq(leaseID.DSeq).
+			WithGSeq(leaseID.GSeq).
+			WithOSeq(leaseID.OSeq).
+			WithProvider(leaseID.Provider).
+			WithHome(s.validator.ClientCtx.HomeDir).
+			WithFrom(s.addrTenant.String())...,
 	)
 
 	require.NoError(s.T(), err)
-	leaseStatusData := gwrest.LeaseStatus{}
+	leaseStatusData := apclient.LeaseStatus{}
 	err = json.Unmarshal(cmdResult.Bytes(), &leaseStatusData)
 	require.NoError(s.T(), err)
 	s.Require().Len(leaseStatusData.IPs, 1)

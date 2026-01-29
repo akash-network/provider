@@ -3,20 +3,23 @@ package rest
 import (
 	"context"
 	"io"
+	"net/http"
 	"testing"
 	"time"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	"github.com/akash-network/node/testutil"
+	"pkg.akt.dev/go/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
+	testFn := func(test *routerTest, _ http.Header) {
 		const dseq = uint64(33)
 		const gseq = uint32(34)
 
@@ -26,28 +29,36 @@ func TestRouteMigrateHostnameDoesNotExist(t *testing.T) {
 		defer cancel()
 		err := test.gwclient.MigrateHostnames(ctx, []string{"foobar.com"}, dseq, gseq)
 		require.Error(t, err)
-		require.IsType(t, ClientResponseError{}, err)
-		require.Regexp(t, `(?s)^.*destination deployment does not exist.*$`, err.(ClientResponseError).ClientError())
-	})
+		require.IsType(t, apclient.ClientResponseError{}, err)
+		require.Regexp(t, `(?s)^.*destination deployment does not exist.*$`, err.(apclient.ClientResponseError).ClientError())
+	}
+
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, testFn)
 }
 
 func TestRouteMigrateHostnameDeploymentDoesNotUse(t *testing.T) {
-	runRouterTest(t, true, func(test *routerTest) {
+	testFn := func(test *routerTest, _ http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+
 		const dseq = uint64(133)
 		const gseq = uint32(134)
 
 		leaseID := testutil.LeaseID(t)
 
-		leaseID.Owner = test.caddr.String()
+		leaseID.Owner = caddr.String()
 		test.clusterService.On("FindActiveLease", mock.Anything, mock.Anything, dseq, gseq).Return(true, leaseID, crd.ManifestGroup{}, nil)
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
 		err := test.gwclient.MigrateHostnames(ctx, []string{"foobar.org"}, dseq, gseq)
 		require.Error(t, err)
-		require.IsType(t, ClientResponseError{}, err)
-		require.Regexp(t, `(?s)^.*the hostname "foobar.org" is not used by this deployment.*$`, err.(ClientResponseError).ClientError())
-	})
+		require.IsType(t, apclient.ClientResponseError{}, err)
+		require.Regexp(t, `(?s)^.*the hostname "foobar.org" is not used by this deployment.*$`, err.(apclient.ClientResponseError).ClientError())
+	}
+
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, testFn)
 }
 
 func TestRouteMigrateHostname(t *testing.T) {
@@ -57,7 +68,7 @@ func TestRouteMigrateHostname(t *testing.T) {
 	const serviceName = "hostly-service"
 	const serviceExternalPort = uint32(1111)
 
-	runRouterTest(t, true, func(test *routerTest) {
+	testFn := func(test *routerTest, _ http.Header) {
 		mgroup := crd.ManifestGroup{
 			Name: "some-group",
 			Services: []crd.ManifestService{
@@ -79,8 +90,11 @@ func TestRouteMigrateHostname(t *testing.T) {
 				},
 			},
 		}
+
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+
 		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = test.caddr.String()
+		leaseID.Owner = caddr.String()
 		test.clusterService.On("FindActiveLease", mock.Anything, mock.Anything, dseq, gseq).Return(true, leaseID, mgroup, nil)
 		test.hostnameClient.On("PrepareHostnamesForTransfer", mock.Anything, []string{hostname}, leaseID).Return(nil)
 		test.clusterService.On("TransferHostname", mock.Anything, leaseID, hostname, serviceName, serviceExternalPort).Return(nil)
@@ -92,7 +106,10 @@ func TestRouteMigrateHostname(t *testing.T) {
 
 		require.Equal(t, 2, len(test.clusterService.Calls))
 		require.Equal(t, "TransferHostname", test.clusterService.Calls[1].Method)
-	})
+	}
+
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, testFn)
 }
 
 func TestRouteMigrateHostnamePrepareFails(t *testing.T) {
@@ -102,7 +119,7 @@ func TestRouteMigrateHostnamePrepareFails(t *testing.T) {
 	const serviceName = "hostly-service"
 	const serviceExternalPort = uint32(999)
 
-	runRouterTest(t, true, func(test *routerTest) {
+	testFn := func(test *routerTest, _ http.Header) {
 		mgroup := crd.ManifestGroup{
 			Name: "some-group",
 			Services: []crd.ManifestService{
@@ -124,8 +141,11 @@ func TestRouteMigrateHostnamePrepareFails(t *testing.T) {
 				},
 			},
 		}
+
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+
 		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = test.caddr.String()
+		leaseID.Owner = caddr.String()
 		test.clusterService.On("FindActiveLease", mock.Anything, mock.Anything, dseq, gseq).Return(true, leaseID, mgroup, nil)
 		test.hostnameClient.On("PrepareHostnamesForTransfer", mock.Anything, []string{hostname}, leaseID).Return(io.EOF)
 
@@ -135,7 +155,10 @@ func TestRouteMigrateHostnamePrepareFails(t *testing.T) {
 		require.Error(t, err)
 		require.Regexp(t, `^.*remote server returned 500.*$`, err)
 		require.Equal(t, 1, len(test.clusterService.Calls))
-	})
+	}
+
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, testFn)
 }
 
 func TestRouteMigrateHostnameTransferFails(t *testing.T) {
@@ -145,7 +168,7 @@ func TestRouteMigrateHostnameTransferFails(t *testing.T) {
 	const serviceName = "decloud-thing"
 	const serviceExternalPort = uint32(1112)
 
-	runRouterTest(t, true, func(test *routerTest) {
+	testFn := func(test *routerTest, _ http.Header) {
 
 		mgroup := crd.ManifestGroup{
 			Name: "some-group",
@@ -168,8 +191,10 @@ func TestRouteMigrateHostnameTransferFails(t *testing.T) {
 				},
 			},
 		}
+
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
 		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = test.caddr.String()
+		leaseID.Owner = caddr.String()
 
 		test.clusterService.On("FindActiveLease", mock.Anything, mock.Anything, dseq, gseq).Return(true, leaseID, mgroup, nil)
 		test.hostnameClient.On("PrepareHostnamesForTransfer", mock.Anything, []string{hostname}, leaseID).Return(nil)
@@ -181,5 +206,8 @@ func TestRouteMigrateHostnameTransferFails(t *testing.T) {
 		require.Error(t, err)
 		require.Regexp(t, `^.*remote server returned 500.*$`, err)
 		require.Equal(t, 2, len(test.clusterService.Calls))
-	})
+	}
+
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, testFn)
 }

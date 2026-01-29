@@ -3,40 +3,34 @@ package rest
 import (
 	"bufio"
 	"context"
-	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
 	gcontext "github.com/gorilla/context"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/pkg/errors"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 	"k8s.io/client-go/tools/remotecommand"
 
+	"cosmossdk.io/log"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/tendermint/tendermint/libs/log"
 
-	manifest "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	manifestValidation "github.com/akash-network/akash-api/go/manifest/v2beta2"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-
-	"github.com/akash-network/node/util/wsutil"
+	manifest "pkg.akt.dev/go/manifest/v2beta3"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
+	ajwt "pkg.akt.dev/go/util/jwt"
+	"pkg.akt.dev/node/util/wsutil"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/cluster"
-	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -51,19 +45,19 @@ type CtxAuthKey string
 const (
 	contentTypeJSON = "application/json; charset=UTF-8"
 
-	// Time allowed to write the file to the client.
+	// Time allowed writing the file to the client.
 	pingWait = 15 * time.Second
 
-	// Time allowed to read the next pong message from the client.
+	// Time allowed reading the next pong message from the client.
 	pongWait = 15 * time.Second
 
-	// Send pings to client with this period. Must be less than pongWait.
+	// Send pings to a client with this period. Must be less than pongWait.
 	pingPeriod = 10 * time.Second
 )
 
 const (
 	// as per RFC https://www.iana.org/assignments/websocket/websocket.xhtml#close-code-number
-	// errors from private use staring
+	// errors from private use starting
 	websocketInternalServerErrorCode = 4000
 	websocketLeaseNotFound           = 4001
 	manifestSubmitTimeout            = 120 * time.Second
@@ -81,7 +75,7 @@ type wsStreamConfig struct {
 func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, middlewares ...mux.MiddlewareFunc) *mux.Router {
 	router := mux.NewRouter()
 
-	// store provider address in context as lease endpoints below need it
+	// store provider address in context as a lease's endpoints below need it
 	router.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gcontext.Set(r, providerContextKey, addr)
@@ -89,6 +83,8 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 			next.ServeHTTP(w, r)
 		})
 	})
+
+	router.Use(prepareAuthMiddleware)
 
 	router.Use(middlewares...)
 
@@ -110,76 +106,85 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
 
-	vrouter := router.NewRoute().Subrouter()
-	vrouter.Use(requireOwner())
+	authedRouter := router.NewRoute().Subrouter()
+	authedRouter.Use(
+		authorizeProviderMiddleware,
+		requireOwner,
+	)
 
 	// GET /validate
 	// validate endpoint checks if provider will bid on given groupspec
-	vrouter.HandleFunc("/validate",
+	authedRouter.HandleFunc("/validate",
 		validateHandler(log, pclient)).
 		Methods("GET")
 
 	// GET /wiboy (aka would I bid on you)
-	// validate endpoint checks if provider will bid on given groupspec
-	vrouter.HandleFunc("/wiboy",
+	// validate endpoint checks if the provider will bid on a given groupspec
+	authedRouter.HandleFunc("/wiboy",
 		validateHandler(log, pclient)).
 		Methods("GET")
 
-	hostnameRouter := router.PathPrefix(hostnamePrefix).Subrouter()
-	hostnameRouter.Use(requireOwner())
-	hostnameRouter.HandleFunc(migratePathPrefix,
+	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
+	hostnameRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
 		Methods(http.MethodPost)
 
-	endpointRouter := router.PathPrefix(endpointPrefix).Subrouter()
-	endpointRouter.Use(requireOwner())
-	endpointRouter.HandleFunc(migratePathPrefix,
+	endpointRouter := authedRouter.PathPrefix(apclient.EndpointPrefix).Subrouter()
+	endpointRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateEndpointHandler(log, pclient.ClusterService(), pclient.Cluster())).
 		Methods(http.MethodPost)
 
-	drouter := router.PathPrefix(deploymentPathPrefix).Subrouter()
-	drouter.Use(
-		requireOwner(),
-		requireDeploymentID(),
-	)
+	drouter := authedRouter.PathPrefix(apclient.DeploymentPathPrefix).Subrouter()
+	drouter.Use(requireDeploymentID)
+
+	mrouter := drouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForDeploymentID(ajwt.PermissionScopeSendManifest))
 
 	// PUT /deployment/manifest
-	drouter.HandleFunc("/manifest",
+	mrouter.HandleFunc("/manifest",
 		createManifestHandler(log, pclient.Manifest())).
 		Methods(http.MethodPut)
 
-	lrouter := router.PathPrefix(leasePathPrefix).Subrouter()
+	lrouter := authedRouter.PathPrefix(apclient.LeasePathPrefix).Subrouter()
 	lrouter.Use(
-		requireOwner(),
-		requireLeaseID(),
+		requireLeaseID,
 	)
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeGetManifest))
+
 	// GET /lease/<lease-id>/manifest
-	lrouter.HandleFunc("/manifest",
+	mrouter.HandleFunc("/manifest",
 		getManifestHandler(log, pclient.Cluster())).
 		Methods(http.MethodGet)
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeStatus))
+
 	// GET /lease/<lease-id>/status
-	lrouter.HandleFunc("/status",
+	mrouter.HandleFunc("/status",
 		leaseStatusHandler(log, pclient.Cluster(), ctxConfig)).
 		Methods(http.MethodGet)
 
+	streamRouter := lrouter.NewRoute().Subrouter()
+	streamRouter.Use(requestStreamParams)
+
+	mrouter = streamRouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeEvents))
+
 	// GET /lease/<lease-id>/kubeevents
-	eventsRouter := lrouter.PathPrefix("/kubeevents").Subrouter()
-	eventsRouter.Use(
-		requestStreamParams(),
-	)
-	eventsRouter.HandleFunc("",
+	mrouter.HandleFunc("/kubeevents",
 		leaseKubeEventsHandler(log, pclient.Cluster())).
 		Methods("GET")
 
-	logRouter := lrouter.PathPrefix("/logs").Subrouter()
-	logRouter.Use(
-		requestStreamParams(),
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(
+		requestStreamParams,
+		requireEndpointScopeForLeaseID(ajwt.PermissionScopeLogs),
 	)
 
 	// GET /lease/<lease-id>/logs
-	logRouter.HandleFunc("",
+	mrouter.HandleFunc("/logs",
 		leaseLogsHandler(log, pclient.Cluster())).
 		Methods("GET")
 
@@ -193,108 +198,14 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		leaseServiceStatusHandler(log, pclient.Cluster())).
 		Methods("GET")
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeShell))
+
 	// POST /lease/<lease-id>/shell
-	lrouter.HandleFunc("/shell",
+	mrouter.HandleFunc("/shell",
 		leaseShellHandler(log, pclient.Cluster()))
 
 	return router
-}
-
-func newJwtServerRouter(addr sdk.Address, privateKey interface{}, jwtExpiresAfter time.Duration, certSerialNumber string) *mux.Router {
-	router := mux.NewRouter()
-
-	router.HandleFunc("/jwt",
-		jwtServiceHandler(addr, privateKey, jwtExpiresAfter, certSerialNumber)).
-		Methods("GET")
-
-	return router
-}
-
-func newResourceServerRouter(log log.Logger, providerAddr sdk.Address, publicKey *ecdsa.PublicKey, lokiGwAddr string) *mux.Router {
-	router := mux.NewRouter()
-
-	// add a middleware to verify the JWT provided in Authorization header
-	router.Use(resourceServerAuth(log, providerAddr, publicKey))
-
-	lrouter := router.PathPrefix(leasePathPrefix).Subrouter()
-	lrouter.Use(requireLeaseID())
-
-	lokiServiceRouter := lrouter.PathPrefix("/loki-service").Subrouter()
-	lokiServiceRouter.NewRoute().Handler(lokiServiceHandler(log, lokiGwAddr))
-
-	return router
-}
-
-// lokiServiceHandler forwards all requests to the loki instance running in provider's cluster.
-// Example:
-//
-//	Incoming Request: http://localhost:8445/lease/1/1/1/loki-service/loki/api/v1/query?query={app=".+"}
-//	Outgoing Request: http://{lokiGwAddr}/loki/api/v1/query?query={app=".+"}
-func lokiServiceHandler(log log.Logger, lokiGwAddr string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// set the X-Scope-OrgID header for fetching logs for the right tenant
-		r.Header.Set("X-Scope-OrgID", builder.LidNS(requestLeaseID(r)))
-
-		// build target url for the reverse proxy
-		scheme := "http" // for http & https
-		if strings.HasPrefix(r.URL.Scheme, "ws") {
-			scheme = "ws" // for ws & wss
-		}
-		lokiURL, err := url.Parse(fmt.Sprintf("%s://%s", scheme, lokiGwAddr))
-		if err != nil {
-			log.Error(err.Error())
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		reverseProxy := httputil.NewSingleHostReverseProxy(lokiURL)
-
-		// remove the "/lease/{dseq}/{gseq}/{oseq}/loki-service" path prefix from the request url
-		// before it is sent to the reverse proxy.
-		pathSplits := strings.SplitN(r.URL.Path, "/", 7)
-		if len(pathSplits) < 7 || pathSplits[6] == "" {
-			log.Error("loki api not provided in url")
-			http.Error(w, "loki api not provided in url", http.StatusBadRequest)
-			return
-		}
-		r.URL.Path = pathSplits[6]
-
-		// serve the request using the reverse proxy
-		log.Info("Forwarding request to loki", "HTTP_API", pathSplits[6])
-		reverseProxy.ServeHTTP(w, r)
-	}
-}
-
-func jwtServiceHandler(paddr sdk.Address, privateKey interface{}, jwtExpiresAfter time.Duration, certSerialNumber string) http.HandlerFunc {
-	return func(writer http.ResponseWriter, request *http.Request) {
-		now := time.Now()
-		claim := ClientCustomClaims{
-			AkashNamespace: &AkashNamespace{
-				V1: &ClaimsV1{
-					CertSerialNumber: certSerialNumber,
-				},
-			},
-			RegisteredClaims: jwt.RegisteredClaims{
-				ExpiresAt: jwt.NewNumericDate(now.Add(jwtExpiresAfter)),
-				IssuedAt:  jwt.NewNumericDate(now),
-				// account address of the tenant: trustable as it has already been verified by mTLS
-				Subject: request.TLS.PeerCertificates[0].Subject.CommonName,
-				Issuer:  paddr.String(),
-			},
-		}
-
-		token := jwt.NewWithClaims(jwt.SigningMethodES256, &claim)
-		jwtString, err := token.SignedString(privateKey)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		_, err = io.WriteString(writer, jwtString)
-		if err != nil {
-			http.Error(writer, err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
 }
 
 type channelToTerminalSizeQueue <-chan remotecommand.TerminalSize
@@ -324,7 +235,7 @@ func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc 
 
 		for i := 0; true; i++ {
 			v := vars.Get(fmt.Sprintf("cmd%d", i))
-			if 0 == len(v) {
+			if len(v) == 0 {
 				break
 			}
 			cmd = append(cmd, v)
@@ -526,11 +437,12 @@ func createStatusHandler(log log.Logger, sclient provider.StatusClient, provider
 			return
 		}
 		data := struct {
-			provider.Status
+			// provider.Status
+			apclient.ProviderStatus
 			Address string `json:"address"`
 		}{
-			Status:  *status,
-			Address: providerAddr.String(),
+			ProviderStatus: *status,
+			Address:        providerAddr.String(),
 		}
 		writeJSON(log, w, data)
 	}
@@ -551,7 +463,7 @@ func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFun
 
 		owner := requestOwner(req)
 
-		var gspec dtypes.GroupSpec
+		var gspec dvbeta.GroupSpec
 
 		if err := json.Unmarshal(data, &gspec); err != nil {
 			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
@@ -580,10 +492,12 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 			return
 		}
 
+		did := requestDeploymentID(req)
+
 		subctx, cancel := context.WithTimeout(req.Context(), manifestSubmitTimeout)
 		defer cancel()
-		if err := mclient.Submit(subctx, requestDeploymentID(req), mani); err != nil {
-			if errors.Is(err, manifestValidation.ErrInvalidManifest) {
+		if err := mclient.Submit(subctx, did, mani); err != nil {
+			if errors.Is(err, manifest.ErrInvalidManifest) {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return
 			}
@@ -650,7 +564,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 		ctx := fromctx.ApplyToContext(req.Context(), clusterSettings)
 
 		leaseID := requestLeaseID(req)
-		result := LeaseStatus{}
+		result := apclient.LeaseStatus{}
 
 		found, manifestGroup, err := cclient.GetManifestGroup(req.Context(), leaseID)
 		if err != nil {
@@ -671,7 +585,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 		ipManifestGroupSearchLoop:
 			for _, service := range manifestGroup.Services {
 				for _, expose := range service.Expose {
-					if 0 != len(expose.IP) {
+					if len(expose.IP) != 0 {
 						hasLeasedIPs = true
 						break ipManifestGroupSearchLoop
 					}
@@ -685,15 +599,15 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 					http.Error(w, err.Error(), http.StatusInternalServerError)
 					return
 				}
-				result.IPs = make(map[string][]LeasedIPStatus)
+				result.IPs = make(map[string][]apclient.LeasedIPStatus)
 
 				for _, ipLease := range ipLeaseStatus {
 					entries := result.IPs[ipLease.ServiceName]
 					if entries == nil {
-						entries = make([]LeasedIPStatus, 0)
+						entries = make([]apclient.LeasedIPStatus, 0)
 					}
 
-					entries = append(entries, LeasedIPStatus{
+					entries = append(entries, apclient.LeasedIPStatus{
 						Port:         ipLease.Port,
 						ExternalPort: ipLease.ExternalPort,
 						Protocol:     ipLease.Protocol,
@@ -818,7 +732,7 @@ func wsSetupPongHandler(ws *websocket.Conn, cancel func()) error {
 			}
 
 			if mtype == websocket.CloseMessage {
-				err = errors.Errorf("disconnect")
+				err = fmt.Errorf("disconnect")
 			}
 		}
 	}()
@@ -859,7 +773,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 
 	var scanners sync.WaitGroup
 
-	logch := make(chan ServiceLogMessage)
+	logch := make(chan apclient.ServiceLogMessage)
 
 	scanners.Add(len(logs))
 
@@ -868,7 +782,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 			defer scanners.Done()
 
 			for scan.Scan() && ctx.Err() == nil {
-				logch <- ServiceLogMessage{
+				logch <- apclient.ServiceLogMessage{
 					Name:    name,
 					Message: scan.Text(),
 				}

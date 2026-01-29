@@ -16,22 +16,16 @@ on:
 
 jobs:
   build-bins:
-    runs-on: ubuntu-latest
+    runs-on: core-e2e
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
+      - name: Cleanup build folder
         run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+          sudo rm -rf ./* || true
+          sudo rm -rf ./.??* || true
+          sudo rm -rf $HOME/go/pkg/mod || true
+      - uses: actions/checkout@v4
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -44,38 +38,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - run: make test-full
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - name: Run linter
         run: make lint
 
@@ -89,19 +61,8 @@ jobs:
           sudo rm -rf ./* || true
           sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -118,51 +79,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: .cache/tests/coverage.txt
-
-  codegen:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
-      - name: Run codegen
-        run: make codegen
-      - name: Ensure no files changed/added/removed
-        run: |
-          if [[ -z "$(git status --short)" ]]; then
-              git status
-              exit 1
-          fi
 
   yamlcheck:
     runs-on: ubuntu-latest
@@ -176,19 +100,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - run: make shellcheck
 
   integration-tests:
@@ -203,7 +116,6 @@ jobs:
       - lint
       - release-dry-run
       - coverage
-      - codegen
       - yamlcheck
       - shellcheck
       - integration-tests

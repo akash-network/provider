@@ -4,6 +4,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 type StatefulSet interface {
@@ -13,23 +14,28 @@ type StatefulSet interface {
 }
 
 type statefulSet struct {
-	Workload
+	*Workload
 }
 
 var _ StatefulSet = (*statefulSet)(nil)
 
-func BuildStatefulSet(workload Workload) StatefulSet {
+func BuildStatefulSet(workload *Workload) StatefulSet {
 	ss := &statefulSet{
 		Workload: workload,
 	}
 
-	ss.Workload.log = ss.Workload.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
 
-func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,unparam
+func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:unparam
 	falseValue := false
+
+	revisionHistoryLimit := int32(1)
+
+	partition := int32(0)
+	maxUnavailable := intstr.FromInt32(1)
 
 	kdeployment := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -37,10 +43,18 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 			Labels: b.labels(),
 		},
 		Spec: appsv1.StatefulSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: b.labels(),
+			UpdateStrategy: appsv1.StatefulSetUpdateStrategy{
+				Type: appsv1.RollingUpdateStatefulSetStrategyType,
+				RollingUpdate: &appsv1.RollingUpdateStatefulSetStrategy{
+					Partition:      &partition,
+					MaxUnavailable: &maxUnavailable,
+				},
 			},
-			Replicas: b.replicas(),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: b.selectorLabels(),
+			},
+			RevisionHistoryLimit: &revisionHistoryLimit,
+			Replicas:             b.replicas(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: b.labels(),
@@ -53,27 +67,30 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:golint,u
 					},
 					AutomountServiceAccountToken: &falseValue,
 					Containers:                   []corev1.Container{b.container()},
-					ImagePullSecrets:             b.imagePullSecrets(),
-					Volumes:                      b.volumes(),
+					ImagePullSecrets:             b.secretsRefs,
+					Volumes:                      b.volumesObjs,
 				},
 			},
-			VolumeClaimTemplates: b.persistentVolumeClaims(),
+			VolumeClaimTemplates: b.pvcsObjs,
 		},
 	}
 
 	return kdeployment, nil
 }
 
-func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:golint,unparam
-	obj.Labels = b.labels()
-	obj.Spec.Selector.MatchLabels = b.labels()
-	obj.Spec.Replicas = b.replicas()
-	obj.Spec.Template.Labels = b.labels()
-	obj.Spec.Template.Spec.Affinity = b.affinity()
-	obj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
-	obj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
-	obj.Spec.Template.Spec.ImagePullSecrets = b.imagePullSecrets()
-	obj.Spec.VolumeClaimTemplates = b.persistentVolumeClaims()
+func (b *statefulSet) Update(obj *appsv1.StatefulSet) (*appsv1.StatefulSet, error) { // nolint:unparam
+	uobj := obj.DeepCopy()
 
-	return obj, nil
+	uobj.Labels = updateAkashLabels(obj.Labels, b.labels())
+	uobj.Spec.Replicas = b.replicas()
+	uobj.Spec.Selector.MatchLabels = b.selectorLabels()
+	uobj.Spec.Template.Labels = b.labels()
+	uobj.Spec.Template.Spec.Affinity = b.affinity()
+	uobj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
+	uobj.Spec.Template.Spec.Containers = []corev1.Container{b.container()}
+	uobj.Spec.Template.Spec.ImagePullSecrets = b.secretsRefs
+	uobj.Spec.Template.Spec.Volumes = b.volumesObjs
+	uobj.Spec.VolumeClaimTemplates = b.pvcsObjs
+
+	return uobj, nil
 }

@@ -5,10 +5,11 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/flowcontrol"
+
+	"cosmossdk.io/log"
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
@@ -42,7 +43,6 @@ func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
 		return cfg, fmt.Errorf("%w: error building kubernetes config", err)
 	}
 	cfg.RateLimiter = rateLimiter
-	// cfg.Timeout
 
 	return cfg, err
 }

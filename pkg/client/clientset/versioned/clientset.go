@@ -19,10 +19,9 @@ limitations under the License.
 package versioned
 
 import (
-	"fmt"
-	"net/http"
+	fmt "fmt"
+	http "net/http"
 
-	akashv2beta1 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta1"
 	akashv2beta2 "github.com/akash-network/provider/pkg/client/clientset/versioned/typed/akash.network/v2beta2"
 	discovery "k8s.io/client-go/discovery"
 	rest "k8s.io/client-go/rest"
@@ -31,20 +30,13 @@ import (
 
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-	AkashV2beta1() akashv2beta1.AkashV2beta1Interface
 	AkashV2beta2() akashv2beta2.AkashV2beta2Interface
 }
 
 // Clientset contains the clients for groups.
 type Clientset struct {
 	*discovery.DiscoveryClient
-	akashV2beta1 *akashv2beta1.AkashV2beta1Client
 	akashV2beta2 *akashv2beta2.AkashV2beta2Client
-}
-
-// AkashV2beta1 retrieves the AkashV2beta1Client
-func (c *Clientset) AkashV2beta1() akashv2beta1.AkashV2beta1Interface {
-	return c.akashV2beta1
 }
 
 // AkashV2beta2 retrieves the AkashV2beta2Client
@@ -96,10 +88,6 @@ func NewForConfigAndClient(c *rest.Config, httpClient *http.Client) (*Clientset,
 
 	var cs Clientset
 	var err error
-	cs.akashV2beta1, err = akashv2beta1.NewForConfigAndClient(&configShallowCopy, httpClient)
-	if err != nil {
-		return nil, err
-	}
 	cs.akashV2beta2, err = akashv2beta2.NewForConfigAndClient(&configShallowCopy, httpClient)
 	if err != nil {
 		return nil, err
@@ -125,7 +113,6 @@ func NewForConfigOrDie(c *rest.Config) *Clientset {
 // New creates a new Clientset for the given RESTClient.
 func New(c rest.Interface) *Clientset {
 	var cs Clientset
-	cs.akashV2beta1 = akashv2beta1.New(c)
 	cs.akashV2beta2 = akashv2beta2.New(c)
 
 	cs.DiscoveryClient = discovery.NewDiscoveryClient(c)

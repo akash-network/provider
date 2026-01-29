@@ -1,21 +1,15 @@
 package cmd
 
 import (
-	"crypto/tls"
+	"errors"
 	"sync"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/spf13/cobra"
+	"pkg.akt.dev/go/cli"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
-	cmdcommon "github.com/akash-network/node/cmd/common"
-	cutils "github.com/akash-network/node/x/cert/utils"
-
-	aclient "github.com/akash-network/provider/client"
-	cltypes "github.com/akash-network/provider/cluster/types/v1beta3"
-	gwrest "github.com/akash-network/provider/gateway/rest"
+	mtypes "pkg.akt.dev/go/node/market/v1"
+	apclient "pkg.akt.dev/go/provider/client"
 )
 
 func leaseEventsCmd() *cobra.Command {
@@ -24,12 +18,16 @@ func leaseEventsCmd() *cobra.Command {
 		Short:        "get lease events",
 		SilenceUsage: true,
 		Args:         cobra.ExactArgs(0),
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return doLeaseEvents(cmd)
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addServiceFlags(cmd)
+	addAuthFlags(cmd)
+
 	cmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed. Defaults to false")
 	cmd.Flags().Int64P("tail", "t", -1, "The number of lines from the end of the logs to show. Defaults to -1")
 
@@ -37,32 +35,17 @@ func leaseEventsCmd() *cobra.Command {
 }
 
 func doLeaseEvents(cmd *cobra.Command) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
-
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
+	cl, err := cli.ClientFromContext(ctx)
+	if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
+		return err
+	}
+	cctx, err := cli.GetClientTxContext(cmd)
 	if err != nil {
 		return err
 	}
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
-	dseq, err := dseqFromFlags(cmd.Flags())
-	if err != nil {
-		return err
-	}
-
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	leases, err := leasesForDeployment(cmd.Context(), cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -80,15 +63,19 @@ func doLeaseEvents(cmd *cobra.Command) error {
 	type result struct {
 		lid    mtypes.LeaseID
 		error  error
-		stream *gwrest.LeaseKubeEvents
+		stream *apclient.LeaseKubeEvents
 	}
 
 	streams := make([]result, 0, len(leases))
 
 	for _, lid := range leases {
 		stream := result{lid: lid}
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+		if err != nil {
+			return err
+		}
+
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), cl.Query(), paddr, true)
 		if err == nil {
 			stream.stream, stream.error = gclient.LeaseEvents(ctx, lid, svcs, follow)
 		} else {
@@ -100,15 +87,15 @@ func doLeaseEvents(cmd *cobra.Command) error {
 
 	var wgStreams sync.WaitGroup
 	type logEntry struct {
-		cltypes.LeaseEvent `json:",inline"`
-		Lid                mtypes.LeaseID `json:"lease_id"`
+		apclient.LeaseEvent `json:",inline"`
+		Lid                 mtypes.LeaseID `json:"lease_id"`
 	}
 
 	outch := make(chan logEntry)
 
 	go func() {
 		for evt := range outch {
-			_ = cmdcommon.PrintJSON(cctx, evt)
+			_ = cli.PrintJSON(cctx, evt)
 		}
 	}()
 

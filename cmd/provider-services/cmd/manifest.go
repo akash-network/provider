@@ -2,23 +2,18 @@ package cmd
 
 import (
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	"github.com/akash-network/node/sdl"
-	cutils "github.com/akash-network/node/x/cert/utils"
-
-	aclient "github.com/akash-network/provider/client"
-	gwrest "github.com/akash-network/provider/gateway/rest"
+	"pkg.akt.dev/go/cli"
+	apclient "pkg.akt.dev/go/provider/client"
+	sdltypes "pkg.akt.dev/go/sdl"
 )
 
 var (
@@ -40,41 +35,37 @@ func SendManifestCmd() *cobra.Command {
 		Args:         cobra.ExactArgs(1),
 		Short:        "Submit manifest to provider(s)",
 		SilenceUsage: true,
+		PreRunE:      ProviderPersistentPreRunE,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return doSendManifest(cmd, args[0])
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addManifestFlags(cmd)
+	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputText, "output format text|json|yaml. default text")
 
 	return cmd
 }
 
-// GetManifestCmd reads current manifest from the provider
+// GetManifestCmd reads the current manifest from the provider
 func GetManifestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "get-manifest",
 		Args:         cobra.ExactArgs(0),
 		Short:        "Read manifest from provider",
 		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cctx, err := sdkclient.GetClientTxContext(cmd)
-			if err != nil {
-				return err
-			}
-
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
-
-			cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-			if err != nil {
+			cl, err := cli.ClientFromContext(ctx)
+			if err != nil && !errors.Is(err, cli.ErrContextValueNotSet) {
 				return err
 			}
-
-			cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
+			cctx, err := cli.GetClientTxContext(cmd)
 			if err != nil {
-				return markRPCServerError(err)
+				return err
 			}
 
 			lid, err := leaseIDFromFlags(cmd.Flags(), cctx.GetFromAddress().String())
@@ -82,8 +73,12 @@ func GetManifestCmd() *cobra.Command {
 				return err
 			}
 
-			prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-			gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+			paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+			if err != nil {
+				return err
+			}
+
+			gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 			if err != nil {
 				return err
 			}
@@ -116,7 +111,9 @@ func GetManifestCmd() *cobra.Command {
 		},
 	}
 
+	AddProviderOperationFlagsToCmd(cmd)
 	addLeaseFlags(cmd)
+	addAuthFlags(cmd)
 
 	cmd.Flags().StringP(flagOutput, "o", outputYAML, "output format json|yaml. default yaml")
 
@@ -124,19 +121,11 @@ func GetManifestCmd() *cobra.Command {
 }
 
 func doSendManifest(cmd *cobra.Command, sdlpath string) error {
-	cctx, err := sdkclient.GetClientTxContext(cmd)
-	if err != nil {
-		return err
-	}
-
 	ctx := cmd.Context()
+	cl := cli.MustClientFromContext(ctx)
+	cctx := cl.ClientContext()
 
-	cl, err := aclient.DiscoverQueryClient(ctx, cctx)
-	if err != nil {
-		return err
-	}
-
-	sdl, err := sdl.ReadFile(sdlpath)
+	sdl, err := sdltypes.ReadFile(sdlpath)
 	if err != nil {
 		return err
 	}
@@ -146,21 +135,13 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 		return err
 	}
 
-	cert, err := cutils.LoadAndQueryCertificateForAccount(cmd.Context(), cctx, nil)
-	if err != nil {
-		return markRPCServerError(err)
-	}
-
 	dseq, err := dseqFromFlags(cmd.Flags())
 	if err != nil {
 		return err
 	}
 
-	// owner address in FlagFrom has already been validated thus save to just pull its value as string
-	leases, err := leasesForDeployment(cmd.Context(), cl, cmd.Flags(), dtypes.DeploymentID{
-		Owner: cctx.GetFromAddress().String(),
-		DSeq:  dseq,
-	})
+	// the owner address in FlagFrom has already been validated thus safe to just pull its value as string
+	leases, err := leasesForDeployment(ctx, cctx, cmd.Flags(), queryClientOrNil(cl))
 	if err != nil {
 		return markRPCServerError(err)
 	}
@@ -177,20 +158,24 @@ func doSendManifest(cmd *cobra.Command, sdlpath string) error {
 	submitFailed := false
 
 	for i, lid := range leases {
-		prov, _ := sdk.AccAddressFromBech32(lid.Provider)
-		gclient, err := gwrest.NewClient(ctx, cl, prov, []tls.Certificate{cert})
+		paddr, err := sdk.AccAddressFromBech32(lid.Provider)
+		if err != nil {
+			return err
+		}
+
+		gclient, err := setupProviderClient(ctx, cctx, cmd.Flags(), queryClientOrNil(cl), paddr, true)
 		if err != nil {
 			return err
 		}
 
 		err = gclient.SubmitManifest(ctx, dseq, mani)
 		res := result{
-			Provider: prov,
+			Provider: paddr,
 			Status:   "PASS",
 		}
 		if err != nil {
 			res.Error = err.Error()
-			if e, valid := err.(gwrest.ClientResponseError); valid {
+			if e, valid := err.(apclient.ClientResponseError); valid {
 				res.ErrorMessage = e.Message
 			}
 			res.Status = "FAIL"

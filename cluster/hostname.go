@@ -2,15 +2,17 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/boz/go-lifecycle"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-	"github.com/pkg/errors"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
+
+	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
@@ -369,10 +371,8 @@ func (hs *hostnameService) PrepareHostnamesForTransfer(ctx context.Context, host
 }
 
 func (hs *hostnameService) isHostnameBlocked(hostname string) error {
-	for _, blockedHostname := range hs.blockedHostnames {
-		if blockedHostname == hostname {
-			return fmt.Errorf("%w: %q is blocked by this provider", ErrHostnameNotAllowed, hostname)
-		}
+	if slices.Contains(hs.blockedHostnames, hostname) {
+		return fmt.Errorf("%w: %q is blocked by this provider", ErrHostnameNotAllowed, hostname)
 	}
 
 	for _, blockedDomain := range hs.blockedDomains {

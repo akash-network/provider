@@ -1,27 +1,26 @@
 package grpc
 
 import (
-	"crypto/tls"
+	"context"
 	"crypto/x509"
 	"fmt"
 	"net"
 	"time"
 
-	atls "github.com/akash-network/akash-api/go/util/tls"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"pkg.akt.dev/go/util/ctxlog"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-
-	"github.com/akash-network/akash-api/go/grpc/gogoreflection"
-	ctypes "github.com/akash-network/akash-api/go/node/cert/v1beta3"
-	providerv1 "github.com/akash-network/akash-api/go/provider/v1"
+	"pkg.akt.dev/go/grpc/gogoreflection"
+	providerv1 "pkg.akt.dev/go/provider/v1"
+	ajwt "pkg.akt.dev/go/util/jwt"
 
 	"github.com/akash-network/provider"
+	gwutils "github.com/akash-network/provider/gateway/utils"
 	"github.com/akash-network/provider/tools/fromctx"
 	ptypes "github.com/akash-network/provider/types"
 )
@@ -29,8 +28,7 @@ import (
 type ContextKey string
 
 const (
-	ContextKeyQueryClient = ContextKey("query-client")
-	ContextKeyOwner       = ContextKey("owner")
+	ContextKeyClaims = ContextKey("owner")
 )
 
 type grpcProviderV1 struct {
@@ -40,36 +38,23 @@ type grpcProviderV1 struct {
 
 var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
 
-func QueryClientFromCtx(ctx context.Context) ctypes.QueryClient {
-	val := ctx.Value(ContextKeyQueryClient)
+func ContextWithClaims(ctx context.Context, claims *ajwt.Claims) context.Context {
+	return context.WithValue(ctx, ContextKeyClaims, claims)
+}
+
+func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
+	val := ctx.Value(ContextKeyClaims)
 	if val == nil {
-		panic("context does not have pubsub set")
+		return &ajwt.Claims{}
 	}
 
-	return val.(ctypes.QueryClient)
+	return val.(*ajwt.Claims)
 }
 
-func ContextWithOwner(ctx context.Context, address sdk.Address) context.Context {
-	return context.WithValue(ctx, ContextKeyOwner, address)
-}
-
-func OwnerFromCtx(ctx context.Context) sdk.Address {
-	val := ctx.Value(ContextKeyOwner)
-	if val == nil {
-		return sdk.AccAddress{}
-	}
-
-	return val.(sdk.Address)
-}
-
-func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, client provider.StatusClient) error {
-	// InsecureSkipVerify is set to true due to inability to use normal TLS verification
-	// certificate validation and authentication performed later in mtlsHandler
-	tlsConfig := &tls.Config{
-		Certificates:       certs,
-		ClientAuth:         tls.RequestClientCert,
-		InsecureSkipVerify: true, // nolint: gosec
-		MinVersion:         tls.VersionTLS13,
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
+	if err != nil {
+		return err
 	}
 
 	group, err := fromctx.ErrGroupFromCtx(ctx)
@@ -77,12 +62,12 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 		return err
 	}
 
-	log := fromctx.LogcFromCtx(ctx)
+	log := ctxlog.LogcFromCtx(ctx)
 
-	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsConfig)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 		MinTime:             30 * time.Second,
 		PermitWithoutStream: false,
-	}), grpc.ChainUnaryInterceptor(mtlsInterceptor()))
+	}), grpc.ChainUnaryInterceptor(authInterceptor()))
 
 	pRPC := &grpcProviderV1{
 		ctx:    ctx,
@@ -114,24 +99,30 @@ func NewServer(ctx context.Context, endpoint string, certs []tls.Certificate, cl
 	return nil
 }
 
-func mtlsInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+func authInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		var tokString string
+		var peerCerts []*x509.Certificate
+
 		if p, ok := peer.FromContext(ctx); ok {
 			if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
-				certificates := mtls.State.PeerCertificates
-
-				if len(certificates) > 0 {
-					cquery := QueryClientFromCtx(ctx)
-
-					owner, _, err := atls.ValidatePeerCertificates(ctx, cquery, certificates, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth})
-					if err != nil {
-						return nil, err
-					}
-
-					ctx = ContextWithOwner(ctx, owner)
-				}
+				peerCerts = mtls.State.PeerCertificates
 			}
 		}
+
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			tokens := md["authorization"]
+			if len(tokens) == 1 {
+				tokString = tokens[1]
+			}
+		}
+
+		claims, err := gwutils.AuthProcess(ctx, peerCerts, tokString)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx = ContextWithClaims(ctx, claims)
 
 		return handler(ctx, req)
 	}

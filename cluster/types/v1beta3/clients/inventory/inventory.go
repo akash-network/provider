@@ -1,19 +1,20 @@
 package inventory
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
 
-	"github.com/akash-network/node/sdl"
-	"golang.org/x/net/context"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/api/resource"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 
-	inventoryV1 "github.com/akash-network/akash-api/go/inventory/v1"
-	dtypes "github.com/akash-network/akash-api/go/node/deployment/v1beta3"
-	"github.com/akash-network/akash-api/go/node/types/unit"
-	types "github.com/akash-network/akash-api/go/node/types/v1beta3"
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/node/types/unit"
+	"pkg.akt.dev/go/sdl"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
@@ -36,11 +37,11 @@ type Client interface {
 
 type NullClient interface {
 	Client
-	Commit(dtypes.ResourceGroup) bool
+	Commit(dvbeta.ResourceGroup) bool
 }
 
 type commitReq struct {
-	res  dtypes.ResourceGroup
+	res  dvbeta.ResourceGroup
 	resp chan<- struct{}
 }
 
@@ -66,7 +67,7 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 
 	cluster := inventoryV1.Cluster{}
 	cluster.Storage = append(cluster.Storage, inventoryV1.Storage{
-		Quantity: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage-(10*unit.Gi), resource.DecimalSI),
+		Quantity: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage, nullClientStorage-(10*unit.Gi), resource.DecimalSI),
 		Info: inventoryV1.StorageInfo{
 			Class: "beta2",
 		},
@@ -77,17 +78,17 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 			Name: ndName,
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, 100, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, nullClientCPU, 100, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(nullClientMemory, 1*unit.Gi, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nullClientMemory, nullClientMemory, 1*unit.Gi, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, 10*unit.Gi, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage, 10*unit.Gi, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 			Capabilities: inventoryV1.NodeCapabilities{},
 		}
@@ -100,17 +101,17 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 			Name: "solo",
 			Resources: inventoryV1.NodeResources{
 				CPU: inventoryV1.CPU{
-					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, 100, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePairMilli(nullClientCPU, nullClientCPU, 100, resource.DecimalSI),
 				},
 				Memory: inventoryV1.Memory{
-					Quantity: inventoryV1.NewResourcePair(nullClientMemory, 1*unit.Gi, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nullClientMemory, nullClientMemory, 1*unit.Gi, resource.DecimalSI),
 				},
 				GPU: inventoryV1.GPU{
-					Quantity: inventoryV1.NewResourcePair(nullClientGPU, 1, resource.DecimalSI),
+					Quantity: inventoryV1.NewResourcePair(nullClientGPU, nullClientGPU, 1, resource.DecimalSI),
 				},
-				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, 10*unit.Gi, resource.DecimalSI),
-				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
+				EphemeralStorage: inventoryV1.NewResourcePair(nullClientStorage, nullClientStorage, 10*unit.Gi, resource.DecimalSI),
+				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			},
 			Capabilities: inventoryV1.NodeCapabilities{},
 		})
@@ -130,7 +131,7 @@ func NewNull(ctx context.Context, nodes ...string) NullClient {
 }
 
 // Commit at the moment commit works on single node clusters
-func (cl *nullInventory) Commit(res dtypes.ResourceGroup) bool {
+func (cl *nullInventory) Commit(res dvbeta.ResourceGroup) bool {
 	ch := make(chan struct{}, 1)
 
 	select {
@@ -281,7 +282,7 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -356,11 +357,11 @@ func (inv *inventory) tryAdjust(node int, res *types.Resources) (*crd.SchedulerP
 	return sparams, true, true
 }
 
-func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *types.CPU) bool {
+func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *rtypes.CPU) bool {
 	return rp.SubMilliNLZ(res.Units)
 }
 
-func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerParams) bool {
+func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams) bool {
 	reqCnt := res.Units.Value()
 
 	if reqCnt == 0 {
@@ -426,7 +427,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerPar
 				}
 			}
 
-			res.Attributes = types.Attributes{
+			res.Attributes = attrtypes.Attributes{
 				{
 					Key:   key,
 					Value: "true",
@@ -440,12 +441,12 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *types.GPU, sparams *crd.SchedulerPar
 	return false
 }
 
-func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *types.Storage) bool {
+func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *rtypes.Storage) bool {
 	return rp.SubNLZ(res.Quantity)
 }
 
 // nolint: unused
-func tryAdjustVolumesAttached(rp *inventoryV1.ResourcePair, res types.ResourceValue) bool {
+func tryAdjustVolumesAttached(rp *inventoryV1.ResourcePair, res rtypes.ResourceValue) bool {
 	return rp.SubNLZ(res)
 }
 
@@ -456,16 +457,16 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 	}
 
 	origResources := reservation.Resources().GetResourceUnits()
-	resources := make(dtypes.ResourceUnits, 0, len(origResources))
-	adjustedResources := make(dtypes.ResourceUnits, 0, len(origResources))
+	resources := make(dvbeta.ResourceUnits, 0, len(origResources))
+	adjustedResources := make(dvbeta.ResourceUnits, 0, len(origResources))
 
 	for _, res := range origResources {
-		resources = append(resources, dtypes.ResourceUnit{
+		resources = append(resources, dvbeta.ResourceUnit{
 			Resources: res.Resources.Dup(),
 			Count:     res.Count,
 		})
 
-		adjustedResources = append(adjustedResources, dtypes.ResourceUnit{
+		adjustedResources = append(adjustedResources, dvbeta.ResourceUnit{
 			Resources: res.Resources.Dup(),
 			Count:     res.Count,
 		})
@@ -482,7 +483,7 @@ nodes:
 		for i := len(resources) - 1; i >= 0; i-- {
 			adjustedGroup := false
 
-			var adjusted *types.Resources
+			var adjusted *rtypes.Resources
 			if origResources[i].Count == resources[i].Count {
 				adjusted = &adjustedResources[i].Resources
 			} else {
@@ -558,13 +559,13 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 	gpuTotal := uint64(0)
 	memoryTotal := uint64(0)
 	storageEphemeralTotal := uint64(0)
-	storageTotal := make(map[string]int64)
+	storageTotal := make(map[string]uint64)
 
 	cpuAvailable := uint64(0)
 	gpuAvailable := uint64(0)
 	memoryAvailable := uint64(0)
 	storageEphemeralAvailable := uint64(0)
-	storageAvailable := make(map[string]int64)
+	storageAvailable := make(map[string]uint64)
 
 	ret := inventoryV1.Metrics{
 		Nodes: make([]inventoryV1.NodeMetrics, 0, len(inv.Nodes)),
@@ -607,10 +608,10 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 
 	for _, class := range inv.Storage {
 		tmp := class.Quantity.Allocatable.DeepCopy()
-		storageTotal[class.Info.Class] = tmp.Value()
+		storageTotal[class.Info.Class] = uint64(tmp.Value()) //nolint: gosec
 
 		tmp = *class.Quantity.Available()
-		storageAvailable[class.Info.Class] = tmp.Value()
+		storageAvailable[class.Info.Class] = uint64(tmp.Value()) //nolint: gosec
 	}
 
 	ret.TotalAllocatable = inventoryV1.MetricTotal{

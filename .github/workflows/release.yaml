@@ -20,19 +20,8 @@ jobs:
           sudo rm -rf ./* || true
           sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect required Go version
-        run: |
-          toolchain=$(./script/tools.sh gotoolchain | sed 's/go*//')
-          echo "GOVERSION=${toolchain}" >> $GITHUB_ENV
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "${{ env.GOVERSION }}"
-      - name: Setup direnv
-        uses: HatsuneMiku3939/direnv-action@v1
-        with:
-          masks: ''
+      - name: Setup environment
+        uses: ./.github/actions/setup-ubuntu
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -59,8 +48,6 @@ jobs:
       - publish
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: release version
         run: echo "RELEASE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
       - name: check if pre-release

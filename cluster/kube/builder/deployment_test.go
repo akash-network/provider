@@ -6,8 +6,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/akash-network/node/sdl"
-	"github.com/akash-network/node/testutil"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
@@ -26,7 +26,12 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	require.NoError(t, err)
 
 	sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
-	group := mani.GetGroups()[0]
+
+	cmani, err := crd.NewManifest("lease", lid, &mani.GetGroups()[0], crd.ClusterSettings{SchedulerParams: sparams})
+	require.NoError(t, err)
+
+	group, sparams, err := cmani.Spec.Group.FromCRD()
+	require.NoError(t, err)
 
 	cdep := &ClusterDeployment{
 		Lid:     lid,
@@ -34,7 +39,10 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 		Sparams: crd.ClusterSettings{SchedulerParams: sparams},
 	}
 
-	deploymentBuilder := NewDeployment(NewWorkloadBuilder(log, settings, cdep, 0))
+	workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 0)
+	require.NoError(t, err)
+
+	deploymentBuilder := NewDeployment(workload)
 
 	require.NotNil(t, deploymentBuilder)
 

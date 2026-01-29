@@ -14,24 +14,23 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
-	inventory "github.com/akash-network/akash-api/go/inventory/v1"
+	inventory "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
 const (
-	FlagAPITimeout          = "api-timeout"
-	FlagQueryTimeout        = "query-timeout"
-	FlagRESTPort            = "rest-port"
-	FlagGRPCPort            = "grpc-port"
-	FlagPodName             = "pod-name"
-	FlagPodNamespace        = "pod-namespace"
-	FlagConfig              = "config"
-	FlagProviderConfigsURL  = "provider-configs-url"
-	FlagPciDbURL            = "provider-pcidb-url"
-	FlagRegistryQueryPeriod = "registry-query-period"
-	FlagDiscoveryImage      = "discovery-image"
-
+	FlagAPITimeout            = "api-timeout"
+	FlagQueryTimeout          = "query-timeout"
+	FlagRESTPort              = "rest-port"
+	FlagGRPCPort              = "grpc-port"
+	FlagPodName               = "pod-name"
+	FlagPodNamespace          = "pod-namespace"
+	FlagConfig                = "config"
+	FlagProviderConfigsURL    = "provider-configs-url"
+	FlagPciDbURL              = "provider-pcidb-url"
+	FlagRegistryQueryPeriod   = "registry-query-period"
+	FlagDiscoveryImage        = "discovery-image"
 	defaultProviderConfigsURL = "https://provider-configs.akash.network"
 )
 
@@ -48,6 +47,7 @@ const (
 	topicKubeNodes        = "kube-nodes"
 	topicKubeCephClusters = "kube-ceph-clusters"
 	topicKubePV           = "kube-pv"
+	topicKubePods         = "kube-pods"
 )
 
 type dpReqType int

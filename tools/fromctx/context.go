@@ -12,11 +12,13 @@ import (
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-
-	cmblog "github.com/tendermint/tendermint/libs/log"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
+	"github.com/akash-network/provider/tools/certissuer"
+	"github.com/akash-network/provider/tools/pconfig"
+	"github.com/akash-network/provider/types"
 )
 
 type Key string
@@ -29,9 +31,12 @@ const (
 	CtxKeyPubSub             = Key("pubsub")
 	CtxKeyLifecycle          = Key("lifecycle")
 	CtxKeyErrGroup           = Key("errgroup")
-	CtxKeyLogc               = Key("logc")
+	CtxKeyLogc               = ctxlog.CtxKeyLog
 	CtxKeyStartupCh          = Key("startup-ch")
 	CtxKeyInventoryUnderTest = Key("inventory-under-test")
+	CtxKeyPersistentConfig   = Key("persistent-config")
+	CtxKeyCertIssuer         = Key("cert-issuer")
+	CtxKeyAccountQuerier     = Key("account-querier")
 )
 
 var (
@@ -39,47 +44,8 @@ var (
 	ErrValueInvalidType = errors.New("fromctx: invalid type")
 )
 
-type options struct {
-	logName Key
-}
-
-type LogcOption func(*options) error
-
-type dummyLogger struct{}
-
-func (l *dummyLogger) Debug(_ string, _ ...interface{}) {}
-func (l *dummyLogger) Info(_ string, _ ...interface{})  {}
-func (l *dummyLogger) Error(_ string, _ ...interface{}) {}
-func (l *dummyLogger) With(_ ...interface{}) cmblog.Logger {
-	return &dummyLogger{}
-}
-
 func CmdSetContextValue(cmd *cobra.Command, key, val interface{}) {
 	cmd.SetContext(context.WithValue(cmd.Context(), key, val))
-}
-
-// WithLogc add logger object to the context
-// key defaults to the "log"
-// use WithLogName("<custom name>") to set custom key
-func WithLogc(ctx context.Context, lg cmblog.Logger, opts ...LogcOption) context.Context {
-	opt, _ := applyOptions(opts...)
-
-	ctx = context.WithValue(ctx, opt.logName, lg)
-
-	return ctx
-}
-
-func LogcFromCtx(ctx context.Context, opts ...LogcOption) cmblog.Logger {
-	opt, _ := applyOptions(opts...)
-
-	var logger cmblog.Logger
-	if lg, valid := ctx.Value(opt.logName).(cmblog.Logger); valid {
-		logger = lg
-	} else {
-		logger = &dummyLogger{}
-	}
-
-	return logger
 }
 
 func LogrFromCtx(ctx context.Context) logr.Logger {
@@ -271,6 +237,84 @@ func MustPubSubFromCtx(ctx context.Context) pubsub.PubSub {
 	return val
 }
 
+func PersistentConfigReaderFromCtx(ctx context.Context) (pconfig.StorageR, error) {
+	val := ctx.Value(CtxKeyPersistentConfig)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have persistent config reader set", ErrNotFound)
+	}
+
+	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func PersistentConfigWriterFromCtx(ctx context.Context) (pconfig.StorageW, error) {
+	val := ctx.Value(CtxKeyPersistentConfig)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have persistent config writer set", ErrNotFound)
+	}
+
+	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func PersistentConfigFromCtx(ctx context.Context) (pconfig.Storage, error) {
+	val := ctx.Value(CtxKeyPersistentConfig)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have persistent config set", ErrNotFound)
+	}
+
+	res, valid := val.(pconfig.Storage)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func AccountQuerierFromCtx(ctx context.Context) (types.AccountQuerier, error) {
+	val := ctx.Value(CtxKeyAccountQuerier)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have account querier set", ErrNotFound)
+	}
+
+	res, valid := val.(types.AccountQuerier)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
+func MustAccountQuerierFromCtx(ctx context.Context) types.AccountQuerier {
+	v, err := AccountQuerierFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+	return v
+}
+
+func CertIssuerFromCtx(ctx context.Context) (certissuer.CertIssuer, error) {
+	val := ctx.Value(CtxKeyCertIssuer)
+	if val == nil {
+		return nil, fmt.Errorf("%w: context does not have cert issuer set", ErrNotFound)
+	}
+
+	res, valid := val.(certissuer.CertIssuer)
+	if !valid {
+		return nil, ErrValueInvalidType
+	}
+
+	return res, nil
+}
+
 func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	val := ctx.Value(CtxKeyInventoryUnderTest)
 	if val == nil {
@@ -282,21 +326,6 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	}
 
 	return false
-}
-
-func applyOptions(opts ...LogcOption) (options, error) {
-	obj := &options{}
-	for _, opt := range opts {
-		if err := opt(obj); err != nil {
-			return options{}, err
-		}
-	}
-
-	if obj.logName == "" {
-		obj.logName = CtxKeyLogc
-	}
-
-	return *obj, nil
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {

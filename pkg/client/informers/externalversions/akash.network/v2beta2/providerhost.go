@@ -19,13 +19,13 @@ limitations under the License.
 package v2beta2
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	apisakashnetworkv2beta2 "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	versioned "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	internalinterfaces "github.com/akash-network/provider/pkg/client/informers/externalversions/internalinterfaces"
-	v2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
+	akashnetworkv2beta2 "github.com/akash-network/provider/pkg/client/listers/akash.network/v2beta2"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -36,7 +36,7 @@ import (
 // ProviderHosts.
 type ProviderHostInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v2beta2.ProviderHostLister
+	Lister() akashnetworkv2beta2.ProviderHostLister
 }
 
 type providerHostInformer struct {
@@ -71,7 +71,7 @@ func NewFilteredProviderHostInformer(client versioned.Interface, namespace strin
 				return client.AkashV2beta2().ProviderHosts(namespace).Watch(context.TODO(), options)
 			},
 		},
-		&akashnetworkv2beta2.ProviderHost{},
+		&apisakashnetworkv2beta2.ProviderHost{},
 		resyncPeriod,
 		indexers,
 	)
@@ -82,9 +82,9 @@ func (f *providerHostInformer) defaultInformer(client versioned.Interface, resyn
 }
 
 func (f *providerHostInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&akashnetworkv2beta2.ProviderHost{}, f.defaultInformer)
+	return f.factory.InformerFor(&apisakashnetworkv2beta2.ProviderHost{}, f.defaultInformer)
 }
 
-func (f *providerHostInformer) Lister() v2beta2.ProviderHostLister {
-	return v2beta2.NewProviderHostLister(f.Informer().GetIndexer())
+func (f *providerHostInformer) Lister() akashnetworkv2beta2.ProviderHostLister {
+	return akashnetworkv2beta2.NewProviderHostLister(f.Informer().GetIndexer())
 }

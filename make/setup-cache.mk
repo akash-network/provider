@@ -76,26 +76,36 @@ $(MOCKERY_VERSION_FILE): $(AP_DEVCACHE)
 	touch $@
 $(MOCKERY): $(MOCKERY_VERSION_FILE)
 
-$(GOLANGCI_LINT_VERSION_FILE): $(AP_DEVCACHE)
+$(GOLANGCI_LINT_VERSION_FILE): $(AP_DEVCACHE) $(SEMVER)
 	@echo "installing golangci-lint $(GOLANGCI_LINT_VERSION) ..."
 	rm -f $(MOCKERY)
-	GOBIN=$(AP_DEVCACHE_BIN) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	GOBIN=$(AP_DEVCACHE_BIN) \
+		go install github.com/golangci/golangci-lint/v$(shell $(SEMVER) get major $(GOLANGCI_LINT_VERSION))/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
 $(GOLANGCI_LINT): $(GOLANGCI_LINT_VERSION_FILE)
 
-$(K8S_CODE_GEN_VERSION_FILE): $(AP_DEVCACHE)
-	@echo "installing k8s code-generator $(K8S_CODE_GEN_VERSION) ..."
+$(K8S_CODEGEN_VERSION_FILE): $(AP_DEVCACHE)
+	@echo "installing k8s code-generator $(K8S_CODEGEN_VERSION) ..."
 	rm -f $(K8S_GO_TO_PROTOBUF)
 	GOBIN=$(AP_DEVCACHE_BIN) go install k8s.io/code-generator/...
-	wget -q https://raw.githubusercontent.com/kubernetes/code-generator/$(K8S_CODE_GEN_VERSION)/$(K8S_KUBE_CODEGEN_FILE) -O $(K8S_KUBE_CODEGEN)
+	wget -q https://raw.githubusercontent.com/kubernetes/code-generator/$(K8S_CODEGEN_VERSION)/$(K8S_KUBE_CODEGEN_FILE) -O $(K8S_KUBE_CODEGEN)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
 	chmod +x $(K8S_KUBE_CODEGEN)
-$(K8S_GO_TO_PROTOBUF): $(K8S_CODE_GEN_VERSION_FILE)
-$(K8S_KUBE_CODEGEN): $(K8S_CODE_GEN_VERSION_FILE)
+$(K8S_KUBE_CODEGEN): $(K8S_CODEGEN_VERSION_FILE)
+$(K8S_GO_TO_PROTOBUF): $(K8S_CODEGEN_VERSION_FILE)
+
+$(SEMVER_VERSION_FILE): $(AP_DEVCACHE)
+	@echo "installing semver $(SEMVER_VERSION) ..."
+	rm -f $(SEMVER)
+	(cd $(GO_ROOT); GOBIN=$(AP_DEVCACHE_BIN) go install github.com/troian/semver/cmd/semver@$(SEMVER_VERSION))
+	rm -rf "$(dir $@)"
+	mkdir -p "$(dir $@)"
+	touch $@
+$(SEMVER): $(SEMVER_VERSION_FILE)
 
 ifeq (false, $(_SYSTEM_KIND))
 $(KIND_VERSION_FILE): $(AP_DEVCACHE)
@@ -105,8 +115,6 @@ $(KIND_VERSION_FILE): $(AP_DEVCACHE)
 	mkdir -p "$(dir $@)"
 	touch $@
 $(KIND): $(KIND_VERSION_FILE)
-else
-	@echo "using alread installed kind $(KIND_VERSION) $(KIND)"
 endif
 
 cache-clean:

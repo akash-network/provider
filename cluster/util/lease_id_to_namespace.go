@@ -5,7 +5,7 @@ import (
 	"encoding/base32"
 	"strings"
 
-	mtypes "github.com/akash-network/akash-api/go/node/market/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
 // LeaseIDToNamespace generates a unique sha256 sum for identifying a provider's object name.
