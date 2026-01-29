@@ -1,3 +1,6 @@
+KUBECONFIG                 ?= $(HOME)/.kube/config
+export KUBECONFIG
+
 K8S_CONTEXT                ?= $(shell kubectl config current-context)
 KUBE_CREATE                := $(AP_RUN_DIR)/.kube-create
 
@@ -205,3 +208,7 @@ kube-logs-operator-inventory:
 .PHONY: kube-wait-inventory-available
 kube-wait-inventory-available:
 	$(SETUP_KUBE) --retries=60 wait inventory-available
+
+.PHONY: provider-migrate-run
+provider-migrate-run:
+	$(PROVIDER_SERVICES) migrate run
