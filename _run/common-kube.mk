@@ -1,5 +1,3 @@
-KUBECONFIG                 ?= $(HOME)/.kube/config
-export KUBECONFIG
 
 K8S_CONTEXT                ?= $(shell kubectl config current-context)
 KUBE_CREATE                := $(AP_RUN_DIR)/.kube-create
