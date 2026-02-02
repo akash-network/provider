@@ -60,7 +60,7 @@ func leaseShellWebsocketHandler(log log.Logger, wg *sync.WaitGroup, shellWs *web
 		case LeaseShellCodeTerminalResize:
 			var size remotecommand.TerminalSize
 			r := bytes.NewReader(msg)
-			// Unpack data, its just binary encoded data in big endian
+			// Unpack data, it's just binary encoded data in big endian
 			err = binary.Read(r, binary.BigEndian, &size.Width)
 			if err != nil {
 				return

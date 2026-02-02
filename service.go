@@ -242,16 +242,16 @@ func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dt
 
 	// inv, err := s.cclient.Inventory(ctx)
 	// if err != nil {
-	// 	return ValidateGroupSpecResult{}, err
+	//	return ValidateGroupSpecResult{}, err
 	// }
 	//
 	// res := &reservation{
-	// 	resources:     nil,
-	// 	clusterParams: nil,
+	//	resources:     nil,
+	//	clusterParams: nil,
 	// }
 	//
 	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-	// 	return ValidateGroupSpecResult{}, err
+	//	return ValidateGroupSpecResult{}, err
 	// }
 
 	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)

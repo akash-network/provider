@@ -1,7 +1,7 @@
 # Setting-up development environment
 
-**Warning**
-All links to the `provider` repo are referencing to the `gpu` branch. As soon as `gpu` is merged into `main` all links need update.
+> [!WARNING]
+> All links to the `provider` repo are referencing to the `gpu` branch. As soon as `gpu` is merged into `main` all links need update.
 
 This page covers setting up development environment for both [node](https://github.com/akash-network/node) and [provider](https://github.com/akash-network/provider) repositories.
 The provider repo elected as placeholder for all the scripts as it depends on the `node` repo (Better explanation?)
