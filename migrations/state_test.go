@@ -80,6 +80,7 @@ func TestStateManager_Load_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	statePath := filepath.Join(tmpDir, "migrations.json")
 
+	// nolint:gosec
 	err := os.WriteFile(statePath, []byte("invalid json"), 0644)
 	if err != nil {
 		t.Fatalf("failed to write file: %v", err)
