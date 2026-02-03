@@ -324,8 +324,8 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Bool(FlagRunMigrations, false, "run migrations automatically on startup")
-	if err := viper.BindPFlag(FlagRunMigrations, cmd.Flags().Lookup(FlagRunMigrations)); err != nil {
+	cmd.Flags().Bool(FlagMigrationsEnabled, true, "enable migrations to run automatically on startup")
+	if err := viper.BindPFlag(FlagMigrationsEnabled, cmd.Flags().Lookup(FlagMigrationsEnabled)); err != nil {
 		return err
 	}
 

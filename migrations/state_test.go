@@ -44,6 +44,7 @@ func TestStateManager_Load_ExistingFile(t *testing.T) {
 		t.Fatalf("failed to marshal state: %v", err)
 	}
 
+	// nolint:gosec
 	err = os.WriteFile(statePath, data, 0644)
 	if err != nil {
 		t.Fatalf("failed to write file: %v", err)

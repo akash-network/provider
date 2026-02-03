@@ -120,7 +120,7 @@ const (
 	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
 	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
 	FlagCertIssuerEmail                  = "cert-issuer-email"
-	FlagRunMigrations                    = "run-migrations"
+	FlagMigrationsEnabled                = "migrations-enabled"
 	FlagMigrationsStatePath              = "migrations-state-path"
 )
 
@@ -492,7 +492,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	logger := ctxlog.LogcFromCtx(cmd.Context())
 
-	runMigrations := viper.GetBool(FlagRunMigrations)
+	runMigrations := viper.GetBool(FlagMigrationsEnabled)
 	if runMigrations {
 		if err := runMigrationsOnStartup(ctx, cmd, logger); err != nil {
 			return fmt.Errorf("migrations failed: %w", err)
