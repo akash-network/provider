@@ -212,7 +212,7 @@ __t1__
 make query-bids
 ```
 
-You should now see "pending" inventory inventory in the provider status:
+You should now see "pending" inventory in the provider status:
 
 __t1__
 ```sh
