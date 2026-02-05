@@ -120,6 +120,8 @@ const (
 	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
 	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
 	FlagCertIssuerEmail                  = "cert-issuer-email"
+	FlagMigrationsEnabled                = "migrations-enabled"
+	FlagMigrationsStatePath              = "migrations-state-path"
 )
 
 const (
@@ -490,6 +492,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	logger := ctxlog.LogcFromCtx(cmd.Context())
 
+	runMigrations := viper.GetBool(FlagMigrationsEnabled)
+	if runMigrations {
+		if err := runMigrationsOnStartup(ctx, cmd, logger); err != nil {
+			return fmt.Errorf("migrations failed: %w", err)
+		}
+	}
+
 	logger.Info("starting provider service")
 
 	var metricsRouter http.Handler
@@ -738,6 +747,24 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	if err != nil && !errors.Is(err, context.Canceled) && !errors.Is(err, http.ErrServerClosed) {
 		logger.Error("provider shutdown with error", "err", err)
 		return err
+	}
+
+	return nil
+}
+
+func runMigrationsOnStartup(ctx context.Context, cmd *cobra.Command, logger log.Logger) error {
+	statePath, err := determineStatePath(cmd)
+	if err != nil {
+		return fmt.Errorf("determining state path: %w", err)
+	}
+
+	result, err := runMigrations(ctx, statePath, logger)
+	if err != nil {
+		return err
+	}
+
+	if len(result.Errs) > 0 {
+		return fmt.Errorf("%d migration(s) failed", len(result.Errs))
 	}
 
 	return nil
