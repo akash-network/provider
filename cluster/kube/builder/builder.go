@@ -29,6 +29,7 @@ const (
 	AkashServiceCapabilityStorage = "akash.network/capabilities.storage"
 	AkashMetalLB                  = "metal-lb"
 	akashDeploymentPolicyName     = "akash-deployment-restrictions"
+	akashAllowSameOwner           = "akash-same-owner"
 	akashNetworkNamespace         = "akash.network/namespace"
 	AkashLeaseOwnerLabelName      = "akash.network/lease.id.owner"
 	AkashLeaseDSeqLabelName       = "akash.network/lease.id.dseq"
