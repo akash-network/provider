@@ -419,6 +419,47 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOwner, lid.Owner)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, lid.Provider)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashClusterPublicHostname, b.settings.ClusterPublicHostname)
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarKubernetesNamespaceOverride, b.NS())
 
 	return env
+}
+
+func (b *Workload) hasPermissions() bool {
+	service := &b.group.Services[b.serviceIdx]
+	if service.Params == nil || service.Params.Permissions == nil {
+		return false
+	}
+	return len(service.Params.Permissions.Read) > 0
+}
+
+func (b *Workload) getPermissions() []string {
+	service := &b.group.Services[b.serviceIdx]
+	if service.Params == nil || service.Params.Permissions == nil {
+		return nil
+	}
+	return service.Params.Permissions.Read
+}
+
+func (b *Workload) automountServiceAccountToken() *bool {
+	if b.hasPermissions() {
+		trueValue := true
+		return &trueValue
+	}
+	falseValue := false
+	return &falseValue
+}
+
+func (b *Workload) serviceAccountName() string {
+	if b.hasPermissions() {
+		return b.Name()
+	}
+	return ""
+}
+
+func (b *Workload) HasPermissions() bool {
+	return b.hasPermissions()
+}
+
+func (b *Workload) GetPermissions() []string {
+	return b.getPermissions()
 }

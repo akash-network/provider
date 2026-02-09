@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -260,6 +261,87 @@ func applyService(ctx context.Context, kc kubernetes.Interface, b builder.Servic
 		if err == nil {
 			nobj, err = kc.CoreV1().Services(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
 			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "services-create", err)
+		}
+	}
+
+	return nobj, uobj, oobj, err
+}
+
+func applyServiceAccount(ctx context.Context, kc kubernetes.Interface, b builder.ServiceAccount) (*corev1.ServiceAccount, *corev1.ServiceAccount, *corev1.ServiceAccount, error) {
+	oobj, err := kc.CoreV1().ServiceAccounts(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "serviceaccounts-get", err, errors.IsNotFound)
+
+	var nobj *corev1.ServiceAccount
+	var uobj *corev1.ServiceAccount
+
+	switch {
+	case err == nil:
+		uobj, err = b.Update(oobj)
+		if err == nil && (!b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
+			uobj, err = kc.CoreV1().ServiceAccounts(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "serviceaccounts-update", err)
+		}
+	case errors.IsNotFound(err):
+		nobj, err = b.Create()
+		if err == nil {
+			nobj, err = kc.CoreV1().ServiceAccounts(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "serviceaccounts-create", err)
+		}
+	}
+
+	return nobj, uobj, oobj, err
+}
+
+func applyRole(ctx context.Context, kc kubernetes.Interface, b builder.Role) (*rbacv1.Role, *rbacv1.Role, *rbacv1.Role, error) {
+	oobj, err := kc.RbacV1().Roles(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "roles-get", err, errors.IsNotFound)
+
+	var nobj *rbacv1.Role
+	var uobj *rbacv1.Role
+
+	switch {
+	case err == nil:
+		uobj, err = b.Update(oobj)
+		if err == nil && (!b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(&uobj.Rules, &oobj.Rules) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
+			uobj, err = kc.RbacV1().Roles(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "roles-update", err)
+		}
+	case errors.IsNotFound(err):
+		nobj, err = b.Create()
+		if err == nil {
+			nobj, err = kc.RbacV1().Roles(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "roles-create", err)
+		}
+	}
+
+	return nobj, uobj, oobj, err
+}
+
+func applyRoleBinding(ctx context.Context, kc kubernetes.Interface, b builder.RoleBinding) (*rbacv1.RoleBinding, *rbacv1.RoleBinding, *rbacv1.RoleBinding, error) {
+	oobj, err := kc.RbacV1().RoleBindings(b.NS()).Get(ctx, b.Name(), metav1.GetOptions{})
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "rolebindings-get", err, errors.IsNotFound)
+
+	var nobj *rbacv1.RoleBinding
+	var uobj *rbacv1.RoleBinding
+
+	switch {
+	case err == nil:
+		uobj, err = b.Update(oobj)
+		if err == nil && (!b.IsObjectRevisionLatest(uobj.Labels) ||
+			!reflect.DeepEqual(&uobj.RoleRef, &oobj.RoleRef) ||
+			!reflect.DeepEqual(&uobj.Subjects, &oobj.Subjects) ||
+			!reflect.DeepEqual(uobj.Labels, oobj.Labels)) {
+			uobj, err = kc.RbacV1().RoleBindings(b.NS()).Update(ctx, uobj, metav1.UpdateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "rolebindings-update", err)
+		}
+	case errors.IsNotFound(err):
+		nobj, err = b.Create()
+		if err == nil {
+			nobj, err = kc.RbacV1().RoleBindings(b.NS()).Create(ctx, nobj, metav1.CreateOptions{})
+			metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "rolebindings-create", err)
 		}
 	}
 

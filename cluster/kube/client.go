@@ -191,11 +191,14 @@ func (c *client) Deployments(ctx context.Context) ([]ctypes.IDeployment, error) 
 }
 
 type deploymentService struct {
-	deployment    builder.Deployment
-	statefulSet   builder.StatefulSet
-	localService  builder.Service
-	globalService builder.Service
-	credentials   builder.ServiceCredentials
+	deployment     builder.Deployment
+	statefulSet    builder.StatefulSet
+	localService   builder.Service
+	globalService  builder.Service
+	credentials    builder.ServiceCredentials
+	serviceAccount builder.ServiceAccount
+	role           builder.Role
+	roleBinding    builder.RoleBinding
 }
 
 type deploymentApplies struct {
@@ -491,6 +494,16 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			svc.deployment = builder.NewDeployment(workload)
 		}
 
+		// Create ServiceAccount, Role, and RoleBinding if permissions are defined
+		if workload.HasPermissions() {
+			c.log.Info("creating ServiceAccount, Role, and RoleBinding for service", "lease", lid, "service", service.Name, "permissions", workload.GetPermissions())
+			svc.serviceAccount = builder.BuildServiceAccount(workload)
+			svc.role = builder.BuildRole(workload)
+			svc.roleBinding = builder.BuildRoleBinding(workload)
+		} else {
+			c.log.Debug("skipping ServiceAccount creation - no permissions defined", "lease", lid, "service", service.Name)
+		}
+
 		applies.services = append(applies.services, svc)
 
 		if len(service.Expose) == 0 {
@@ -555,6 +568,41 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	for svcIdx := range group.Services {
 		applyObjs := applies.services[svcIdx]
 		service := &group.Services[svcIdx]
+
+		// Create ServiceAccount, Role, and RoleBinding BEFORE deployment/statefulSet
+		// so they exist when the pod is created
+		if applyObjs.serviceAccount != nil {
+			nobj, uobj, oobj, err := applyServiceAccount(ctx, c.kc, applyObjs.serviceAccount)
+			if err != nil {
+				c.log.Error("applying service account", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+			_ = nobj
+			_ = uobj
+			_ = oobj
+		}
+
+		if applyObjs.role != nil {
+			nobj, uobj, oobj, err := applyRole(ctx, c.kc, applyObjs.role)
+			if err != nil {
+				c.log.Error("applying role", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+			_ = nobj
+			_ = uobj
+			_ = oobj
+		}
+
+		if applyObjs.roleBinding != nil {
+			nobj, uobj, oobj, err := applyRoleBinding(ctx, c.kc, applyObjs.roleBinding)
+			if err != nil {
+				c.log.Error("applying role binding", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+			_ = nobj
+			_ = uobj
+			_ = oobj
+		}
 
 		if applyObjs.credentials != nil {
 			nobj, uobj, obj, err := applyServiceCredentials(ctx, c.kc, applyObjs.credentials)

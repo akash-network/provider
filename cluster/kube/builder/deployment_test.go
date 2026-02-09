@@ -80,3 +80,113 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, lid.Provider, value)
 }
+
+func TestDeploymentPermissions(t *testing.T) {
+	log := testutil.Logger(t)
+	const fakeHostname = "ahostname.dev"
+	settings := Settings{
+		ClusterPublicHostname: fakeHostname,
+	}
+	lid := testutil.LeaseID(t)
+
+	t.Run("defaults to false when no permissions specified", func(t *testing.T) {
+		sdl, err := sdl.ReadFile("../../../testdata/deployment/deployment.yaml")
+		require.NoError(t, err)
+
+		mani, err := sdl.Manifest()
+		require.NoError(t, err)
+
+		sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
+
+		cmani, err := crd.NewManifest("lease", lid, &mani.GetGroups()[0], crd.ClusterSettings{SchedulerParams: sparams})
+		require.NoError(t, err)
+
+		group, sparams, err := cmani.Spec.Group.FromCRD()
+		require.NoError(t, err)
+
+		cdep := &ClusterDeployment{
+			Lid:     lid,
+			Group:   &group,
+			Sparams: crd.ClusterSettings{SchedulerParams: sparams},
+		}
+
+		workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 0)
+		require.NoError(t, err)
+
+		deploymentBuilder := NewDeployment(workload)
+		deployment, err := deploymentBuilder.Create()
+		require.NoError(t, err)
+		require.NotNil(t, deployment)
+
+		require.NotNil(t, deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+		require.False(t, *deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+	})
+
+	t.Run("enables automount when permissions are defined", func(t *testing.T) {
+		sdl, err := sdl.ReadFile("../../../testdata/sdl/permissions.yaml")
+		require.NoError(t, err)
+
+		mani, err := sdl.Manifest()
+		require.NoError(t, err)
+
+		sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
+
+		cmani, err := crd.NewManifest("lease", lid, &mani.GetGroups()[0], crd.ClusterSettings{SchedulerParams: sparams})
+		require.NoError(t, err)
+
+		group, sparams, err := cmani.Spec.Group.FromCRD()
+		require.NoError(t, err)
+
+		cdep := &ClusterDeployment{
+			Lid:     lid,
+			Group:   &group,
+			Sparams: crd.ClusterSettings{SchedulerParams: sparams},
+		}
+
+		// Test service with permissions.read: [logs] (index 0 = web)
+		workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 0)
+		require.NoError(t, err)
+
+		deploymentBuilder := NewDeployment(workload)
+		deployment, err := deploymentBuilder.Create()
+		require.NoError(t, err)
+		require.NotNil(t, deployment)
+
+		require.NotNil(t, deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+		require.True(t, *deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+	})
+
+	t.Run("disables automount when no permissions defined", func(t *testing.T) {
+		sdl, err := sdl.ReadFile("../../../testdata/sdl/permissions.yaml")
+		require.NoError(t, err)
+
+		mani, err := sdl.Manifest()
+		require.NoError(t, err)
+
+		sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
+
+		cmani, err := crd.NewManifest("lease", lid, &mani.GetGroups()[0], crd.ClusterSettings{SchedulerParams: sparams})
+		require.NoError(t, err)
+
+		group, sparams, err := cmani.Spec.Group.FromCRD()
+		require.NoError(t, err)
+
+		cdep := &ClusterDeployment{
+			Lid:     lid,
+			Group:   &group,
+			Sparams: crd.ClusterSettings{SchedulerParams: sparams},
+		}
+
+		// Test service without permissions (index 1 = web2)
+		workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 1)
+		require.NoError(t, err)
+
+		deploymentBuilder := NewDeployment(workload)
+		deployment, err := deploymentBuilder.Create()
+		require.NoError(t, err)
+		require.NotNil(t, deployment)
+
+		require.NotNil(t, deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+		require.False(t, *deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+	})
+}

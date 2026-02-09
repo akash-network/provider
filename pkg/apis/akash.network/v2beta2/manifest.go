@@ -85,8 +85,13 @@ type ManifestStorageParams struct {
 	ReadOnly bool   `json:"readOnly" yaml:"readOnly"`
 }
 
+type ManifestServicePermissions struct {
+	Read []string `json:"read,omitempty"`
+}
+
 type ManifestServiceParams struct {
-	Storage []ManifestStorageParams `json:"storage,omitempty"`
+	Storage     []ManifestStorageParams     `json:"storage,omitempty"`
+	Permissions *ManifestServicePermissions `json:"permissions,omitempty"`
 }
 
 type SchedulerResourceGPU struct {
@@ -280,6 +285,12 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				ReadOnly: storage.ReadOnly,
 			})
 		}
+
+		if ms.Params.Permissions != nil {
+			ams.Params.Permissions = &mani.ServicePermissions{
+				Read: ms.Params.Permissions.Read,
+			}
+		}
 	}
 
 	return *ams, nil
@@ -318,6 +329,12 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
 			})
+		}
+
+		if ams.Params.Permissions != nil {
+			ms.Params.Permissions = &ManifestServicePermissions{
+				Read: ams.Params.Permissions.Read,
+			}
 		}
 	}
 

@@ -57,6 +57,9 @@ const (
 	envVarAkashOwner                 = "AKASH_OWNER"
 	envVarAkashProvider              = "AKASH_PROVIDER"
 	envVarAkashClusterPublicHostname = "AKASH_CLUSTER_PUBLIC_HOSTNAME"
+	envVarKubernetesNamespaceOverride = "KUBERNETES_NAMESPACE_OVERRIDE"
+	envVarKubernetesServiceHost       = "KUBERNETES_SERVICE_HOST"
+	envVarKubernetesServicePort       = "KUBERNETES_SERVICE_PORT"
 )
 
 var (

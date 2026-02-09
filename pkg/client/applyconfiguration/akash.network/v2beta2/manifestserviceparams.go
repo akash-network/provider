@@ -21,7 +21,8 @@ package v2beta2
 // ManifestServiceParamsApplyConfiguration represents a declarative configuration of the ManifestServiceParams type for use
 // with apply.
 type ManifestServiceParamsApplyConfiguration struct {
-	Storage []ManifestStorageParamsApplyConfiguration `json:"storage,omitempty"`
+	Storage     []ManifestStorageParamsApplyConfiguration     `json:"storage,omitempty"`
+	Permissions *ManifestServicePermissionsApplyConfiguration `json:"permissions,omitempty"`
 }
 
 // ManifestServiceParamsApplyConfiguration constructs a declarative configuration of the ManifestServiceParams type for use with
@@ -40,5 +41,13 @@ func (b *ManifestServiceParamsApplyConfiguration) WithStorage(values ...*Manifes
 		}
 		b.Storage = append(b.Storage, *values[i])
 	}
+	return b
+}
+
+// WithPermissions sets the Permissions field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Permissions field is set to the value of the last call.
+func (b *ManifestServiceParamsApplyConfiguration) WithPermissions(value *ManifestServicePermissionsApplyConfiguration) *ManifestServiceParamsApplyConfiguration {
+	b.Permissions = value
 	return b
 }
