@@ -69,8 +69,6 @@ replace (
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
-	github.com/bytedance/sonic => github.com/bytedance/sonic v1.14.1
-
 	// use akash fork of cometbft
 	github.com/cometbft/cometbft => github.com/akash-network/cometbft v0.38.19-akash.1
 	// use akash fork of cosmos sdk
