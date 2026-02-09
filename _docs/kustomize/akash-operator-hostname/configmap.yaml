@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operator-hostname
+data:
+  k8s-manifest-ns: lease
+  prune-interval: 600s
+  ignore-list-entry-limit: "131072"
+  web-refresh-interval: 5s
+  retry-delay: 3s
+  ignore-list-age-limit: 2613600s
+  event-failure-limit: "3"
+  ingress-mode: ingress
+  gateway-name: akash-gateway
+  gateway-namespace: akash-gateway
+  gateway-implementation: nginx
+
+

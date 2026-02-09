@@ -24,7 +24,15 @@ import (
 
 const (
 	akashIngressClassName = "akash-ingress-class"
+	IngressModeGateway    = "gateway-api"
+	IngressModeIngress    = "ingress"
 )
+
+type IngressConfig struct {
+	IngressMode      string
+	GatewayName      string
+	GatewayNamespace string
+}
 
 func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string {
 	// For kubernetes/ingress-nginx
@@ -71,6 +79,16 @@ func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirectiv
 }
 
 func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
+	c.log.Info("connecting hostname to deployment",
+		"hostname", directive.Hostname,
+		"ingress-mode", c.ingressMode)
+
+	if c.ingressMode == IngressModeGateway {
+		c.log.Info("using Gateway API mode for hostname connection")
+		return c.connectHostnameToDeploymentGateway(ctx, directive)
+	}
+
+	c.log.Info("using NGINX Ingress mode for hostname connection")
 	ingressName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)
@@ -109,6 +127,10 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chos
 }
 
 func (c *client) RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error {
+	if c.ingressMode == IngressModeGateway {
+		return c.removeHostnameFromDeploymentGateway(ctx, hostname, leaseID, allowMissing)
+	}
+
 	ns := builder.LidNS(leaseID)
 	labelSelector := &strings.Builder{}
 	kubeSelectorForLease(labelSelector, leaseID)
@@ -185,6 +207,10 @@ func (lh leaseIDHostnameConnection) GetServiceName() string {
 }
 
 func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
+	if c.ingressMode == IngressModeGateway {
+		return c.getHostnameDeploymentConnectionsGateway(ctx)
+	}
+
 	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return c.kc.NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, opts)
 	})

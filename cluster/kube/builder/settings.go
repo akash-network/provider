@@ -43,6 +43,18 @@ type Settings struct {
 
 	// Name of the image pull secret to use in pod spec
 	DockerImagePullSecretsName string
+
+	// Ingress mode: "ingress" or "gateway-api"
+	IngressMode string
+
+	// Gateway name when using gateway-api mode
+	GatewayName string
+
+	// Gateway namespace when using gateway-api mode
+	GatewayNamespace string
+
+	// Gateway implementation when using gateway-api mode
+	GatewayImplementation string
 }
 
 var ErrSettingsValidation = errors.New("settings validation")

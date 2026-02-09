@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
 
@@ -25,9 +26,11 @@ import (
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 
+	"github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	clusterutil "github.com/akash-network/provider/cluster/util"
@@ -49,10 +52,13 @@ type hostnameOperator struct {
 	log                log.Logger
 	kc                 kubernetes.Interface
 	ac                 akashclientset.Interface
+	dc                 dynamic.Interface
 	cfg                common.OperatorConfig
 	server             common.OperatorHTTP
 	flagHostnamesData  common.PrepareFlagFn
 	flagIgnoreListData common.PrepareFlagFn
+	ingressConfig      kube.IngressConfig
+	gatewayImpl        gateway.Implementation
 }
 
 func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, config common.OperatorConfig, ilc common.IgnoreListConfig) (*hostnameOperator, error) {
@@ -66,10 +72,43 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		return nil, err
 	}
 
+	kubecfg, err := fromctx.KubeConfigFromCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	dc, err := dynamic.NewForConfig(kubecfg)
+	if err != nil {
+		return nil, fmt.Errorf("hostname operator: unable to create dynamic client: %w", err)
+	}
+
 	opHTTP, err := common.NewOperatorHTTP()
 	if err != nil {
 		return nil, err
 	}
+
+	ingressMode := fromctx.IngressModeFromCtx(ctx)
+	gatewayName := fromctx.GatewayNameFromCtx(ctx)
+	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
+	gatewayImplementation := fromctx.GatewayImplementationFromCtx(ctx)
+
+	// Initialize Gateway implementation if using gateway-api mode
+	var gatewayImpl gateway.Implementation
+	if ingressMode == "gateway-api" {
+		impl, err := gateway.GetImplementation(gatewayImplementation, logger)
+		if err != nil {
+			return nil, fmt.Errorf("hostname operator: failed to get gateway implementation: %w", err)
+		}
+		gatewayImpl = impl
+		logger.Info("initialized gateway implementation",
+			"implementation", impl.Name())
+	}
+
+	logger.Info("initializing hostname operator",
+		"ingress-mode", ingressMode,
+		"gateway-name", gatewayName,
+		"gateway-namespace", gatewayNamespace,
+		"gateway-implementation", gatewayImplementation)
 
 	op := &hostnameOperator{
 		ctx:           ctx,
@@ -78,9 +117,16 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		log:           logger,
 		kc:            kc,
 		ac:            ac,
+		dc:            dc,
 		cfg:           config,
 		server:        opHTTP,
 		leasesIgnored: common.NewIgnoreList(ilc),
+		ingressConfig: kube.IngressConfig{
+			IngressMode:      ingressMode,
+			GatewayName:      gatewayName,
+			GatewayNamespace: gatewayNamespace,
+		},
+		gatewayImpl: gatewayImpl,
 	}
 
 	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)
@@ -457,6 +503,10 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 }
 
 func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
+	if op.ingressConfig.IngressMode == kube.IngressModeGateway {
+		return op.getHostnameDeploymentConnectionsGateway(ctx)
+	}
+
 	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 		return op.kc.NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, opts)
 	})
@@ -632,6 +682,10 @@ func (op *hostnameOperator) getManifestGroup(ctx context.Context, lID mtypes.Lea
 }
 
 func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error {
+	if op.ingressConfig.IngressMode == kube.IngressModeGateway {
+		return op.removeHostnameFromDeploymentGateway(ctx, hostname, leaseID, allowMissing)
+	}
+
 	ns := builder.LidNS(leaseID)
 	labelSelector := &strings.Builder{}
 
@@ -662,6 +716,16 @@ func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, ho
 }
 
 func (op *hostnameOperator) connectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
+	op.log.Info("hostname operator connecting hostname to deployment",
+		"hostname", directive.Hostname,
+		"ingress-mode", op.ingressConfig.IngressMode)
+
+	if op.ingressConfig.IngressMode == kube.IngressModeGateway {
+		op.log.Info("hostname operator using Gateway API mode")
+		return op.connectHostnameToDeploymentGateway(ctx, directive)
+	}
+
+	op.log.Info("hostname operator using NGINX Ingress mode")
 	ingressName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)
