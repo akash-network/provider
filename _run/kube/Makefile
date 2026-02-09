@@ -69,7 +69,7 @@ $(KUBE_CREATE_GATEWAY): $(AP_RUN_DIR) kube-cluster-create-kind-gateway
 
 .PHONY: kube-setup-ingress-gateway
 kube-setup-ingress-gateway:
-	kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.3.0" | kubectl apply -f -
+	kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.4.1&timeout=90s" | kubectl apply -f -
 	helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
 		--create-namespace \
 		-n nginx-gateway \
