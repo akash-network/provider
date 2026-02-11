@@ -5,6 +5,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"strconv"
 )
 
 type StatefulSet interface {
@@ -31,11 +32,65 @@ func BuildStatefulSet(workload *Workload) StatefulSet {
 
 func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:unparam
 	falseValue := false
+	trueValue := true
 
 	revisionHistoryLimit := int32(1)
 
 	partition := int32(0)
 	maxUnavailable := intstr.FromInt32(1)
+
+	// Add config volume
+	configVolume := corev1.Volume{
+		Name: AkashConfigVolume,
+		VolumeSource: corev1.VolumeSource{
+			EmptyDir: &corev1.EmptyDirVolumeSource{},
+		},
+	}
+
+	// Calculate if NodePort is required
+	requiresNodePort := false
+	service := &b.deployment.ManifestGroup().Services[b.serviceIdx]
+	for _, expose := range service.Expose {
+		if expose.Global {
+			requiresNodePort = true
+			break
+		}
+	}
+
+	// Add init container
+	initContainer := corev1.Container{
+		Name:  AkashConfigInitName,
+		Image: "alpine/curl:3.14",
+		Command: []string{
+			"/bin/sh",
+			"-c",
+			akashInitScript,
+		},
+		Env: []corev1.EnvVar{
+			{
+				Name:  "SERVICE_NAME",
+				Value: b.Name(),
+			},
+			{
+				Name:  "AKASH_CONFIG_PATH",
+				Value: AkashConfigMount,
+			},
+			{
+				Name:  "AKASH_CONFIG_FILE",
+				Value: AkashConfigEnvFile,
+			},
+			{
+				Name:  "AKASH_REQUIRES_NODEPORT",
+				Value: strconv.FormatBool(requiresNodePort),
+			},
+		},
+		VolumeMounts: []corev1.VolumeMount{
+			{
+				Name:      AkashConfigVolume,
+				MountPath: AkashConfigMount,
+			},
+		},
+	}
 
 	kdeployment := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -65,10 +120,11 @@ func (b *statefulSet) Create() (*appsv1.StatefulSet, error) { // nolint:unparam
 					SecurityContext: &corev1.PodSecurityContext{
 						RunAsNonRoot: &falseValue,
 					},
-					AutomountServiceAccountToken: &falseValue,
+					AutomountServiceAccountToken: &trueValue,
+					InitContainers:               []corev1.Container{initContainer},
 					Containers:                   []corev1.Container{b.container()},
 					ImagePullSecrets:             b.secretsRefs,
-					Volumes:                      b.volumesObjs,
+					Volumes:                      append(b.volumesObjs, configVolume),
 				},
 			},
 			VolumeClaimTemplates: b.pvcsObjs,
