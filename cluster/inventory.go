@@ -80,6 +80,7 @@ type inventoryRequest struct {
 	order     mtypes.OrderID
 	resources dtypes.ResourceGroup
 	ch        chan<- inventoryResponse
+	dryRun    bool
 }
 
 type inventoryResponse struct {
@@ -181,7 +182,12 @@ func (is *inventoryService) lookup(order mtypes.OrderID, resources dtypes.Resour
 	}
 }
 
-func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
+func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.ResourceGroup, opts ...ctypes.InventoryOption) (ctypes.Reservation, error) {
+	cfg := &ctypes.InventoryOptions{}
+	for _, opt := range opts {
+		cfg = opt(cfg)
+	}
+
 	for idx, res := range resources.GetResourceUnits() {
 		if res.CPU == nil {
 			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
@@ -199,12 +205,13 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.Resou
 		order:     order,
 		resources: resources,
 		ch:        ch,
+		dryRun:    cfg.DryRun,
 	}
 
 	select {
 	case is.reservech <- req:
 		response := <-ch
-		if response.err == nil {
+		if response.err == nil && !cfg.DryRun {
 			cnt := atomic.AddInt64(&is.reservationCount, 1)
 			is.log.Debug("reservation count", "cnt", cnt)
 		}
@@ -442,23 +449,33 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 			return
 		}
 
-		is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "pending", pending)
-	} else {
+		if !req.dryRun {
+			is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "pending", pending)
+		}
+	} else if !req.dryRun {
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
-	err := state.inventory.Adjust(reservation)
+	var adjustOpts []ctypes.InventoryOption
+	if req.dryRun {
+		adjustOpts = append(adjustOpts, ctypes.WithDryRun())
+	}
+
+	err := state.inventory.Adjust(reservation, adjustOpts...)
 	if err != nil {
-		is.log.Info("insufficient capacity for reservation", "order", req.order)
+		is.log.Info("insufficient capacity for reservation", "order", req.order, "dry-run", req.dryRun)
 		inventoryRequestsCounter.WithLabelValues("reserve", "insufficient-capacity").Inc()
 		req.ch <- inventoryResponse{err: err}
 		return
 	}
 
-	// Add the reservation to the list
-	state.reservations = append(state.reservations, reservation)
+	if !req.dryRun {
+		// Add the reservation to the list only for real reservations
+		state.reservations = append(state.reservations, reservation)
+		inventoryRequestsCounter.WithLabelValues("reserve", "create").Inc()
+	}
+
 	req.ch <- inventoryResponse{value: reservation}
-	inventoryRequestsCounter.WithLabelValues("reserve", "create").Inc()
 }
 
 func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservation) {

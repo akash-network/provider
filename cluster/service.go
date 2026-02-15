@@ -78,7 +78,7 @@ type checkDeploymentExistsRequest struct {
 //
 //go:generate mockery --name Cluster
 type Cluster interface {
-	Reserve(mtypes.OrderID, dtypes.ResourceGroup) (ctypes.Reservation, error)
+	Reserve(mtypes.OrderID, dtypes.ResourceGroup, ...ctypes.InventoryOption) (ctypes.Reservation, error)
 	Unreserve(mtypes.OrderID) error
 }
 
@@ -225,8 +225,8 @@ func (s *service) Ready() <-chan struct{} {
 	return s.inventory.ready()
 }
 
-func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
-	return s.inventory.reserve(order, resources)
+func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup, opts ...ctypes.InventoryOption) (ctypes.Reservation, error) {
+	return s.inventory.reserve(order, resources, opts...)
 }
 
 func (s *service) Unreserve(order mtypes.OrderID) error {

@@ -20,6 +20,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"pkg.akt.dev/go/sdkutil"
 
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -114,7 +115,7 @@ func defaultGroupSpec() *dvbeta.GroupSpec {
 			},
 		},
 	}
-	price := sdk.NewDecCoin(testutil.CoinDenom, sdkmath.NewInt(23))
+	price := sdk.NewDecCoin(sdkutil.DenomUakt, sdkmath.NewInt(23))
 	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,

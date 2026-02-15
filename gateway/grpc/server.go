@@ -33,7 +33,7 @@ const (
 
 type grpcProviderV1 struct {
 	ctx    context.Context
-	client provider.StatusClient
+	client provider.GatewayClient
 }
 
 var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
@@ -51,7 +51,7 @@ func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
 	return val.(*ajwt.Claims)
 }
 
-func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.GatewayClient) error {
 	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
 	if err != nil {
 		return err
@@ -153,4 +153,8 @@ func (gm *grpcProviderV1) StreamStatus(_ *emptypb.Empty, stream providerv1.Provi
 			}
 		}
 	}
+}
+
+func (gm *grpcProviderV1) BidScreening(ctx context.Context, req *providerv1.BidScreeningRequest) (*providerv1.BidScreeningResponse, error) {
+	return gm.client.BidScreening(ctx, req)
 }

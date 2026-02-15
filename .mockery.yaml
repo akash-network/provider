@@ -11,6 +11,7 @@ packages:
       dir: mocks/client
     interfaces:
       StatusClient: {}
+      GatewayClient: {}
       Client: {}
   github.com/akash-network/provider/cluster:
     config:

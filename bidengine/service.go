@@ -51,6 +51,7 @@ type Service interface {
 	StatusClient
 	Close() error
 	Done() <-chan struct{}
+	ProviderAttrService() ProviderAttrSignatureService
 }
 
 // NewService creates new service instance and returns error in case of failure
@@ -147,6 +148,10 @@ func (s *service) Close() error {
 
 func (s *service) Done() <-chan struct{} {
 	return s.lc.Done()
+}
+
+func (s *service) ProviderAttrService() ProviderAttrSignatureService {
+	return s.pass
 }
 
 func (s *service) Status(ctx context.Context) (*apclient.BidEngineStatus, error) {
