@@ -97,9 +97,6 @@ replace (
 	golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
 	// stick with compatible version of rapid in v0.47.x line
 	pgregory.net/rapid => pgregory.net/rapid v0.5.5
-// use local chain-sdk for development
-// pkg.akt.dev/go => ../chain-sdk/go
-// pkg.akt.dev/go/sdl => ../chain-sdk/go/sdl
 )
 
 // these replaces required for rook to work
@@ -152,8 +149,8 @@ require (
 	github.com/bits-and-blooms/bitset v1.24.3 // indirect
 	github.com/brunoga/deep v1.2.4 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.15.0 // indirect
-	github.com/bytedance/sonic/loader v0.5.0 // indirect
+	github.com/bytedance/sonic v1.14.2 // indirect
+	github.com/bytedance/sonic/loader v0.4.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
