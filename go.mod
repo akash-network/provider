@@ -57,7 +57,7 @@ require (
 	pkg.akt.dev/node v1.1.0
 	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
-	sigs.k8s.io/structured-merge-diff/v4 v4.7.0
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
 )
 
@@ -96,6 +96,9 @@ replace (
 	golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
 	// stick with compatible version of rapid in v0.47.x line
 	pgregory.net/rapid => pgregory.net/rapid v0.5.5
+// use local chain-sdk for development
+// pkg.akt.dev/go => ../chain-sdk/go
+// pkg.akt.dev/go/sdl => ../chain-sdk/go/sdl
 )
 
 // these replaces required for rook to work
@@ -145,8 +148,8 @@ require (
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
 	github.com/brunoga/deep v1.2.4 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.14.0 // indirect
-	github.com/bytedance/sonic/loader v0.3.0 // indirect
+	github.com/bytedance/sonic v1.15.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -380,7 +383,6 @@ require (
 	rsc.io/qr v0.2.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
