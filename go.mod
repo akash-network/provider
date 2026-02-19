@@ -96,6 +96,9 @@ replace (
 	golang.org/x/exp => golang.org/x/exp v0.0.0-20230711153332-06a737ee72cb
 	// stick with compatible version of rapid in v0.47.x line
 	pgregory.net/rapid => pgregory.net/rapid v0.5.5
+// use local chain-sdk for development
+// pkg.akt.dev/go => ../chain-sdk/go
+// pkg.akt.dev/go/sdl => ../chain-sdk/go/sdl
 )
 
 // these replaces required for rook to work
