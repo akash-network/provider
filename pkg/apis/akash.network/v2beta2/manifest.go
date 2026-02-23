@@ -85,8 +85,17 @@ type ManifestStorageParams struct {
 	ReadOnly bool   `json:"readOnly" yaml:"readOnly"`
 }
 
+type ManifestServicePermissions struct {
+	Read []string `json:"read,omitempty"`
+	// Write permissions (not yet implemented - reserved for future use)
+	Write []string `json:"write,omitempty"`
+	// Delete permissions (not yet implemented - reserved for future use)
+	Delete []string `json:"delete,omitempty"`
+}
+
 type ManifestServiceParams struct {
-	Storage []ManifestStorageParams `json:"storage,omitempty"`
+	Storage     []ManifestStorageParams     `json:"storage,omitempty"`
+	Permissions *ManifestServicePermissions `json:"permissions,omitempty"`
 }
 
 type SchedulerResourceGPU struct {
@@ -280,6 +289,18 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				ReadOnly: storage.ReadOnly,
 			})
 		}
+
+		if ms.Params.Permissions != nil {
+			ams.Params.Permissions = &mani.ServicePermissions{
+				Read: ms.Params.Permissions.Read,
+				// NOTE: Write and Delete are stored in ManifestServicePermissions
+				// but cannot be converted to mani.ServicePermissions until the
+				// upstream SDK (pkg.akt.dev/go/manifest/v2beta3) adds support.
+				// When that happens, uncomment and update the following:
+				// Write:  ms.Params.Permissions.Write,
+				// Delete: ms.Params.Permissions.Delete,
+			}
+		}
 	}
 
 	return *ams, nil
@@ -318,6 +339,17 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
 			})
+		}
+
+		if ams.Params.Permissions != nil {
+			ms.Params.Permissions = &ManifestServicePermissions{
+				Read: ams.Params.Permissions.Read,
+				// NOTE: Write and Delete will be populated here once the upstream
+				// SDK (pkg.akt.dev/go/manifest/v2beta3) adds support for them.
+				// When that happens, uncomment and update the following:
+				// Write:  ams.Params.Permissions.Write,
+				// Delete: ams.Params.Permissions.Delete,
+			}
 		}
 	}
 

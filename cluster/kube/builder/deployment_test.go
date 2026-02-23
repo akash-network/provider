@@ -10,19 +10,23 @@ import (
 	"pkg.akt.dev/go/testutil"
 
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
-func TestDeploySetsEnvironmentVariables(t *testing.T) {
+const fakeHostname = "ahostname.dev"
+
+func testSetup(t *testing.T, sdlFile string, serviceIdx int, lid mtypes.LeaseID) (*crd.Manifest, *Workload) {
+	t.Helper()
+
 	log := testutil.Logger(t)
-	const fakeHostname = "ahostname.dev"
 	settings := Settings{
 		ClusterPublicHostname: fakeHostname,
 	}
-	lid := testutil.LeaseID(t)
-	sdl, err := sdl.ReadFile("../../../testdata/deployment/deployment.yaml")
+
+	sdlData, err := sdl.ReadFile(sdlFile)
 	require.NoError(t, err)
 
-	mani, err := sdl.Manifest()
+	mani, err := sdlData.Manifest()
 	require.NoError(t, err)
 
 	sparams := make([]*crd.SchedulerParams, len(mani.GetGroups()[0].Services))
@@ -39,8 +43,15 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 		Sparams: crd.ClusterSettings{SchedulerParams: sparams},
 	}
 
-	workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 0)
+	workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, serviceIdx)
 	require.NoError(t, err)
+
+	return cmani, workload
+}
+
+func TestDeploySetsEnvironmentVariables(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
 	deploymentBuilder := NewDeployment(workload)
 
@@ -79,4 +90,47 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 	value, ok = env[envVarAkashProvider]
 	require.True(t, ok)
 	require.Equal(t, lid.Provider, value)
+}
+
+func TestDeploymentPermissions(t *testing.T) {
+	tests := []struct {
+		name          string
+		sdlFile       string
+		serviceIdx    int
+		expectedToken bool
+	}{
+		{
+			name:          "defaults to false when no permissions specified",
+			sdlFile:       "../../../testdata/deployment/deployment.yaml",
+			serviceIdx:    0,
+			expectedToken: false,
+		},
+		{
+			name:          "enables automount when permissions are defined",
+			sdlFile:       "../../../testdata/sdl/permissions.yaml",
+			serviceIdx:    0,
+			expectedToken: true,
+		},
+		{
+			name:          "disables automount when no permissions defined",
+			sdlFile:       "../../../testdata/sdl/permissions.yaml",
+			serviceIdx:    1,
+			expectedToken: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lid := testutil.LeaseID(t)
+			_, workload := testSetup(t, tt.sdlFile, tt.serviceIdx, lid)
+
+			deploymentBuilder := NewDeployment(workload)
+			deployment, err := deploymentBuilder.Create()
+			require.NoError(t, err)
+			require.NotNil(t, deployment)
+
+			require.NotNil(t, deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+			require.Equal(t, tt.expectedToken, *deployment.Spec.Template.Spec.AutomountServiceAccountToken)
+		})
+	}
 }
