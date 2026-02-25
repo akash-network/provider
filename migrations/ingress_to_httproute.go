@@ -66,10 +66,6 @@ func (m *ingressToHTTPRouteMigration) Run(ctx context.Context) error {
 	gatewayName := fromctx.GatewayNameFromCtx(ctx)
 	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
 
-	if gatewayName == "" || gatewayNamespace == "" {
-		return nil
-	}
-
 	labelSelector := fmt.Sprintf("%s=true", builder.AkashManagedLabelName)
 
 	ingresses, err := kc.NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
