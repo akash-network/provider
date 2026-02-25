@@ -44,7 +44,7 @@ func (m *ingressToHTTPRouteMigration) Description() string {
 }
 
 func (m *ingressToHTTPRouteMigration) FromVersion() string {
-	return "0.6.5"
+	return "0.10.6"
 }
 
 func (m *ingressToHTTPRouteMigration) Run(ctx context.Context) error {
