@@ -20,7 +20,7 @@ func TestIngressToHTTPRouteMigration_Description(t *testing.T) {
 
 func TestIngressToHTTPRouteMigration_FromVersion(t *testing.T) {
 	m := NewIngressToHTTPRouteMigration()
-	assert.Equal(t, "0.6.5", m.FromVersion())
+	assert.Equal(t, "0.10.6", m.FromVersion())
 }
 
 func TestIngressToHTTPRouteMigration_ConvertAnnotations(t *testing.T) {
