@@ -30,6 +30,8 @@ import (
 	"pkg.akt.dev/go/testutil"
 	ajwt "pkg.akt.dev/go/util/jwt"
 
+	providerv1 "pkg.akt.dev/go/provider/v1"
+
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	pmock "github.com/akash-network/provider/mocks/client"
 	pcmock "github.com/akash-network/provider/mocks/cluster"
@@ -453,11 +455,13 @@ func TestRouteStatusFails(t *testing.T) {
 
 func TestRouteValidateOK(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		validate := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
+		price := testutil.AkashDecCoin(t, 200)
+		screenResp := &providerv1.BidScreeningResponse{
+			Passed: true,
+			Price:  &price,
 		}
 
-		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(validate, nil)
+		test.pclient.On("BidScreening", mock.Anything, mock.Anything).Return(screenResp, nil)
 
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
@@ -485,11 +489,13 @@ func TestRouteValidateOK(t *testing.T) {
 
 func TestRouteValidateUnauthorized(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
-		validate := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
+		price := testutil.AkashDecCoin(t, 200)
+		screenResp := &providerv1.BidScreeningResponse{
+			Passed: true,
+			Price:  &price,
 		}
 
-		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(validate, nil)
+		test.pclient.On("BidScreening", mock.Anything, mock.Anything).Return(screenResp, nil)
 
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
@@ -513,7 +519,7 @@ func TestRouteValidateUnauthorized(t *testing.T) {
 
 func TestRouteValidateFails(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		test.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errGeneric)
+		test.pclient.On("BidScreening", mock.Anything, mock.Anything).Return((*providerv1.BidScreeningResponse)(nil), errGeneric)
 
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)
@@ -540,7 +546,7 @@ func TestRouteValidateFails(t *testing.T) {
 
 func TestRouteValidateFailsEmptyBody(t *testing.T) {
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		test.pclient.On("Validate", mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errGeneric)
+		test.pclient.On("BidScreening", mock.Anything, mock.Anything).Return((*providerv1.BidScreeningResponse)(nil), errGeneric)
 
 		uri, err := apclient.MakeURI(test.host, apclient.ValidatePath())
 		require.NoError(t, err)

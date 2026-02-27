@@ -26,6 +26,7 @@ import (
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	providertypes "pkg.akt.dev/go/node/provider/v1beta4"
 	apclient "pkg.akt.dev/go/provider/client"
+	providerv1 "pkg.akt.dev/go/provider/v1"
 	"pkg.akt.dev/go/testutil"
 	ajwt "pkg.akt.dev/go/util/jwt"
 
@@ -123,8 +124,10 @@ func Test_router_Status(t *testing.T) {
 
 func Test_router_Validate(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		expected := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
+		expectedPrice := testutil.AkashDecCoin(t, 200)
+		mockResult := &providerv1.BidScreeningResponse{
+			Passed: true,
+			Price:  &expectedPrice,
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -140,7 +143,7 @@ func Test_router_Validate(t *testing.T) {
 		}
 
 		mocks := createMocks()
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(expected, nil)
+		mocks.pclient.On("BidScreening", mock.Anything, mock.Anything).Return(mockResult, nil)
 
 		withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.cmocks), testutil.CertificateOptionCache(cquerier))
@@ -149,7 +152,9 @@ func Test_router_Validate(t *testing.T) {
 			assert.NoError(t, err)
 			result, err := client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.NoError(t, err)
-			assert.Equal(t, expected, result)
+			assert.True(t, result.Passed)
+			assert.NotNil(t, result.Price)
+			assert.Equal(t, expectedPrice, *result.Price)
 
 			client, err = apclient.NewClient(context.Background(), paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
 				key:  ckey,
@@ -158,7 +163,9 @@ func Test_router_Validate(t *testing.T) {
 			assert.NoError(t, err)
 			result, err = client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.NoError(t, err)
-			assert.Equal(t, expected, result)
+			assert.True(t, result.Passed)
+			assert.NotNil(t, result.Price)
+			assert.Equal(t, expectedPrice, *result.Price)
 		})
 		mocks.pclient.AssertExpectations(t)
 	})
@@ -178,7 +185,7 @@ func Test_router_Validate(t *testing.T) {
 
 		mocks := createMocks()
 
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errors.New("oops"))
+		mocks.pclient.On("BidScreening", mock.Anything, mock.Anything).Return((*providerv1.BidScreeningResponse)(nil), errors.New("oops"))
 		withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
 			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.cmocks), testutil.CertificateOptionCache(cquerier))
 

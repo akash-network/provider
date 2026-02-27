@@ -14,7 +14,6 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
-	atypes "pkg.akt.dev/go/node/audit/v1"
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
@@ -517,74 +516,24 @@ loop:
 }
 
 func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
-	// does provider have required attributes?
-	if !group.GroupSpec.MatchAttributes(o.session.Provider().Attributes) {
-		o.log.Debug("unable to fulfill: incompatible provider attributes")
-		return false, nil
+	params := ScreenBidParams{
+		Provider:        o.session.Provider(),
+		Attributes:      o.cfg.Attributes,
+		MaxGroupVolumes: o.cfg.MaxGroupVolumes,
+		AttrService:     o.pass,
+		Log:             o.log,
 	}
 
-	// does order have required attributes?
-	if !o.cfg.Attributes.SubsetOf(group.GroupSpec.Requirements.Attributes) {
-		o.log.Debug("unable to fulfill: incompatible order attributes")
-		return false, nil
-	}
-
-	attr, err := o.pass.GetAttributes()
+	result, err := ScreenBid(context.Background(), group, params)
 	if err != nil {
 		return false, err
 	}
 
-	// does provider have required capabilities?
-	if !group.GroupSpec.MatchResourcesRequirements(attr) {
-		o.log.Debug("unable to fulfill: incompatible attributes for resources requirements", "wanted", group.GroupSpec, "have", attr)
-		return false, nil
-	}
-
-	for _, resources := range group.GroupSpec.GetResourceUnits() {
-		if len(resources.Storage) > o.cfg.MaxGroupVolumes {
-			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Storage), o.cfg.MaxGroupVolumes))
-			return false, nil
-		}
-	}
-	signatureRequirements := group.GroupSpec.Requirements.SignedBy
-	if signatureRequirements.Size() != 0 {
-		// Check that the signature requirements are met for each attribute
-		var provAttr atypes.AuditedProviders
-		ownAttrs := atypes.AuditedProvider{
-			Owner:      o.session.Provider().Owner,
-			Auditor:    "",
-			Attributes: o.session.Provider().Attributes,
-		}
-		provAttr = append(provAttr, ownAttrs)
-		auditors := make([]string, 0)
-		auditors = append(auditors, group.GroupSpec.Requirements.SignedBy.AllOf...)
-		auditors = append(auditors, group.GroupSpec.Requirements.SignedBy.AnyOf...)
-
-		gotten := make(map[string]struct{})
-		for _, auditor := range auditors {
-			_, done := gotten[auditor]
-			if done {
-				continue
-			}
-			result, err := o.pass.GetAuditorAttributeSignatures(auditor)
-			if err != nil {
-				return false, err
-			}
-			provAttr = append(provAttr, result...)
-			gotten[auditor] = struct{}{}
-		}
-
-		ok := group.GroupSpec.MatchRequirements(provAttr)
-		if !ok {
-			o.log.Debug("attribute signature requirements not met")
-			return false, nil
+	if !result.Passed {
+		for _, reason := range result.Reasons {
+			o.log.Debug("unable to fulfill", "reason", reason)
 		}
 	}
 
-	if err := group.GroupSpec.ValidateBasic(); err != nil {
-		o.log.Error("unable to fulfill: group validation error",
-			"error", err)
-		return false, nil
-	}
-	return true, nil
+	return result.Passed, nil
 }

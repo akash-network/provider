@@ -39,8 +39,16 @@ func (_m *Cluster) EXPECT() *Cluster_Expecter {
 }
 
 // Reserve provides a mock function for the type Cluster
-func (_mock *Cluster) Reserve(orderID v1.OrderID, resourceGroup v1beta4.ResourceGroup) (v1beta3.Reservation, error) {
-	ret := _mock.Called(orderID, resourceGroup)
+func (_mock *Cluster) Reserve(orderID v1.OrderID, resourceGroup v1beta4.ResourceGroup, inventoryOptions ...v1beta3.InventoryOption) (v1beta3.Reservation, error) {
+	// v1beta3.InventoryOption
+	_va := make([]interface{}, len(inventoryOptions))
+	for _i := range inventoryOptions {
+		_va[_i] = inventoryOptions[_i]
+	}
+	var _ca []interface{}
+	_ca = append(_ca, orderID, resourceGroup)
+	_ca = append(_ca, _va...)
+	ret := _mock.Called(_ca...)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Reserve")
@@ -48,18 +56,18 @@ func (_mock *Cluster) Reserve(orderID v1.OrderID, resourceGroup v1beta4.Resource
 
 	var r0 v1beta3.Reservation
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(v1.OrderID, v1beta4.ResourceGroup) (v1beta3.Reservation, error)); ok {
-		return returnFunc(orderID, resourceGroup)
+	if returnFunc, ok := ret.Get(0).(func(v1.OrderID, v1beta4.ResourceGroup, ...v1beta3.InventoryOption) (v1beta3.Reservation, error)); ok {
+		return returnFunc(orderID, resourceGroup, inventoryOptions...)
 	}
-	if returnFunc, ok := ret.Get(0).(func(v1.OrderID, v1beta4.ResourceGroup) v1beta3.Reservation); ok {
-		r0 = returnFunc(orderID, resourceGroup)
+	if returnFunc, ok := ret.Get(0).(func(v1.OrderID, v1beta4.ResourceGroup, ...v1beta3.InventoryOption) v1beta3.Reservation); ok {
+		r0 = returnFunc(orderID, resourceGroup, inventoryOptions...)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(v1beta3.Reservation)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(v1.OrderID, v1beta4.ResourceGroup) error); ok {
-		r1 = returnFunc(orderID, resourceGroup)
+	if returnFunc, ok := ret.Get(1).(func(v1.OrderID, v1beta4.ResourceGroup, ...v1beta3.InventoryOption) error); ok {
+		r1 = returnFunc(orderID, resourceGroup, inventoryOptions...)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -74,11 +82,13 @@ type Cluster_Reserve_Call struct {
 // Reserve is a helper method to define mock.On call
 //   - orderID v1.OrderID
 //   - resourceGroup v1beta4.ResourceGroup
-func (_e *Cluster_Expecter) Reserve(orderID interface{}, resourceGroup interface{}) *Cluster_Reserve_Call {
-	return &Cluster_Reserve_Call{Call: _e.mock.On("Reserve", orderID, resourceGroup)}
+//   - inventoryOptions ...v1beta3.InventoryOption
+func (_e *Cluster_Expecter) Reserve(orderID interface{}, resourceGroup interface{}, inventoryOptions ...interface{}) *Cluster_Reserve_Call {
+	return &Cluster_Reserve_Call{Call: _e.mock.On("Reserve",
+		append([]interface{}{orderID, resourceGroup}, inventoryOptions...)...)}
 }
 
-func (_c *Cluster_Reserve_Call) Run(run func(orderID v1.OrderID, resourceGroup v1beta4.ResourceGroup)) *Cluster_Reserve_Call {
+func (_c *Cluster_Reserve_Call) Run(run func(orderID v1.OrderID, resourceGroup v1beta4.ResourceGroup, inventoryOptions ...v1beta3.InventoryOption)) *Cluster_Reserve_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 v1.OrderID
 		if args[0] != nil {
@@ -88,9 +98,18 @@ func (_c *Cluster_Reserve_Call) Run(run func(orderID v1.OrderID, resourceGroup v
 		if args[1] != nil {
 			arg1 = args[1].(v1beta4.ResourceGroup)
 		}
+		var arg2 []v1beta3.InventoryOption
+		variadicArgs := make([]v1beta3.InventoryOption, len(args)-2)
+		for i, a := range args[2:] {
+			if a != nil {
+				variadicArgs[i] = a.(v1beta3.InventoryOption)
+			}
+		}
+		arg2 = variadicArgs
 		run(
 			arg0,
 			arg1,
+			arg2...,
 		)
 	})
 	return _c
@@ -101,7 +120,7 @@ func (_c *Cluster_Reserve_Call) Return(reservation v1beta3.Reservation, err erro
 	return _c
 }
 
-func (_c *Cluster_Reserve_Call) RunAndReturn(run func(orderID v1.OrderID, resourceGroup v1beta4.ResourceGroup) (v1beta3.Reservation, error)) *Cluster_Reserve_Call {
+func (_c *Cluster_Reserve_Call) RunAndReturn(run func(orderID v1.OrderID, resourceGroup v1beta4.ResourceGroup, inventoryOptions ...v1beta3.InventoryOption) (v1beta3.Reservation, error)) *Cluster_Reserve_Call {
 	_c.Call.Return(run)
 	return _c
 }

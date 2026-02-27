@@ -14,8 +14,9 @@ import (
 	aclient "pkg.akt.dev/go/node/client/discovery"
 	sclient "pkg.akt.dev/go/node/client/v1beta3"
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
-	provider "pkg.akt.dev/go/provider/v1"
+	providerv1 "pkg.akt.dev/go/provider/v1"
 
 	"github.com/akash-network/provider/bidengine"
 	"github.com/akash-network/provider/cluster"
@@ -29,20 +30,24 @@ import (
 	"pkg.akt.dev/go/util/pubsub"
 )
 
-// ValidateClient is the interface to check if provider will bid on given groupspec
-type ValidateClient interface {
-	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error)
+// BidScreeningClient is the interface to screen if provider will bid on given groupspec
+type BidScreeningClient interface {
+	BidScreening(context.Context, *providerv1.BidScreeningRequest) (*providerv1.BidScreeningResponse, error)
 }
 
 // StatusClient is the interface which includes status of service
 type StatusClient interface {
 	Status(context.Context) (*apclient.ProviderStatus, error)
-	StatusV1(ctx context.Context) (*provider.Status, error)
+	StatusV1(ctx context.Context) (*providerv1.Status, error)
+}
+
+type GatewayClient interface {
+	StatusClient
+	BidScreeningClient
 }
 
 type Client interface {
-	StatusClient
-	ValidateClient
+	GatewayClient
 	Manifest() manifest.Client
 	Cluster() cluster.Client
 	Hostname() ctypes.HostnameServiceClient
@@ -210,7 +215,7 @@ func (s *service) Status(ctx context.Context) (*apclient.ProviderStatus, error) 
 	}, nil
 }
 
-func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
+func (s *service) StatusV1(ctx context.Context) (*providerv1.Status, error) {
 	clusterSt, err := s.cluster.StatusV1(ctx)
 	if err != nil {
 		return nil, err
@@ -223,7 +228,7 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &provider.Status{
+	return &providerv1.Status{
 		Cluster:   clusterSt,
 		BidEngine: bidengineSt,
 		Manifest:  manifestSt,
@@ -234,33 +239,86 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 	}, nil
 }
 
-func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error) {
-	req := bidengine.Request{
-		Owner: owner.String(),
-		GSpec: &gspec,
+type ctxKeyOwner struct{}
+
+// ContextWithOwner returns a new context with the owner address stored.
+func ContextWithOwner(ctx context.Context, owner sdktypes.Address) context.Context {
+	return context.WithValue(ctx, ctxKeyOwner{}, owner)
+}
+
+func ownerFromCtx(ctx context.Context) sdktypes.Address {
+	val, _ := ctx.Value(ctxKeyOwner{}).(sdktypes.Address)
+	return val
+}
+
+func (s *service) BidScreening(ctx context.Context, req *providerv1.BidScreeningRequest) (*providerv1.BidScreeningResponse, error) {
+	gspec := req.GetGroupSpec()
+	if gspec == nil {
+		return &providerv1.BidScreeningResponse{
+			Passed:  false,
+			Reasons: []string{"missing group spec"},
+		}, nil
 	}
 
-	// inv, err := s.cclient.Inventory(ctx)
-	// if err != nil {
-	//	return ValidateGroupSpecResult{}, err
-	// }
-	//
-	// res := &reservation{
-	//	resources:     nil,
-	//	clusterParams: nil,
-	// }
-	//
-	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-	//	return ValidateGroupSpecResult{}, err
-	// }
+	group := &dtypes.Group{GroupSpec: *gspec}
 
-	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
+	owner := ownerFromCtx(ctx)
+	if owner.Empty() && len(req.GetHostnames()) > 0 {
+		return &providerv1.BidScreeningResponse{
+			Passed:  false,
+			Reasons: []string{"missing owner in context; required for hostname availability check"},
+		}, nil
+	}
+
+	// Step 1: Run bid screening (eligibility checks)
+	params := bidengine.ScreenBidParams{
+		Provider:        s.session.Provider(),
+		Attributes:      s.config.Attributes,
+		MaxGroupVolumes: s.config.MaxGroupVolumes,
+		AttrService:     s.bidengine.ProviderAttrService(),
+		HostnameService: s.cluster.HostnameService(),
+		Owner:           owner,
+		Hostnames:       req.GetHostnames(),
+		Log:             s.session.Log(),
+	}
+
+	screenResult, err := bidengine.ScreenBid(ctx, group, params)
 	if err != nil {
-		return apclient.ValidateGroupSpecResult{}, err
+		return nil, err
 	}
 
-	return apclient.ValidateGroupSpecResult{
-		MinBidPrice: price,
+	if !screenResult.Passed {
+		return &providerv1.BidScreeningResponse{
+			Passed:  false,
+			Reasons: screenResult.Reasons,
+		}, nil
+	}
+
+	// Step 2: Dry-run cluster reservation (capacity check without mutation)
+	reservation, err := s.cluster.Reserve(mtypes.OrderID{}, gspec, ctypes.WithDryRun())
+	if err != nil {
+		return &providerv1.BidScreeningResponse{
+			Passed:  false,
+			Reasons: append(screenResult.Reasons, "cluster capacity: "+err.Error()),
+		}, nil
+	}
+
+	// Step 3: Calculate price with allocated resources
+	priceReq := bidengine.Request{
+		Owner:              owner.String(),
+		GSpec:              gspec,
+		PricePrecision:     bidengine.DefaultPricePrecision,
+		AllocatedResources: reservation.GetAllocatedResources(),
+	}
+
+	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, priceReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &providerv1.BidScreeningResponse{
+		Passed: true,
+		Price:  &price,
 	}, nil
 }
 
@@ -318,7 +376,7 @@ func (s *service) statusRun() {
 
 	defer bus.Unsub(events)
 
-	status := provider.Status{
+	status := providerv1.Status{
 		PublicHostnames: []string{
 			s.config.ClusterPublicHostname,
 		},
@@ -331,13 +389,13 @@ loop:
 			return
 		case evt := <-events:
 			switch obj := evt.(type) {
-			case provider.ClusterStatus:
+			case providerv1.ClusterStatus:
 				status.Timestamp = time.Now().UTC()
 				status.Cluster = &obj
-			case provider.BidEngineStatus:
+			case providerv1.BidEngineStatus:
 				status.Timestamp = time.Now().UTC()
 				status.BidEngine = &obj
-			case provider.ManifestStatus:
+			case providerv1.ManifestStatus:
 				status.Timestamp = time.Now().UTC()
 				status.Manifest = &obj
 			default:

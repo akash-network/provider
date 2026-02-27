@@ -665,6 +665,11 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 }
 
 func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
+	// Zero GPU before iterating. If the device plugin has disappeared the GPU
+	// resource won't appear in the map and must be reset to 0.
+	node.Resources.GPU.Quantity.Allocatable.Set(0)
+	node.Resources.GPU.Quantity.Capacity.Set(0)
+
 	for name, r := range knode.Status.Allocatable {
 		switch name {
 		case corev1.ResourceCPU:
@@ -719,7 +724,10 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 				fallthrough
 			case builder.ResourceGPUAMD:
 				node.Resources.GPU.Quantity.Allocated.Add(quantity)
-				// GPU overcommit is not allowed, if that happens something is terribly wrong with the inventory
+				// Cap GPU allocated at allocatable — overcommit is not allowed.
+				if node.Resources.GPU.Quantity.Allocated.Cmp(*node.Resources.GPU.Quantity.Allocatable) > 0 {
+					node.Resources.GPU.Quantity.Allocated.Set(node.Resources.GPU.Quantity.Allocatable.Value())
+				}
 			}
 		}
 

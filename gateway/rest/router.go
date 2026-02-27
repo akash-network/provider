@@ -26,6 +26,7 @@ import (
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
+	providerv1 "pkg.akt.dev/go/provider/v1"
 	ajwt "pkg.akt.dev/go/util/jwt"
 	"pkg.akt.dev/node/util/wsutil"
 
@@ -448,7 +449,7 @@ func createStatusHandler(log log.Logger, sclient provider.StatusClient, provider
 	}
 }
 
-func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFunc {
+func validateHandler(log log.Logger, cl provider.BidScreeningClient) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		data, err := io.ReadAll(req.Body)
 		if err != nil {
@@ -463,19 +464,29 @@ func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFun
 
 		owner := requestOwner(req)
 
+		// Try BidScreeningRequest format first, fall back to bare GroupSpec
+		var screenReq providerv1.BidScreeningRequest
 		var gspec dvbeta.GroupSpec
 
-		if err := json.Unmarshal(data, &gspec); err != nil {
-			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
-			return
+		if err := json.Unmarshal(data, &screenReq); err == nil && screenReq.GroupSpec != nil && screenReq.GroupSpec.Name != "" {
+			// parsed as BidScreeningRequest
+		} else {
+			// Backward compatible: try bare GroupSpec
+			if err := json.Unmarshal(data, &gspec); err != nil {
+				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+				return
+			}
+			screenReq.GroupSpec = &gspec
 		}
 
-		validate, err := cl.Validate(req.Context(), owner, gspec)
+		ctx := provider.ContextWithOwner(req.Context(), owner)
+
+		result, err := cl.BidScreening(ctx, &screenReq)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(log, w, validate)
+		writeJSON(log, w, result)
 	}
 }
 

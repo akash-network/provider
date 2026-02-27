@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	tpubsub "github.com/troian/pubsub"
+	"pkg.akt.dev/go/sdkutil"
 
 	sdkmath "cosmossdk.io/math"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
@@ -92,7 +93,7 @@ func makeMocks(s *orderTestScaffold) {
 		Memory:  &memory,
 		Storage: storage,
 	}
-	price := sdk.NewInt64DecCoin(testutil.CoinDenom, 23)
+	price := sdk.NewInt64DecCoin(sdkutil.DenomUakt, 23)
 	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     2,
@@ -222,7 +223,7 @@ func makeOrderForTest(
 			Bid: mvbeta.Bid{
 				ID:        bidID,
 				State:     bidState,
-				Price:     sdk.NewInt64DecCoin(testutil.CoinDenom, int64(testutil.RandRangeInt(100, 1000))),
+				Price:     sdk.NewInt64DecCoin(sdkutil.DenomUakt, int64(testutil.RandRangeInt(100, 1000))),
 				CreatedAt: testBidCreatedAt,
 			},
 		}
@@ -262,7 +263,7 @@ func Test_BidOrderAndUnreserve(t *testing.T) {
 	require.Equal(t, createBidMsg.ID.OrderID(), scaffold.orderID)
 
 	priceDenom := createBidMsg.Price.Denom
-	require.Equal(t, testutil.CoinDenom, priceDenom)
+	require.Equal(t, sdkutil.DenomUakt, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
 
 	require.GreaterOrEqual(t, priceAmount.TruncateInt64(), int64(1))
@@ -290,7 +291,7 @@ func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
 	require.Equal(t, createBidMsg.ID.OrderID(), scaffold.orderID)
 
 	priceDenom := createBidMsg.Price.Denom
-	require.Equal(t, testutil.CoinDenom, priceDenom)
+	require.Equal(t, sdkutil.DenomUakt, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
 
 	require.True(t, priceAmount.GT(sdkmath.LegacyNewDec(0)))
@@ -407,7 +408,7 @@ func Test_BidOrderAndThenLeaseCreated(t *testing.T) {
 
 	require.Equal(t, createBidMsg.ID.OrderID(), scaffold.orderID)
 	priceDenom := createBidMsg.Price.Denom
-	require.Equal(t, testutil.CoinDenom, priceDenom)
+	require.Equal(t, sdkutil.DenomUakt, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
 
 	require.GreaterOrEqual(t, priceAmount.TruncateInt64(), int64(1))
@@ -532,7 +533,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 	require.NoError(t, err)
 	cfg := Config{
 		PricingStrategy: pricing,
-		Deposit:         sdk.NewInt64Coin(testutil.CoinDenom, 1),
+		Deposit:         sdk.NewInt64Coin(sdkutil.DenomUakt, 1),
 		BidTimeout:      time.Second,
 		Attributes:      nil,
 	}
@@ -558,7 +559,7 @@ func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 	require.NoError(t, err)
 	cfg := Config{
 		PricingStrategy: pricing,
-		Deposit:         sdk.NewInt64Coin(testutil.CoinDenom, 1),
+		Deposit:         sdk.NewInt64Coin(sdkutil.DenomUakt, 1),
 		BidTimeout:      time.Minute,
 		Attributes:      nil,
 	}
@@ -583,7 +584,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 	require.NoError(t, err)
 	cfg := Config{
 		PricingStrategy: pricing,
-		Deposit:         sdk.NewInt64Coin(testutil.CoinDenom, 1),
+		Deposit:         sdk.NewInt64Coin(sdkutil.DenomUakt, 1),
 		BidTimeout:      6 * time.Second,
 		Attributes:      nil,
 	}
@@ -647,7 +648,7 @@ func Test_ShouldRecognizeLeaseCreatedIfBiddingIsSkipped(t *testing.T) {
 }
 
 func (tbps testBidPricingStrategy) CalculatePrice(_ context.Context, _ Request) (sdk.DecCoin, error) {
-	return sdk.NewInt64DecCoin(testutil.CoinDenom, int64(tbps)), nil
+	return sdk.NewInt64DecCoin(sdkutil.DenomUakt, int64(tbps)), nil
 }
 
 func Test_BidOrderUsesBidPricingStrategy(t *testing.T) {
@@ -662,7 +663,7 @@ func Test_BidOrderUsesBidPricingStrategy(t *testing.T) {
 	require.Equal(t, createBidMsg.ID.OrderID(), scaffold.orderID)
 
 	priceDenom := createBidMsg.Price.Denom
-	require.Equal(t, testutil.CoinDenom, priceDenom)
+	require.Equal(t, sdkutil.DenomUakt, priceDenom)
 	priceAmount := createBidMsg.Price.Amount
 
 	require.Equal(t, priceAmount, sdkmath.LegacyNewDec(expectedBid))
