@@ -75,8 +75,6 @@ type checkDeploymentExistsRequest struct {
 }
 
 // Cluster is the interface that wraps Reserve and Unreserve methods
-//
-//go:generate mockery --name Cluster
 type Cluster interface {
 	Reserve(mtypes.OrderID, dtypes.ResourceGroup) (ctypes.Reservation, error)
 	Unreserve(mtypes.OrderID) error
@@ -90,8 +88,6 @@ type StatusClient interface {
 }
 
 // Service manage compute cluster for the provider.  Will eventually integrate with kubernetes, etc...
-//
-//go:generate mockery --name Service
 type Service interface {
 	StatusClient
 	Cluster
