@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/prometheus/common/expfmt"
+	"github.com/prometheus/common/model"
 	corev1 "k8s.io/api/core/v1"
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -141,7 +142,7 @@ func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
 		return math.MaxUint32, math.MaxUint32, fmt.Errorf("%w: response status %d", errMetalLB, response.StatusCode)
 	}
 
-	var parser expfmt.TextParser
+	parser := expfmt.NewTextParser(model.LegacyValidation)
 	mf, err := parser.TextToMetricFamilies(response.Body)
 	if err != nil {
 		return math.MaxUint32, math.MaxUint32, err

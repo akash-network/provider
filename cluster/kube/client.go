@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	eventsv1 "k8s.io/api/events/v1"
 	netv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
@@ -191,11 +192,14 @@ func (c *client) Deployments(ctx context.Context) ([]ctypes.IDeployment, error) 
 }
 
 type deploymentService struct {
-	deployment    builder.Deployment
-	statefulSet   builder.StatefulSet
-	localService  builder.Service
-	globalService builder.Service
-	credentials   builder.ServiceCredentials
+	deployment     builder.Deployment
+	statefulSet    builder.StatefulSet
+	localService   builder.Service
+	globalService  builder.Service
+	credentials    builder.ServiceCredentials
+	serviceAccount builder.ServiceAccount
+	role           builder.Role
+	roleBinding    builder.RoleBinding
 }
 
 type deploymentApplies struct {
@@ -206,30 +210,39 @@ type deploymentApplies struct {
 }
 
 type previousObj struct {
-	nmani           *crd.Manifest
-	umani           *crd.Manifest
-	omani           *crd.Manifest
-	nns             *corev1.Namespace
-	uns             *corev1.Namespace
-	ons             *corev1.Namespace
-	nNetPolicies    []netv1.NetworkPolicy
-	uNetPolicies    []netv1.NetworkPolicy
-	oNetPolicies    []netv1.NetworkPolicy
-	nServiceCreds   []*corev1.Secret
-	uServiceCreds   []*corev1.Secret
-	oServiceCreds   []*corev1.Secret
-	nStatefulSets   []*appsv1.StatefulSet
-	uStatefulSets   []*appsv1.StatefulSet
-	oStatefulSets   []*appsv1.StatefulSet
-	nDeployments    []*appsv1.Deployment
-	uDeployments    []*appsv1.Deployment
-	oDeployments    []*appsv1.Deployment
-	nLocalServices  []*corev1.Service
-	uLocalServices  []*corev1.Service
-	oLocalServices  []*corev1.Service
-	nGlobalServices []*corev1.Service
-	uGlobalServices []*corev1.Service
-	oGlobalServices []*corev1.Service
+	nmani            *crd.Manifest
+	umani            *crd.Manifest
+	omani            *crd.Manifest
+	nns              *corev1.Namespace
+	uns              *corev1.Namespace
+	ons              *corev1.Namespace
+	nNetPolicies     []netv1.NetworkPolicy
+	uNetPolicies     []netv1.NetworkPolicy
+	oNetPolicies     []netv1.NetworkPolicy
+	nServiceAccounts []*corev1.ServiceAccount
+	uServiceAccounts []*corev1.ServiceAccount
+	oServiceAccounts []*corev1.ServiceAccount
+	nRoles           []*rbacv1.Role
+	uRoles           []*rbacv1.Role
+	oRoles           []*rbacv1.Role
+	nRoleBindings    []*rbacv1.RoleBinding
+	uRoleBindings    []*rbacv1.RoleBinding
+	oRoleBindings    []*rbacv1.RoleBinding
+	nServiceCreds    []*corev1.Secret
+	uServiceCreds    []*corev1.Secret
+	oServiceCreds    []*corev1.Secret
+	nStatefulSets    []*appsv1.StatefulSet
+	uStatefulSets    []*appsv1.StatefulSet
+	oStatefulSets    []*appsv1.StatefulSet
+	nDeployments     []*appsv1.Deployment
+	uDeployments     []*appsv1.Deployment
+	oDeployments     []*appsv1.Deployment
+	nLocalServices   []*corev1.Service
+	uLocalServices   []*corev1.Service
+	oLocalServices   []*corev1.Service
+	nGlobalServices  []*corev1.Service
+	uGlobalServices  []*corev1.Service
+	oGlobalServices  []*corev1.Service
 }
 
 func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac akashclient.Interface) []error {
@@ -267,6 +280,42 @@ func (p *previousObj) recover(ctx context.Context, kc kubernetes.Interface, ac a
 
 	for _, val := range slices.Backward(p.oStatefulSets) {
 		if _, err := kc.AppsV1().StatefulSets(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.nRoleBindings) {
+		if err := kc.RbacV1().RoleBindings(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oRoleBindings) {
+		if _, err := kc.RbacV1().RoleBindings(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.nRoles) {
+		if err := kc.RbacV1().Roles(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oRoles) {
+		if _, err := kc.RbacV1().Roles(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.nServiceAccounts) {
+		if err := kc.CoreV1().ServiceAccounts(val.Namespace).Delete(ctx, val.Name, metav1.DeleteOptions{}); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	for _, val := range slices.Backward(p.oServiceAccounts) {
+		if _, err := kc.CoreV1().ServiceAccounts(val.Namespace).Update(ctx, val, metav1.UpdateOptions{}); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -463,6 +512,9 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	applies.ns = builder.BuildNS(settings, cdeployment)
 	applies.netPol = builder.BuildNetPol(settings, cdeployment)
 
+	// Track services that have permissions for RBAC cleanup
+	servicesWithPermissions := make([]string, 0)
+
 	for svcIdx := range group.Services {
 		workload, err := builder.NewWorkloadBuilder(c.log, settings, cdeployment, currManifest, svcIdx)
 		if err != nil {
@@ -491,6 +543,17 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			svc.deployment = builder.NewDeployment(workload)
 		}
 
+		// Create ServiceAccount, Role, and RoleBinding if permissions are defined
+		if workload.HasPermissions() {
+			c.log.Info("creating ServiceAccount, Role, and RoleBinding for service", "lease", lid, "service", service.Name, "permissions", workload.GetPermissions())
+			svc.serviceAccount = builder.BuildServiceAccount(workload)
+			svc.role = builder.BuildRole(workload)
+			svc.roleBinding = builder.BuildRoleBinding(workload)
+			servicesWithPermissions = append(servicesWithPermissions, service.Name)
+		} else {
+			c.log.Debug("skipping ServiceAccount creation - no permissions defined", "lease", lid, "service", service.Name)
+		}
+
 		applies.services = append(applies.services, svc)
 
 		if len(service.Expose) == 0 {
@@ -514,7 +577,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		return err
 	}
 
-	if err = cleanupStaleResources(ctx, c.kc, lid, group); err != nil {
+	if err = cleanupStaleResources(ctx, c.kc, lid, group, servicesWithPermissions); err != nil {
 		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
 		return err
 	}
@@ -555,6 +618,62 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	for svcIdx := range group.Services {
 		applyObjs := applies.services[svcIdx]
 		service := &group.Services[svcIdx]
+
+		// Create ServiceAccount, Role, and RoleBinding BEFORE deployment/statefulSet
+		// so they exist when the pod is created
+		if applyObjs.serviceAccount != nil {
+			nobj, uobj, oobj, err := applyServiceAccount(ctx, c.kc, applyObjs.serviceAccount)
+			if err != nil {
+				c.log.Error("applying service account", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+
+			if nobj != nil {
+				po.nServiceAccounts = append(po.nServiceAccounts, nobj)
+			}
+			if uobj != nil {
+				po.uServiceAccounts = append(po.uServiceAccounts, uobj)
+			}
+			if oobj != nil {
+				po.oServiceAccounts = append(po.oServiceAccounts, oobj)
+			}
+		}
+
+		if applyObjs.role != nil {
+			nobj, uobj, oobj, err := applyRole(ctx, c.kc, applyObjs.role)
+			if err != nil {
+				c.log.Error("applying role", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+
+			if nobj != nil {
+				po.nRoles = append(po.nRoles, nobj)
+			}
+			if uobj != nil {
+				po.uRoles = append(po.uRoles, uobj)
+			}
+			if oobj != nil {
+				po.oRoles = append(po.oRoles, oobj)
+			}
+		}
+
+		if applyObjs.roleBinding != nil {
+			nobj, uobj, oobj, err := applyRoleBinding(ctx, c.kc, applyObjs.roleBinding)
+			if err != nil {
+				c.log.Error("applying role binding", "err", err, "lease", lid, "service", service.Name)
+				return err
+			}
+
+			if nobj != nil {
+				po.nRoleBindings = append(po.nRoleBindings, nobj)
+			}
+			if uobj != nil {
+				po.uRoleBindings = append(po.uRoleBindings, uobj)
+			}
+			if oobj != nil {
+				po.oRoleBindings = append(po.oRoleBindings, oobj)
+			}
+		}
 
 		if applyObjs.credentials != nil {
 			nobj, uobj, obj, err := applyServiceCredentials(ctx, c.kc, applyObjs.credentials)

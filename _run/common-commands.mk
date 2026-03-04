@@ -94,7 +94,7 @@ get-manifest:
 
 .PHONY: deployment-create
 deployment-create:
-	$(AKASH) tx deployment create "$(SDL_PATH)" \
+	$(PROVIDER_SERVICES) tx deployment create "$(SDL_PATH)" \
 		--dseq "$(DSEQ)" \
 		--from "$(KEY_NAME)"
 

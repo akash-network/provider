@@ -419,6 +419,72 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashOwner, lid.Owner)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, lid.Provider)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashClusterPublicHostname, b.settings.ClusterPublicHostname)
+	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarKubernetesNamespaceOverride, b.NS())
 
 	return env
+}
+
+// getWorkloadPermissions extracts all permission types from the service params
+// and returns them as a WorkloadPermissions struct.
+// NOTE: Currently only Read permissions are supported in the manifest SDK.
+func (b *Workload) getWorkloadPermissions() *WorkloadPermissions {
+	service := &b.group.Services[b.serviceIdx]
+	if service.Params == nil || service.Params.Permissions == nil {
+		return nil
+	}
+
+	perms := &WorkloadPermissions{
+		Read: service.Params.Permissions.Read,
+	}
+
+	return perms
+}
+
+// hasPermissions returns true if any permissions are defined for this workload.
+// This checks all permission types (read, write, delete).
+func (b *Workload) hasPermissions() bool {
+	perms := b.getWorkloadPermissions()
+	return perms.HasAny()
+}
+
+// getPermissions returns the read permissions list for backward compatibility.
+// Deprecated: Use GetWorkloadPermissions() for access to all permission types.
+func (b *Workload) getPermissions() []string {
+	perms := b.getWorkloadPermissions()
+	if perms == nil {
+		return nil
+	}
+	return perms.Read
+}
+
+func (b *Workload) automountServiceAccountToken() *bool {
+	if b.hasPermissions() {
+		trueValue := true
+		return &trueValue
+	}
+	falseValue := false
+	return &falseValue
+}
+
+func (b *Workload) serviceAccountName() string {
+	if b.hasPermissions() {
+		return b.Name()
+	}
+	return ""
+}
+
+// HasPermissions returns true if any permissions are defined for this workload.
+func (b *Workload) HasPermissions() bool {
+	return b.hasPermissions()
+}
+
+// GetPermissions returns the read permissions list for backward compatibility.
+// Deprecated: Use GetWorkloadPermissions() for access to all permission types.
+func (b *Workload) GetPermissions() []string {
+	return b.getPermissions()
+}
+
+// GetWorkloadPermissions returns all permissions for this workload organized by type.
+func (b *Workload) GetWorkloadPermissions() *WorkloadPermissions {
+	return b.getWorkloadPermissions()
 }
