@@ -10,9 +10,7 @@ import (
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/manifest"
-	"github.com/cosmos/cosmos-sdk/types"
 	mock "github.com/stretchr/testify/mock"
-	"pkg.akt.dev/go/node/deployment/v1beta4"
 	"pkg.akt.dev/go/provider/client"
 	"pkg.akt.dev/go/provider/v1"
 )
@@ -348,78 +346,6 @@ func (_c *Client_StatusV1_Call) Return(status *v1.Status, err error) *Client_Sta
 }
 
 func (_c *Client_StatusV1_Call) RunAndReturn(run func(ctx context.Context) (*v1.Status, error)) *Client_StatusV1_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Validate provides a mock function for the type Client
-func (_mock *Client) Validate(context1 context.Context, address types.Address, groupSpec v1beta4.GroupSpec) (rest.ValidateGroupSpecResult, error) {
-	ret := _mock.Called(context1, address, groupSpec)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Validate")
-	}
-
-	var r0 rest.ValidateGroupSpecResult
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Address, v1beta4.GroupSpec) (rest.ValidateGroupSpecResult, error)); ok {
-		return returnFunc(context1, address, groupSpec)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, types.Address, v1beta4.GroupSpec) rest.ValidateGroupSpecResult); ok {
-		r0 = returnFunc(context1, address, groupSpec)
-	} else {
-		r0 = ret.Get(0).(rest.ValidateGroupSpecResult)
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, types.Address, v1beta4.GroupSpec) error); ok {
-		r1 = returnFunc(context1, address, groupSpec)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// Client_Validate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Validate'
-type Client_Validate_Call struct {
-	*mock.Call
-}
-
-// Validate is a helper method to define mock.On call
-//   - context1 context.Context
-//   - address types.Address
-//   - groupSpec v1beta4.GroupSpec
-func (_e *Client_Expecter) Validate(context1 interface{}, address interface{}, groupSpec interface{}) *Client_Validate_Call {
-	return &Client_Validate_Call{Call: _e.mock.On("Validate", context1, address, groupSpec)}
-}
-
-func (_c *Client_Validate_Call) Run(run func(context1 context.Context, address types.Address, groupSpec v1beta4.GroupSpec)) *Client_Validate_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 types.Address
-		if args[1] != nil {
-			arg1 = args[1].(types.Address)
-		}
-		var arg2 v1beta4.GroupSpec
-		if args[2] != nil {
-			arg2 = args[2].(v1beta4.GroupSpec)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-		)
-	})
-	return _c
-}
-
-func (_c *Client_Validate_Call) Return(validateGroupSpecResult rest.ValidateGroupSpecResult, err error) *Client_Validate_Call {
-	_c.Call.Return(validateGroupSpecResult, err)
-	return _c
-}
-
-func (_c *Client_Validate_Call) RunAndReturn(run func(context1 context.Context, address types.Address, groupSpec v1beta4.GroupSpec) (rest.ValidateGroupSpecResult, error)) *Client_Validate_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -29,11 +29,6 @@ import (
 	"pkg.akt.dev/go/util/pubsub"
 )
 
-// ValidateClient is the interface to check if provider will bid on given groupspec
-type ValidateClient interface {
-	Validate(context.Context, sdktypes.Address, dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error)
-}
-
 // StatusClient is the interface which includes status of service
 type StatusClient interface {
 	Status(context.Context) (*apclient.ProviderStatus, error)
@@ -42,7 +37,6 @@ type StatusClient interface {
 
 type Client interface {
 	StatusClient
-	ValidateClient
 	Manifest() manifest.Client
 	Cluster() cluster.Client
 	Hostname() ctypes.HostnameServiceClient
@@ -231,36 +225,6 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 			s.config.ClusterPublicHostname,
 		},
 		Timestamp: time.Now().UTC(),
-	}, nil
-}
-
-func (s *service) Validate(ctx context.Context, owner sdktypes.Address, gspec dtypes.GroupSpec) (apclient.ValidateGroupSpecResult, error) {
-	req := bidengine.Request{
-		Owner: owner.String(),
-		GSpec: &gspec,
-	}
-
-	// inv, err := s.cclient.Inventory(ctx)
-	// if err != nil {
-	//	return ValidateGroupSpecResult{}, err
-	// }
-	//
-	// res := &reservation{
-	//	resources:     nil,
-	//	clusterParams: nil,
-	// }
-	//
-	// if err = inv.Adjust(res, ctypes.WithDryRun()); err != nil {
-	//	return ValidateGroupSpecResult{}, err
-	// }
-
-	price, err := s.config.BidPricingStrategy.CalculatePrice(ctx, req)
-	if err != nil {
-		return apclient.ValidateGroupSpecResult{}, err
-	}
-
-	return apclient.ValidateGroupSpecResult{
-		MinBidPrice: price,
 	}, nil
 }
 

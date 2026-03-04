@@ -23,7 +23,6 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
-	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 	ajwt "pkg.akt.dev/go/util/jwt"
@@ -111,19 +110,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		authorizeProviderMiddleware,
 		requireOwner,
 	)
-
-	// GET /validate
-	// validate endpoint checks if provider will bid on given groupspec
-	authedRouter.HandleFunc("/validate",
-		validateHandler(log, pclient)).
-		Methods("GET")
-
-	// GET /wiboy (aka would I bid on you)
-	// validate endpoint checks if the provider will bid on a given groupspec
-	authedRouter.HandleFunc("/wiboy",
-		validateHandler(log, pclient)).
-		Methods("GET")
-
+	
 	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
 	hostnameRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
@@ -445,37 +432,6 @@ func createStatusHandler(log log.Logger, sclient provider.StatusClient, provider
 			Address:        providerAddr.String(),
 		}
 		writeJSON(log, w, data)
-	}
-}
-
-func validateHandler(log log.Logger, cl provider.ValidateClient) http.HandlerFunc {
-	return func(w http.ResponseWriter, req *http.Request) {
-		data, err := io.ReadAll(req.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if len(data) == 0 {
-			http.Error(w, "empty payload", http.StatusBadRequest)
-			return
-		}
-
-		owner := requestOwner(req)
-
-		var gspec dvbeta.GroupSpec
-
-		if err := json.Unmarshal(data, &gspec); err != nil {
-			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
-			return
-		}
-
-		validate, err := cl.Validate(req.Context(), owner, gspec)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(log, w, validate)
 	}
 }
 

@@ -22,7 +22,6 @@ import (
 	qmock "pkg.akt.dev/go/mocks/node/client"
 	certmocks "pkg.akt.dev/go/mocks/node/client/cert"
 	providermocks "pkg.akt.dev/go/mocks/node/client/provider"
-	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	providertypes "pkg.akt.dev/go/node/provider/v1beta4"
 	apclient "pkg.akt.dev/go/provider/client"
@@ -115,88 +114,6 @@ func Test_router_Status(t *testing.T) {
 			client, err := apclient.NewClient(context.Background(), paddr, apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
 			assert.NoError(t, err)
 			_, err = client.Status(context.Background())
-			assert.Error(t, err)
-		})
-		mocks.pclient.AssertExpectations(t)
-	})
-}
-
-func Test_router_Validate(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		expected := apclient.ValidateGroupSpecResult{
-			MinBidPrice: testutil.AkashDecCoin(t, 200),
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		pkey := testutil.Key(t)
-		ckey := testutil.Key(t)
-		paddr := sdk.AccAddress(pkey.PubKey().Address())
-		caddr := sdk.AccAddress(ckey.PubKey().Address())
-
-		keys := []cryptotypes.PrivKey{
-			pkey, ckey,
-		}
-
-		mocks := createMocks()
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(expected, nil)
-
-		withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
-			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.cmocks), testutil.CertificateOptionCache(cquerier))
-
-			client, err := apclient.NewClient(context.Background(), paddr, apclient.WithAuthCerts(cert.Cert), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
-			assert.NoError(t, err)
-			result, err := client.Validate(context.Background(), testutil.GroupSpec(t))
-			assert.NoError(t, err)
-			assert.Equal(t, expected, result)
-
-			client, err = apclient.NewClient(context.Background(), paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
-			assert.NoError(t, err)
-			result, err = client.Validate(context.Background(), testutil.GroupSpec(t))
-			assert.NoError(t, err)
-			assert.Equal(t, expected, result)
-		})
-		mocks.pclient.AssertExpectations(t)
-	})
-
-	t.Run("failure", func(t *testing.T) {
-		pkey := testutil.Key(t)
-		ckey := testutil.Key(t)
-		paddr := sdk.AccAddress(pkey.PubKey().Address())
-		caddr := sdk.AccAddress(ckey.PubKey().Address())
-
-		keys := []cryptotypes.PrivKey{
-			pkey, ckey,
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		mocks := createMocks()
-
-		mocks.pclient.On("Validate", mock.Anything, mock.Anything, mock.Anything).Return(apclient.ValidateGroupSpecResult{}, errors.New("oops"))
-		withServer(ctx, t, keys, mocks.pclient, mocks, func(host string, cquerier *certQuerier) {
-			cert := testutil.Certificate(t, caddr, testutil.CertificateOptionMocks(mocks.cmocks), testutil.CertificateOptionCache(cquerier))
-
-			client, err := apclient.NewClient(context.Background(), paddr, apclient.WithAuthCerts(cert.Cert), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
-			assert.NoError(t, err)
-			_, err = client.Validate(context.Background(), dvbeta.GroupSpec{})
-			assert.Error(t, err)
-			_, err = client.Validate(context.Background(), testutil.GroupSpec(t))
-			assert.Error(t, err)
-
-			client, err = apclient.NewClient(context.Background(), paddr, apclient.WithAuthJWTSigner(&testJwtSigner{
-				key:  ckey,
-				addr: caddr,
-			}), apclient.WithProviderURL(host), apclient.WithCertQuerier(cquerier))
-			assert.NoError(t, err)
-			_, err = client.Validate(context.Background(), dvbeta.GroupSpec{})
-			assert.Error(t, err)
-			_, err = client.Validate(context.Background(), testutil.GroupSpec(t))
 			assert.Error(t, err)
 		})
 		mocks.pclient.AssertExpectations(t)
