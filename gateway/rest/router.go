@@ -314,20 +314,6 @@ func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc 
 		if err != nil {
 			if cluster.ErrorIsOkToSendToClient(err) || errors.Is(err, kubeclienterrors.ErrNoServiceForLease) {
 				responseData.Message = err.Error()
-			} else {
-				_ = shellWs.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketInternalServerErrorCode, err.Error()))
-				_ = shellWs.Close()
-				if stdinPipeOut != nil {
-					_ = stdinPipeOut.Close()
-				}
-				if stdinPipeIn != nil {
-					_ = stdinPipeIn.Close()
-				}
-				wg.Wait()
-				if terminalSizeUpdate != nil {
-					close(terminalSizeUpdate)
-				}
-				return
 			}
 		}
 
