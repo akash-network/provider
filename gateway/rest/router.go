@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -110,7 +111,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		authorizeProviderMiddleware,
 		requireOwner,
 	)
-	
+
 	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
 	hostnameRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
@@ -314,7 +315,19 @@ func leaseShellHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc 
 			if cluster.ErrorIsOkToSendToClient(err) || errors.Is(err, kubeclienterrors.ErrNoServiceForLease) {
 				responseData.Message = err.Error()
 			} else {
-				http.Error(rw, err.Error(), http.StatusInternalServerError)
+				_ = shellWs.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketInternalServerErrorCode, err.Error()))
+				_ = shellWs.Close()
+				if stdinPipeOut != nil {
+					_ = stdinPipeOut.Close()
+				}
+				if stdinPipeIn != nil {
+					_ = stdinPipeIn.Close()
+				}
+				wg.Wait()
+				if terminalSizeUpdate != nil {
+					close(terminalSizeUpdate)
+				}
+				return
 			}
 		}
 
@@ -405,7 +418,7 @@ func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerF
 	return func(w http.ResponseWriter, _ *http.Request) {
 		kube, err := pclient.Cluster().KubeVersion()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 
@@ -420,7 +433,7 @@ func createStatusHandler(log log.Logger, sclient provider.StatusClient, provider
 	return func(w http.ResponseWriter, req *http.Request) {
 		status, err := sclient.Status(req.Context())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 		data := struct {
@@ -453,7 +466,9 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 		subctx, cancel := context.WithTimeout(req.Context(), manifestSubmitTimeout)
 		defer cancel()
 		if err := mclient.Submit(subctx, did, mani); err != nil {
-			if errors.Is(err, manifest.ErrInvalidManifest) {
+			errLower := strings.ToLower(err.Error())
+			if errors.Is(err, manifest.ErrInvalidManifest) || errors.Is(err, manifest.ErrManifestCrossValidation) ||
+				strings.Contains(errLower, "invalid manifest") || strings.Contains(errLower, "manifest cross-validation") {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return
 			}
@@ -462,7 +477,7 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 				return
 			}
 			log.Error("manifest submit failed", "err", err)
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 	}
@@ -472,7 +487,7 @@ func getManifestHandler(log log.Logger, cclient cluster.ReadClient) http.Handler
 	return func(w http.ResponseWriter, r *http.Request) {
 		found, grp, err := cclient.GetManifestGroup(r.Context(), requestLeaseID(r))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 
@@ -483,7 +498,7 @@ func getManifestHandler(log log.Logger, cclient cluster.ReadClient) http.Handler
 
 		mgrp, _, err := grp.FromCRD()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 
@@ -524,7 +539,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 
 		found, manifestGroup, err := cclient.GetManifestGroup(req.Context(), leaseID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 
@@ -552,7 +567,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 				log.Debug("querying for IP address status", "lease-id", leaseID)
 				ipLeaseStatus, err = clIP.GetIPAddressStatus(req.Context(), leaseID.OrderID())
 				if err != nil {
-					http.Error(w, err.Error(), http.StatusInternalServerError)
+					http.Error(w, err.Error(), statusCodeForClusterErr(err))
 					return
 				}
 				result.IPs = make(map[string][]apclient.LeasedIPStatus)
@@ -588,7 +603,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 		if hasForwardedPorts {
 			result.ForwardedPorts, err = cclient.ForwardedPortStatus(ctx, leaseID)
 			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				http.Error(w, err.Error(), statusCodeForClusterErr(err))
 				return
 			}
 		}
@@ -607,7 +622,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 
@@ -631,7 +646,7 @@ func leaseServiceStatusHandler(log log.Logger, cclient cluster.ReadClient) http.
 				http.Error(w, err.Error(), http.StatusNotFound)
 				return
 			}
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, err.Error(), statusCodeForClusterErr(err))
 			return
 		}
 		writeJSON(log, w, status)
@@ -869,6 +884,16 @@ done:
 			}
 		}
 	}
+}
+
+func statusCodeForClusterErr(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	if kubeclienterrors.IsClusterUnavailable(err) {
+		return http.StatusServiceUnavailable
+	}
+	return http.StatusInternalServerError
 }
 
 func writeJSON(log log.Logger, w http.ResponseWriter, obj interface{}) {
