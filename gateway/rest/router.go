@@ -454,7 +454,9 @@ func createManifestHandler(log log.Logger, mclient pmanifest.Client) http.Handle
 		if err := mclient.Submit(subctx, did, mani); err != nil {
 			errLower := strings.ToLower(err.Error())
 			if errors.Is(err, manifest.ErrInvalidManifest) || errors.Is(err, manifest.ErrManifestCrossValidation) ||
-				strings.Contains(errLower, "invalid manifest") || strings.Contains(errLower, "manifest cross-validation") {
+				errors.Is(err, pmanifest.ErrManifestVersion) ||
+				strings.Contains(errLower, "invalid manifest") || strings.Contains(errLower, "manifest cross-validation") ||
+				strings.Contains(errLower, "manifest version validation") {
 				http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 				return
 			}
