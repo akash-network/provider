@@ -43,21 +43,21 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.49.0
 	golang.org/x/sync v0.19.0
-	google.golang.org/grpc v1.75.0
+	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.35.1
-	k8s.io/apimachinery v0.35.1
-	k8s.io/client-go v0.35.1
+	k8s.io/api v0.34.1
+	k8s.io/apimachinery v0.34.1
+	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
 	pkg.akt.dev/go v0.1.9
 	pkg.akt.dev/go/cli v0.1.9
 	pkg.akt.dev/go/sdl v0.1.9
 	pkg.akt.dev/node v1.2.1-rc0
-	sigs.k8s.io/gateway-api v1.5.0
+	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.2
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
 )
 
@@ -145,8 +145,8 @@ require (
 	github.com/bits-and-blooms/bitset v1.24.3 // indirect
 	github.com/brunoga/deep v1.2.4 // indirect
 	github.com/bytedance/gopkg v0.1.3 // indirect
-	github.com/bytedance/sonic v1.14.2 // indirect
-	github.com/bytedance/sonic/loader v0.4.0 // indirect
+	github.com/bytedance/sonic v1.15.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cenkalti/backoff/v3 v3.2.2 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
