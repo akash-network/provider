@@ -495,49 +495,56 @@ func TestRoutePutManifestOK(t *testing.T) {
 	})
 }
 
-func TestRoutePutInvalidManifest(t *testing.T) {
-	_ = dtypes.DeploymentID{}
-	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+func TestRoutePutManifest_validation_errors_return_422(t *testing.T) {
+	tests := []struct {
+		name           string
+		submitErr      error
+		expectedStatus int
+		bodyRegex      string
+	}{
+		{"invalid_manifest", manifestValidation.ErrInvalidManifest, http.StatusUnprocessableEntity, "^invalid manifest(?s:.)*$"},
+		{"cross_validation", manifestValidation.ErrManifestCrossValidation, http.StatusUnprocessableEntity, ""},
+		{"invalid_manifest_string_fallback", errString{"invalid manifest: unknown deployment group ('dcloud')"}, http.StatusUnprocessableEntity, ""},
+		{"invalid_manifest_case_insensitive", errString{"Invalid Manifest: bad config"}, http.StatusUnprocessableEntity, ""},
+		{"manifest_cross_validation_case_insensitive", errString{"Manifest Cross-Validation: service X"}, http.StatusUnprocessableEntity, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+				caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+				dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
+				test.pmclient.On("Submit",
+					mock.Anything,
+					dtypes.DeploymentID{Owner: caddr.String(), DSeq: dseq},
+					mock.AnythingOfType("v2beta3.Manifest"),
+				).Return(tt.submitErr)
 
-		dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
-		test.pmclient.On("Submit",
-			mock.Anything,
-			dtypes.DeploymentID{
-				Owner: caddr.String(),
-				DSeq:  dseq,
-			},
+				uri, err := apclient.MakeURI(test.host, apclient.SubmitManifestPath(dseq))
+				require.NoError(t, err)
+				sdl, err := sdl.ReadFile(testSDL)
+				require.NoError(t, err)
+				mani, err := sdl.Manifest()
+				require.NoError(t, err)
+				buf, err := json.Marshal(mani)
+				require.NoError(t, err)
+				req, err := http.NewRequest("PUT", uri, bytes.NewBuffer(buf))
+				require.NoError(t, err)
+				req.Header = hdr
+				req.Header.Set("Content-Type", contentTypeJSON)
 
-			mock.AnythingOfType("v2beta3.Manifest"),
-		).Return(manifestValidation.ErrInvalidManifest)
+				rCl := test.gwclient.NewReqClient(context.Background())
+				resp, err := rCl.Do(req)
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedStatus, resp.StatusCode)
 
-		uri, err := apclient.MakeURI(test.host, apclient.SubmitManifestPath(dseq))
-		require.NoError(t, err)
-
-		sdl, err := sdl.ReadFile(testSDL)
-		require.NoError(t, err)
-
-		mani, err := sdl.Manifest()
-		require.NoError(t, err)
-
-		buf, err := json.Marshal(mani)
-		require.NoError(t, err)
-
-		req, err := http.NewRequest("PUT", uri, bytes.NewBuffer(buf))
-		require.NoError(t, err)
-		req.Header = hdr
-
-		req.Header.Set("Content-Type", contentTypeJSON)
-
-		rCl := test.gwclient.NewReqClient(context.Background())
-		resp, err := rCl.Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
-
-		data, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.Regexp(t, "^invalid manifest(?s:.)*$", string(data))
-	})
+				if tt.bodyRegex != "" {
+					data, err := io.ReadAll(resp.Body)
+					require.NoError(t, err)
+					require.Regexp(t, tt.bodyRegex, string(data))
+				}
+			})
+		})
+	}
 }
 
 func mockManifestGroupsForRouterTest(rt *routerTest, leaseID mtypes.LeaseID) {
@@ -687,35 +694,90 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 	})
 }
 
-func TestRouteLeaseStatusErr(t *testing.T) {
-	runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
-		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
-		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+func TestStatusCodeForClusterErr(t *testing.T) {
+	tests := []struct {
+		name           string
+		err            error
+		expectedStatus int
+	}{
+		{"nil", nil, http.StatusOK},
+		{"generic", errGeneric, http.StatusInternalServerError},
+		{"apiserver_not_ready", errString{"apiserver not ready"}, http.StatusServiceUnavailable},
+		{"connection_refused", errString{"dial tcp 10.43.0.1:443: connect: connection refused"}, http.StatusServiceUnavailable},
+		{"connection_reset", errString{"read tcp 172.16.166.130:41742->10.43.0.1:443: read: connection reset by peer"}, http.StatusServiceUnavailable},
+		{"starting", errString{"starting"}, http.StatusServiceUnavailable},
+		{"starting_with_newline", errString{"starting\n"}, http.StatusServiceUnavailable},
+		{"cluster_error_503", kubeclienterrors.ClusterUnavailable(errors.New("unreachable")), http.StatusServiceUnavailable},
+		{"cluster_error_500", kubeclienterrors.NewClusterError(500, errGeneric), http.StatusInternalServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := statusCodeForClusterErr(tt.err)
+			require.Equal(t, tt.expectedStatus, got)
+		})
+	}
+}
 
-		leaseID := testutil.LeaseID(t)
-		leaseID.Owner = caddr.String()
-		leaseID.Provider = paddr.String()
-		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, errGeneric)
-		mockManifestGroupsForRouterTest(test, leaseID)
+type errString struct{ s string }
 
-		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
-		require.NoError(t, err)
+func (e errString) Error() string { return e.s }
 
-		req, err := http.NewRequest("GET", uri, nil)
-		require.NoError(t, err)
-		req.Header = hdr
+func TestRouteLeaseStatus_cluster_errors(t *testing.T) {
+	tests := []struct {
+		name           string
+		setup          func(*routerTest, mtypes.LeaseID)
+		expectedStatus int
+		bodyRegex      string
+	}{
+		{
+			name: "internal_error",
+			setup: func(rt *routerTest, lid mtypes.LeaseID) {
+				rt.pcclient.On("LeaseStatus", mock.Anything, lid).Return(nil, errGeneric)
+				mockManifestGroupsForRouterTest(rt, lid)
+			},
+			expectedStatus: http.StatusInternalServerError,
+			bodyRegex:      "^generic test error(?s:.)*$",
+		},
+		{
+			name: "service_unavailable",
+			setup: func(rt *routerTest, lid mtypes.LeaseID) {
+				rt.pcclient.On("GetManifestGroup", mock.Anything, lid).
+					Return(false, v2beta2.ManifestGroup{}, errors.New("apiserver not ready"))
+			},
+			expectedStatus: http.StatusServiceUnavailable,
+			bodyRegex:      "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
+				caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+				paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+				leaseID := testutil.LeaseID(t)
+				leaseID.Owner = caddr.String()
+				leaseID.Provider = paddr.String()
+				tt.setup(test, leaseID)
 
-		req.Header.Set("Content-Type", contentTypeJSON)
+				uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
+				require.NoError(t, err)
+				req, err := http.NewRequest("GET", uri, nil)
+				require.NoError(t, err)
+				req.Header = hdr
+				req.Header.Set("Content-Type", contentTypeJSON)
 
-		rCl := test.gwclient.NewReqClient(context.Background())
-		resp, err := rCl.Do(req)
-		require.NoError(t, err)
+				rCl := test.gwclient.NewReqClient(context.Background())
+				resp, err := rCl.Do(req)
+				require.NoError(t, err)
+				require.Equal(t, tt.expectedStatus, resp.StatusCode)
 
-		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-		data, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.Regexp(t, "^generic test error(?s:.)*$", string(data))
-	})
+				if tt.bodyRegex != "" {
+					data, err := io.ReadAll(resp.Body)
+					require.NoError(t, err)
+					require.Regexp(t, tt.bodyRegex, string(data))
+				}
+			})
+		})
+	}
 }
 
 func TestRouteServiceStatusOK(t *testing.T) {
