@@ -875,13 +875,7 @@ done:
 }
 
 func statusCodeForClusterErr(err error) int {
-	if err == nil {
-		return http.StatusOK
-	}
-	if kubeclienterrors.IsClusterUnavailable(err) {
-		return http.StatusServiceUnavailable
-	}
-	return http.StatusInternalServerError
+	return kubeclienterrors.StatusCodeFrom(err)
 }
 
 func writeJSON(log log.Logger, w http.ResponseWriter, obj interface{}) {

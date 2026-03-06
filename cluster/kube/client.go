@@ -75,6 +75,7 @@ func wrapKubeCall[T any](label string, fn func() (T, error)) (T, error) {
 	status := metricsutils.SuccessLabel
 	if err != nil {
 		status = metricsutils.FailLabel
+		err = kubeclienterrors.WrapForGateway(err)
 	}
 	kubeCallsCounter.WithLabelValues(label, status).Inc()
 
