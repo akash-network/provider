@@ -71,8 +71,7 @@ func NewPolicyRuleRegistry() *PolicyRuleRegistry {
 
 	// Register default resource handlers
 	registry.Register(logsResourceMapping())
-	// TODO: enable events in a different PR and test them separately.
-	// registry.Register(eventsResourceMapping())
+	registry.Register(eventsResourceMapping())
 
 	return registry
 }
@@ -151,30 +150,23 @@ func logsResourceMapping() ResourcePolicyMapping {
 	}
 }
 
-// TODO: enable events in a different PR and test them separately.
 // eventsResourceMapping returns the policy mapping for "events" resource
-// func eventsResourceMapping() ResourcePolicyMapping {
-// 	return ResourcePolicyMapping{
-// 		Name: "events",
-// 		Generator: func(resource string, permType PermissionType) []rbacv1.PolicyRule {
-// 			switch permType {
-// 			case PermissionTypeRead:
-// 				return []rbacv1.PolicyRule{
-// 					{
-// 						APIGroups: []string{""},
-// 						Resources: []string{"events"},
-// 						Verbs:     []string{"get", "list", "watch"},
-// 					},
-// 				}
-// 			case PermissionTypeWrite:
-// 				// Future: Add write rules for events when implemented
-// 				return nil
-// 			case PermissionTypeDelete:
-// 				// Future: Add delete rules for events when implemented
-// 				return nil
-// 			default:
-// 				return nil
-// 			}
-// 		},
-// 	}
-// }
+func eventsResourceMapping() ResourcePolicyMapping {
+	return ResourcePolicyMapping{
+		Name: "events",
+		Generator: func(resource string, permType PermissionType) []rbacv1.PolicyRule {
+			switch permType {
+			case PermissionTypeRead:
+				return []rbacv1.PolicyRule{
+					{
+						APIGroups: []string{""},
+						Resources: []string{"events"},
+						Verbs:     []string{"get", "list", "watch"},
+					},
+				}
+			default:
+				return nil
+			}
+		},
+	}
+}
