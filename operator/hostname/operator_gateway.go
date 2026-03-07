@@ -137,6 +137,9 @@ func (op *hostnameOperator) getHostnameDeploymentConnectionsGateway(ctx context.
 				return fmt.Errorf("%w: no backend refs", kubeclienterrors.ErrInvalidHostnameConnection)
 			}
 			backendRef := rule.BackendRefs[0]
+			if backendRef.Port == nil {
+				return fmt.Errorf("%w: backend ref has no port", kubeclienterrors.ErrInvalidHostnameConnection)
+			}
 
 			results = append(results, leaseIDHostnameConnection{
 				leaseID:      routeLeaseID,

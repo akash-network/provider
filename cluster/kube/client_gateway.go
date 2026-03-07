@@ -145,6 +145,9 @@ func (c *client) getHostnameDeploymentConnectionsGateway(ctx context.Context) ([
 				return fmt.Errorf("%w: no backend refs", kubeclienterrors.ErrInvalidHostnameConnection)
 			}
 			backendRef := rule.BackendRefs[0]
+			if backendRef.Port == nil {
+				return fmt.Errorf("%w: backend ref has no port", kubeclienterrors.ErrInvalidHostnameConnection)
+			}
 
 			// We only use the first hostname because the operator implementation creates
 			// one HTTPRoute per hostname/domain from the SDL. Each HTTPRoute contains

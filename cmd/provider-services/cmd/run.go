@@ -581,6 +581,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		}
 	}
 	ingressMode := viper.GetString(FlagIngressMode)
+	if ingressMode != kube.IngressModeIngress && ingressMode != kube.IngressModeGateway {
+		return fmt.Errorf("invalid ingress-mode %q: must be %q or %q", ingressMode, kube.IngressModeIngress, kube.IngressModeGateway)
+	}
 	gatewayName := viper.GetString(FlagGatewayName)
 	gatewayNamespace := viper.GetString(FlagGatewayNamespace)
 	gatewayImplementation := viper.GetString(FlagGatewayImplementation)
