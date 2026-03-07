@@ -19,3 +19,7 @@ configMapGenerator:
       - retry-delay=3s
       - ignore-list-age-limit=2613600s
       - event-failure-limit=3
+      - ingress-mode=ingress
+      - gateway-name=akash-gateway
+      - gateway-namespace=akash-gateway
+      - gateway-implementation=nginx
