@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/akash-network/provider/cluster/kube"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	"github.com/akash-network/provider/operator/common"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -29,7 +30,10 @@ func Cmd() *cobra.Command {
 
 			logger := common.OpenLogger().With("op", "hostname")
 
-			ctx = withGatewayApi(ctx)
+			ctx, err := withGatewayApi(ctx)
+			if err != nil {
+				return err
+			}
 
 			logger.Info("hostname operator configuration",
 				"ingress-mode", fromctx.IngressModeFromCtx(ctx),
@@ -113,9 +117,12 @@ func addGatewayApiFlags(cmd *cobra.Command) {
 	}
 }
 
-func withGatewayApi(ctx context.Context) context.Context {
+func withGatewayApi(ctx context.Context) (context.Context, error) {
 
 	ingressMode := viper.GetString("ingress-mode")
+	if ingressMode != kube.IngressModeIngress && ingressMode != kube.IngressModeGateway {
+		return nil, fmt.Errorf("invalid ingress-mode %q: must be %q or %q", ingressMode, kube.IngressModeIngress, kube.IngressModeGateway)
+	}
 	gatewayName := viper.GetString("gateway-name")
 	gatewayNamespace := viper.GetString("gateway-namespace")
 	gatewayImplementation := viper.GetString("gateway-implementation")
@@ -125,5 +132,5 @@ func withGatewayApi(ctx context.Context) context.Context {
 	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayNamespace, gatewayNamespace)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayImplementation, gatewayImplementation)
 
-	return ctx
+	return ctx, nil
 }
