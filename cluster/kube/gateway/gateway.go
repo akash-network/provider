@@ -37,4 +37,3 @@ type Implementation interface {
 	// where unsupported options are logged but don't cause failures.
 	ValidateOptions(directive chostname.ConnectToDeploymentDirective) []string
 }
-
