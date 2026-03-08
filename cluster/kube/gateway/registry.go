@@ -55,4 +55,3 @@ func (r *Registry) SupportedNames() []string {
 func GetImplementation(name string, logger log.Logger) (Implementation, error) {
 	return defaultRegistry.Get(name, logger)
 }
-
