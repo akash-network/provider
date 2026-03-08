@@ -3,7 +3,6 @@ package hostname
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -156,11 +155,4 @@ func (op *hostnameOperator) getHostnameDeploymentConnectionsGateway(ctx context.
 	}
 
 	return results, nil
-}
-
-func kubeSelectorForLeaseOp(dst *strings.Builder, lID mtypes.LeaseID) {
-	_, _ = fmt.Fprintf(dst, "%s=%s", builder.AkashLeaseOwnerLabelName, lID.Owner)
-	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.AkashLeaseDSeqLabelName, lID.DSeq)
-	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.AkashLeaseGSeqLabelName, lID.GSeq)
-	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.AkashLeaseOSeqLabelName, lID.OSeq)
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -86,13 +87,23 @@ func (s *E2EGatewayAPI) TestE2EGatewayAPIHTTPRouteCreation() {
 	// Wait for bid
 	s.Require().NoError(s.waitForBlocksCommitted(15))
 
-	// Get bid and create lease
+	// Get bid for this specific deployment
 	res, err = clitestutil.ExecQueryBids(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 	bidsRes := &mvbeta.QueryBidsResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), bidsRes)
 	s.Require().NoError(err)
 	s.Require().NotEmpty(bidsRes.Bids, "expected at least one bid")
+
+	// Find bid for this deployment's DSeq
+	var targetBid *mvbeta.QueryBidResponse
+	for i := range bidsRes.Bids {
+		if bidsRes.Bids[i].Bid.ID.DSeq == deploymentID.DSeq {
+			targetBid = &bidsRes.Bids[i]
+			break
+		}
+	}
+	s.Require().NotNil(targetBid, "expected bid for deployment DSeq %d", deploymentID.DSeq)
 
 	res, err = clitestutil.ExecCreateLease(
 		s.ctx,
@@ -101,22 +112,29 @@ func (s *E2EGatewayAPI) TestE2EGatewayAPIHTTPRouteCreation() {
 			WithGasAuto().
 			WithOutputJSON().
 			WithFrom(s.addrTenant.String()).
-			WithBidID(bidsRes.Bids[0].Bid.ID)...,
+			WithBidID(targetBid.Bid.ID)...,
 	)
 	s.Require().NoError(err)
 	s.Require().NoError(s.waitForBlocksCommitted(6))
 	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	// Get lease
+	// Get lease for this specific deployment
 	res, err = clitestutil.ExecQueryLeases(s.ctx, cctx, cli.TestFlags().WithOutputJSON()...)
 	s.Require().NoError(err)
 	leaseRes := &mvbeta.QueryLeasesResponse{}
 	err = s.validator.ClientCtx.Codec.UnmarshalJSON(res.Bytes(), leaseRes)
 	s.Require().NoError(err)
-	s.Require().NotEmpty(leaseRes.Leases, "expected at least one lease")
 
-	lease := newestLease(leaseRes.Leases)
-	lid := lease.ID
+	// Find lease for this deployment's DSeq
+	var lease *mvbeta.QueryLeaseResponse
+	for i := range leaseRes.Leases {
+		if leaseRes.Leases[i].Lease.ID.DSeq == deploymentID.DSeq {
+			lease = &leaseRes.Leases[i]
+			break
+		}
+	}
+	s.Require().NotNil(lease, "expected lease for deployment DSeq %d", deploymentID.DSeq)
+	lid := lease.Lease.ID
 
 	// Send manifest
 	_, err = ptestutil.ExecSendManifest(
@@ -304,7 +322,9 @@ func (s *E2EGatewayAPI) verifyHTTPRouteExists(namespace, routeName string) {
 	assert.Equal(s.T(), routeName, route.GetName())
 }
 
-// verifyHTTPRouteDeleted checks that an HTTPRoute no longer exists
+// verifyHTTPRouteDeleted checks that an HTTPRoute no longer exists.
+// Only a NotFound error indicates successful deletion; other errors (auth, network, etc.)
+// are treated as failures to avoid false positives.
 func (s *E2EGatewayAPI) verifyHTTPRouteDeleted(namespace, routeName string) {
 	if s.dc == nil {
 		s.T().Skip("dynamic client not available")
@@ -314,17 +334,26 @@ func (s *E2EGatewayAPI) verifyHTTPRouteDeleted(namespace, routeName string) {
 	ctx, cancel := context.WithTimeout(s.ctx, 30*time.Second)
 	defer cancel()
 
-	var deleted bool
+	var lastErr error
 	for i := 0; i < 10; i++ {
 		_, err := s.dc.Resource(httpRouteGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
 		if err != nil {
-			deleted = true
-			break
+			if apierrors.IsNotFound(err) {
+				// Successfully confirmed deletion
+				return
+			}
+			// Non-NotFound error - keep polling but record the error
+			lastErr = err
 		}
 		time.Sleep(time.Second)
 	}
 
-	assert.True(s.T(), deleted, "HTTPRoute %s should be deleted from namespace %s", routeName, namespace)
+	// If we got here, either the route still exists or we got non-NotFound errors
+	if lastErr != nil {
+		s.T().Errorf("HTTPRoute %s deletion check failed with error: %v", routeName, lastErr)
+	} else {
+		s.T().Errorf("HTTPRoute %s still exists in namespace %s after timeout", routeName, namespace)
+	}
 }
 
 // verifyHTTPRouteLabels checks that the HTTPRoute has correct Akash labels
@@ -374,7 +403,13 @@ func (s *E2EGatewayAPI) verifyHTTPRouteParentRef(namespace, routeName, gatewayNa
 	}
 }
 
-// verifyHTTPRouteAnnotations checks that the HTTPRoute has correct annotations for HTTP options
+// verifyHTTPRouteAnnotations checks that the HTTPRoute has correct annotations for HTTP options.
+// Expected annotations based on deployment-v2-gateway-api.yaml http_options:
+//   - read_timeout: 60000 (ms) -> nginx.org/proxy-read-timeout: "60" (seconds)
+//   - send_timeout: 60000 (ms) -> nginx.org/proxy-send-timeout: "60" (seconds)
+//   - max_body_size: 2097152 -> nginx.org/client-max-body-size: "2097152"
+//   - next_tries: 3 -> nginx.org/proxy-next-upstream-tries: "3"
+//   - next_timeout: 30000 (ms) -> nginx.org/proxy-next-upstream-timeout: "30s"
 func (s *E2EGatewayAPI) verifyHTTPRouteAnnotations(namespace, routeName string) {
 	if s.dc == nil {
 		s.T().Skip("dynamic client not available")
@@ -388,14 +423,28 @@ func (s *E2EGatewayAPI) verifyHTTPRouteAnnotations(namespace, routeName string) 
 	require.NoError(s.T(), err)
 
 	annotations := route.GetAnnotations()
-
-	// Check for NGINX Gateway Fabric annotations based on http_options in SDL
-	// The exact annotation keys depend on the gateway implementation
 	s.T().Logf("HTTPRoute annotations: %v", annotations)
 
-	// Verify annotations exist (specific keys depend on implementation)
-	// For NGINX Gateway Fabric, these would be nginx.org/* annotations
-	assert.NotNil(s.T(), annotations, "HTTPRoute should have annotations")
+	// Verify NGINX Gateway Fabric annotations match http_options from SDL
+	// read_timeout: 60000ms -> 60s
+	assert.Equal(s.T(), "60", annotations["nginx.org/proxy-read-timeout"],
+		"read_timeout should be converted to seconds")
+
+	// send_timeout: 60000ms -> 60s
+	assert.Equal(s.T(), "60", annotations["nginx.org/proxy-send-timeout"],
+		"send_timeout should be converted to seconds")
+
+	// max_body_size: 2097152 bytes
+	assert.Equal(s.T(), "2097152", annotations["nginx.org/client-max-body-size"],
+		"max_body_size should be set")
+
+	// next_tries: 3
+	assert.Equal(s.T(), "3", annotations["nginx.org/proxy-next-upstream-tries"],
+		"next_tries should be set")
+
+	// next_timeout: 30000ms -> 30s
+	assert.Equal(s.T(), "30s", annotations["nginx.org/proxy-next-upstream-timeout"],
+		"next_timeout should be converted to seconds with 's' suffix")
 }
 
 // TestGatewayAPISuite runs the Gateway API e2e test suite
