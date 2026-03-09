@@ -46,10 +46,6 @@ func NewClusterError(statusCode int, err error) *ClusterError {
 	return &ClusterError{Err: err, StatusCode: statusCode}
 }
 
-func ClusterUnavailable(err error) *ClusterError {
-	return NewClusterError(http.StatusServiceUnavailable, err)
-}
-
 func StatusCodeFrom(err error) int {
 	if err == nil {
 		return http.StatusOK
@@ -69,7 +65,7 @@ func WrapForGateway(err error) error {
 		return nil
 	}
 	if IsClusterUnavailable(err) {
-		return ClusterUnavailable(err)
+		return NewClusterError(http.StatusServiceUnavailable, err)
 	}
 	return NewClusterError(http.StatusInternalServerError, err)
 }

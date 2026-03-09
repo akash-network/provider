@@ -41,7 +41,7 @@ func TestStatusCodeFrom(t *testing.T) {
 	}{
 		{"nil", nil, 200},
 		{"generic", errors.New("fail"), http.StatusInternalServerError},
-		{"cluster_unavailable", ClusterUnavailable(errors.New("refused")), http.StatusServiceUnavailable},
+		{"cluster_unavailable", NewClusterError(http.StatusServiceUnavailable, errors.New("refused")), http.StatusServiceUnavailable},
 		{"cluster_error_500", NewClusterError(500, errors.New("fail")), http.StatusInternalServerError},
 		{"cluster_error_503", NewClusterError(503, errors.New("fail")), http.StatusServiceUnavailable},
 		{"unwrapped_unavailable", errors.New("apiserver not ready"), http.StatusServiceUnavailable},

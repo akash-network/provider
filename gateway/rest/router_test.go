@@ -707,7 +707,7 @@ func TestStatusCodeForClusterErr(t *testing.T) {
 		{"connection_reset", errString{"read tcp 172.16.166.130:41742->10.43.0.1:443: read: connection reset by peer"}, http.StatusServiceUnavailable},
 		{"starting", errString{"starting"}, http.StatusServiceUnavailable},
 		{"starting_with_newline", errString{"starting\n"}, http.StatusServiceUnavailable},
-		{"cluster_error_503", kubeclienterrors.ClusterUnavailable(errors.New("unreachable")), http.StatusServiceUnavailable},
+		{"cluster_error_503", kubeclienterrors.NewClusterError(http.StatusServiceUnavailable, errors.New("unreachable")), http.StatusServiceUnavailable},
 		{"cluster_error_500", kubeclienterrors.NewClusterError(500, errGeneric), http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
