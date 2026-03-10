@@ -263,7 +263,7 @@ loop:
 				if ev.LeaseID.GetProvider() != s.session.Provider().Address().String() {
 					continue
 				}
-				s.session.Log().Info("lease won", "lease", ev.LeaseID)
+				s.session.Log().Info("handling lease", "lease", ev.LeaseID)
 				s.handleLease(ev, true)
 			case *dtypes.EventDeploymentUpdated:
 				s.session.Log().Info("update received", "deployment", ev.ID, "version", ev.Hash)

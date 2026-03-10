@@ -75,17 +75,20 @@ func (wd *watchdog) run() {
 				ID:     mtypes.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
 				Reason: mtypes.LeaseClosedReasonManifestTimeout,
 			}
-
 			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 		})
 	case err = <-wd.lc.ShutdownRequest():
 	}
 
-	wd.lc.ShutdownInitiated(err)
 	if runch != nil {
-		result := <-runch
-		if err := result.Error(); err != nil {
-			wd.log.Error("failed closing bid", "err", err)
+		select {
+		case result := <-runch:
+			if err := result.Error(); err != nil {
+				wd.log.Error("failed closing bid", "err", err)
+			}
+		case err = <-wd.lc.ShutdownRequest():
+			go func() { <-runch }()
 		}
 	}
+	wd.lc.ShutdownInitiated(err)
 }
