@@ -87,7 +87,7 @@ func (wd *watchdog) run() {
 				wd.log.Error("failed closing bid", "err", err)
 			}
 		case err = <-wd.lc.ShutdownRequest():
-			go func() { <-runch }()
+			// we need this case to skip waiting on runch when stop() is called
 		}
 	}
 	wd.lc.ShutdownInitiated(err)

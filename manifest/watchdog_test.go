@@ -29,6 +29,10 @@ type watchdogTestScaffold struct {
 }
 
 func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *watchdogTestScaffold) {
+	return makeWatchdogTestScaffoldWithBlocking(t, timeout, nil)
+}
+
+func makeWatchdogTestScaffoldWithBlocking(t *testing.T, timeout time.Duration, blockUntilRelease <-chan struct{}) (*watchdog, *watchdogTestScaffold) {
 	scaffold := &watchdogTestScaffold{}
 	scaffold.parentCh = make(chan struct{})
 	scaffold.doneCh = make(chan dtypes.DeploymentID, 1)
@@ -39,6 +43,9 @@ func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *
 
 	txClientMock := &clientmocks.TxClient{}
 	txClientMock.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		if blockUntilRelease != nil {
+			<-blockUntilRelease
+		}
 		scaffold.broadcasts <- args.Get(1).([]sdk.Msg)
 	}).Return(&sdk.Result{}, nil)
 
@@ -72,6 +79,7 @@ func TestWatchdogTimeout(t *testing.T) {
 
 	msg := msgs[0].(*mvbeta.MsgCloseBid)
 	require.Equal(t, scaffold.leaseID, msg.ID.LeaseID())
+	require.Equal(t, mtypes.LeaseClosedReasonManifestTimeout, msg.Reason)
 
 	deploymentID := testutil.ChannelWaitForValue(t, scaffold.doneCh)
 	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())
@@ -117,6 +125,25 @@ func TestWatchdogStopsOnParent(t *testing.T) {
 		t.Fatal("should no have broadcast any message")
 	default:
 	}
+
+	deploymentID := testutil.ChannelWaitForValue(t, scaffold.doneCh)
+	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())
+}
+
+func TestWatchdogStopWhileWaitingForBroadcast(t *testing.T) {
+	releaseCh := make(chan struct{})
+	wd, scaffold := makeWatchdogTestScaffoldWithBlocking(t, 100*time.Millisecond, releaseCh)
+
+	<-time.After(200 * time.Millisecond)
+	wd.stop()
+
+	select {
+	case <-wd.lc.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("deadlock: stop() blocked while watchdog was waiting on broadcast")
+	}
+
+	close(releaseCh)
 
 	deploymentID := testutil.ChannelWaitForValue(t, scaffold.doneCh)
 	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())
