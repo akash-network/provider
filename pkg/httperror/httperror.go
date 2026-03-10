@@ -13,40 +13,40 @@ import (
 )
 
 var (
-	ErrJWTMissing        = NewError(http.StatusBadRequest, errors.New("JWT is missing"))
-	ErrInvalidAuthHeader = NewError(http.StatusBadRequest, errors.New("invalid authorization header"))
-	ErrInvalidRequest    = NewError(http.StatusBadRequest, errors.New("invalid request"))
-	ErrJWTInvalidClaims  = NewError(http.StatusBadRequest, errors.New("JWT has invalid claims"))
-	ErrAuthAmbiguous     = NewError(http.StatusBadRequest, errors.New("auth: ambiguous authentication. may not use mTLS and JWT at the same time"))
+	ErrJWTMissing        = NewHttpError(http.StatusBadRequest, errors.New("JWT is missing"))
+	ErrInvalidAuthHeader = NewHttpError(http.StatusBadRequest, errors.New("invalid authorization header"))
+	ErrInvalidRequest    = NewHttpError(http.StatusBadRequest, errors.New("invalid request"))
+	ErrJWTInvalidClaims  = NewHttpError(http.StatusBadRequest, errors.New("JWT has invalid claims"))
+	ErrAuthAmbiguous     = NewHttpError(http.StatusBadRequest, errors.New("auth: ambiguous authentication. may not use mTLS and JWT at the same time"))
 
-	ErrUnauthorized = NewError(http.StatusUnauthorized, errors.New("unauthorized access"))
-	ErrJWTInvalid   = NewError(http.StatusUnauthorized, errors.New("JWT is invalid"))
-	ErrJWTExpired   = NewError(http.StatusUnauthorized, errors.New("JWT is expired"))
+	ErrUnauthorized = NewHttpError(http.StatusUnauthorized, errors.New("unauthorized access"))
+	ErrJWTInvalid   = NewHttpError(http.StatusUnauthorized, errors.New("JWT is invalid"))
+	ErrJWTExpired   = NewHttpError(http.StatusUnauthorized, errors.New("JWT is expired"))
 )
 
-// CustomError wraps an error with the appropriate HTTP status code.
-type CustomError struct {
+// HttpError wraps an error with the appropriate HTTP status code.
+type HttpError struct {
 	Err        error
 	StatusCode int
 }
 
-func (e *CustomError) Error() string {
+func (e *HttpError) Error() string {
 	return e.Err.Error()
 }
 
-func (e *CustomError) Unwrap() error {
+func (e *HttpError) Unwrap() error {
 	return e.Err
 }
 
-func NewError(statusCode int, err error) *CustomError {
-	return &CustomError{Err: err, StatusCode: statusCode}
+func NewHttpError(statusCode int, err error) *HttpError {
+	return &HttpError{Err: err, StatusCode: statusCode}
 }
 
 func StatusCodeFrom(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
-	var ce *CustomError
+	var ce *HttpError
 	if errors.As(err, &ce) {
 		return ce.StatusCode
 	}

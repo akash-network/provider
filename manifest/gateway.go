@@ -9,7 +9,7 @@ import (
 	"github.com/akash-network/provider/pkg/httperror"
 )
 
-// WrapSubmitErrorForGateway wraps manifest submit errors with CustomError
+// WrapSubmitErrorForGateway wraps manifest submit errors with custom HttpError
 // so the gateway can return the correct HTTP status.
 func WrapSubmitErrorForGateway(err error) error {
 	if err == nil {
@@ -23,9 +23,9 @@ func WrapSubmitErrorForGateway(err error) error {
 	case errors.Is(err, manifest.ErrManifestCrossValidation):
 		fallthrough
 	case errors.Is(err, errManifestRejected):
-		return httperror.NewError(http.StatusUnprocessableEntity, err)
+		return httperror.NewHttpError(http.StatusUnprocessableEntity, err)
 	case errors.Is(err, ErrNoLeaseForDeployment):
-		return httperror.NewError(http.StatusNotFound, err)
+		return httperror.NewHttpError(http.StatusNotFound, err)
 	default:
 		return err
 	}

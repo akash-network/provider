@@ -513,7 +513,7 @@ func TestRoutePutManifest_errors_return_correct_status(t *testing.T) {
 			runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
 				caddr := sdk.AccAddress(test.ckey.PubKey().Address())
 				dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
-				wrappedErr := httperror.NewError(tt.expectedStatus, tt.submitErr)
+				wrappedErr := httperror.NewHttpError(tt.expectedStatus, tt.submitErr)
 				test.pmclient.On("Submit",
 					mock.Anything,
 					dtypes.DeploymentID{Owner: caddr.String(), DSeq: dseq},
@@ -667,7 +667,7 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 				Code:     0,
 			},
 		}
-		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, httperror.NewError(http.StatusNotFound, kubeStatus))
+		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, httperror.NewHttpError(http.StatusNotFound, kubeStatus))
 		mockManifestGroupsForRouterTest(test, leaseID)
 
 		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
@@ -703,8 +703,8 @@ func TestStatusCodeFrom(t *testing.T) {
 	}{
 		{"nil", nil, http.StatusOK},
 		{"generic", errGeneric, http.StatusInternalServerError},
-		{"custom_503", httperror.NewError(http.StatusServiceUnavailable, errors.New("unreachable")), http.StatusServiceUnavailable},
-		{"custom_500", httperror.NewError(500, errGeneric), http.StatusInternalServerError},
+		{"custom_503", httperror.NewHttpError(http.StatusServiceUnavailable, errors.New("unreachable")), http.StatusServiceUnavailable},
+		{"custom_500", httperror.NewHttpError(500, errGeneric), http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -734,7 +734,7 @@ func TestRouteLeaseStatus_cluster_errors(t *testing.T) {
 			name: "service_unavailable",
 			setup: func(rt *routerTest, lid mtypes.LeaseID) {
 				rt.pcclient.On("GetManifestGroup", mock.Anything, lid).
-					Return(false, v2beta2.ManifestGroup{}, httperror.NewError(http.StatusServiceUnavailable, errors.New("apiserver not ready")))
+					Return(false, v2beta2.ManifestGroup{}, httperror.NewHttpError(http.StatusServiceUnavailable, errors.New("apiserver not ready")))
 			},
 			expectedStatus: http.StatusServiceUnavailable,
 			bodyRegex:      "",
@@ -899,7 +899,7 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 			GSeq:     gseq,
 			OSeq:     oseq,
 			Provider: paddr.String(),
-		}, serviceName).Return(nil, httperror.NewError(http.StatusNotFound, kubeStatus))
+		}, serviceName).Return(nil, httperror.NewHttpError(http.StatusNotFound, kubeStatus))
 
 		lid := mtypes.LeaseID{
 			DSeq:     dseq,

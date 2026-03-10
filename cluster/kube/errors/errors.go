@@ -29,13 +29,13 @@ var (
 	ErrAlreadyExists             = fmt.Errorf("%w: resource already exists", errKubeClient)
 )
 
-// WrapClusterErrorForGateway wraps a cluster error in a CustomError with the appropriate HTTP status code.
+// WrapClusterErrorForGateway wraps a cluster error in a custom HttpError with the appropriate HTTP status code.
 func WrapClusterErrorForGateway(err error) error {
 	switch {
 	case err == nil:
 		return nil
 	case IsClusterUnavailable(err):
-		return httperror.NewError(http.StatusServiceUnavailable, err)
+		return httperror.NewHttpError(http.StatusServiceUnavailable, err)
 	case errors.Is(err, ErrNoDeploymentForLease):
 		fallthrough
 	case errors.Is(err, ErrLeaseNotFound):
@@ -45,9 +45,9 @@ func WrapClusterErrorForGateway(err error) error {
 	case errors.Is(err, ErrNoServiceForLease):
 		fallthrough
 	case kubeErrors.IsNotFound(err):
-		return httperror.NewError(http.StatusNotFound, err)
+		return httperror.NewHttpError(http.StatusNotFound, err)
 	default:
-		return httperror.NewError(http.StatusInternalServerError, err)
+		return httperror.NewHttpError(http.StatusInternalServerError, err)
 	}
 }
 

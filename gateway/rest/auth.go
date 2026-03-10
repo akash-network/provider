@@ -38,18 +38,18 @@ func DefaultErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 	_, _ = w.Write(body)
 }
 
-func authErrorResponse(err error) *httperror.CustomError {
+func authErrorResponse(err error) *httperror.HttpError {
 	if err == nil {
 		panic("authErrorResponse called with nil error")
 	}
 
-	var customError *httperror.CustomError
-	if errors.As(err, &customError) {
-		return customError
+	var httpError *httperror.HttpError
+	if errors.As(err, &httpError) {
+		return httpError
 	}
 
 	log.Printf("auth error: %v", err)
-	return httperror.NewError(http.StatusInternalServerError, errors.New("unknown error while processing JWT"))
+	return httperror.NewHttpError(http.StatusInternalServerError, errors.New("unknown error while processing JWT"))
 }
 
 // prepareAuthMiddleware returns an HTTP middleware that validates client identity
