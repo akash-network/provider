@@ -75,7 +75,7 @@ func wrapKubeCall[T any](label string, fn func() (T, error)) (T, error) {
 	status := metricsutils.SuccessLabel
 	if err != nil {
 		status = metricsutils.FailLabel
-		err = kubeclienterrors.WrapForGateway(err)
+		err = kubeclienterrors.WrapClusterErrorForGateway(err)
 	}
 	kubeCallsCounter.WithLabelValues(label, status).Inc()
 
@@ -373,6 +373,12 @@ type deployObjNames struct {
 }
 
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
+	defer func() {
+		if err != nil {
+			err = kubeclienterrors.WrapClusterErrorForGateway(err)
+		}
+	}()
+
 	var settings builder.Settings
 	var valid bool
 
@@ -1037,7 +1043,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 
 	if err != nil {
 		c.log.Error("CRD manifest not found", "lease-ns", builder.LidNS(lid), "name", name)
-		return nil, kubeclienterrors.ErrNoManifestForLease
+		return nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoManifestForLease)
 	}
 
 	var result *apclient.ServiceStatus
@@ -1052,7 +1058,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 	}
 
 	if svc == nil {
-		return nil, kubeclienterrors.ErrNoServiceForLease
+		return nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoServiceForLease)
 	}
 
 	isDeployment := true
@@ -1077,7 +1083,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 		}
 		if deployment == nil {
 			c.log.Error("no deployment found", "name", name)
-			return nil, kubeclienterrors.ErrNoDeploymentForLease
+			return nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoDeploymentForLease)
 		}
 
 		result = &apclient.ServiceStatus{
@@ -1102,7 +1108,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 		}
 		if statefulset == nil {
 			c.log.Error("no statefulsets found", "name", name)
-			return nil, kubeclienterrors.ErrNoDeploymentForLease
+			return nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoDeploymentForLease)
 		}
 
 		result = &apclient.ServiceStatus{
@@ -1146,7 +1152,7 @@ exposeCheckLoop:
 	}
 
 	if !found {
-		return nil, fmt.Errorf("%w: service %q", kubeclienterrors.ErrNoServiceForLease, name)
+		return nil, kubeclienterrors.WrapClusterErrorForGateway(fmt.Errorf("%w: service %q", kubeclienterrors.ErrNoServiceForLease, name))
 	}
 
 	c.log.Debug("service result", "lease-ns", builder.LidNS(lid), "has-hostnames", hasHostnames)
@@ -1184,7 +1190,7 @@ func (c *client) leaseExists(ctx context.Context, lid mtypes.LeaseID) error {
 
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			return kubeclienterrors.ErrLeaseNotFound
+			return kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrLeaseNotFound)
 		}
 
 		c.log.Error("namespaces get", "err", err)
@@ -1251,7 +1257,7 @@ func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (m
 
 	if len(serviceStatus) == 0 {
 		c.log.Info("No deployments found for", "lease namespace", builder.LidNS(lid))
-		return nil, kubeclienterrors.ErrNoDeploymentForLease
+		return nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoDeploymentForLease)
 	}
 
 	return serviceStatus, nil

@@ -3,23 +3,14 @@ package rest
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v5"
 	gcontext "github.com/gorilla/context"
 
 	gwutils "github.com/akash-network/provider/gateway/utils"
-)
-
-var (
-	ErrJWTMissing        = errors.New("jwt: missing")
-	ErrJWTInvalid        = errors.New("jwt: invalid")
-	ErrInvalidRequest    = errors.New("invalid request")
-	ErrUnauthorized      = errors.New("unauthorized")
-	ErrInvalidAuthHeader = errors.New("authorization header format must be Bearer {token}")
+	"github.com/akash-network/provider/pkg/httperror"
 )
 
 // AuthHeaderTokenExtractor is a TokenExtractor that takes a request
@@ -32,7 +23,7 @@ func AuthHeaderTokenExtractor(r *http.Request) (string, error) {
 
 	authHeaderParts := strings.Fields(authHeader)
 	if len(authHeaderParts) != 2 || strings.ToLower(authHeaderParts[0]) != "bearer" {
-		return "", ErrInvalidAuthHeader
+		return "", httperror.ErrInvalidAuthHeader
 	}
 
 	return authHeaderParts[1], nil
@@ -41,35 +32,24 @@ func AuthHeaderTokenExtractor(r *http.Request) (string, error) {
 func DefaultErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 	w.Header().Set("Content-Type", "application/json")
 
-	code, msg := authErrorResponse(err)
-	w.WriteHeader(code)
-	body, _ := json.Marshal(map[string]string{"message": msg})
+	ce := authErrorResponse(err)
+	w.WriteHeader(ce.StatusCode)
+	body, _ := json.Marshal(map[string]string{"message": ce.Err.Error()})
 	_, _ = w.Write(body)
 }
 
-func authErrorResponse(err error) (int, string) {
+func authErrorResponse(err error) *httperror.CustomError {
 	if err == nil {
 		panic("authErrorResponse called with nil error")
 	}
-	switch {
-	case errors.Is(err, ErrJWTMissing):
-		return http.StatusBadRequest, "JWT is missing"
-	case errors.Is(err, ErrInvalidRequest):
-		return http.StatusBadRequest, "invalid request"
-	case errors.Is(err, jwt.ErrTokenInvalidClaims):
-		return http.StatusBadRequest, "JWT has invalid claims"
-	case errors.Is(err, ErrUnauthorized):
-		return http.StatusUnauthorized, "unauthorized access"
-	case errors.Is(err, ErrJWTInvalid), errors.Is(err, jwt.ErrTokenNotValidYet), errors.Is(err, jwt.ErrTokenUsedBeforeIssued):
-		return http.StatusUnauthorized, "JWT is invalid"
-	case errors.Is(err, jwt.ErrTokenExpired):
-		return http.StatusUnauthorized, "JWT is expired"
-	case errors.Is(err, ErrInvalidAuthHeader):
-		return http.StatusBadRequest, "invalid authorization header"
-	default:
-		log.Printf("auth error: %v", err)
-		return http.StatusInternalServerError, "unknown error while processing JWT"
+
+	var customError *httperror.CustomError
+	if errors.As(err, &customError) {
+		return customError
 	}
+
+	log.Printf("auth error: %v", err)
+	return httperror.NewError(http.StatusInternalServerError, errors.New("unknown error while processing JWT"))
 }
 
 // prepareAuthMiddleware returns an HTTP middleware that validates client identity
@@ -78,9 +58,8 @@ func prepareAuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		tokString, err := AuthHeaderTokenExtractor(r)
 		if err != nil {
-			// This is not ErrJWTMissing because an error here means that the
-			// tokenExtractor had an error and _not_ that the token was missing.
-			DefaultErrorHandler(w, r, fmt.Errorf("error extracting token: %w", err))
+			// Error here means the Authorization header format was invalid, not that the token was absent.
+			DefaultErrorHandler(w, r, err)
 			return
 		}
 
@@ -105,7 +84,7 @@ func authorizeProviderMiddleware(next http.Handler) http.Handler {
 
 		var err error
 		if !claims.AuthorizeForProvider(provider) {
-			err = ErrUnauthorized
+			err = httperror.ErrUnauthorized
 		}
 
 		if err != nil {

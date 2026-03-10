@@ -31,11 +31,13 @@ import (
 	ajwt "pkg.akt.dev/go/util/jwt"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	pmanifest "github.com/akash-network/provider/manifest"
 	pmock "github.com/akash-network/provider/mocks/client"
 	pcmock "github.com/akash-network/provider/mocks/cluster"
 	clmocks "github.com/akash-network/provider/mocks/cluster/types"
 	pmmock "github.com/akash-network/provider/mocks/manifest"
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	"github.com/akash-network/provider/pkg/httperror"
 	"github.com/akash-network/provider/version"
 )
 
@@ -495,7 +497,7 @@ func TestRoutePutManifestOK(t *testing.T) {
 	})
 }
 
-func TestRoutePutManifest_validation_errors_return_422(t *testing.T) {
+func TestRoutePutManifest_errors_return_correct_status(t *testing.T) {
 	tests := []struct {
 		name           string
 		submitErr      error
@@ -504,20 +506,19 @@ func TestRoutePutManifest_validation_errors_return_422(t *testing.T) {
 	}{
 		{"invalid_manifest", manifestValidation.ErrInvalidManifest, http.StatusUnprocessableEntity, "^invalid manifest(?s:.)*$"},
 		{"cross_validation", manifestValidation.ErrManifestCrossValidation, http.StatusUnprocessableEntity, ""},
-		{"invalid_manifest_string_fallback", errString{"invalid manifest: unknown deployment group ('dcloud')"}, http.StatusUnprocessableEntity, ""},
-		{"invalid_manifest_case_insensitive", errString{"Invalid Manifest: bad config"}, http.StatusUnprocessableEntity, ""},
-		{"manifest_cross_validation_case_insensitive", errString{"Manifest Cross-Validation: service X"}, http.StatusUnprocessableEntity, ""},
+		{"no_lease_for_deployment", pmanifest.ErrNoLeaseForDeployment, http.StatusNotFound, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			runRouterTest(t, []routerTestAuth{routerTestAuthCert, routerTestAuthJWT}, func(test *routerTest, hdr http.Header) {
 				caddr := sdk.AccAddress(test.ckey.PubKey().Address())
 				dseq := uint64(testutil.RandRangeInt(1, 1000)) // nolint: gosec
+				wrappedErr := httperror.NewError(tt.expectedStatus, tt.submitErr)
 				test.pmclient.On("Submit",
 					mock.Anything,
 					dtypes.DeploymentID{Owner: caddr.String(), DSeq: dseq},
 					mock.AnythingOfType("v2beta3.Manifest"),
-				).Return(tt.submitErr)
+				).Return(wrappedErr)
 
 				uri, err := apclient.MakeURI(test.host, apclient.SubmitManifestPath(dseq))
 				require.NoError(t, err)
@@ -666,7 +667,7 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 				Code:     0,
 			},
 		}
-		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, kubeStatus)
+		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, httperror.NewError(http.StatusNotFound, kubeStatus))
 		mockManifestGroupsForRouterTest(test, leaseID)
 
 		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
@@ -694,7 +695,7 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 	})
 }
 
-func TestStatusCodeForClusterErr(t *testing.T) {
+func TestStatusCodeFrom(t *testing.T) {
 	tests := []struct {
 		name           string
 		err            error
@@ -702,25 +703,16 @@ func TestStatusCodeForClusterErr(t *testing.T) {
 	}{
 		{"nil", nil, http.StatusOK},
 		{"generic", errGeneric, http.StatusInternalServerError},
-		{"apiserver_not_ready", errString{"apiserver not ready"}, http.StatusServiceUnavailable},
-		{"connection_refused", errString{"dial tcp 10.43.0.1:443: connect: connection refused"}, http.StatusServiceUnavailable},
-		{"connection_reset", errString{"read tcp 172.16.166.130:41742->10.43.0.1:443: read: connection reset by peer"}, http.StatusServiceUnavailable},
-		{"starting", errString{"starting"}, http.StatusServiceUnavailable},
-		{"starting_with_newline", errString{"starting\n"}, http.StatusServiceUnavailable},
-		{"cluster_error_503", kubeclienterrors.NewClusterError(http.StatusServiceUnavailable, errors.New("unreachable")), http.StatusServiceUnavailable},
-		{"cluster_error_500", kubeclienterrors.NewClusterError(500, errGeneric), http.StatusInternalServerError},
+		{"custom_503", httperror.NewError(http.StatusServiceUnavailable, errors.New("unreachable")), http.StatusServiceUnavailable},
+		{"custom_500", httperror.NewError(500, errGeneric), http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := statusCodeForClusterErr(tt.err)
+			got := httperror.StatusCodeFrom(tt.err)
 			require.Equal(t, tt.expectedStatus, got)
 		})
 	}
 }
-
-type errString struct{ s string }
-
-func (e errString) Error() string { return e.s }
 
 func TestRouteLeaseStatus_cluster_errors(t *testing.T) {
 	tests := []struct {
@@ -742,7 +734,7 @@ func TestRouteLeaseStatus_cluster_errors(t *testing.T) {
 			name: "service_unavailable",
 			setup: func(rt *routerTest, lid mtypes.LeaseID) {
 				rt.pcclient.On("GetManifestGroup", mock.Anything, lid).
-					Return(false, v2beta2.ManifestGroup{}, errors.New("apiserver not ready"))
+					Return(false, v2beta2.ManifestGroup{}, httperror.NewError(http.StatusServiceUnavailable, errors.New("apiserver not ready")))
 			},
 			expectedStatus: http.StatusServiceUnavailable,
 			bodyRegex:      "",
@@ -851,7 +843,7 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 			GSeq:     gseq,
 			OSeq:     oseq,
 			Provider: paddr.String(),
-		}, serviceName).Return(nil, kubeclienterrors.ErrNoDeploymentForLease)
+		}, serviceName).Return(nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoDeploymentForLease))
 
 		lid := mtypes.LeaseID{
 			DSeq:     dseq,
@@ -907,7 +899,7 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 			GSeq:     gseq,
 			OSeq:     oseq,
 			Provider: paddr.String(),
-		}, serviceName).Return(nil, kubeStatus)
+		}, serviceName).Return(nil, httperror.NewError(http.StatusNotFound, kubeStatus))
 
 		lid := mtypes.LeaseID{
 			DSeq:     dseq,

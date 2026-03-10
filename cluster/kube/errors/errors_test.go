@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/akash-network/provider/pkg/httperror"
 )
 
 func TestIsClusterUnavailable(t *testing.T) {
@@ -33,33 +35,21 @@ func TestIsClusterUnavailable(t *testing.T) {
 	}
 }
 
-func TestStatusCodeFrom(t *testing.T) {
+func TestWrapClusterErrorForGateway(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
-		want int
+		name           string
+		err            error
+		expectedStatus int
 	}{
-		{"nil", nil, 200},
-		{"generic", errors.New("fail"), http.StatusInternalServerError},
-		{"cluster_unavailable", NewClusterError(http.StatusServiceUnavailable, errors.New("refused")), http.StatusServiceUnavailable},
-		{"cluster_error_500", NewClusterError(500, errors.New("fail")), http.StatusInternalServerError},
-		{"cluster_error_503", NewClusterError(503, errors.New("fail")), http.StatusServiceUnavailable},
-		{"unwrapped_unavailable", errors.New("apiserver not ready"), http.StatusServiceUnavailable},
+		{"connection_refused", errors.New("connection refused"), http.StatusServiceUnavailable},
+		{"lease_not_found", ErrLeaseNotFound, http.StatusNotFound},
+		{"no_deployment_for_lease", ErrNoDeploymentForLease, http.StatusNotFound},
+		{"unknown", errors.New("other"), http.StatusInternalServerError},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, StatusCodeFrom(tt.err))
+			wrapped := WrapClusterErrorForGateway(tt.err)
+			require.Equal(t, tt.expectedStatus, httperror.StatusCodeFrom(wrapped))
 		})
 	}
-}
-
-func TestWrapForGateway(t *testing.T) {
-	base := errors.New("connection refused")
-	wrapped := WrapForGateway(base)
-	require.Contains(t, wrapped.Error(), "connection refused")
-	require.Equal(t, http.StatusServiceUnavailable, StatusCodeFrom(wrapped))
-
-	base2 := errors.New("other error")
-	wrapped2 := WrapForGateway(base2)
-	require.Equal(t, http.StatusInternalServerError, StatusCodeFrom(wrapped2))
 }

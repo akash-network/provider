@@ -15,6 +15,8 @@ import (
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mquery "pkg.akt.dev/node/x/market/query"
+
+	"github.com/akash-network/provider/pkg/httperror"
 )
 
 type contextKey int
@@ -75,7 +77,7 @@ func requireEndpointScopeForDeploymentID(scope ajwt.PermissionScope) mux.Middlew
 			provider := requestProvider(r)
 
 			if !claims.AuthorizeDeploymentIDForPermissionScope(did, provider, scope) {
-				DefaultErrorHandler(w, r, ErrUnauthorized)
+				DefaultErrorHandler(w, r, httperror.ErrUnauthorized)
 				return
 			}
 
@@ -91,7 +93,7 @@ func requireEndpointScopeForLeaseID(scope ajwt.PermissionScope) mux.MiddlewareFu
 			lid := requestLeaseID(r)
 
 			if !claims.AuthorizeLeaseIDForPermissionScope(lid, scope) {
-				DefaultErrorHandler(w, r, ErrUnauthorized)
+				DefaultErrorHandler(w, r, httperror.ErrUnauthorized)
 				return
 			}
 
@@ -105,7 +107,7 @@ func requireOwner(next http.Handler) http.Handler {
 		claims := requestClaims(r)
 
 		if claims.IssuerAddress().Empty() {
-			DefaultErrorHandler(w, r, ErrUnauthorized)
+			DefaultErrorHandler(w, r, httperror.ErrUnauthorized)
 			return
 		}
 
@@ -128,7 +130,7 @@ func requireDeploymentID(next http.Handler) http.Handler {
 		provider := requestProvider(r)
 
 		if !claims.AuthorizeForDeploymentID(id, provider) {
-			DefaultErrorHandler(w, r, ErrUnauthorized)
+			DefaultErrorHandler(w, r, httperror.ErrUnauthorized)
 			return
 		}
 
@@ -148,7 +150,7 @@ func requireLeaseID(next http.Handler) http.Handler {
 
 		claims := requestClaims(r)
 		if !claims.AuthorizeForLeaseID(id) {
-			DefaultErrorHandler(w, r, ErrUnauthorized)
+			DefaultErrorHandler(w, r, httperror.ErrUnauthorized)
 			return
 		}
 

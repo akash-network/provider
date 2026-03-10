@@ -7,8 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
+
+	"github.com/akash-network/provider/pkg/httperror"
 )
 
 func TestDefaultErrorHandler(t *testing.T) {
@@ -20,49 +21,49 @@ func TestDefaultErrorHandler(t *testing.T) {
 	}{
 		{
 			name:           "jwt_missing",
-			err:            ErrJWTMissing,
+			err:            httperror.ErrJWTMissing,
 			expectedStatus: http.StatusBadRequest,
 			bodyContains:   "JWT is missing",
 		},
 		{
 			name:           "jwt_invalid",
-			err:            ErrJWTInvalid,
+			err:            httperror.ErrJWTInvalid,
 			expectedStatus: http.StatusUnauthorized,
 			bodyContains:   "JWT is invalid",
 		},
 		{
 			name:           "unauthorized",
-			err:            ErrUnauthorized,
+			err:            httperror.ErrUnauthorized,
 			expectedStatus: http.StatusUnauthorized,
 			bodyContains:   "unauthorized access",
 		},
 		{
 			name:           "invalid_request",
-			err:            ErrInvalidRequest,
+			err:            httperror.ErrInvalidRequest,
 			expectedStatus: http.StatusBadRequest,
 			bodyContains:   "invalid request",
 		},
 		{
 			name:           "jwt_expired",
-			err:            jwt.ErrTokenExpired,
+			err:            httperror.ErrJWTExpired,
 			expectedStatus: http.StatusUnauthorized,
 			bodyContains:   "JWT is expired",
 		},
 		{
 			name:           "jwt_invalid_claims",
-			err:            jwt.ErrTokenInvalidClaims,
+			err:            httperror.ErrJWTInvalidClaims,
 			expectedStatus: http.StatusBadRequest,
 			bodyContains:   "JWT has invalid claims",
 		},
 		{
 			name:           "jwt_not_valid_yet",
-			err:            jwt.ErrTokenNotValidYet,
+			err:            httperror.ErrJWTInvalid,
 			expectedStatus: http.StatusUnauthorized,
 			bodyContains:   "JWT is invalid",
 		},
 		{
 			name:           "jwt_used_before_issued",
-			err:            jwt.ErrTokenUsedBeforeIssued,
+			err:            httperror.ErrJWTInvalid,
 			expectedStatus: http.StatusUnauthorized,
 			bodyContains:   "JWT is invalid",
 		},
@@ -80,25 +81,25 @@ func TestDefaultErrorHandler(t *testing.T) {
 		},
 		{
 			name:           "wrapped_err_jwt_missing",
-			err:            fmt.Errorf("context: %w", ErrJWTMissing),
+			err:            fmt.Errorf("context: %w", httperror.ErrJWTMissing),
 			expectedStatus: http.StatusBadRequest,
 			bodyContains:   "JWT is missing",
 		},
 		{
 			name:           "wrapped_err_token_expired",
-			err:            fmt.Errorf("validation: %w", jwt.ErrTokenExpired),
+			err:            fmt.Errorf("validation: %w", httperror.ErrJWTExpired),
 			expectedStatus: http.StatusUnauthorized,
 			bodyContains:   "JWT is expired",
 		},
 		{
 			name:           "invalid_auth_header",
-			err:            ErrInvalidAuthHeader,
+			err:            httperror.ErrInvalidAuthHeader,
 			expectedStatus: http.StatusBadRequest,
 			bodyContains:   "invalid authorization header",
 		},
 		{
 			name:           "wrapped_err_invalid_auth_header",
-			err:            fmt.Errorf("error extracting token: %w", ErrInvalidAuthHeader),
+			err:            fmt.Errorf("error extracting token: %w", httperror.ErrInvalidAuthHeader),
 			expectedStatus: http.StatusBadRequest,
 			bodyContains:   "invalid authorization header",
 		},
