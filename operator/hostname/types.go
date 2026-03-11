@@ -24,29 +24,6 @@ type managedHostname struct {
 	lastChangeAt        time.Time
 }
 
-type leaseIDHostnameConnection struct {
-	leaseID      mtypes.LeaseID
-	hostname     string
-	externalPort int32
-	serviceName  string
-}
-
-func (lh leaseIDHostnameConnection) GetHostname() string {
-	return lh.hostname
-}
-
-func (lh leaseIDHostnameConnection) GetLeaseID() mtypes.LeaseID {
-	return lh.leaseID
-}
-
-func (lh leaseIDHostnameConnection) GetExternalPort() int32 {
-	return lh.externalPort
-}
-
-func (lh leaseIDHostnameConnection) GetServiceName() string {
-	return lh.serviceName
-}
-
 type hostnameResourceEvent struct {
 	eventType ctypes.ProviderResourceEvent
 	hostname  string
