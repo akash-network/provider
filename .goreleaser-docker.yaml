@@ -25,10 +25,10 @@ builds:
       - "-tags={{ .Env.BUILD_TAGS }}"
       - -trimpath
     ldflags:
-      - "{{ .Env.BUILD_VARS }}"
-      - "{{ .Env.STRIP_FLAGS }}"
-      - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread"
+      - "{{ .Env.BUILD_LDFLAGS }}"
+      - -s -w
+      - -linkmode=external
+      - -extldflags "-L./.cache/lib -lwasmvm_muslc.aarch64 -Wl,-z,muldefs -lm -lrt -lc -lpthread"
   - id: provider-services-linux-amd64
     binary: provider-services
     main: ./cmd/provider-services
@@ -44,10 +44,10 @@ builds:
       - "-tags={{ .Env.BUILD_TAGS }}"
       - -trimpath
     ldflags:
-      - "{{ .Env.BUILD_VARS }}"
-      - "{{ .Env.STRIP_FLAGS }}"
-      - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread"
+      - "{{ .Env.BUILD_LDFLAGS }}"
+      - -s -w
+      - -linkmode=external
+      - -extldflags "-L./.cache/lib -lwasmvm_muslc.x86_64 -Wl,-z,muldefs -lm -lrt -lc -lpthread"
   - id: provider-services-linux-arm64-debug
     binary: provider-services
     main: ./cmd/provider-services
@@ -63,9 +63,10 @@ builds:
       - "-tags={{ .Env.BUILD_TAGS }}"
       - -trimpath
     ldflags:
-      - "{{ .Env.BUILD_VARS }}"
-      - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread"
+      - "{{ .Env.BUILD_LDFLAGS }}"
+      - -s -w
+      - -linkmode=external
+      - -extldflags "-L./.cache/lib -lwasmvm_muslc.aarch64 -Wl,-z,muldefs -lm -lrt -lc -lpthread"
     gcflags:
       - "all=-N -l"
   - id: provider-services-linux-amd64-debug
@@ -83,9 +84,10 @@ builds:
       - "-tags={{ .Env.BUILD_TAGS }}"
       - -trimpath
     ldflags:
-      - "{{ .Env.BUILD_VARS }}"
-      - "-linkmode={{ .Env.LINKMODE }}"
-      - -extldflags "-lc -lrt -lpthread"
+      - "{{ .Env.BUILD_LDFLAGS }}"
+      - -s -w
+      - -linkmode=external
+      - -extldflags "-L./.cache/lib -lwasmvm_muslc.x86_64 -Wl,-z,muldefs -lm -lrt -lc -lpthread"
     gcflags:
       - "all=-N -l"
 archives:

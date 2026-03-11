@@ -32,7 +32,7 @@ import (
 	"pkg.akt.dev/go/sdkutil"
 	"pkg.akt.dev/go/util/events"
 	"pkg.akt.dev/go/util/pubsub"
-	"pkg.akt.dev/node/app"
+	"pkg.akt.dev/node/v2/app"
 
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -45,11 +45,11 @@ import (
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	otypes "pkg.akt.dev/go/node/oracle/v1"
 	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
-	ttypes "pkg.akt.dev/go/node/take/v1"
 	"pkg.akt.dev/go/testutil"
-	nodetestutil "pkg.akt.dev/node/testutil"
-	testnet "pkg.akt.dev/node/testutil/network"
+	nodetestutil "pkg.akt.dev/node/v2/testutil"
+	testnet "pkg.akt.dev/node/v2/testutil/network"
 
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
@@ -86,18 +86,21 @@ type IntegrationTestSuite struct {
 	appPort string
 
 	ipMarketplace bool
+
+	addrOracle        sdk.AccAddress
+	oracleMnemonic    string
+	priceFeedInterval time.Duration
 }
 
 const (
-	defaultGasPrice         = "0.03uakt"
-	defaultGasAdjustment    = "1.4"
-	axlUSDCDenom            = "ibc/12C6A0C374171B595A0A9E18B83FA09D295FB1F2D8C6DAA3AC28683471752D84"
-	axlUSCDMinDepositAmount = 5000000
+	defaultGasPrice      = "0.03uakt"
+	defaultGasAdjustment = "1.4"
+	uactMinDepositAmount = 5000000
 )
 
 var (
-	axlUSCDMinDeposit        = fmt.Sprintf("%d%s", axlUSCDMinDepositAmount, axlUSDCDenom)
-	deploymentAxlUSDCDeposit = fmt.Sprintf("--deposit=%s", axlUSCDMinDeposit)
+	uactMinDeposit        = fmt.Sprintf("%d%s", uactMinDepositAmount, sdkutil.DenomUact)
+	deploymentUactDeposit = fmt.Sprintf("--deposit=%s", uactMinDeposit)
 )
 
 var cliFlags = cli.TestFlags().
@@ -111,26 +114,26 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	encCfg := sdkutil.MakeEncodingConfig()
 	app.ModuleBasics().RegisterInterfaces(encCfg.InterfaceRegistry)
 
+	// Create oracle key early to get address for genesis whitelist
+	tmpKr := keyring.NewInMemory(encCfg.Codec)
+	_, oracleMnemonic, err := tmpKr.NewMnemonic("oracle", keyring.English, sdk.FullFundraiserPath, "", hd.Secp256k1)
+	s.Require().NoError(err)
+	oracleRec, err := tmpKr.Key("oracle")
+	s.Require().NoError(err)
+	oracleAddr, err := oracleRec.GetAddress()
+	s.Require().NoError(err)
+	s.addrOracle = oracleAddr
+	s.oracleMnemonic = oracleMnemonic
+
 	// Create a network for test
 	cfg := testnet.DefaultConfig(nodetestutil.NewTestNetworkFixture, testnet.WithInterceptState(func(cdc codec.Codec, s string, istate json.RawMessage) json.RawMessage {
 		var res json.RawMessage
 
 		switch s {
-		case "take":
-			state := &ttypes.GenesisState{}
+		case "oracle":
+			state := &otypes.GenesisState{}
 			cdc.MustUnmarshalJSON(istate, state)
-
-			state.Params.DenomTakeRates = append(state.Params.DenomTakeRates, ttypes.DenomTakeRate{
-				Denom: axlUSDCDenom,
-				Rate:  20,
-			})
-
-			res = cdc.MustMarshalJSON(state)
-		case "deployment":
-			state := &dvbeta.GenesisState{}
-			cdc.MustUnmarshalJSON(istate, state)
-			state.Params.MinDeposits = append(state.Params.MinDeposits, sdk.NewInt64Coin(axlUSDCDenom, 5000000))
-
+			state.Params.Sources = append(state.Params.Sources, oracleAddr.String())
 			res = cdc.MustMarshalJSON(state)
 		}
 
@@ -138,7 +141,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	}))
 
 	cfg.NumValidators = 1
-	cfg.MinGasPrices = fmt.Sprintf("0%s", testutil.CoinDenom)
+	cfg.MinGasPrices = fmt.Sprintf("0%s", sdkutil.DenomUakt)
 	s.cfg = cfg
 
 	ctx := context.WithValue(context.Background(), cli.ContextTypeAddressCodec, encCfg.SigningOptions.AddressCodec)
@@ -160,6 +163,10 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	_, _, err = kb.NewMnemonic("keyFoo", keyring.English, sdk.FullFundraiserPath, "", hd.Secp256k1)
 	s.Require().NoError(err)
 
+	// Import oracle key into test keyring
+	_, err = kb.NewAccount("keyOracle", s.oracleMnemonic, "", sdk.FullFundraiserPath, hd.Secp256k1)
+	s.Require().NoError(err)
+
 	// Wait for the network to start
 	_, err = s.network.WaitForHeight(1)
 	s.Require().NoError(err)
@@ -176,7 +183,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// Send coins value
 	sendTokens := sdk.Coins{
 		sdk.NewCoin(s.cfg.BondDenom, mvbeta.DefaultBidMinDeposit.Amount.MulRaw(4)),
-		sdk.NewCoin(axlUSDCDenom, sdkmath.NewInt(axlUSCDMinDepositAmount*4)),
+		sdk.NewCoin(sdkutil.DenomUact, sdkmath.NewInt(uactMinDepositAmount*4)),
 	}
 
 	// Setup a Provider key
@@ -218,6 +225,21 @@ func (s *IntegrationTestSuite) SetupSuite() {
 			With(
 				s.addrTenant.String(),
 				sendTokens.String()).
+			WithFrom(s.validator.Address.String()).
+			Append(cliFlags)...,
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(s.network.WaitForNextBlock())
+	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
+
+	// Fund oracle account (needs gas for periodic price submissions)
+	res, err = clitestutil.ExecSend(
+		s.ctx,
+		cctx,
+		cli.TestFlags().
+			With(
+				s.addrOracle.String(),
+				sdk.NewCoin(s.cfg.BondDenom, sdkmath.NewInt(1000000)).String()).
 			WithFrom(s.validator.Address.String()).
 			Append(cliFlags)...,
 	)
@@ -472,6 +494,11 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.T().Log("waiting for provider gateway")
 	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
 
+	// Start oracle price feed simulation
+	s.group.Go(func() error {
+		return s.runPriceFeed(ctx, cctx)
+	})
+
 	s.Require().NoError(s.network.WaitForNextBlock())
 }
 
@@ -503,6 +530,50 @@ func waitForTCPSocket(ctx context.Context, dialer net.Dialer, host string, t *te
 		_ = conn.Close()
 		return
 	}
+}
+
+func (s *IntegrationTestSuite) runPriceFeed(ctx context.Context, cctx sdkclient.Context) error {
+	interval := s.priceFeedInterval
+	if interval == 0 {
+		interval = 30 * time.Second
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Submit initial price immediately
+	if err := s.submitPriceEntry(ctx, cctx); err != nil {
+		s.T().Logf("initial price feed submission failed: %v", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := s.submitPriceEntry(ctx, cctx); err != nil {
+				s.T().Logf("price feed submission failed: %v", err)
+			}
+		}
+	}
+}
+
+func (s *IntegrationTestSuite) submitPriceEntry(ctx context.Context, cctx sdkclient.Context) error {
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	res, err := clitestutil.ExecOracleFeedPrice(ctx, cctx,
+		cli.TestFlags().
+			With(sdkutil.DenomAkt, sdkutil.DenomUSD, "1.000000000000000000", now).
+			WithFrom(s.addrOracle.String()).
+			Append(cliFlags)...,
+	)
+	if err != nil {
+		return err
+	}
+
+	s.T().Logf("price feed submitted at %s", now)
+	_ = res
+
+	return nil
 }
 
 func (s *IntegrationTestSuite) TearDownTest() {

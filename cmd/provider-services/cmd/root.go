@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	cflags "pkg.akt.dev/go/cli/flags"
-	acmd "pkg.akt.dev/node/cmd/akash/cmd"
+	acmd "pkg.akt.dev/node/v2/cmd/akash/cmd"
 
 	tmcli "github.com/cometbft/cometbft/libs/cli"
 	"github.com/cosmos/cosmos-sdk/client/debug"
@@ -12,7 +12,7 @@ import (
 
 	"pkg.akt.dev/go/cli"
 	"pkg.akt.dev/go/sdkutil"
-	"pkg.akt.dev/node/app"
+	"pkg.akt.dev/node/v2/app"
 
 	"github.com/akash-network/provider/operator"
 	"github.com/akash-network/provider/operator/hostname"

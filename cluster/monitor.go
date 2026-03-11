@@ -17,7 +17,7 @@ import (
 
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
 	"pkg.akt.dev/go/util/pubsub"
-	"pkg.akt.dev/node/util/runner"
+	"pkg.akt.dev/node/v2/util/runner"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"

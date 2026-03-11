@@ -20,6 +20,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"pkg.akt.dev/go/sdkutil"
 
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -114,7 +115,7 @@ func defaultGroupSpec() *dvbeta.GroupSpec {
 			},
 		},
 	}
-	price := sdk.NewDecCoin(testutil.CoinDenom, sdkmath.NewInt(23))
+	price := sdk.NewDecCoin(sdkutil.DenomUact, sdkmath.NewInt(23))
 	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
@@ -544,7 +545,7 @@ func Test_ScriptPricingReturnsResultFromScript(t *testing.T) {
 
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	require.Equal(t, "uakt", price.Denom)
+	require.Equal(t, sdkutil.DenomUact, price.Denom)
 	require.Equal(t, sdkmath.LegacyNewDec(132), price.Amount)
 }
 
@@ -658,7 +659,7 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	require.Equal(t, "uakt", price.Denom)
+	require.Equal(t, sdkutil.DenomUact, price.Denom)
 	require.Equal(t, sdkmath.LegacyNewDec(1), price.Amount)
 	// Open the file and make sure it has the JSON
 	fin, err := os.Open(jsonPath)
@@ -719,7 +720,7 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 	amount, err := sdkmath.LegacyNewDecFromStr(expectedPrice)
 	require.NoError(t, err)
 
-	require.Equal(t, sdk.NewDecCoinFromDec("uakt", amount).String(), price.String())
+	require.Equal(t, sdk.NewDecCoinFromDec(sdkutil.DenomUact, amount).String(), price.String())
 }
 
 func TestRationalToIntConversion(t *testing.T) {

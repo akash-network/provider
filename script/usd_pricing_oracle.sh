@@ -26,31 +26,20 @@ if ! command -v bc &> /dev/null ; then
   exit 1
 fi
 
-if ! command -v curl &> /dev/null ; then
-  echo "curl could not be found" >&2
-  exit 1
-fi
-
-# One can set API_URL env variable to the url that returns coingecko like response, something like: `{"akash-network":{"usd":3.57}}`
-# and if the API_URL isn't set, the default api url will be used
-
-# URL to get current USD price per AKT
-DEFAULT_API_URL="https://api.coingecko.com/api/v3/simple/price?ids=akash-network&vs_currencies=usd"
-
 # These are the variables one can modify to change the USD scale for each resource kind
-CPU_USD_SCALE=0.10
-GPU_USD_SCALE=0.50
-MEMORY_USD_SCALE=0.02
-ENDPOINT_USD_SCALE=0.02
+CPU_UACT_SCALE=0.10
+GPU_UACT_SCALE=0.50
+MEMORY_UACT_SCALE=0.02
+ENDPOINT_UACT_SCALE=0.02
 
-declare -A STORAGE_USD_SCALE
+declare -A STORAGE_UACT_SCALE
 
-STORAGE_USD_SCALE[ephemeral]=0.01
-STORAGE_USD_SCALE[default]=0.02
-STORAGE_USD_SCALE[beta1]=0.02
-STORAGE_USD_SCALE[beta2]=0.03
-STORAGE_USD_SCALE[beta3]=0.04
-STORAGE_USD_SCALE[ram]=0.02 # ram storage class is for tmp disks like /dev/shm, making assumption for now pricing is same of for regular RAM
+STORAGE_UACT_SCALE[ephemeral]=0.01
+STORAGE_UACT_SCALE[default]=0.02
+STORAGE_UACT_SCALE[beta1]=0.02
+STORAGE_UACT_SCALE[beta2]=0.03
+STORAGE_UACT_SCALE[beta3]=0.04
+STORAGE_UACT_SCALE[ram]=0.02 # ram storage class is for tmp disks like /dev/shm, making assumption for now pricing is same of for regular RAM
 
 # used later for validation
 MAX_INT64=9223372036854775807
@@ -60,7 +49,7 @@ memory_total=0
 cpu_total=0
 gpu_total=0
 endpoint_total=0
-storage_cost_usd=0
+storage_cost_uact=0
 
 # read the JSON in `stdin` into $script_input
 read -r script_input
@@ -88,13 +77,13 @@ for group in $(jq -c '.resources[]' <<<"$script_input"); do
       # jq has to be with -r to not quote value
       class=$(jq -r '.class' <<<"$storage")
 
-      if [ -v 'STORAGE_USD_SCALE[class]' ]; then
+      if [ -v 'STORAGE_UACT_SCALE[class]' ]; then
         echo "requests unsupported storage class \"$class\"" >&2
         exit 1
       fi
 
       storage_size=$((storage_size * count))
-      storage_cost_usd=$(bc -l <<<"(${storage_size}*${STORAGE_USD_SCALE[$class]}) + ${storage_cost_usd}")
+      storage_cost_usd=$(bc -l <<<"(${storage_size}*${STORAGE_UACT_SCALE[$class]}) + ${storage_cost_uact}")
   done
 
   endpoint_quantity=$(jq ".endpoint_quantity" <<<"$group")
@@ -103,49 +92,27 @@ for group in $(jq -c '.resources[]' <<<"$script_input"); do
 done
 
 # calculate the total cost in USD for each resource
-cpu_cost_usd=$(bc -l <<<"${cpu_total}*${CPU_USD_SCALE}")
-gpu_cost_usd=$(bc -l <<<"${gpu_total}*${GPU_USD_SCALE}")
-memory_cost_usd=$(bc -l <<<"${memory_total}*${MEMORY_USD_SCALE}")
-endpoint_cost_usd=$(bc -l <<<"${endpoint_total}*${ENDPOINT_USD_SCALE}")
+cpu_cost_uact=$(bc -l <<<"${cpu_total}*${CPU_UACT_SCALE}")
+gpu_cost_uact=$(bc -l <<<"${gpu_total}*${GPU_UACT_SCALE}")
+memory_cost_uact=$(bc -l <<<"${memory_total}*${MEMORY_UACT_SCALE}")
+endpoint_cost_uact=$(bc -l <<<"${endpoint_total}*${ENDPOINT_UACT_SCALE}")
 
 # validate the USD cost for each resource
-if [ 1 -eq "$(bc <<<"${cpu_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${cpu_cost_usd}<=${MAX_INT64}")" ] ||
-  [ 1 -eq "$(bc <<<"${gpu_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${gpu_cost_usd}<=${MAX_INT64}")" ] ||
-  [ 1 -eq "$(bc <<<"${memory_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${memory_cost_usd}<=${MAX_INT64}")" ] ||
-  [ 1 -eq "$(bc <<<"${storage_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${storage_cost_usd}<=${MAX_INT64}")" ] ||
-  [ 1 -eq "$(bc <<<"${endpoint_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${endpoint_cost_usd}<=${MAX_INT64}")" ]; then
+if [ 1 -eq "$(bc <<<"${cpu_cost_uact}<0")" ] || [ 0 -eq "$(bc <<<"${cpu_cost_uact}<=${MAX_INT64}")" ] ||
+  [ 1 -eq "$(bc <<<"${gpu_cost_uact}<0")" ] || [ 0 -eq "$(bc <<<"${gpu_cost_uact}<=${MAX_INT64}")" ] ||
+  [ 1 -eq "$(bc <<<"${memory_cost_uact}<0")" ] || [ 0 -eq "$(bc <<<"${memory_cost_uact}<=${MAX_INT64}")" ] ||
+  [ 1 -eq "$(bc <<<"${storage_cost_uact}<0")" ] || [ 0 -eq "$(bc <<<"${storage_cost_uact}<=${MAX_INT64}")" ] ||
+  [ 1 -eq "$(bc <<<"${endpoint_cost_uact}<0")" ] || [ 0 -eq "$(bc <<<"${endpoint_cost_uact}<=${MAX_INT64}")" ]; then
   echo "invalid cost results for units" >&2
   exit 1
 fi
 
-# finally, calculate the total cost in USD of all resources and validate it
-total_cost_usd=$(bc -l <<<"${cpu_cost_usd}+${gpu_cost_usd}+${memory_cost_usd}+${storage_cost_usd}+${endpoint_cost_usd}")
-if [ 1 -eq "$(bc <<<"${total_cost_usd}<0")" ] || [ 0 -eq "$(bc <<<"${total_cost_usd}<=${MAX_INT64}")" ]; then
-  echo "invalid total cost $total_cost_usd" >&2
+# finally, calculate the total cost in uACT of all resources and validate it
+total_cost_uact=$(bc -l <<<"${cpu_cost_uact}+${gpu_cost_uact}+${memory_cost_uact}+${storage_cost_uact}+${endpoint_cost_uact}")
+if [ 1 -eq "$(bc <<<"${total_cost_uact}<0")" ] || [ 0 -eq "$(bc <<<"${total_cost_uact}<=${MAX_INT64}")" ]; then
+  echo "invalid total cost $total_cost_uact" >&2
   exit 1
 fi
-
-# call the API and find out the current USD price per AKT
-if [ -z "$API_URL" ]; then
-  API_URL=$DEFAULT_API_URL
-fi
-
-API_RESPONSE=$(curl -s "$API_URL")
-curl_exit_status=$?
-if [ $curl_exit_status != 0 ]; then
-  exit $curl_exit_status
-fi
-usd_per_akt=$(jq '."akash-network"."usd"' <<<"$API_RESPONSE")
-
-# validate the current USD price per AKT is not zero
-if [ 1 -eq "$(bc <<< "${usd_per_akt}==0")" ]; then
-  echo "invalid akt to usd price, cannot be 0" >&2
-  exit 1
-fi
-
-# calculate the total cost in uAKT
-total_cost_akt=$(bc -l <<<"${total_cost_usd}/${usd_per_akt}")
-total_cost_uakt=$(bc -l <<<"${total_cost_akt}*1000000")
 
 # DO NOT INCREASE PRECISION below, it gives varying results during tests on different hosts
-printf "%.*f" "$precision" "$total_cost_uakt"
+printf "%.*f" "$precision" "$total_cost_uact"
