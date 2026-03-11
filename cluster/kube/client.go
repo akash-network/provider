@@ -123,7 +123,7 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 
 	// Initialize Gateway implementation if using gateway-api mode
 	var gatewayImpl gateway.Implementation
-	if ingressMode == "gateway-api" {
+	if ingressMode == IngressModeGateway {
 		impl, err := gateway.GetImplementation(gatewayImplementation, log)
 		if err != nil {
 			return nil, fmt.Errorf("kube: failed to get gateway implementation: %w", err)

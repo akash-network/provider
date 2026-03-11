@@ -3,6 +3,7 @@ package gateway
 import (
 	"fmt"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -133,10 +134,7 @@ func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentD
 	if len(directive.NextCases) > 0 {
 		strBuilder := strings.Builder{}
 		for i, v := range directive.NextCases {
-			first := string(v[0])
-			isHTTPCode := strings.ContainsAny(first, "12345")
-
-			if isHTTPCode {
+			if isValidHTTPStatusCode(v) {
 				strBuilder.WriteString("http_")
 			}
 			strBuilder.WriteString(v)
@@ -151,25 +149,35 @@ func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentD
 	return annotations
 }
 
-// ValidateOptions checks if all directive options are supported by NGINX Gateway Fabric.
-// Currently, all Akash directive options are supported by NGINX, so this returns an empty slice.
-// In the future, if new directive options are added that NGINX doesn't support, they should
-// be detected here and returned as warnings.
-func (n *nginxGateway) ValidateOptions(directive chostname.ConnectToDeploymentDirective) []string {
-	var warnings []string
-
-	// All directive options are currently supported by NGINX Gateway Fabric:
-	// - ReadTimeout -> nginx.org/proxy-read-timeout annotation
-	// - SendTimeout -> nginx.org/proxy-send-timeout annotation
-	// - MaxBodySize -> nginx.org/client-max-body-size annotation
-	// - NextTimeout -> nginx.org/proxy-next-upstream-timeout annotation
-	// - NextTries -> nginx.org/proxy-next-upstream-tries annotation
-	// - NextCases -> nginx.org/proxy-next-upstream annotation
-
-	return warnings
+// SupportedDirectives returns the directive options supported by NGINX Gateway Fabric.
+// Each option maps to an NGINX-specific annotation:
+//   - ReadTimeout -> nginx.org/proxy-read-timeout
+//   - SendTimeout -> nginx.org/proxy-send-timeout
+//   - MaxBodySize -> nginx.org/client-max-body-size
+//   - NextTimeout -> nginx.org/proxy-next-upstream-timeout
+//   - NextTries   -> nginx.org/proxy-next-upstream-tries
+//   - NextCases   -> nginx.org/proxy-next-upstream
+func (n *nginxGateway) SupportedDirectives() []string {
+	return []string{
+		"ReadTimeout",
+		"SendTimeout",
+		"MaxBodySize",
+		"NextTimeout",
+		"NextTries",
+		"NextCases",
+	}
 }
 
 // strPtr returns a pointer to the given string.
+// TODO: go 1.26 makes this helper unecessary.
 func strPtr(s string) *string {
 	return &s
+}
+
+func isValidHTTPStatusCode(codeStr string) bool {
+	code, err := strconv.Atoi(codeStr)
+	if err != nil {
+		return false
+	}
+	return http.StatusText(code) != ""
 }
