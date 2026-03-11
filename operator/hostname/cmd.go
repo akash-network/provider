@@ -118,7 +118,6 @@ func addGatewayApiFlags(cmd *cobra.Command) {
 }
 
 func withGatewayApi(ctx context.Context) (context.Context, error) {
-
 	ingressMode := viper.GetString("ingress-mode")
 	if ingressMode != kube.IngressModeIngress && ingressMode != kube.IngressModeGateway {
 		return nil, fmt.Errorf("invalid ingress-mode %q: must be %q or %q", ingressMode, kube.IngressModeIngress, kube.IngressModeGateway)
@@ -126,6 +125,15 @@ func withGatewayApi(ctx context.Context) (context.Context, error) {
 	gatewayName := viper.GetString("gateway-name")
 	gatewayNamespace := viper.GetString("gateway-namespace")
 	gatewayImplementation := viper.GetString("gateway-implementation")
+
+	if ingressMode == kube.IngressModeGateway {
+		if gatewayName == "" {
+			return nil, fmt.Errorf("gateway-name is required when ingress-mode is %s", kube.IngressModeGateway)
+		}
+		if gatewayNamespace == "" {
+			return nil, fmt.Errorf("gateway-namespace is required when ingress-mode is %s", kube.IngressModeGateway)
+		}
+	}
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyIngressMode, ingressMode)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayName, gatewayName)

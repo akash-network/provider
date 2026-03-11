@@ -183,29 +183,6 @@ func ingressRules(hostname string, kubeServiceName string, kubeServicePort int32
 	}}
 }
 
-type leaseIDHostnameConnection struct {
-	leaseID      mtypes.LeaseID
-	hostname     string
-	externalPort int32
-	serviceName  string
-}
-
-func (lh leaseIDHostnameConnection) GetHostname() string {
-	return lh.hostname
-}
-
-func (lh leaseIDHostnameConnection) GetLeaseID() mtypes.LeaseID {
-	return lh.leaseID
-}
-
-func (lh leaseIDHostnameConnection) GetExternalPort() int32 {
-	return lh.externalPort
-}
-
-func (lh leaseIDHostnameConnection) GetServiceName() string {
-	return lh.serviceName
-}
-
 func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
 	if c.ingressMode == IngressModeGateway {
 		return c.getHostnameDeploymentConnectionsGateway(ctx)
@@ -234,11 +211,11 @@ func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]chostn
 				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.HTTP.Paths))
 			}
 			rulePath := rule.HTTP.Paths[0]
-			results = append(results, leaseIDHostnameConnection{
-				leaseID:      ingressLeaseID,
-				hostname:     rule.Host,
-				externalPort: rulePath.Backend.Service.Port.Number,
-				serviceName:  rulePath.Backend.Service.Name,
+			results = append(results, chostname.LeaseIDHostnameConnection{
+				LeaseID:      ingressLeaseID,
+				Hostname:     rule.Host,
+				ExternalPort: rulePath.Backend.Service.Port.Number,
+				ServiceName:  rulePath.Backend.Service.Name,
 			})
 
 			return nil
