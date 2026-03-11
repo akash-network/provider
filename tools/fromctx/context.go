@@ -332,56 +332,96 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	return false
 }
 
-func IngressModeFromCtx(ctx context.Context) string {
+func IngressModeFromCtx(ctx context.Context) (string, error) {
 	val := ctx.Value(CtxKeyIngressMode)
 	if val == nil {
-		return "ingress" // default to NGINX Ingress
+		return "ingress", nil
 	}
 
-	if v, valid := val.(string); valid {
-		return v
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
 	}
 
-	return "ingress"
+	return v, nil
 }
 
-func GatewayNameFromCtx(ctx context.Context) string {
+func MustIngressModeFromCtx(ctx context.Context) string {
+	val, err := IngressModeFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func GatewayNameFromCtx(ctx context.Context) (string, error) {
 	val := ctx.Value(CtxKeyGatewayName)
 	if val == nil {
-		return ""
+		return "", nil
 	}
 
-	if v, valid := val.(string); valid {
-		return v
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
 	}
 
-	return ""
+	return v, nil
 }
 
-func GatewayNamespaceFromCtx(ctx context.Context) string {
+func MustGatewayNameFromCtx(ctx context.Context) string {
+	val, err := GatewayNameFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func GatewayNamespaceFromCtx(ctx context.Context) (string, error) {
 	val := ctx.Value(CtxKeyGatewayNamespace)
 	if val == nil {
-		return ""
+		return "", nil
 	}
 
-	if v, valid := val.(string); valid {
-		return v
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
 	}
 
-	return ""
+	return v, nil
 }
 
-func GatewayImplementationFromCtx(ctx context.Context) string {
+func MustGatewayNamespaceFromCtx(ctx context.Context) string {
+	val, err := GatewayNamespaceFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func GatewayImplementationFromCtx(ctx context.Context) (string, error) {
 	val := ctx.Value(CtxKeyGatewayImplementation)
 	if val == nil {
-		return "nginx" // default to NGINX Gateway Fabric
+		return "nginx", nil
 	}
 
-	if v, valid := val.(string); valid {
-		return v
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
 	}
 
-	return "nginx"
+	return v, nil
+}
+
+func MustGatewayImplementationFromCtx(ctx context.Context) string {
+	val, err := GatewayImplementationFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {
