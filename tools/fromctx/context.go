@@ -24,23 +24,23 @@ import (
 type Key string
 
 const (
-	CtxKeyKubeConfig         = Key(providerflags.FlagKubeConfig)
-	CtxKeyKubeRESTClient     = Key("kube-restclient")
-	CtxKeyKubeClientSet      = Key("kube-clientset")
-	CtxKeyAkashClientSet     = Key("akash-clientset")
-	CtxKeyPubSub             = Key("pubsub")
-	CtxKeyLifecycle          = Key("lifecycle")
-	CtxKeyErrGroup           = Key("errgroup")
-	CtxKeyLogc               = ctxlog.CtxKeyLog
-	CtxKeyStartupCh          = Key("startup-ch")
-	CtxKeyInventoryUnderTest = Key("inventory-under-test")
-	CtxKeyPersistentConfig   = Key("persistent-config")
-	CtxKeyCertIssuer         = Key("cert-issuer")
-	CtxKeyAccountQuerier     = Key("account-querier")
-	CtxKeyIngressMode             = Key("ingress-mode")
-	CtxKeyGatewayName             = Key("gateway-name")
-	CtxKeyGatewayNamespace        = Key("gateway-namespace")
-	CtxKeyGatewayImplementation   = Key("gateway-implementation")
+	CtxKeyKubeConfig            = Key(providerflags.FlagKubeConfig)
+	CtxKeyKubeRESTClient        = Key("kube-restclient")
+	CtxKeyKubeClientSet         = Key("kube-clientset")
+	CtxKeyAkashClientSet        = Key("akash-clientset")
+	CtxKeyPubSub                = Key("pubsub")
+	CtxKeyLifecycle             = Key("lifecycle")
+	CtxKeyErrGroup              = Key("errgroup")
+	CtxKeyLogc                  = ctxlog.CtxKeyLog
+	CtxKeyStartupCh             = Key("startup-ch")
+	CtxKeyInventoryUnderTest    = Key("inventory-under-test")
+	CtxKeyPersistentConfig      = Key("persistent-config")
+	CtxKeyCertIssuer            = Key("cert-issuer")
+	CtxKeyAccountQuerier        = Key("account-querier")
+	CtxKeyIngressMode           = Key("ingress-mode")
+	CtxKeyGatewayName           = Key("gateway-name")
+	CtxKeyGatewayNamespace      = Key("gateway-namespace")
+	CtxKeyGatewayImplementation = Key("gateway-implementation")
 )
 
 var (
