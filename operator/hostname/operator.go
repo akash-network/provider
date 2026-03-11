@@ -529,11 +529,11 @@ func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context
 				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.HTTP.Paths))
 			}
 			rulePath := rule.HTTP.Paths[0]
-			results = append(results, leaseIDHostnameConnection{
-				leaseID:      ingressLeaseID,
-				hostname:     rule.Host,
-				externalPort: rulePath.Backend.Service.Port.Number,
-				serviceName:  rulePath.Backend.Service.Name,
+			results = append(results, chostname.LeaseIDHostnameConnection{
+				LeaseID:      ingressLeaseID,
+				Hostname:     rule.Host,
+				ExternalPort: rulePath.Backend.Service.Port.Number,
+				ServiceName:  rulePath.Backend.Service.Name,
 			})
 
 			return nil

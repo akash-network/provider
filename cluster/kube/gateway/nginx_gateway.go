@@ -169,7 +169,7 @@ func (n *nginxGateway) SupportedDirectives() []string {
 }
 
 // strPtr returns a pointer to the given string.
-// TODO: go 1.26 makes this helper unecessary.
+// TODO: go 1.26 makes this helper unnecessary.
 func strPtr(s string) *string {
 	return &s
 }
