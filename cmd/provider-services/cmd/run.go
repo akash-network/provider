@@ -604,12 +604,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		"gateway-namespace", gatewayNamespace,
 		"gateway-implementation", gatewayImplementation)
 
-	if ingressMode == "gateway-api" {
+	if ingressMode == kube.IngressModeGateway {
 		if gatewayName == "" {
-			return fmt.Errorf("gateway-name is required when ingress-mode is gateway-api")
+			return fmt.Errorf("gateway-name is required when ingress-mode is %s", kube.IngressModeGateway)
 		}
 		if gatewayNamespace == "" {
-			return fmt.Errorf("gateway-namespace is required when ingress-mode is gateway-api")
+			return fmt.Errorf("gateway-namespace is required when ingress-mode is %s", kube.IngressModeGateway)
 		}
 	}
 

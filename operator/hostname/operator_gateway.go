@@ -17,6 +17,7 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
@@ -31,7 +32,7 @@ func (op *hostnameOperator) connectHostnameToDeploymentGateway(ctx context.Conte
 	ns := builder.LidNS(directive.LeaseID)
 
 	// Validate options and log warnings
-	warnings := op.gatewayImpl.ValidateOptions(directive)
+	warnings := gateway.ValidateDirective(op.gatewayImpl, directive)
 	for _, warning := range warnings {
 		op.log.Warn("gateway option not supported", "warning", warning)
 	}
