@@ -17,7 +17,7 @@ import (
 	apclient "pkg.akt.dev/go/provider/client"
 	provider "pkg.akt.dev/go/provider/v1"
 	"pkg.akt.dev/go/util/pubsub"
-	mquery "pkg.akt.dev/node/x/market/query"
+	mquery "pkg.akt.dev/node/v2/x/market/query"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/operator/waiter"

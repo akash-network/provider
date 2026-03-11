@@ -62,17 +62,17 @@ shellcheck:
 	-x /shellcheck/script/shellcheck.sh
 
 .PHONY: test
-test:
-	$(GO_TEST) -tags=$(BUILD_MAINNET) -timeout 300s $(TEST_MODULES)
+test: $(AP_DEVCACHE) wasmvm-libs
+	$(GO_TEST) -v $(BUILD_FLAGS) -timeout 300s $(TEST_MODULES)
 
 .PHONY: test-nocache
-test-nocache:
-	$(GO_TEST) -tags=$(BUILD_MAINNET) -count=1 $(TEST_MODULES)
+test-nocache: $(AP_DEVCACHE) wasmvm-libs
+	$(GO_TEST) $(BUILD_FLAGS) -count=1 $(TEST_MODULES)
 
 .PHONY: test-full
-test-full:
-	$(GO_TEST) -tags=$(BUILD_TAGS) -race -count=1 $(TEST_MODULES)
+test-full: $(AP_DEVCACHE) wasmvm-libs
+	$(GO_TEST) -v $(BUILD_FLAGS) $(TEST_MODULES)
 
 .PHONY: test-coverage
-test-coverage: $(AP_DEVCACHE)
+test-coverage: $(AP_DEVCACHE) wasmvm-libs
 	./script/codecov.sh "$(AP_DEVCACHE_TESTS)" $(BUILD_TAGS_ALL)

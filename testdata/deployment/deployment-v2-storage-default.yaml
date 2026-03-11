@@ -49,10 +49,10 @@ profiles:
     global:
       pricing:
         web:
-          denom: uakt
+          denom: uact
           amount: 100
         bew:
-          denom: uakt
+          denom: uact
           amount: 100
 deployment:
   web:

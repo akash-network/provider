@@ -2,6 +2,7 @@ GORELEASER_RELEASE       ?= false
 GORELEASER_DEBUG         ?= false
 GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:$(GOTOOLCHAIN_SEMVER)
 GORELEASER_MOUNT_CONFIG  ?= false
+GORELEASER_MOD_MOUNT     ?= $(shell cat $(ROOT_DIR)/.github/repo | tr -d '\n')
 
 GORELEASER_SKIP_FLAGS    := $(GORELEASER_SKIP)
 GORELEASER_SKIP          :=
@@ -30,6 +31,11 @@ ifeq ($(DETECTED_OS), Darwin)
 	export CGO_CFLAGS=-Wno-deprecated-declarations
 endif
 
+GORELEASER_GOWORK := off
+ifneq ($(GOWORK), off)
+	GORELEASER_GOWORK := /go/src/$(GORELEASER_MOD_MOUNT)/go.work
+endif
+
 .PHONY: bump-%
 bump-%:
 	@./script/tools.sh bump "$*"
@@ -38,11 +44,11 @@ bump-%:
 bins: $(BINS)
 
 .PHONY: build
-build:
+build: wasmvm-libs
 	$(GO_BUILD) -a  ./...
 
 .PHONY: $(PROVIDER_SERVICES)
-$(PROVIDER_SERVICES):
+$(PROVIDER_SERVICES): wasmvm-libs
 	$(GO_BUILD) -o $@ $(BUILD_FLAGS) ./cmd/provider-services
 
 .PHONY: provider-services
@@ -53,7 +59,7 @@ docgen: $(AP_DEVCACHE)
 	@echo TODO
 
 .PHONY: install
-install:
+install: wasmvm-libs
 	$(GO) install $(BUILD_FLAGS) ./cmd/provider-services
 
 .PHONY: chmod-akash-scripts
@@ -61,18 +67,16 @@ chmod-akash-scripts:
 	find "$(AKASHD_LOCAL_PATH)/script" -type f -name '*.sh' -exec echo "chmod +x {}" \; -exec chmod +x {} \;
 
 .PHONY: docker-image
-docker-image:
+docker-image: wasmvm-libs
 	docker run \
 		--rm \
-		-e STABLE=$(IS_STABLE) \
 		-e MOD="$(GO_MOD)" \
-		-e BUILD_TAGS="$(BUILD_TAGS)" \
-		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
-		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
-		-e LINKMODE="$(GO_LINKMODE)" \
+		-e BUILD_TAGS="$(GORELEASER_TAGS)" \
+		-e BUILD_LDFLAGS="$(GORELEASER_LDFLAGS)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-e GOPATH=/go \
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
+		-e GOWORK="$(GORELEASER_GOWORK)" \
 		-v $(GOPATH):/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
@@ -90,20 +94,18 @@ gen-changelog: $(GIT_CHGLOG)
 	./script/genchangelog.sh "$(RELEASE_TAG)" .cache/changelog.md
 
 .PHONY: release
-release: gen-changelog
+release: wasmvm-libs gen-changelog
 	docker run \
 		--rm \
-		-e STABLE=$(IS_STABLE) \
 		-e MOD="$(GO_MOD)" \
-		-e BUILD_TAGS="$(BUILD_TAGS)" \
-		-e BUILD_VARS="$(GORELEASER_BUILD_VARS)" \
-		-e STRIP_FLAGS="$(GORELEASER_STRIP_FLAGS)" \
-		-e LINKMODE="$(GO_LINKMODE)" \
+		-e BUILD_TAGS="$(GORELEASER_TAGS)" \
+		-e BUILD_LDFLAGS="$(GORELEASER_LDFLAGS)" \
 		-e GITHUB_TOKEN="$(GITHUB_TOKEN)" \
 		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
 		-e GOPATH=/go \
+		-e GOWORK="$(GORELEASER_GOWORK)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(GOPATH):/go \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \

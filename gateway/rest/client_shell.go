@@ -16,7 +16,7 @@ package rest
 // 	"k8s.io/client-go/tools/remotecommand"
 //
 // 	mtypes "pkg.akt.dev/go/node/market/v1beta4"
-// 	"pkg.akt.dev/node/util/wsutil"
+// 	"pkg.akt.dev/node/v2/util/wsutil"
 // )
 //
 // var (
