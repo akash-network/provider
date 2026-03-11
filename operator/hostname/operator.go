@@ -94,7 +94,7 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 
 	// Initialize Gateway implementation if using gateway-api mode
 	var gatewayImpl gateway.Implementation
-	if ingressMode == "gateway-api" {
+	if ingressMode == kube.IngressModeGateway {
 		impl, err := gateway.GetImplementation(gatewayImplementation, logger)
 		if err != nil {
 			return nil, fmt.Errorf("hostname operator: failed to get gateway implementation: %w", err)
