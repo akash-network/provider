@@ -116,10 +116,10 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		return nil, fmt.Errorf("kube: unable to fetch leases namespace: %w", err)
 	}
 
-	ingressMode := fromctx.IngressModeFromCtx(ctx)
-	gatewayName := fromctx.GatewayNameFromCtx(ctx)
-	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
-	gatewayImplementation := fromctx.GatewayImplementationFromCtx(ctx)
+	ingressMode := fromctx.MustIngressModeFromCtx(ctx)
+	gatewayName := fromctx.MustGatewayNameFromCtx(ctx)
+	gatewayNamespace := fromctx.MustGatewayNamespaceFromCtx(ctx)
+	gatewayImplementation := fromctx.MustGatewayImplementationFromCtx(ctx)
 
 	// Initialize Gateway implementation if using gateway-api mode
 	var gatewayImpl gateway.Implementation
