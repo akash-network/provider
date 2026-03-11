@@ -36,10 +36,10 @@ func Cmd() *cobra.Command {
 			}
 
 			logger.Info("hostname operator configuration",
-				"ingress-mode", fromctx.IngressModeFromCtx(ctx),
-				"gateway-name", fromctx.GatewayNameFromCtx(ctx),
-				"gateway-namespace", fromctx.GatewayNamespaceFromCtx(ctx),
-				"gateway-implementation", fromctx.GatewayImplementationFromCtx(ctx))
+				"ingress-mode", fromctx.MustIngressModeFromCtx(ctx),
+				"gateway-name", fromctx.MustGatewayNameFromCtx(ctx),
+				"gateway-namespace", fromctx.MustGatewayNamespaceFromCtx(ctx),
+				"gateway-implementation", fromctx.MustGatewayImplementationFromCtx(ctx))
 
 			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {

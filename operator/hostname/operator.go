@@ -87,10 +87,10 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		return nil, err
 	}
 
-	ingressMode := fromctx.IngressModeFromCtx(ctx)
-	gatewayName := fromctx.GatewayNameFromCtx(ctx)
-	gatewayNamespace := fromctx.GatewayNamespaceFromCtx(ctx)
-	gatewayImplementation := fromctx.GatewayImplementationFromCtx(ctx)
+	ingressMode := fromctx.MustIngressModeFromCtx(ctx)
+	gatewayName := fromctx.MustGatewayNameFromCtx(ctx)
+	gatewayNamespace := fromctx.MustGatewayNamespaceFromCtx(ctx)
+	gatewayImplementation := fromctx.MustGatewayImplementationFromCtx(ctx)
 
 	// Initialize Gateway implementation if using gateway-api mode
 	var gatewayImpl gateway.Implementation
