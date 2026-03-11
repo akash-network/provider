@@ -106,11 +106,11 @@ function minikube_losetup() {
 	# scp should not ask for any confirmation
 	pushd "$(pwd)"
 
-	cd "$AKASH_DEVCACHE"
+	cd "$AP_DEVCACHE"
 
 	rpm2cpio "${LOSETUP_RPM}" | cpio -ivdm ./sbin/losetup
-	scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i "$(${minikube} ssh-key)" "${AKASH_DEVCACHE}/sbin/losetup" docker@"$(${minikube} ip)":losetup
-	rm -f "${AKASH_DEVCACHE}/sbin/losetup"
+	scp -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i "$(${minikube} ssh-key)" "${AP_DEVCACHE}/sbin/losetup" docker@"$(${minikube} ip)":losetup
+	rm -f "${AP_DEVCACHE}/sbin/losetup"
 
 	popd
 

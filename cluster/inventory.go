@@ -27,7 +27,7 @@ import (
 
 	sdlutil "pkg.akt.dev/go/sdl/util"
 	"pkg.akt.dev/go/util/pubsub"
-	"pkg.akt.dev/node/util/runner"
+	"pkg.akt.dev/node/v2/util/runner"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"

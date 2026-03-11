@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+eval "$(direnv hook bash)"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 SEMVER=$SCRIPT_DIR/semver.sh
 
@@ -49,17 +51,23 @@ function get_goversion() {
 }
 
 function build_akash() {
-	dev_cache=${AP_DEVCACHE_BIN}
+	local tmp_akash
+	tmp_akash="${AP_DEVCACHE_BIN}/akash"
+
 	cd "$1" || exit 1
-	export AKASH_ROOT="$1"
-	source .env
-	make akash AKASH="${dev_cache}/akash"
+
+	direnv allow
+	_direnv_hook
+
+	cp "$AKASH" "$tmp_akash"
+
+	make akash
 }
 
 function build_akash_docker() {
 	cd "$1" || exit 1
-	export AKASH_ROOT="$1"
-	source .env
+	direnv allow
+	_direnv_hook
 	make docker-image
 }
 
