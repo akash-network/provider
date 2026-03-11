@@ -23,3 +23,5 @@ configMapGenerator:
       - gateway-name=akash-gateway
       - gateway-namespace=akash-gateway
       - gateway-implementation=nginx
+generatorOptions:
+  disableNameSuffixHash: true
