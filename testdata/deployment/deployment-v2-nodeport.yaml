@@ -29,7 +29,7 @@ profiles:
     global:
       pricing:
         web: 
-          denom: uakt
+          denom: uact
           amount: 9000
 
 deployment:

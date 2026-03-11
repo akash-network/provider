@@ -19,7 +19,7 @@ import (
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
-	mquery "pkg.akt.dev/node/x/market/query"
+	mquery "pkg.akt.dev/node/v2/x/market/query"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"

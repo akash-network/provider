@@ -31,7 +31,7 @@ import (
 	"pkg.akt.dev/go/util/ctxlog"
 	"pkg.akt.dev/go/util/events"
 	"pkg.akt.dev/go/util/pubsub"
-	xpconfig "pkg.akt.dev/node/x/provider/config"
+	xpconfig "pkg.akt.dev/node/v2/x/provider/config"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/bidengine"

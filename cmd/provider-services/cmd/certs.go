@@ -28,7 +28,7 @@ import (
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	"pkg.akt.dev/go/util/pubsub"
-	cutils "pkg.akt.dev/node/x/cert/utils"
+	cutils "pkg.akt.dev/node/v2/x/cert/utils"
 
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/tools/certissuer"

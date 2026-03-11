@@ -6,7 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	vutil "pkg.akt.dev/node/util/validation"
+	vutil "pkg.akt.dev/node/v2/util/validation"
 )
 
 // Settings configures k8s object generation such that it is customized to the
