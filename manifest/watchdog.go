@@ -25,6 +25,7 @@ type watchdog struct {
 	lc      lifecycle.Lifecycle
 	sess    session.Session
 	ctx     context.Context
+	cancel  context.CancelFunc
 	log     log.Logger
 }
 
@@ -36,13 +37,11 @@ func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtype
 		lc:      lifecycle.New(),
 		sess:    sess,
 		ctx:     ctx,
+		cancel:  cancel,
 		log:     sess.Log().With("leaseID", leaseID),
 	}
 
-	go func() {
-		result.lc.WatchChannel(parent)
-		cancel()
-	}()
+	go result.lc.WatchChannel(parent)
 
 	go func() {
 		<-result.lc.Done()
@@ -54,12 +53,22 @@ func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtype
 	return result
 }
 
+// stop signals the watchdog to exit without closing the bid.
+// Called when: (1) manifest received within the timeout, (2) manifest manager is stopped.
 func (wd *watchdog) stop() {
 	wd.lc.ShutdownAsync(nil)
 }
 
+// run waits for the manifest timeout, then broadcasts MsgCloseBid.
+//
+// Rule: once the broadcast is started, we commit to it - it must complete regardless of
+// any concurrent stop() or parent shutdown. This prevents leaving an open bid on-chain.
+//
+// wd.ctx is derived from context.Background() and is only canceled via defer wd.cancel()
+// at the end of run(), so the broadcast context is always alive while run() executes.
 func (wd *watchdog) run() {
 	defer wd.lc.ShutdownCompleted()
+	defer wd.cancel()
 
 	var runch <-chan runner.Result
 	var err error
@@ -78,16 +87,20 @@ func (wd *watchdog) run() {
 			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 		})
 	case err = <-wd.lc.ShutdownRequest():
+		// Manifest received or parent shutdown before timeout - exit without closing the bid.
 	}
 
-	if runch != nil {
+	// ShutdownRequest may arrive while we wait for the broadcast result
+	// consume it to unblock the sender, but keep looping until runch delivers.
+	// wd.ctx is not canceled until run() returns, so none of these signals can interrupt the in-flight broadcast.
+	for runch != nil {
 		select {
 		case result := <-runch:
 			if err := result.Error(); err != nil {
 				wd.log.Error("failed closing bid", "err", err)
 			}
+			runch = nil
 		case err = <-wd.lc.ShutdownRequest():
-			// we need this case to skip waiting on runch when stop() is called
 		}
 	}
 	wd.lc.ShutdownInitiated(err)
