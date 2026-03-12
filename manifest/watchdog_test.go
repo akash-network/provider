@@ -137,14 +137,19 @@ func TestWatchdogStopWhileWaitingForBroadcast(t *testing.T) {
 	<-time.After(200 * time.Millisecond)
 	wd.stop()
 
+	close(releaseCh)
+
 	select {
 	case <-wd.lc.Done():
 	case <-time.After(5 * time.Second):
-		t.Fatal("deadlock: stop() blocked while watchdog was waiting on broadcast")
+		t.Fatal("deadlock: watchdog did not complete after broadcast")
 	}
-
-	close(releaseCh)
 
 	deploymentID := testutil.ChannelWaitForValue(t, scaffold.doneCh)
 	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())
+
+	broadcasts := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	msgs := broadcasts.([]sdk.Msg)
+	require.Len(t, msgs, 1)
+	require.Equal(t, mtypes.LeaseClosedReasonManifestTimeout, msgs[0].(*mvbeta.MsgCloseBid).Reason)
 }
