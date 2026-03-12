@@ -1,3 +1,5 @@
+GATEWAY_API ?= false
+
 KUBE_SETUP_PREREQUISITES   ?= \
 
 KUBE_CLUSTER_CREATE_TYPE := kind
@@ -11,6 +13,15 @@ KUSTOMIZE_INSTALLS ?= \
 include ../common.mk
 include ../common-commands.mk
 include ../common-kube.mk
+
+# Gateway API mode overrides
+ifeq ($(GATEWAY_API),true)
+KIND_CONFIG_FILE := $(CURDIR)/kind-config-gateway.yaml
+
+# Override default ingress setup to use Gateway API instead of NGINX Ingress
+kube-setup-ingress-default: kube-setup-ingress-gateway
+	@echo "Gateway API ingress setup complete"
+endif
 
 SDL_PATH ?= grafana.yaml
 
@@ -30,7 +41,8 @@ provider-run:
 		--cluster-public-hostname "$(GATEWAY_HOSTNAME)" \
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none" \
-		--ip-operator=true
+		--ip-operator=true \
+		$(if $(filter true,$(GATEWAY_API)),--ingress-mode=gateway-api --gateway-name=akash-gateway --gateway-namespace=akash-gateway)
 
 .PHONY: provider-lease-ping
 provider-lease-ping:
@@ -55,22 +67,17 @@ kube-setup-hostname-operator-ingress:
 	kubectl rollout status deployment/operator-hostname -n akash-services --timeout=60s
 
 .PHONY: kube-setup-kube
+ifeq ($(GATEWAY_API),true)
+kube-setup-kube: kube-setup-hostname-operator-gateway
+else
 kube-setup-kube: kube-setup-hostname-operator-ingress
-
-.INTERMEDIATE: kube-cluster-create-kind-gateway
-kube-cluster-create-kind-gateway: $(KIND)
-	$(KIND) create cluster --config kind-config-gateway.yaml --name "$(KIND_NAME)" --image "$(KIND_IMG)"
-
-KUBE_CREATE_GATEWAY := $(AP_RUN_DIR)/.kube-create-gateway
-
-$(KUBE_CREATE_GATEWAY): $(AP_RUN_DIR) kube-cluster-create-kind-gateway
-	$(SETUP_KUBE) --crd=$(CRD_FILE) kind init "$(KUBE_SSH_NODES)"
-	touch $@
+endif
 
 .PHONY: kube-setup-ingress-gateway
 kube-setup-ingress-gateway:
 	kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.4.1&timeout=90s" | kubectl apply -f -
 	helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
+		--version 2.4.1 \
 		--create-namespace \
 		-n nginx-gateway \
 		--set nginx.service.type=NodePort \
@@ -80,7 +87,7 @@ kube-setup-ingress-gateway:
 	kubectl apply -f "$(METALLB_SERVICE_PATH)"
 	kubectl apply -f gateway-resources.yaml
 	@echo "Waiting for Gateway to be ready..."
-	@kubectl wait --for=condition=Programmed gateway/akash-gateway -n akash-gateway --timeout=120s || true
+	@kubectl wait --for=condition=Programmed gateway/akash-gateway -n akash-gateway --timeout=120s
 
 .PHONY: kube-setup-hostname-operator-gateway
 kube-setup-hostname-operator-gateway:
@@ -90,39 +97,7 @@ kube-setup-hostname-operator-gateway:
 	kubectl rollout restart deployment/operator-hostname -n akash-services
 	kubectl rollout status deployment/operator-hostname -n akash-services --timeout=60s
 
-.PHONY: kube-cluster-setup-gateway
-kube-cluster-setup-gateway: init \
-	kube-prepare-images \
-	$(KUBE_CREATE_GATEWAY) \
-	kube-cluster-check-info \
-	kube-setup-ingress-gateway \
-	kube-upload-images \
-	kustomize-init \
-	kustomize-deploy-services \
-	kube-deployments-rollout \
-	kube-install-helm-charts \
-	kube-setup-$(AP_RUN_NAME) \
-	kube-setup-hostname-operator-gateway
-
-.PHONY: provider-run-gateway
-provider-run-gateway:
-	$(PROVIDER_SERVICES) run \
-		--from "$(PROVIDER_KEY_NAME)" \
-		--cluster-k8s \
-		--gateway-listen-address "$(GATEWAY_HOST)" \
-		--deployment-ingress-static-hosts true \
-		--deployment-ingress-domain "$(GATEWAY_HOSTNAME)" \
-		--cluster-node-port-quantity 100 \
-		--cluster-public-hostname "$(GATEWAY_HOSTNAME)" \
-		--bid-price-strategy "randomRange" \
-		--deployment-runtime-class "none" \
-		--ip-operator=true \
-		--ingress-mode=gateway-api \
-		--gateway-name=akash-gateway \
-		--gateway-namespace=akash-gateway
-
-# Override the standard kube-cluster-delete-kind to handle both marker files
 .PHONY: kube-cluster-delete
 kube-cluster-delete: $(KIND)
 	$(KIND) delete cluster --name "$(KIND_NAME)"
-	rm -rf $(KUBE_CREATE) $(KUBE_CREATE_GATEWAY)
+	rm -rf $(KUBE_CREATE)
