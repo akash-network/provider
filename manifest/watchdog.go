@@ -98,6 +98,7 @@ func (wd *watchdog) run() {
 			}
 			runch = nil
 		case err = <-wd.lc.ShutdownRequest():
+			wd.log.Info("watchdog shutdown requested, waiting for bid close tx to complete")
 		}
 	}
 	wd.lc.ShutdownInitiated(err)
