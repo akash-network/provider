@@ -110,7 +110,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		authorizeProviderMiddleware,
 		requireOwner,
 	)
-	
+
 	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
 	hostnameRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).

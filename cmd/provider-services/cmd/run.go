@@ -474,6 +474,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
+	broadcastTimeout := viper.GetDuration(FlagTxBroadcastTimeout)
 	metricsListener := viper.GetString(FlagMetricsListener)
 	providerConfig := viper.GetString(FlagProviderConfig)
 	cachedResultMaxAge := viper.GetDuration(FlagCachedResultMaxAge)
@@ -576,6 +577,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
 	config.ManifestTimeout = manifestTimeout
+	config.BroadcastTimeout = broadcastTimeout
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod
 	config.MonitorRetryPeriodJitter = monitorRetryPeriodJitter
