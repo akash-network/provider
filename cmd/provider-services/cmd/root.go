@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	cflags "pkg.akt.dev/go/cli/flags"
-	acmd "pkg.akt.dev/node/cmd/akash/cmd"
+	acmd "pkg.akt.dev/node/v2/cmd/akash/cmd"
 
 	tmcli "github.com/cometbft/cometbft/libs/cli"
 	"github.com/cosmos/cosmos-sdk/client/debug"
@@ -12,7 +12,7 @@ import (
 
 	"pkg.akt.dev/go/cli"
 	"pkg.akt.dev/go/sdkutil"
-	"pkg.akt.dev/node/app"
+	"pkg.akt.dev/node/v2/app"
 
 	"github.com/akash-network/provider/operator"
 	"github.com/akash-network/provider/operator/hostname"
@@ -64,11 +64,11 @@ func NewRootCmd() *cobra.Command {
 
 	cmd.AddCommand(cli.EventsCmd())
 	cmd.AddCommand(cli.KeysCmds())
-	cmd.AddCommand(genutilcli.InitCmd(app.ModuleBasics(), app.DefaultHome))
-	// cmd.AddCommand(genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, app.DefaultHome))
-	// cmd.AddCommand(genutilcli.GenTxCmd(app.ModuleBasics(), encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{}, app.DefaultHome))
+	cmd.AddCommand(genutilcli.InitCmd(app.ModuleBasics(), cli.DefaultHome))
+	// cmd.AddCommand(genutilcli.CollectGenTxsCmd(banktypes.GenesisBalancesIterator{}, cli.DefaultHome))
+	// cmd.AddCommand(genutilcli.GenTxCmd(app.ModuleBasics(), encodingConfig.TxConfig, banktypes.GenesisBalancesIterator{}, cli.DefaultHome))
 	cmd.AddCommand(genutilcli.ValidateGenesisCmd(app.ModuleBasics()))
-	cmd.AddCommand(acmd.AddGenesisAccountCmd(app.DefaultHome))
+	cmd.AddCommand(acmd.AddGenesisAccountCmd(cli.DefaultHome))
 	cmd.AddCommand(tmcli.NewCompletionCmd(cmd, true))
 	cmd.AddCommand(debug.Cmd())
 

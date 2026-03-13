@@ -17,7 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 
-	metricsutils "pkg.akt.dev/node/util/metrics"
+	metricsutils "pkg.akt.dev/node/v2/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 )

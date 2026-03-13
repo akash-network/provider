@@ -44,12 +44,12 @@ profiles:
     global:
       pricing:
         web:
-          denom: uakt
+          denom: uact
           amount: 10
     bob:
       pricing:
         bob:
-          denom: uakt
+          denom: uact
           amount: 99
 
 deployment:

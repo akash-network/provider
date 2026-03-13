@@ -15,7 +15,7 @@ package manifest
 // 	mtypes "pkg.akt.dev/go/node/market/v1beta4"
 // 	ptypes "pkg.akt.dev/go/node/provider/v1beta3"
 // 	"pkg.akt.dev/go/sdkutil"
-// 	clientMocks "pkg.akt.dev/node/client/mocks"
+// 	clientMocks "pkg.akt.dev/node/v2/client/mocks"
 // 	"pkg.akt.dev/go/util/pubsub"
 // 	"pkg.akt.dev/go/sdl"
 // 	"pkg.akt.dev/go/testutil"
