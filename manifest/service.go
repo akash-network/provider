@@ -191,7 +191,7 @@ func (s *service) Submit(ctx context.Context, did dtypes.DeploymentID, mani mani
 	case <-s.lc.Done():
 		return ErrNotRunning
 	case result := <-ch:
-		return result
+		return WrapSubmitErrorForGateway(result)
 	}
 }
 
