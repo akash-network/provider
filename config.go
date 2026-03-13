@@ -34,6 +34,7 @@ func NewDefaultConfig() Config {
 	return Config{
 		ClusterWaitReadyDuration: time.Second * 10,
 		BidDeposit:               mtypes.DefaultBidMinDeposit,
+		BroadcastTimeout:         30 * time.Second,
 		BalanceCheckerCfg: BalanceCheckerConfig{
 			LeaseFundsCheckInterval: 1 * time.Minute,
 			WithdrawalPeriod:        24 * time.Hour,
