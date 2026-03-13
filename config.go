@@ -21,6 +21,7 @@ type Config struct {
 	BidDeposit                  sdk.Coin
 	BidTimeout                  time.Duration
 	ManifestTimeout             time.Duration
+	BroadcastTimeout            time.Duration
 	BalanceCheckerCfg           BalanceCheckerConfig
 	Attributes                  attrtypes.Attributes
 	MaxGroupVolumes             int

@@ -20,25 +20,22 @@ import (
 )
 
 type watchdog struct {
-	leaseID mtypes.LeaseID
-	timeout time.Duration
-	lc      lifecycle.Lifecycle
-	sess    session.Session
-	ctx     context.Context
-	cancel  context.CancelFunc
-	log     log.Logger
+	leaseID          mtypes.LeaseID
+	timeout          time.Duration
+	broadcastTimeout time.Duration
+	lc               lifecycle.Lifecycle
+	sess             session.Session
+	log              log.Logger
 }
 
-func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID mtypes.LeaseID, timeout time.Duration) *watchdog {
-	ctx, cancel := context.WithCancel(context.Background())
+func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID mtypes.LeaseID, timeout, broadcastTimeout time.Duration) *watchdog {
 	result := &watchdog{
-		leaseID: leaseID,
-		timeout: timeout,
-		lc:      lifecycle.New(),
-		sess:    sess,
-		ctx:     ctx,
-		cancel:  cancel,
-		log:     sess.Log().With("leaseID", leaseID),
+		leaseID:          leaseID,
+		timeout:          timeout,
+		broadcastTimeout: broadcastTimeout,
+		lc:               lifecycle.New(),
+		sess:             sess,
+		log:              sess.Log().With("leaseID", leaseID),
 	}
 
 	go result.lc.WatchChannel(parent)
@@ -63,12 +60,9 @@ func (wd *watchdog) stop() {
 //
 // Rule: once the broadcast is started, we commit to it - it must complete regardless of
 // any concurrent stop() or parent shutdown. This prevents leaving an open bid on-chain.
-//
-// wd.ctx is derived from context.Background() and is only canceled via defer wd.cancel()
-// at the end of run(), so the broadcast context is always alive while run() executes.
+// broadcastTimeout bounds how long we wait for the RPC response to prevent a permanent hang.
 func (wd *watchdog) run() {
 	defer wd.lc.ShutdownCompleted()
-	defer wd.cancel()
 
 	var runch <-chan runner.Result
 	var err error
@@ -80,19 +74,22 @@ func (wd *watchdog) run() {
 		wd.log.Info("watchdog closing bid")
 
 		runch = runner.Do(func() runner.Result {
+			ctx, cancel := context.WithTimeout(context.Background(), wd.broadcastTimeout)
+			defer cancel()
+
 			msg := &mvbeta.MsgCloseBid{
 				ID:     mtypes.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
 				Reason: mtypes.LeaseClosedReasonManifestTimeout,
 			}
-			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 		})
 	case err = <-wd.lc.ShutdownRequest():
 		// Manifest received or parent shutdown before timeout - exit without closing the bid.
 	}
 
-	// ShutdownRequest may arrive while we wait for the broadcast result
-	// consume it to unblock the sender, but keep looping until runch delivers.
-	// wd.ctx is not canceled until run() returns, so none of these signals can interrupt the in-flight broadcast.
+	// ShutdownRequest may arrive while we wait for the broadcast result.
+	// Consume it to unblock the sender, but keep looping until runch delivers.
+	// The broadcast context is independent and bounded by broadcastTimeout.
 	for runch != nil {
 		select {
 		case result := <-runch:
