@@ -21,7 +21,6 @@ import (
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
-	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 )
 

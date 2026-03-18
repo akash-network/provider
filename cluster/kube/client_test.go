@@ -145,7 +145,7 @@ func TestLeaseStatusWithNoDeployments(t *testing.T) {
 	})
 
 	status, err := clientInterface.LeaseStatus(ctx, lid)
-	require.ErrorIs(t, err, kubeclienterrors.ErrNoDeploymentForLease)
+	require.Equal(t, kubeclienterrors.ErrNoDeploymentForLease, err)
 	require.Nil(t, status)
 }
 

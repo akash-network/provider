@@ -3,13 +3,10 @@ package errors
 import (
 	"errors"
 	"net"
-	"net/http"
 	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/akash-network/provider/pkg/httperror"
 )
 
 func TestIsClusterUnavailable(t *testing.T) {
@@ -31,25 +28,6 @@ func TestIsClusterUnavailable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, IsClusterUnavailable(tt.err))
-		})
-	}
-}
-
-func TestWrapClusterErrorForGateway(t *testing.T) {
-	tests := []struct {
-		name           string
-		err            error
-		expectedStatus int
-	}{
-		{"connection_refused", errors.New("connection refused"), http.StatusServiceUnavailable},
-		{"lease_not_found", ErrLeaseNotFound, http.StatusNotFound},
-		{"no_deployment_for_lease", ErrNoDeploymentForLease, http.StatusNotFound},
-		{"unknown", errors.New("other"), http.StatusInternalServerError},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			wrapped := WrapClusterErrorForGateway(tt.err)
-			require.Equal(t, tt.expectedStatus, httperror.StatusCodeFrom(wrapped))
 		})
 	}
 }

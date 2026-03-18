@@ -372,7 +372,6 @@ type deployObjNames struct {
 }
 
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
-
 	var settings builder.Settings
 	var valid bool
 

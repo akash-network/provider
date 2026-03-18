@@ -1,20 +1,12 @@
-// Package errors provides cluster error types and HTTP status mapping.
-//
-// The gateway wraps cluster errors via WrapClusterErrorForGateway before writing
-// HTTP responses. The cluster client returns raw errors.
+// Package errors provides cluster error types.
 package errors
 
 import (
 	"errors"
 	"fmt"
 	"net"
-	"net/http"
 	"strings"
 	"syscall"
-
-	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
-
-	"github.com/akash-network/provider/pkg/httperror"
 )
 
 var (
@@ -28,28 +20,6 @@ var (
 	ErrNotConfiguredWithSettings = fmt.Errorf("%w: not configured with settings in the context passed to function", errKubeClient)
 	ErrAlreadyExists             = fmt.Errorf("%w: resource already exists", errKubeClient)
 )
-
-// WrapClusterErrorForGateway wraps a cluster error in a custom HttpError with the appropriate HTTP status code.
-func WrapClusterErrorForGateway(err error) error {
-	switch {
-	case err == nil:
-		return nil
-	case IsClusterUnavailable(err):
-		return httperror.NewHttpError(http.StatusServiceUnavailable, err)
-	case errors.Is(err, ErrNoDeploymentForLease):
-		fallthrough
-	case errors.Is(err, ErrLeaseNotFound):
-		fallthrough
-	case errors.Is(err, ErrNoManifestForLease):
-		fallthrough
-	case errors.Is(err, ErrNoServiceForLease):
-		fallthrough
-	case kubeErrors.IsNotFound(err):
-		return httperror.NewHttpError(http.StatusNotFound, err)
-	default:
-		return httperror.NewHttpError(http.StatusInternalServerError, err)
-	}
-}
 
 // IsClusterUnavailable reports whether err indicates the cluster is unreachable.
 func IsClusterUnavailable(err error) bool {
