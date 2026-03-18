@@ -17,6 +17,7 @@ import (
 	atypes "pkg.akt.dev/go/node/audit/v1"
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	dv1 "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	deposit "pkg.akt.dev/go/node/types/deposit/v1"
@@ -294,12 +295,18 @@ loop:
 
 				break loop
 			case *mtypes.EventOrderClosed:
-				// different deployment
 				if !ev.ID.Equals(o.orderID) {
 					break
 				}
-
 				o.log.Info("order closed")
+				orderCompleteCounter.WithLabelValues("order-closed").Inc()
+				break loop
+			case *dv1.EventGroupClosed:
+				// deployment/group closed without lease - chain emits EventGroupClosed, not EventOrderClosed
+				if !ev.ID.Equals(o.orderID.GroupID()) {
+					break
+				}
+				o.log.Info("group closed, closing order")
 				orderCompleteCounter.WithLabelValues("order-closed").Inc()
 				break loop
 			case *mtypes.EventBidClosed:
