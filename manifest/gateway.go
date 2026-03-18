@@ -9,9 +9,8 @@ import (
 	"github.com/akash-network/provider/pkg/httperror"
 )
 
-// WrapSubmitErrorForGateway wraps manifest submit errors with custom HttpError
-// so the gateway can return the correct HTTP status.
-func WrapSubmitErrorForGateway(err error) error {
+// ManifestSubmitErrorToHTTP maps manifest submit errors to HttpError for gateway responses.
+func ManifestSubmitErrorToHTTP(err error) error {
 	if err == nil {
 		return nil
 	}

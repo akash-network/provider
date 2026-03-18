@@ -667,7 +667,7 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 				Code:     0,
 			},
 		}
-		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, httperror.NewHttpError(http.StatusNotFound, kubeStatus))
+		test.pcclient.On("LeaseStatus", mock.Anything, leaseID).Return(nil, kubeStatus)
 		mockManifestGroupsForRouterTest(test, leaseID)
 
 		uri, err := apclient.MakeURI(test.host, apclient.LeaseStatusPath(leaseID))
@@ -693,6 +693,24 @@ func TestRouteLeaseNotInKubernetes(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
+}
+
+func TestWebsocketCloseCodeFrom(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		wantCode int
+	}{
+		{"not_found", kubeclienterrors.ErrNoDeploymentForLease, websocketLeaseNotFound},
+		{"service_unavailable", errors.New("apiserver not ready"), websocketServiceUnavailable},
+		{"internal_error", errGeneric, websocketInternalServerErrorCode},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := websocketCloseCodeFrom(tt.err)
+			require.Equal(t, tt.wantCode, got)
+		})
+	}
 }
 
 func TestStatusCodeFrom(t *testing.T) {
@@ -734,7 +752,7 @@ func TestRouteLeaseStatus_cluster_errors(t *testing.T) {
 			name: "service_unavailable",
 			setup: func(rt *routerTest, lid mtypes.LeaseID) {
 				rt.pcclient.On("GetManifestGroup", mock.Anything, lid).
-					Return(false, v2beta2.ManifestGroup{}, httperror.NewHttpError(http.StatusServiceUnavailable, errors.New("apiserver not ready")))
+					Return(false, v2beta2.ManifestGroup{}, errors.New("apiserver not ready"))
 			},
 			expectedStatus: http.StatusServiceUnavailable,
 			bodyRegex:      "",
@@ -899,7 +917,7 @@ func TestRouteServiceStatusKubernetesNotFound(t *testing.T) {
 			GSeq:     gseq,
 			OSeq:     oseq,
 			Provider: paddr.String(),
-		}, serviceName).Return(nil, httperror.NewHttpError(http.StatusNotFound, kubeStatus))
+		}, serviceName).Return(nil, kubeStatus)
 
 		lid := mtypes.LeaseID{
 			DSeq:     dseq,

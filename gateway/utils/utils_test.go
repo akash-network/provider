@@ -1,5 +1,4 @@
-// Tests assert behavior from main: JWT error→status mapping (WrapAuthErrorForGateway)
-// and AuthProcess ErrAuthAmbiguous (mTLS+token), no-token→claims.
+// Tests assert JWT error→status mapping (jwtErrorToHTTP) and AuthProcess ErrAuthAmbiguous, no-token→claims.
 package utils
 
 import (
@@ -24,7 +23,7 @@ import (
 	"github.com/akash-network/provider/pkg/httperror"
 )
 
-func TestWrapAuthErrorForGateway(t *testing.T) {
+func TestJwtErrorToHTTP(t *testing.T) {
 	tests := []struct {
 		name           string
 		token          *jwt.Token
@@ -91,7 +90,7 @@ func TestWrapAuthErrorForGateway(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ce := WrapAuthErrorForGateway(tt.token, tt.err)
+			ce := jwtErrorToHTTP(tt.token, tt.err)
 			require.NotNil(t, ce)
 			require.Equal(t, tt.expectedStatus, ce.StatusCode)
 			require.Contains(t, ce.Error(), tt.expectedMsg)

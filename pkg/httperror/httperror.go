@@ -2,9 +2,9 @@
 // for gateway responses. The gateway uses StatusCodeFrom(err) only.
 //
 // Domain-specific mappers (wrap errors before returning to gateway):
-//   - gateway/rest.writeClusterError (calls wrapClusterErrorToHTTP)
-//   - manifest.WrapSubmitErrorForGateway
-//   - gateway/utils.WrapAuthErrorForGateway (JWT parse errors)
+//   - gateway/rest.writeClusterError (calls clusterErrorToHTTP)
+//   - manifest.ManifestSubmitErrorToHTTP
+//   - gateway/utils.jwtErrorToHTTP (JWT parse errors)
 package httperror
 
 import (

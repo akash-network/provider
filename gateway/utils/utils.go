@@ -152,15 +152,15 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 		}, jwt.WithValidMethods([]string{"ES256K", "ES256KADR36"}))
 
 		if err != nil || !parsedToken.Valid {
-			return nil, WrapAuthErrorForGateway(parsedToken, err)
+			return nil, jwtErrorToHTTP(parsedToken, err)
 		}
 	}
 
 	return claims, nil
 }
 
-// WrapAuthErrorForGateway converts a JWT parse result to a custom HttpError with the appropriate HTTP status code.
-func WrapAuthErrorForGateway(token *jwt.Token, err error) *httperror.HttpError {
+// jwtErrorToHTTP maps JWT parse results to HttpError for gateway responses.
+func jwtErrorToHTTP(token *jwt.Token, err error) *httperror.HttpError {
 	switch {
 	case err == nil && (token == nil || !token.Valid):
 		return httperror.ErrJWTInvalid

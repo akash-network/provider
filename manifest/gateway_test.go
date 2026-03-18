@@ -12,7 +12,7 @@ import (
 	"github.com/akash-network/provider/pkg/httperror"
 )
 
-func TestWrapSubmitErrorForGateway(t *testing.T) {
+func TestManifestSubmitErrorToHTTP(t *testing.T) {
 	tests := []struct {
 		name           string
 		err            error
@@ -29,7 +29,7 @@ func TestWrapSubmitErrorForGateway(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := WrapSubmitErrorForGateway(tt.err)
+			got := ManifestSubmitErrorToHTTP(tt.err)
 			if tt.err == nil {
 				require.NoError(t, got)
 				return

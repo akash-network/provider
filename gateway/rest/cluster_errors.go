@@ -10,7 +10,7 @@ import (
 	"github.com/akash-network/provider/pkg/httperror"
 )
 
-func wrapClusterErrorToHTTP(err error) error {
+func clusterErrorToHTTP(err error) error {
 	switch {
 	case err == nil:
 		return nil

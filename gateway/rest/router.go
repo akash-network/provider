@@ -64,11 +64,12 @@ const (
 )
 
 func writeClusterError(w http.ResponseWriter, err error) {
-	err = wrapClusterErrorToHTTP(err)
+	err = clusterErrorToHTTP(err)
 	http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
 }
 
 func websocketCloseCodeFrom(err error) int {
+	err = clusterErrorToHTTP(err)
 	switch httperror.StatusCodeFrom(err) {
 	case http.StatusNotFound:
 		return websocketLeaseNotFound
@@ -692,7 +693,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 	logs, err := cfg.client.LeaseLogs(cctx, cfg.lid, cfg.services, cfg.follow, cfg.tailLines)
 	if err != nil {
 		cfg.log.Error("couldn't fetch logs", "error", err.Error())
-		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(wrapClusterErrorToHTTP(err)), ""))
+		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(err), ""))
 		if err != nil {
 			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
 		}
@@ -786,7 +787,7 @@ func wsEventWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) 
 	evts, err := cfg.client.LeaseEvents(cctx, cfg.lid, cfg.services, cfg.follow)
 	if err != nil {
 		cfg.log.Error("couldn't fetch events", "error", err.Error())
-		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(wrapClusterErrorToHTTP(err)), ""))
+		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(err), ""))
 		if err != nil {
 			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
 		}
