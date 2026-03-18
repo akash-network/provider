@@ -63,6 +63,11 @@ const (
 	manifestSubmitTimeout            = 120 * time.Second
 )
 
+func writeClusterError(w http.ResponseWriter, err error) {
+	err = kubeclienterrors.WrapClusterErrorForGateway(err)
+	http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+}
+
 func websocketCloseCodeFrom(err error) int {
 	switch httperror.StatusCodeFrom(err) {
 	case http.StatusNotFound:
@@ -415,7 +420,7 @@ func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerF
 	return func(w http.ResponseWriter, _ *http.Request) {
 		kube, err := pclient.Cluster().KubeVersion()
 		if err != nil {
-			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+			writeClusterError(w, err)
 			return
 		}
 
@@ -474,7 +479,7 @@ func getManifestHandler(log log.Logger, cclient cluster.ReadClient) http.Handler
 	return func(w http.ResponseWriter, r *http.Request) {
 		found, grp, err := cclient.GetManifestGroup(r.Context(), requestLeaseID(r))
 		if err != nil {
-			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+			writeClusterError(w, err)
 			return
 		}
 
@@ -526,7 +531,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 
 		found, manifestGroup, err := cclient.GetManifestGroup(req.Context(), leaseID)
 		if err != nil {
-			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+			writeClusterError(w, err)
 			return
 		}
 
@@ -554,7 +559,7 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 				log.Debug("querying for IP address status", "lease-id", leaseID)
 				ipLeaseStatus, err = clIP.GetIPAddressStatus(req.Context(), leaseID.OrderID())
 				if err != nil {
-					http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+					writeClusterError(w, err)
 					return
 				}
 				result.IPs = make(map[string][]apclient.LeasedIPStatus)
@@ -590,14 +595,14 @@ func leaseStatusHandler(log log.Logger, cclient cluster.ReadClient, clusterSetti
 		if hasForwardedPorts {
 			result.ForwardedPorts, err = cclient.ForwardedPortStatus(ctx, leaseID)
 			if err != nil {
-				http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+				writeClusterError(w, err)
 				return
 			}
 		}
 
 		result.Services, err = cclient.LeaseStatus(ctx, leaseID)
 		if err != nil {
-			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+			writeClusterError(w, err)
 			return
 		}
 
@@ -609,7 +614,7 @@ func leaseServiceStatusHandler(log log.Logger, cclient cluster.ReadClient) http.
 	return func(w http.ResponseWriter, req *http.Request) {
 		status, err := cclient.ServiceStatus(req.Context(), requestLeaseID(req), requestService(req))
 		if err != nil {
-			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+			writeClusterError(w, err)
 			return
 		}
 		writeJSON(log, w, status)
@@ -687,7 +692,7 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 	logs, err := cfg.client.LeaseLogs(cctx, cfg.lid, cfg.services, cfg.follow, cfg.tailLines)
 	if err != nil {
 		cfg.log.Error("couldn't fetch logs", "error", err.Error())
-		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(err), ""))
+		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(kubeclienterrors.WrapClusterErrorForGateway(err)), ""))
 		if err != nil {
 			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
 		}
@@ -781,7 +786,7 @@ func wsEventWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) 
 	evts, err := cfg.client.LeaseEvents(cctx, cfg.lid, cfg.services, cfg.follow)
 	if err != nil {
 		cfg.log.Error("couldn't fetch events", "error", err.Error())
-		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(err), ""))
+		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(kubeclienterrors.WrapClusterErrorForGateway(err)), ""))
 		if err != nil {
 			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
 		}

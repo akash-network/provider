@@ -843,7 +843,7 @@ func TestRouteServiceStatusNoDeployment(t *testing.T) {
 			GSeq:     gseq,
 			OSeq:     oseq,
 			Provider: paddr.String(),
-		}, serviceName).Return(nil, kubeclienterrors.WrapClusterErrorForGateway(kubeclienterrors.ErrNoDeploymentForLease))
+		}, serviceName).Return(nil, kubeclienterrors.ErrNoDeploymentForLease)
 
 		lid := mtypes.LeaseID{
 			DSeq:     dseq,

@@ -122,7 +122,7 @@ func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, clie
 
 			if err != nil {
 				log.Error("could not re-declare IP as part of endpoint migration", "lease", leaseID, "err", err)
-				rw.WriteHeader(http.StatusInternalServerError)
+				writeClusterError(rw, err)
 				return
 			}
 		}

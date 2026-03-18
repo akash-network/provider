@@ -1,7 +1,7 @@
 // Package errors provides cluster error types and HTTP status mapping.
 //
-// When returning cluster failures to the gateway, use WrapClusterErrorForGateway
-// so the gateway can map them to the correct HTTP status. Do not return raw errors.
+// The gateway wraps cluster errors via WrapClusterErrorForGateway before writing
+// HTTP responses. The cluster client returns raw errors.
 package errors
 
 import (

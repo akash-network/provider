@@ -105,7 +105,7 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chos
 		metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "networking-ingresses-create", err)
 	}
 
-	return kubeclienterrors.WrapClusterErrorForGateway(err)
+	return err
 }
 
 func (c *client) RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error {
@@ -134,7 +134,7 @@ func (c *client) RemoveHostnameFromDeployment(ctx context.Context, hostname stri
 		return nil
 	}
 
-	return kubeclienterrors.WrapClusterErrorForGateway(err)
+	return err
 }
 
 func ingressRules(hostname string, kubeServiceName string, kubeServicePort int32) []netv1.IngressRule {

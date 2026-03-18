@@ -57,7 +57,7 @@ func (c *client) Exec(ctx context.Context, leaseID mtypes.LeaseID, serviceName s
 
 	mani, err := c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, namespace, metav1.GetOptions{})
 	if err != nil {
-		return nil, kubeclienterrors.WrapClusterErrorForGateway(fmt.Errorf("%w: failed getting manifest", err))
+		return nil, fmt.Errorf("%w: failed getting manifest", err)
 	}
 
 loop:
@@ -77,7 +77,7 @@ loop:
 		LabelSelector: fmt.Sprintf("akash.network/manifest-service=%s", serviceName),
 	})
 	if err != nil {
-		return nil, kubeclienterrors.WrapClusterErrorForGateway(fmt.Errorf("%w: failed getting pods in namespace %q", err, namespace))
+		return nil, fmt.Errorf("%w: failed getting pods in namespace %q", err, namespace)
 	}
 
 	// if no pods are found yet then the deployment hasn't been spun up kubernetes yet
@@ -137,7 +137,7 @@ loop:
 
 	kubeRestClient, err := restclient.RESTClientFor(kubeConfig)
 	if err != nil {
-		return nil, kubeclienterrors.WrapClusterErrorForGateway(fmt.Errorf("%w: failed getting REST client", err))
+		return nil, fmt.Errorf("%w: failed getting REST client", err)
 	}
 
 	c.log.Info("Opening container shell", "namespace", namespace, "pod", podName, "container", containerName)
@@ -161,7 +161,7 @@ loop:
 	// Make the request with SPDY
 	exec, err := remotecommand.NewSPDYExecutor(kubeConfig, "POST", req.URL())
 	if err != nil {
-		return nil, kubeclienterrors.WrapClusterErrorForGateway(fmt.Errorf("%w: execution via SPDY failed", err))
+		return nil, fmt.Errorf("%w: execution via SPDY failed", err)
 	}
 
 	// Run, passing in the streams and everything else. This runs until the remote end closes
@@ -197,5 +197,5 @@ loop:
 		return nil, cluster.ErrExecCommandExecutionFailed
 	}
 
-	return nil, kubeclienterrors.WrapClusterErrorForGateway(err)
+	return nil, err
 }

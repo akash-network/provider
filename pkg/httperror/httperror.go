@@ -2,7 +2,7 @@
 // for gateway responses. The gateway uses StatusCodeFrom(err) only.
 //
 // Domain-specific mappers (wrap errors before returning to gateway):
-//   - cluster/kube/errors.WrapClusterErrorForGateway
+//   - gateway/rest.writeClusterError (calls cluster/kube/errors.WrapClusterErrorForGateway)
 //   - manifest.WrapSubmitErrorForGateway
 //   - gateway/utils.WrapAuthErrorForGateway (JWT parse errors)
 package httperror
