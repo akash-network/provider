@@ -275,7 +275,7 @@ loop:
 				if ev.ID.Provider != o.session.Provider().Address().String() {
 					orderCompleteCounter.WithLabelValues("lease-lost").Inc()
 					o.log.Info("lease lost", "lease", ev.ID)
-					bidPlaced = false // Lease lost, network closes bid
+					// Keep bidPlaced true so cleanup runs MsgCloseBid (network does not auto-close)
 					break loop
 				}
 				orderCompleteCounter.WithLabelValues("lease-won").Inc()
