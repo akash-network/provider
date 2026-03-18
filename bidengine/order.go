@@ -275,7 +275,11 @@ loop:
 				if ev.ID.Provider != o.session.Provider().Address().String() {
 					orderCompleteCounter.WithLabelValues("lease-lost").Inc()
 					o.log.Info("lease lost", "lease", ev.ID)
-					// Keep bidPlaced true so cleanup runs MsgCloseBid (network does not auto-close)
+					// Ensure cleanup runs MsgCloseBid: we may have already set bidPlaced, or have a
+					// bid tx in flight (bidch != nil) that could land on chain; network does not auto-close
+					if bidch != nil {
+						bidPlaced = true
+					}
 					break loop
 				}
 				orderCompleteCounter.WithLabelValues("lease-won").Inc()
