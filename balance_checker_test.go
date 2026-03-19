@@ -20,6 +20,7 @@ func TestNewBalanceCheckerInitializesWithdrawSemaphore(t *testing.T) {
 	defer cancel()
 
 	bus := pubsub.NewBus()
+	defer bus.Close()
 	sess := session.New(log.NewLogger(io.Discard), nil, nil, 0)
 
 	bc, err := newBalanceChecker(ctx, nil, sdk.AccAddress{}, sess, bus, BalanceCheckerConfig{})
