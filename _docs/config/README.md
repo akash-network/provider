@@ -56,7 +56,9 @@ bidengine:
 gateway:
   listen_address: "0.0.0.0:8443"
   grpc_listen_address: "0.0.0.0:8444"
-  tls: { cert: "", key: "" }
+  tls:
+    cert: ""
+    key: ""
 
 monitor:
   max_retries: 40
