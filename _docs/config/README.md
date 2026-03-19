@@ -15,7 +15,6 @@
 ## Terminology
 
 - **Ops** (human operator): Person who runs and maintains the provider. Receives notifications, decides when to restart.
-- **K8s operator**: Controller running in Kubernetes (e.g. inventory operator) that manages provider deployments and related resources.
 - **Startup config**: Values (e.g. cluster.k8s, manifest_namespace) that require a restart to take effect.
 - **Runtime config**: Values that can be reloaded on the fly without restart.
 
@@ -97,24 +96,14 @@ Decisions:
 
 3. **Module re-init without full process restart?** Possibly yes, in a later iteration. Cluster and bidengine have shared state, so a clean restart is recommended for those modules. Some values (e.g. listen address) could be applied without restart by redesign - start new server, close old one.
 
-**Restart notification** (when startup config changes, notify Ops; they restart when ready). Fully automated: Ops is pushed the notification, no manual checks.
+**Restart notification** (when startup config changes, notify Ops; they restart when ready)
 
-Flow:
-1. Provider loads config from source (ConfigMap, S3, etc.) and watches or polls for changes.
-2. Provider detects startup config change. Applies runtime changes only.
-3. Provider emits notification (Prometheus metric, K8s Event, or pub/sub message).
-4. Ops receives notification automatically (Prometheus alert, Slack, PagerDuty, etc.) - no active check required.
-5. Ops restarts provider when ready (maintenance window, low traffic, etc.).
-
-| Config source | Notification channel |
-|---------------|----------------------|
-| **ConfigMap** | Provider creates K8s Event (alert on Event) or sets Prometheus metric; Ops gets paged. |
-| **S3** | Provider sets Prometheus metric `provider_config_restart_required=1`; Ops alert fires. |
-| **HTTP** | Same as S3. |
-| **Redis** | Provider publishes to `restart_required` channel; consumer triggers alert (push to Ops). |
-| **Consul** | Provider sets Prometheus metric; or consumer watches KV and triggers alert. |
-
-Provider keeps running normally. Notification (metric, Event, pub/sub) is a passive marker - no change to provider behavior, no traffic drain. Ops gets alerted and restarts when ready.
+- **Flow**:
+  - Provider loads config, watches or polls for changes
+  - Provider detects config change; runtime config is applied immediately, 
+  - If there is a startup config change, Provider emits `provider_config_restart_required=1` metric (or K8s Event when in-cluster) - passive marker, no traffic drain
+  - Prometheus or other monitoring tool alerts Ops (Slack, PagerDuty, etc.)
+  - Ops restarts when ready
 
 ## Solution comparison
 
