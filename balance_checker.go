@@ -88,8 +88,8 @@ func newBalanceChecker(
 		aqc:     aqc,
 		leases:  make(map[mtypes.LeaseID]*leaseState),
 		cfg:     cfg,
+		withdrawSem: make(chan struct{}, maxConcurrentWithdraws),
 	}
-	bc.withdrawSem = make(chan struct{}, maxConcurrentWithdraws)
 
 	startCh := make(chan error, 1)
 	go bc.lc.WatchContext(ctx)
