@@ -54,7 +54,7 @@ require (
 	pkg.akt.dev/go v0.2.0-b21
 	pkg.akt.dev/go/cli v0.2.0-b16
 	pkg.akt.dev/go/sdl v0.2.0-b2
-	pkg.akt.dev/node/v2 v2.0.0-rc17
+	pkg.akt.dev/node/v2 v2.0.0-rc18
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
