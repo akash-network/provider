@@ -14,7 +14,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 
-	"pkg.akt.dev/node/util/runner"
+	"pkg.akt.dev/node/v2/util/runner"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
 	"github.com/akash-network/provider/tools/fromctx"

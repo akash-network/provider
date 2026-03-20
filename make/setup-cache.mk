@@ -10,6 +10,7 @@ $(AP_DEVCACHE):
 	@echo "creating .cache dir structure..."
 	mkdir -p $@
 	mkdir -p $(AP_DEVCACHE_BIN)
+	mkdir -p $(AP_DEVCACHE_LIB)
 	mkdir -p $(AP_DEVCACHE_INCLUDE)
 	mkdir -p $(AP_DEVCACHE_VERSIONS)
 	mkdir -p $(AP_DEVCACHE_NODE_MODULES)
@@ -119,3 +120,23 @@ endif
 
 cache-clean:
 	rm -rf $(AP_DEVCACHE)
+
+$(AP_DEVCACHE_LIB)/%:
+	wget -q --show-progress https://github.com/CosmWasm/wasmvm/releases/download/$(WASMVM_VERSION)/$* -O $@
+	@rm -f $(AP_DEVCACHE_LIB)/.wasmvm_verified
+
+$(AP_DEVCACHE_LIB)/wasmvm_checksums.txt:
+	wget -q --show-progress https://github.com/CosmWasm/wasmvm/releases/download/$(WASMVM_VERSION)/checksums.txt -O $@
+	@rm -f $(AP_DEVCACHE_LIB)/.wasmvm_verified
+
+$(AP_DEVCACHE_LIB)/.wasmvm_verified: $(patsubst %, $(AP_DEVCACHE_LIB)/%,$(WASMVM_LIBS)) $(AP_DEVCACHE_LIB)/wasmvm_checksums.txt
+	cd $(AP_DEVCACHE_LIB) && sha256sum -c --ignore-missing wasmvm_checksums.txt
+	@touch $@
+
+.PHONY: wasmvm-libs-verify
+wasmvm-libs-verify:
+	@$(MAKE) -s $(AP_DEVCACHE_LIB)/.wasmvm_verified
+
+.NOTPARALLEL: wasmvm-libs
+.PHONY: wasmvm-libs
+wasmvm-libs: $(AP_DEVCACHE) $(patsubst %, $(AP_DEVCACHE_LIB)/%,$(WASMVM_LIBS)) $(AP_DEVCACHE_LIB)/wasmvm_checksums.txt wasmvm-libs-verify

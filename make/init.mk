@@ -80,7 +80,7 @@ endif
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 
-AKASHD_MODULE                := pkg.akt.dev/node
+AKASHD_MODULE                := pkg.akt.dev/node/v2
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
 AKASHD_SRC_IS_LOCAL          ?= $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
 AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")
@@ -93,6 +93,16 @@ MOCKERY_PACKAGE_NAME         := github.com/vektra/mockery/v3
 MOCKERY_VERSION              ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(MOCKERY_PACKAGE_NAME))
 K8S_CODEGEN_VERSION          ?= $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' k8s.io/code-generator)
 SEMVER_VERSION               ?= v1.3.0
+
+WASMVM_MOD                   := $(shell $(GO) list -m -f '{{ .Path }}' all | grep github.com/CosmWasm/wasmvm)
+WASMVM_VERSION               := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(WASMVM_MOD))
+
+WASMVM_LIBS  := libwasmvm_muslc.x86_64.a \
+libwasmvm_muslc.aarch64.a \
+libwasmvmstatic_darwin.a \
+libwasmvm.aarch64.so \
+libwasmvm.dylib \
+libwasmvm.x86_64.so
 
 AKASHD_BUILD_FROM_SRC        := false
 ifeq (false,$(AKASHD_SRC_IS_LOCAL))

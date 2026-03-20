@@ -17,6 +17,7 @@ import (
 	"pkg.akt.dev/go/cli"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/sdkutil"
 
 	clitestutil "pkg.akt.dev/go/cli/testutil"
 
@@ -46,7 +47,7 @@ func (s *E2ECustomCurrency) TestDefaultStorageClass() {
 			With(deploymentPath).
 			WithFrom(s.addrTenant.String()).
 			WithDSeq(deploymentID.DSeq).
-			WithDeposit(sdk.NewCoin(axlUSDCDenom, sdkmath.NewInt(axlUSCDMinDepositAmount))).
+			WithDeposit(sdk.NewCoin(sdkutil.DenomUact, sdkmath.NewInt(uactMinDepositAmount))).
 			Append(cliFlags)...,
 	)
 	s.Require().NoError(err)

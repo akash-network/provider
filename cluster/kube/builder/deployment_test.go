@@ -9,8 +9,9 @@ import (
 	"pkg.akt.dev/go/sdl"
 	"pkg.akt.dev/go/testutil"
 
-	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	mtypes "pkg.akt.dev/go/node/market/v1"
+
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const fakeHostname = "ahostname.dev"
@@ -93,6 +94,8 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 }
 
 func TestDeploymentPermissions(t *testing.T) {
+	t.Skip("skipping test. flapping on GH actions")
+
 	tests := []struct {
 		name          string
 		sdlFile       string

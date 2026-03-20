@@ -26,8 +26,7 @@ import (
 
 	"pkg.akt.dev/go/cli"
 	ajwt "pkg.akt.dev/go/util/jwt"
-	"pkg.akt.dev/node/app"
-	cutils "pkg.akt.dev/node/x/cert/utils"
+	cutils "pkg.akt.dev/node/v2/x/cert/utils"
 )
 
 const (
@@ -61,7 +60,7 @@ func addCmdFlags(cmd *cobra.Command) {
 	cmd.Flags().String(cflags.FlagProvider, "", "provider")
 	cmd.Flags().String(cflags.FlagOwner, "", "deployment owner")
 	cmd.Flags().Uint64(cflags.FlagDSeq, 0, "deployment sequence")
-	cmd.Flags().String(cflags.FlagHome, app.DefaultHome, "the application home directory")
+	cmd.Flags().String(cflags.FlagHome, cli.DefaultHome, "the application home directory")
 	cmd.Flags().String(cflags.FlagFrom, "", "name or address of private key with which to sign")
 	cmd.Flags().String(cflags.FlagKeyringBackend, cflags.DefaultKeyringBackend, "select keyring's backend (os|file|kwallet|pass|test)")
 	cmd.Flags().String(cflags.FlagSignMode, cflags.SignModeDirect, "")
