@@ -8,8 +8,6 @@ import (
 	"io"
 	"math"
 	"math/big"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path"
@@ -20,6 +18,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"pkg.akt.dev/go/sdkutil"
 
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -79,7 +78,7 @@ func defaultGroupSpecCPUMem() *dvbeta.GroupSpec {
 		Memory: &memory,
 	}
 
-	price := sdk.NewDecCoin("uakt", sdkmath.NewInt(23))
+	price := sdk.NewDecCoin(sdkutil.DenomUact, sdkmath.NewInt(23))
 	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
@@ -114,7 +113,7 @@ func defaultGroupSpec() *dvbeta.GroupSpec {
 			},
 		},
 	}
-	price := sdk.NewDecCoin(testutil.CoinDenom, sdkmath.NewInt(23))
+	price := sdk.NewDecCoin(sdkutil.DenomUact, sdkmath.NewInt(23))
 	resource := dvbeta.ResourceUnit{
 		Resources: clusterResources,
 		Count:     1,
@@ -166,7 +165,7 @@ func Test_ScalePricingOnCpu(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, pricing)
 
-	expectedPrice := testutil.AkashDecCoin(t, cpuScale.IntPart()*int64(cpuQuantity))
+	expectedPrice := testutil.ACTDecCoin(t, cpuScale.IntPart()*int64(cpuQuantity))
 	require.Equal(t, expectedPrice, price)
 }
 
@@ -189,12 +188,12 @@ func Test_ScalePricingOnMemory(t *testing.T) {
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
 
-	expectedPrice := testutil.AkashDecCoin(t, int64(memoryScale*memoryQuantity)) // nolint: gosec
+	expectedPrice := testutil.ACTDecCoin(t, int64(memoryScale*memoryQuantity)) // nolint: gosec
 	require.Equal(t, expectedPrice, price)
 }
 
 func Test_ScalePricingOnMemoryLessThanOne(t *testing.T) {
-	memoryScale := uint64(1) // 1 uakt per megabyte
+	memoryScale := uint64(1) // 1 uact per megabyte
 	memoryPrice := decimal.NewFromInt(int64(memoryScale))
 	pricing, err := MakeScalePricing(decimal.Zero, memoryPrice, make(Storage), decimal.Zero, decimal.Zero)
 	require.NoError(t, err)
@@ -544,7 +543,7 @@ func Test_ScriptPricingReturnsResultFromScript(t *testing.T) {
 
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	require.Equal(t, "uakt", price.Denom)
+	require.Equal(t, sdkutil.DenomUact, price.Denom)
 	require.Equal(t, sdkmath.LegacyNewDec(132), price.Amount)
 }
 
@@ -658,7 +657,7 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 
 	price, err := pricing.CalculatePrice(context.Background(), req)
 	require.NoError(t, err)
-	require.Equal(t, "uakt", price.Denom)
+	require.Equal(t, sdkutil.DenomUact, price.Denom)
 	require.Equal(t, sdkmath.LegacyNewDec(1), price.Amount)
 	// Open the file and make sure it has the JSON
 	fin, err := os.Open(jsonPath)
@@ -684,21 +683,7 @@ func Test_ScriptPricingWritesJsonToStdin(t *testing.T) {
 }
 
 func Test_ScriptPricingFromScript(t *testing.T) {
-	const (
-		mockAPIResponse = `{"akash-network":{"usd":3.57}}`
-	)
-
-	expectedPrice := fmt.Sprintf("%.*f", DefaultPricePrecision, 67843137.254901960)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, err := io.WriteString(w, mockAPIResponse)
-		require.NoError(t, err)
-	}))
-	defer server.Close()
-
-	err := os.Setenv("API_URL", server.URL)
-	require.NoError(t, err)
+	expectedPrice := fmt.Sprintf("%.*f", DefaultPricePrecision, 242.2)
 
 	scriptPath, err := filepath.Abs("../script/usd_pricing_oracle.sh")
 	require.NoError(t, err)
@@ -719,7 +704,7 @@ func Test_ScriptPricingFromScript(t *testing.T) {
 	amount, err := sdkmath.LegacyNewDecFromStr(expectedPrice)
 	require.NoError(t, err)
 
-	require.Equal(t, sdk.NewDecCoinFromDec("uakt", amount).String(), price.String())
+	require.Equal(t, sdk.NewDecCoinFromDec(sdkutil.DenomUact, amount).String(), price.String())
 }
 
 func TestRationalToIntConversion(t *testing.T) {

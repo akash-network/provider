@@ -14,7 +14,7 @@ import (
 	"k8s.io/client-go/tools/pager"
 
 	mtypes "pkg.akt.dev/go/node/market/v1"
-	metricsutils "pkg.akt.dev/node/util/metrics"
+	metricsutils "pkg.akt.dev/node/v2/util/metrics"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
