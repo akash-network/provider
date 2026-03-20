@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/boz/go-lifecycle"
+	"pkg.akt.dev/go/sdkutil"
 
 	"cosmossdk.io/log"
 	tmrpc "github.com/cometbft/cometbft/rpc/core/types"
@@ -19,9 +20,9 @@ import (
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"pkg.akt.dev/go/util/pubsub"
-	netutil "pkg.akt.dev/node/util/network"
-	"pkg.akt.dev/node/util/runner"
-	"pkg.akt.dev/node/x/escrow/client/util"
+	netutil "pkg.akt.dev/node/v2/util/network"
+	"pkg.akt.dev/node/v2/util/runner"
+	"pkg.akt.dev/node/v2/x/escrow/client/util"
 
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"
@@ -168,7 +169,14 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 		totalLeaseAmount = totalLeaseAmount.Add(lease.Lease.Price.Amount)
 	}
 
-	balanceRemain := util.LeaseCalcBalanceRemain(dResp.EscrowAccount.State.Funds[0].Amount,
+	var balance sdkmath.LegacyDec
+	for _, funds := range dResp.EscrowAccount.State.Funds {
+		if funds.Denom == sdkutil.DenomUact {
+			balance = funds.Amount
+			break
+		}
+	}
+	balanceRemain := util.LeaseCalcBalanceRemain(balance,
 		syncInfo.LatestBlockHeight,
 		dResp.EscrowAccount.State.SettledAt,
 		totalLeaseAmount)

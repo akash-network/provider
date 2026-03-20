@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/akash-network/provider/pkg/httperror"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 
@@ -14,9 +15,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
-	mquery "pkg.akt.dev/node/x/market/query"
-
-	"github.com/akash-network/provider/pkg/httperror"
+	mquery "pkg.akt.dev/node/v2/x/market/query"
 )
 
 type contextKey int

@@ -17,7 +17,7 @@ import (
 	apclient "pkg.akt.dev/go/provider/client"
 	provider "pkg.akt.dev/go/provider/v1"
 	"pkg.akt.dev/go/util/pubsub"
-	dquery "pkg.akt.dev/node/x/deployment/query"
+	dquery "pkg.akt.dev/node/v2/x/deployment/query"
 
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/event"
