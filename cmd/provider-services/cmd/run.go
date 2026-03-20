@@ -577,6 +577,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
 	config.ManifestTimeout = manifestTimeout
+	if broadcastTimeout <= 0 {
+		logger.Warn("tx-broadcast-timeout must be positive, using default", "invalid", broadcastTimeout, "default", 12*time.Second)
+		broadcastTimeout = 12 * time.Second
+	}
 	config.BroadcastTimeout = broadcastTimeout
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod
