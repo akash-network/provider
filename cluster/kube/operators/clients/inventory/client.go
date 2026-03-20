@@ -15,6 +15,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 	"pkg.akt.dev/go/util/ctxlog"
@@ -46,6 +47,7 @@ type client struct {
 
 type inventory struct {
 	inventoryV1.Cluster
+	log logr.Logger
 }
 
 type inventoryState struct {
@@ -219,13 +221,13 @@ func (cl *client) subscriber(in <-chan inventoryV1.Cluster, out chan<- ctypes.In
 		case inv := <-in:
 			pending = append(pending, inv)
 			if och == nil {
-				msg = newInventory(pending[0])
+				msg = newInventory(cl.ctx, pending[0])
 				och = out
 			}
 		case och <- msg:
 			pending = pending[1:]
 			if len(pending) > 0 {
-				msg = newInventory(pending[0])
+				msg = newInventory(cl.ctx, pending[0])
 			} else {
 				och = nil
 				msg = nil

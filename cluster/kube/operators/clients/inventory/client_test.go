@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -211,6 +212,7 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 	kc := kfake.NewClientset()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyInventoryUnderTest, true)
+	ctx = logr.NewContext(ctx, logr.Discard())
 
 	gSrv := setupInventoryGRPC(ctx, group, ports[0])
 
@@ -313,6 +315,225 @@ func TestInventoryZero(t *testing.T) {
 	// The inventory was called and the kubernetes client says there are no nodes & no pods. Inventory
 	// should be zero
 	require.Len(t, inv.Metrics().Nodes, 0)
+}
+
+func TestInventoryMetrics_bad_gpu_values_no_overflow(t *testing.T) {
+	scaffold := makeInventoryScaffold(t)
+	cl, err := NewClient(scaffold.ctx)
+	require.NoError(t, err)
+	require.NotNil(t, cl)
+
+	scaffold.gInv.invch <- inventoryV1.Cluster{
+		Nodes: inventoryV1.Nodes{
+			inventoryV1.Node{
+				Name: "bad-gpu-node",
+				Resources: inventoryV1.NodeResources{
+					CPU: inventoryV1.CPU{
+						Quantity: inventoryV1.NewResourcePairMilli(1000, 1000, 0, resource.DecimalSI),
+					},
+					Memory: inventoryV1.Memory{
+						Quantity: inventoryV1.NewResourcePair(1024, 1024, 0, resource.DecimalSI),
+					},
+					GPU: inventoryV1.GPU{
+						Quantity: inventoryV1.NewResourcePair(0, -1, 0, resource.DecimalSI),
+					},
+					EphemeralStorage: inventoryV1.NewResourcePair(100, 100, 0, resource.DecimalSI),
+					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+				},
+				Capabilities: inventoryV1.NodeCapabilities{},
+			},
+		},
+	}
+
+	inv := waitForInventory(t, cl.ResultChan())
+	require.NotNil(t, inv)
+
+	metrics := inv.Metrics()
+	require.Len(t, metrics.Nodes, 1)
+	assert.Equal(t, uint64(0), metrics.Nodes[0].Available.GPU, "negative allocatable must yield 0, not uint64 overflow")
+	assert.Equal(t, uint64(0), metrics.TotalAvailable.GPU)
+}
+
+func TestInventoryMetrics_negative_quantities_clamped_no_overflow(t *testing.T) {
+	tests := []struct {
+		name     string
+		cluster  inventoryV1.Cluster
+		check    func(t *testing.T, m inventoryV1.Metrics)
+	}{
+		{
+			name: "negative_allocatable_cpu",
+			cluster: inventoryV1.Cluster{
+				Nodes: inventoryV1.Nodes{
+					inventoryV1.Node{
+						Name: "bad-cpu-node",
+						Resources: inventoryV1.NodeResources{
+							CPU: inventoryV1.CPU{
+								Quantity: inventoryV1.NewResourcePairMilli(1000, -1, 0, resource.DecimalSI),
+							},
+							Memory: inventoryV1.Memory{
+								Quantity: inventoryV1.NewResourcePair(1024, 1024, 0, resource.DecimalSI),
+							},
+							GPU: inventoryV1.GPU{
+								Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							},
+							EphemeralStorage: inventoryV1.NewResourcePair(100, 100, 0, resource.DecimalSI),
+							VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+						},
+						Capabilities: inventoryV1.NodeCapabilities{},
+					},
+				},
+			},
+			check: func(t *testing.T, m inventoryV1.Metrics) {
+				require.Len(t, m.Nodes, 1)
+				assert.Equal(t, uint64(0), m.Nodes[0].Allocatable.CPU)
+				assert.Equal(t, uint64(0), m.TotalAllocatable.CPU)
+			},
+		},
+		{
+			name: "negative_allocatable_memory",
+			cluster: inventoryV1.Cluster{
+				Nodes: inventoryV1.Nodes{
+					inventoryV1.Node{
+						Name: "bad-memory-node",
+						Resources: inventoryV1.NodeResources{
+							CPU: inventoryV1.CPU{
+								Quantity: inventoryV1.NewResourcePairMilli(1000, 1000, 0, resource.DecimalSI),
+							},
+							Memory: inventoryV1.Memory{
+								Quantity: inventoryV1.NewResourcePair(1024, -1, 0, resource.DecimalSI),
+							},
+							GPU: inventoryV1.GPU{
+								Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							},
+							EphemeralStorage: inventoryV1.NewResourcePair(100, 100, 0, resource.DecimalSI),
+							VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+						},
+						Capabilities: inventoryV1.NodeCapabilities{},
+					},
+				},
+			},
+			check: func(t *testing.T, m inventoryV1.Metrics) {
+				require.Len(t, m.Nodes, 1)
+				assert.Equal(t, uint64(0), m.Nodes[0].Allocatable.Memory)
+				assert.Equal(t, uint64(0), m.TotalAllocatable.Memory)
+			},
+		},
+		{
+			name: "negative_allocatable_storage_ephemeral",
+			cluster: inventoryV1.Cluster{
+				Nodes: inventoryV1.Nodes{
+					inventoryV1.Node{
+						Name: "bad-storage-node",
+						Resources: inventoryV1.NodeResources{
+							CPU: inventoryV1.CPU{
+								Quantity: inventoryV1.NewResourcePairMilli(1000, 1000, 0, resource.DecimalSI),
+							},
+							Memory: inventoryV1.Memory{
+								Quantity: inventoryV1.NewResourcePair(1024, 1024, 0, resource.DecimalSI),
+							},
+							GPU: inventoryV1.GPU{
+								Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							},
+							EphemeralStorage: inventoryV1.NewResourcePair(100, -1, 0, resource.DecimalSI),
+							VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+						},
+						Capabilities: inventoryV1.NodeCapabilities{},
+					},
+				},
+			},
+			check: func(t *testing.T, m inventoryV1.Metrics) {
+				require.Len(t, m.Nodes, 1)
+				assert.Equal(t, uint64(0), m.Nodes[0].Allocatable.StorageEphemeral)
+				assert.Equal(t, uint64(0), m.TotalAllocatable.StorageEphemeral)
+			},
+		},
+		{
+			name: "negative_allocatable_storage_class",
+			cluster: inventoryV1.Cluster{
+				Nodes: inventoryV1.Nodes{
+					inventoryV1.Node{
+						Name: "node",
+						Resources: inventoryV1.NodeResources{
+							CPU: inventoryV1.CPU{
+								Quantity: inventoryV1.NewResourcePairMilli(1000, 1000, 0, resource.DecimalSI),
+							},
+							Memory: inventoryV1.Memory{
+								Quantity: inventoryV1.NewResourcePair(1024, 1024, 0, resource.DecimalSI),
+							},
+							GPU: inventoryV1.GPU{
+								Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							},
+							EphemeralStorage: inventoryV1.NewResourcePair(100, 100, 0, resource.DecimalSI),
+							VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+						},
+						Capabilities: inventoryV1.NodeCapabilities{
+							StorageClasses: []string{"default"},
+						},
+					},
+				},
+				Storage: inventoryV1.ClusterStorage{
+					{
+						Quantity: inventoryV1.NewResourcePair(0, -1, 0, resource.DecimalSI),
+						Info:     inventoryV1.StorageInfo{Class: "default"},
+					},
+				},
+			},
+			check: func(t *testing.T, m inventoryV1.Metrics) {
+				assert.Equal(t, uint64(0), m.TotalAllocatable.Storage["default"])
+			},
+		},
+		{
+			name: "allocated_exceeds_allocatable_gpu",
+			cluster: inventoryV1.Cluster{
+				Nodes: inventoryV1.Nodes{
+					inventoryV1.Node{
+						Name: "overalloc-node",
+						Resources: inventoryV1.NodeResources{
+							CPU: inventoryV1.CPU{
+								Quantity: inventoryV1.NewResourcePairMilli(1000, 1000, 0, resource.DecimalSI),
+							},
+							Memory: inventoryV1.Memory{
+								Quantity: inventoryV1.NewResourcePair(1024, 1024, 0, resource.DecimalSI),
+							},
+							GPU: inventoryV1.GPU{
+								Quantity: inventoryV1.NewResourcePair(4, 4, 10, resource.DecimalSI),
+							},
+							EphemeralStorage: inventoryV1.NewResourcePair(100, 100, 0, resource.DecimalSI),
+							VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+							VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+						},
+						Capabilities: inventoryV1.NodeCapabilities{},
+					},
+				},
+			},
+			check: func(t *testing.T, m inventoryV1.Metrics) {
+				require.Len(t, m.Nodes, 1)
+				assert.Equal(t, uint64(0), m.Nodes[0].Available.GPU, "allocated>allocatable must yield 0 available")
+				assert.Equal(t, uint64(4), m.Nodes[0].Allocatable.GPU)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scaffold := makeInventoryScaffold(t)
+			cl, err := NewClient(scaffold.ctx)
+			require.NoError(t, err)
+			require.NotNil(t, cl)
+
+			scaffold.gInv.invch <- tt.cluster
+
+			inv := waitForInventory(t, cl.ResultChan())
+			require.NotNil(t, inv)
+
+			tt.check(t, inv.Metrics())
+		})
+	}
 }
 
 func TestInventorySingleNodeNoPods(t *testing.T) {

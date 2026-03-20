@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
@@ -32,10 +33,19 @@ import (
 )
 
 var (
-	errWorkerExit = errors.New("worker finished")
+	errWorkerExit         = errors.New("worker finished")
+	errInvalidGPUQuantity = errors.New("invalid GPU quantity from node, clamping to 0")
 
 	labelNvidiaComGPUPresent = fmt.Sprintf("%s.present", builder.ResourceGPUNvidia)
 )
+
+func sanitizeGPUQuantity(log logr.Logger, nodeName, resourceName string, val int64) int64 {
+	if val < 0 {
+		log.Error(errInvalidGPUQuantity, "invalid GPU quantity from node, clamping to 0", "node", nodeName, "resource", resourceName, "value", val)
+		return 0
+	}
+	return val
+}
 
 type k8sPatch struct {
 	Op    string      `json:"op"`
@@ -522,7 +532,7 @@ func (dp *nodeDiscovery) monitor() error {
 					switch evt.Type {
 					case watch.Modified:
 						if nodeAllocatableChanged(knode, obj) {
-							updateNodeInfo(obj, &node)
+							updateNodeInfo(ctx, obj, &node)
 							if err = restartPodsWatcher(); err != nil {
 								return err
 							}
@@ -659,12 +669,14 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 		},
 	}
 
-	updateNodeInfo(knode, &res)
+	updateNodeInfo(dp.ctx, knode, &res)
 
 	return res
 }
 
-func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
+func updateNodeInfo(ctx context.Context, knode *corev1.Node, node *v1.Node) {
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+
 	for name, r := range knode.Status.Allocatable {
 		switch name {
 		case corev1.ResourceCPU:
@@ -676,7 +688,7 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
+			node.Resources.GPU.Quantity.Allocatable.Set(sanitizeGPUQuantity(log, knode.Name, string(name), r.Value()))
 		}
 	}
 
@@ -691,7 +703,7 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Capacity.Set(r.Value())
+			node.Resources.GPU.Quantity.Capacity.Set(sanitizeGPUQuantity(log, knode.Name, string(name), r.Value()))
 		}
 	}
 }
