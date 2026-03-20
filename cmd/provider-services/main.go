@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/signal"
 
-	acmd "pkg.akt.dev/node/cmd/akash/cmd"
+	"pkg.akt.dev/go/cli"
 
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 )
@@ -16,7 +16,7 @@ func run() error {
 
 	rootCmd := pcmd.NewRootCmd()
 
-	return acmd.ExecuteWithCtx(ctx, rootCmd, "AP")
+	return cli.ExecuteWithCtx(ctx, rootCmd, "AP")
 }
 
 func main() {

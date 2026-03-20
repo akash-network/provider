@@ -26,7 +26,7 @@ import (
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 	ajwt "pkg.akt.dev/go/util/jwt"
-	"pkg.akt.dev/node/util/wsutil"
+	"pkg.akt.dev/node/v2/util/wsutil"
 
 	"github.com/akash-network/provider"
 	"github.com/akash-network/provider/cluster"
@@ -110,7 +110,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		authorizeProviderMiddleware,
 		requireOwner,
 	)
-	
+
 	hostnameRouter := authedRouter.PathPrefix(apclient.HostnamePrefix).Subrouter()
 	hostnameRouter.HandleFunc(apclient.MigratePathPrefix,
 		migrateHandler(log, pclient.Hostname(), pclient.ClusterService())).
