@@ -46,9 +46,9 @@ require (
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.35.1
-	k8s.io/apimachinery v0.35.1
-	k8s.io/client-go v0.35.1
+	k8s.io/api v0.34.1
+	k8s.io/apimachinery v0.34.1
+	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
 	pkg.akt.dev/go v0.2.0-b21
@@ -56,9 +56,9 @@ require (
 	pkg.akt.dev/go/sdl v0.2.0-b2
 	pkg.akt.dev/node v1.2.2
 	pkg.akt.dev/node/v2 v2.0.0-rc18
-	sigs.k8s.io/gateway-api v1.5.0
+	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
-	sigs.k8s.io/structured-merge-diff/v6 v6.3.2
+	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
 )
 
