@@ -22,6 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	restclient "k8s.io/client-go/rest"
@@ -35,6 +36,7 @@ import (
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
@@ -58,9 +60,14 @@ type client struct {
 	ctx               context.Context
 	kc                kubernetes.Interface
 	ac                akashclient.Interface
+	dc                dynamic.Interface
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
+	ingressMode       string
+	gatewayName       string
+	gatewayNamespace  string
+	gatewayImpl       gateway.Implementation
 }
 
 func (c *client) String() string {
@@ -99,18 +106,51 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		return nil, err
 	}
 
+	dc, err := dynamic.NewForConfig(kubecfg)
+	if err != nil {
+		return nil, fmt.Errorf("kube: unable to create dynamic client: %w", err)
+	}
+
 	_, err = kc.CoreV1().Namespaces().Get(ctx, ns, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("kube: unable to fetch leases namespace: %w", err)
 	}
 
+	ingressMode := fromctx.MustIngressModeFromCtx(ctx)
+	gatewayName := fromctx.MustGatewayNameFromCtx(ctx)
+	gatewayNamespace := fromctx.MustGatewayNamespaceFromCtx(ctx)
+	gatewayImplementation := fromctx.MustGatewayImplementationFromCtx(ctx)
+
+	// Initialize Gateway implementation if using gateway-api mode
+	var gatewayImpl gateway.Implementation
+	if ingressMode == IngressModeGateway {
+		impl, err := gateway.GetImplementation(gatewayImplementation, log)
+		if err != nil {
+			return nil, fmt.Errorf("kube: failed to get gateway implementation: %w", err)
+		}
+		gatewayImpl = impl
+		log.Info("initialized gateway implementation",
+			"implementation", impl.Name())
+	}
+
+	log.Info("initializing kube client",
+		"ingress-mode", ingressMode,
+		"gateway-name", gatewayName,
+		"gateway-namespace", gatewayNamespace,
+		"gateway-implementation", gatewayImplementation)
+
 	cl := &client{
 		ctx:               ctx,
 		kc:                kc,
 		ac:                ac,
+		dc:                dc,
 		ns:                ns,
 		log:               log.With("client", "kube"),
 		kubeContentConfig: kubecfg,
+		ingressMode:       ingressMode,
+		gatewayName:       gatewayName,
+		gatewayNamespace:  gatewayNamespace,
+		gatewayImpl:       gatewayImpl,
 	}
 
 	return cl, nil

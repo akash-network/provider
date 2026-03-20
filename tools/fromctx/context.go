@@ -24,19 +24,23 @@ import (
 type Key string
 
 const (
-	CtxKeyKubeConfig         = Key(providerflags.FlagKubeConfig)
-	CtxKeyKubeRESTClient     = Key("kube-restclient")
-	CtxKeyKubeClientSet      = Key("kube-clientset")
-	CtxKeyAkashClientSet     = Key("akash-clientset")
-	CtxKeyPubSub             = Key("pubsub")
-	CtxKeyLifecycle          = Key("lifecycle")
-	CtxKeyErrGroup           = Key("errgroup")
-	CtxKeyLogc               = ctxlog.CtxKeyLog
-	CtxKeyStartupCh          = Key("startup-ch")
-	CtxKeyInventoryUnderTest = Key("inventory-under-test")
-	CtxKeyPersistentConfig   = Key("persistent-config")
-	CtxKeyCertIssuer         = Key("cert-issuer")
-	CtxKeyAccountQuerier     = Key("account-querier")
+	CtxKeyKubeConfig            = Key(providerflags.FlagKubeConfig)
+	CtxKeyKubeRESTClient        = Key("kube-restclient")
+	CtxKeyKubeClientSet         = Key("kube-clientset")
+	CtxKeyAkashClientSet        = Key("akash-clientset")
+	CtxKeyPubSub                = Key("pubsub")
+	CtxKeyLifecycle             = Key("lifecycle")
+	CtxKeyErrGroup              = Key("errgroup")
+	CtxKeyLogc                  = ctxlog.CtxKeyLog
+	CtxKeyStartupCh             = Key("startup-ch")
+	CtxKeyInventoryUnderTest    = Key("inventory-under-test")
+	CtxKeyPersistentConfig      = Key("persistent-config")
+	CtxKeyCertIssuer            = Key("cert-issuer")
+	CtxKeyAccountQuerier        = Key("account-querier")
+	CtxKeyIngressMode           = Key("ingress-mode")
+	CtxKeyGatewayName           = Key("gateway-name")
+	CtxKeyGatewayNamespace      = Key("gateway-namespace")
+	CtxKeyGatewayImplementation = Key("gateway-implementation")
 )
 
 var (
@@ -326,6 +330,98 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	}
 
 	return false
+}
+
+func IngressModeFromCtx(ctx context.Context) (string, error) {
+	val := ctx.Value(CtxKeyIngressMode)
+	if val == nil {
+		return "ingress", nil
+	}
+
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
+	}
+
+	return v, nil
+}
+
+func MustIngressModeFromCtx(ctx context.Context) string {
+	val, err := IngressModeFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func GatewayNameFromCtx(ctx context.Context) (string, error) {
+	val := ctx.Value(CtxKeyGatewayName)
+	if val == nil {
+		return "", nil
+	}
+
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
+	}
+
+	return v, nil
+}
+
+func MustGatewayNameFromCtx(ctx context.Context) string {
+	val, err := GatewayNameFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func GatewayNamespaceFromCtx(ctx context.Context) (string, error) {
+	val := ctx.Value(CtxKeyGatewayNamespace)
+	if val == nil {
+		return "", nil
+	}
+
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
+	}
+
+	return v, nil
+}
+
+func MustGatewayNamespaceFromCtx(ctx context.Context) string {
+	val, err := GatewayNamespaceFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
+}
+
+func GatewayImplementationFromCtx(ctx context.Context) (string, error) {
+	val := ctx.Value(CtxKeyGatewayImplementation)
+	if val == nil {
+		return "nginx", nil
+	}
+
+	v, valid := val.(string)
+	if !valid {
+		return "", ErrValueInvalidType
+	}
+
+	return v, nil
+}
+
+func MustGatewayImplementationFromCtx(ctx context.Context) string {
+	val, err := GatewayImplementationFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {

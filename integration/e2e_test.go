@@ -94,6 +94,7 @@ type IntegrationTestSuite struct {
 	oracleMnemonic    string
 	oracleClient      cclient.Client
 	priceFeedInterval time.Duration
+	gatewayAPIMode    bool
 }
 
 const (
@@ -437,21 +438,37 @@ func (s *IntegrationTestSuite) SetupSuite() {
 			WithFlag("ip-operator", true)
 	}
 
+	if s.gatewayAPIMode {
+		pArgs = pArgs.
+			WithFlag(pcmd.FlagIngressMode, "gateway-api").
+			WithFlag(pcmd.FlagGatewayName, "akash-gateway").
+			WithFlag(pcmd.FlagGatewayNamespace, "akash-gateway")
+	}
+
 	dialer := net.Dialer{
 		Timeout: time.Second * 3,
 	}
 
 	// --- Start hostname operator
+	hostnameOperatorArgs := cli.TestFlags().
+		With("hostname").
+		WithFlag(operatorcommon.FlagRESTAddress, "127.0.0.1").
+		WithFlag(operatorcommon.FlagRESTPort, hostnameOperatorPort)
+
+	if s.gatewayAPIMode {
+		hostnameOperatorArgs = hostnameOperatorArgs.
+			WithFlag("ingress-mode", "gateway-api").
+			WithFlag("gateway-name", "akash-gateway").
+			WithFlag("gateway-namespace", "akash-gateway")
+	}
+
 	s.group.Go(func() error {
 		s.T().Logf("starting hostname operator for test on %s", hostnameOperatorHost)
 
 		_, err := ptestutil.RunLocalOperator(
 			s.ctx,
 			cctx,
-			cli.TestFlags().
-				With("hostname").
-				WithFlag(operatorcommon.FlagRESTAddress, "127.0.0.1").
-				WithFlag(operatorcommon.FlagRESTPort, hostnameOperatorPort)...,
+			hostnameOperatorArgs...,
 		)
 		s.Assert().NoError(err)
 		return err
