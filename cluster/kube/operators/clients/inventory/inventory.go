@@ -49,17 +49,16 @@ func clampAvailableUint64(log logr.Logger, allocatable *resource.Quantity, v int
 }
 
 func newInventory(ctx context.Context, clState inventoryV1.Cluster) *inventory {
-	log := fromctx.LogrFromCtx(ctx).WithName("inventory")
 	return &inventory{
 		Cluster: clState,
-		log:     log,
+		ctx:     ctx,
 	}
 }
 
 func (inv *inventory) dup() inventory {
 	return inventory{
 		Cluster: *inv.Cluster.Dup(),
-		log:     inv.log,
+		ctx:     inv.ctx,
 	}
 }
 
@@ -361,7 +360,7 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 		Nodes: make([]inventoryV1.NodeMetrics, 0, len(inv.Nodes)),
 	}
 
-	log := inv.log
+	log := fromctx.LogrFromCtx(inv.ctx).WithName("inventory.metrics")
 	for _, nd := range inv.Nodes {
 		ndLog := log.WithValues("node", nd.Name)
 
