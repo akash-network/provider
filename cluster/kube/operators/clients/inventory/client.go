@@ -15,7 +15,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
-	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
 	"pkg.akt.dev/go/util/ctxlog"
@@ -47,7 +46,7 @@ type client struct {
 
 type inventory struct {
 	inventoryV1.Cluster
-	log logr.Logger
+	ctx context.Context
 }
 
 type inventoryState struct {
