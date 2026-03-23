@@ -31,7 +31,8 @@ import (
 type respState int
 
 const (
-	withdrawTimeout = 30 * time.Second
+	withdrawTimeout        = 30 * time.Second
+	maxConcurrentWithdraws = 5
 )
 
 const (
@@ -51,15 +52,16 @@ type leaseState struct {
 }
 
 type balanceChecker struct {
-	ctx     context.Context
-	session session.Session
-	log     log.Logger
-	lc      lifecycle.Lifecycle
-	bus     pubsub.Bus
-	ownAddr sdk.AccAddress
-	aqc     aclient.QueryClient
-	leases  map[mtypes.LeaseID]*leaseState
-	cfg     BalanceCheckerConfig
+	ctx         context.Context
+	session     session.Session
+	log         log.Logger
+	lc          lifecycle.Lifecycle
+	bus         pubsub.Bus
+	ownAddr     sdk.AccAddress
+	aqc         aclient.QueryClient
+	leases      map[mtypes.LeaseID]*leaseState
+	cfg         BalanceCheckerConfig
+	withdrawSem chan struct{}
 }
 
 type leaseCheckResponse struct {
@@ -87,6 +89,7 @@ func newBalanceChecker(
 		aqc:     aqc,
 		leases:  make(map[mtypes.LeaseID]*leaseState),
 		cfg:     cfg,
+		withdrawSem: make(chan struct{}, maxConcurrentWithdraws),
 	}
 
 	startCh := make(chan error, 1)
@@ -236,7 +239,7 @@ func (bc *balanceChecker) run(startCh chan<- error) {
 		return
 	}
 
-	resultch = make(chan runner.Result, 1)
+	resultch = make(chan runner.Result, maxConcurrentWithdraws)
 
 loop:
 	for {
@@ -325,12 +328,19 @@ loop:
 			}
 
 			if withdraw {
-				go func() {
+				go func(lid mtypes.LeaseID) {
 					select {
 					case <-ctx.Done():
-					case resultch <- runner.NewResult(res.lid, bc.startWithdraw(ctx, res.lid)):
+						return
+					case bc.withdrawSem <- struct{}{}:
+						defer func() { <-bc.withdrawSem }()
+						select {
+						case <-ctx.Done():
+							return
+						case resultch <- runner.NewResult(lid, bc.startWithdraw(ctx, lid)):
+						}
 					}
-				}()
+				}(res.lid)
 			}
 		case res := <-resultch:
 			if err := res.Error(); err != nil {
