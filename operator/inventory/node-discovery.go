@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
@@ -32,10 +33,23 @@ import (
 )
 
 var (
-	errWorkerExit = errors.New("worker finished")
+	errWorkerExit              = errors.New("worker finished")
+	errInvalidResourceQuantity = errors.New("invalid resource quantity from node, clamping to 0")
+	errAllocatedUnderflowClamp = errors.New("allocated underflow (event reorder or duplicate delete), clamped to 0")
+	errGPUExceedsCapacity      = errors.New("GPU allocatable exceeds capacity")
+
+	quantityZero = resource.NewQuantity(0, resource.DecimalSI)
 
 	labelNvidiaComGPUPresent = fmt.Sprintf("%s.present", builder.ResourceGPUNvidia)
 )
+
+func sanitizeResourceQuantity(log logr.Logger, nodeName, resourceName string, val int64) int64 {
+	if val < 0 {
+		log.Error(errInvalidResourceQuantity, "clamping to 0", "node", nodeName, "resource", resourceName, "value", val)
+		return 0
+	}
+	return val
+}
 
 type k8sPatch struct {
 	Op    string      `json:"op"`
@@ -341,6 +355,10 @@ initloop:
 	}
 }
 
+func podKey(pod *corev1.Pod) string {
+	return pod.Namespace + "/" + pod.Name
+}
+
 func isPodAllocated(status corev1.PodStatus) bool {
 	for _, condition := range status.Conditions {
 		if condition.Type == corev1.PodScheduled {
@@ -419,10 +437,8 @@ func (dp *nodeDiscovery) monitor() error {
 
 	restartPodsWatcher := func() error {
 		if podsWatch != nil {
-			select {
-			case <-podsWatch.ResultChan():
-			default:
-			}
+			podsWatch.Stop()
+			podsWatch = nil
 		}
 
 		var terr error
@@ -455,7 +471,7 @@ func (dp *nodeDiscovery) monitor() error {
 
 			addPodAllocatedResources(&node, pod)
 
-			currPods[pod.Name] = *pod
+			currPods[podKey(pod)] = *pod
 		}
 
 		return nil
@@ -518,21 +534,22 @@ func (dp *nodeDiscovery) monitor() error {
 			evt := rEvt.(watch.Event)
 			switch obj := evt.Object.(type) {
 			case *corev1.Node:
-				if obj.Name == dp.name {
-					switch evt.Type {
-					case watch.Modified:
-						if nodeAllocatableChanged(knode, obj) {
-							updateNodeInfo(obj, &node)
-							if err = restartPodsWatcher(); err != nil {
-								return err
-							}
-						}
-
-						signalLabels()
-					}
-
-					knode = obj.DeepCopy()
+				if obj.Name != dp.name {
+					continue
 				}
+				switch evt.Type {
+				case watch.Added:
+					fallthrough
+				case watch.Modified:
+					if evt.Type == watch.Added || (knode != nil && nodeAllocatableChanged(knode, obj)) {
+						updateNodeInfo(ctx, obj, &node)
+						if err = restartPodsWatcher(); err != nil {
+							return err
+						}
+					}
+					signalLabels()
+				}
+				knode = obj.DeepCopy()
 			}
 		case res, isopen := <-podsWatch.ResultChan():
 			if !isopen {
@@ -545,24 +562,25 @@ func (dp *nodeDiscovery) monitor() error {
 			}
 
 			obj := res.Object.(*corev1.Pod)
+			key := podKey(obj)
 			switch res.Type {
 			case watch.Added:
 				fallthrough
 			case watch.Modified:
-				if _, exists := currPods[obj.Name]; !exists && isPodAllocated(obj.Status) {
-					currPods[obj.Name] = *obj.DeepCopy()
+				if _, exists := currPods[key]; !exists && isPodAllocated(obj.Status) {
+					currPods[key] = *obj.DeepCopy()
 					addPodAllocatedResources(&node, obj)
 				}
 			case watch.Deleted:
-				pod, exists := currPods[obj.Name]
+				pod, exists := currPods[key]
 				if !exists {
 					log.Info("received pod delete event for item that does not exist. check node inventory logic, it's might have bug in it!")
 					break
 				}
 
-				subPodAllocatedResources(&node, &pod)
+				subPodAllocatedResources(log, &node, &pod)
 
-				delete(currPods, obj.Name)
+				delete(currPods, key)
 			}
 			signalState()
 		case <-statech:
@@ -659,40 +677,50 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 		},
 	}
 
-	updateNodeInfo(knode, &res)
+	updateNodeInfo(dp.ctx, knode, &res)
 
 	return res
 }
 
-func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
+func updateNodeInfo(ctx context.Context, knode *corev1.Node, node *v1.Node) {
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+
 	for name, r := range knode.Status.Allocatable {
 		switch name {
 		case corev1.ResourceCPU:
-			node.Resources.CPU.Quantity.Allocatable.SetMilli(r.MilliValue())
+			node.Resources.CPU.Quantity.Allocatable.SetMilli(sanitizeResourceQuantity(log, knode.Name, string(name), r.MilliValue()))
 		case corev1.ResourceMemory:
-			node.Resources.Memory.Quantity.Allocatable.Set(r.Value())
+			node.Resources.Memory.Quantity.Allocatable.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
+			node.Resources.EphemeralStorage.Allocatable.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
+			node.Resources.GPU.Quantity.Allocatable.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		}
 	}
 
 	for name, r := range knode.Status.Capacity {
 		switch name {
 		case corev1.ResourceCPU:
-			node.Resources.CPU.Quantity.Capacity.SetMilli(r.MilliValue())
+			node.Resources.CPU.Quantity.Capacity.SetMilli(sanitizeResourceQuantity(log, knode.Name, string(name), r.MilliValue()))
 		case corev1.ResourceMemory:
-			node.Resources.Memory.Quantity.Capacity.Set(r.Value())
+			node.Resources.Memory.Quantity.Capacity.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Capacity.Set(r.Value())
+			node.Resources.EphemeralStorage.Capacity.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Capacity.Set(r.Value())
+			node.Resources.GPU.Quantity.Capacity.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		}
+	}
+
+	gpuAllocatable := node.Resources.GPU.Quantity.Allocatable.Value()
+	gpuCapacity := node.Resources.GPU.Quantity.Capacity.Value()
+	if gpuCapacity > 0 && gpuAllocatable > gpuCapacity {
+		log.Error(errGPUExceedsCapacity, "clamping allocatable to capacity",
+			"node", knode.Name, "allocatable", gpuAllocatable, "capacity", gpuCapacity)
+		node.Resources.GPU.Quantity.Allocatable.Set(gpuCapacity)
 	}
 }
 
@@ -733,29 +761,30 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 	}
 }
 
-func subAllocatedNLZ(allocated *resource.Quantity, val resource.Quantity) {
-	newVal := allocated.Value() - val.Value()
-	if newVal < 0 {
-		newVal = 0
+func subAllocatedNLZ(log logr.Logger, nodeName, resourceName string, allocated *resource.Quantity, val resource.Quantity) {
+	before := allocated.DeepCopy()
+	allocated.Sub(val)
+	if allocated.Cmp(*quantityZero) < 0 {
+		log.Error(errAllocatedUnderflowClamp, "allocated underflow clamped", "node", nodeName, "resource", resourceName, "allocated_before", before.String(), "subtracted", val.String())
+		allocated.Set(0)
 	}
-
-	allocated.Set(newVal)
 }
 
-func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
+func subPodAllocatedResources(log logr.Logger, node *v1.Node, pod *corev1.Pod) {
+	nodeName := node.Name
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
 			switch name {
 			case corev1.ResourceCPU:
-				subAllocatedNLZ(node.Resources.CPU.Quantity.Allocated, quantity)
+				subAllocatedNLZ(log, nodeName, string(corev1.ResourceCPU), node.Resources.CPU.Quantity.Allocated, quantity)
 			case corev1.ResourceMemory:
-				subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, quantity)
+				subAllocatedNLZ(log, nodeName, string(corev1.ResourceMemory), node.Resources.Memory.Quantity.Allocated, quantity)
 			case corev1.ResourceEphemeralStorage:
-				subAllocatedNLZ(node.Resources.EphemeralStorage.Allocated, quantity)
+				subAllocatedNLZ(log, nodeName, string(corev1.ResourceEphemeralStorage), node.Resources.EphemeralStorage.Allocated, quantity)
 			case builder.ResourceGPUNvidia:
 				fallthrough
 			case builder.ResourceGPUAMD:
-				subAllocatedNLZ(node.Resources.GPU.Quantity.Allocated, quantity)
+				subAllocatedNLZ(log, nodeName, string(name), node.Resources.GPU.Quantity.Allocated, quantity)
 			}
 		}
 
@@ -764,7 +793,7 @@ func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 				continue
 			}
 
-			subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, *vol.EmptyDir.SizeLimit)
+			subAllocatedNLZ(log, nodeName, "memory.emptydir", node.Resources.Memory.Quantity.Allocated, *vol.EmptyDir.SizeLimit)
 		}
 	}
 }
