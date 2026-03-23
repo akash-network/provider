@@ -34,15 +34,18 @@ import (
 
 var (
 	errWorkerExit              = errors.New("worker finished")
-	errInvalidGPUQuantity      = errors.New("invalid GPU quantity from node, clamping to 0")
+	errInvalidResourceQuantity = errors.New("invalid resource quantity from node, clamping to 0")
 	errAllocatedUnderflowClamp = errors.New("allocated underflow (event reorder or duplicate delete), clamped to 0")
+	errGPUExceedsCapacity      = errors.New("GPU allocatable exceeds capacity")
+
+	quantityZero = resource.NewQuantity(0, resource.DecimalSI)
 
 	labelNvidiaComGPUPresent = fmt.Sprintf("%s.present", builder.ResourceGPUNvidia)
 )
 
-func sanitizeGPUQuantity(log logr.Logger, nodeName, resourceName string, val int64) int64 {
+func sanitizeResourceQuantity(log logr.Logger, nodeName, resourceName string, val int64) int64 {
 	if val < 0 {
-		log.Error(errInvalidGPUQuantity, "invalid GPU quantity from node, clamping to 0", "node", nodeName, "resource", resourceName, "value", val)
+		log.Error(errInvalidResourceQuantity, "clamping to 0", "node", nodeName, "resource", resourceName, "value", val)
 		return 0
 	}
 	return val
@@ -685,31 +688,39 @@ func updateNodeInfo(ctx context.Context, knode *corev1.Node, node *v1.Node) {
 	for name, r := range knode.Status.Allocatable {
 		switch name {
 		case corev1.ResourceCPU:
-			node.Resources.CPU.Quantity.Allocatable.SetMilli(r.MilliValue())
+			node.Resources.CPU.Quantity.Allocatable.SetMilli(sanitizeResourceQuantity(log, knode.Name, string(name), r.MilliValue()))
 		case corev1.ResourceMemory:
-			node.Resources.Memory.Quantity.Allocatable.Set(r.Value())
+			node.Resources.Memory.Quantity.Allocatable.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
+			node.Resources.EphemeralStorage.Allocatable.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Allocatable.Set(sanitizeGPUQuantity(log, knode.Name, string(name), r.Value()))
+			node.Resources.GPU.Quantity.Allocatable.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		}
 	}
 
 	for name, r := range knode.Status.Capacity {
 		switch name {
 		case corev1.ResourceCPU:
-			node.Resources.CPU.Quantity.Capacity.SetMilli(r.MilliValue())
+			node.Resources.CPU.Quantity.Capacity.SetMilli(sanitizeResourceQuantity(log, knode.Name, string(name), r.MilliValue()))
 		case corev1.ResourceMemory:
-			node.Resources.Memory.Quantity.Capacity.Set(r.Value())
+			node.Resources.Memory.Quantity.Capacity.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case corev1.ResourceEphemeralStorage:
-			node.Resources.EphemeralStorage.Capacity.Set(r.Value())
+			node.Resources.EphemeralStorage.Capacity.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		case builder.ResourceGPUNvidia:
 			fallthrough
 		case builder.ResourceGPUAMD:
-			node.Resources.GPU.Quantity.Capacity.Set(sanitizeGPUQuantity(log, knode.Name, string(name), r.Value()))
+			node.Resources.GPU.Quantity.Capacity.Set(sanitizeResourceQuantity(log, knode.Name, string(name), r.Value()))
 		}
+	}
+
+	gpuAllocatable := node.Resources.GPU.Quantity.Allocatable.Value()
+	gpuCapacity := node.Resources.GPU.Quantity.Capacity.Value()
+	if gpuCapacity > 0 && gpuAllocatable > gpuCapacity {
+		log.Error(errGPUExceedsCapacity, "clamping allocatable to capacity",
+			"node", knode.Name, "allocatable", gpuAllocatable, "capacity", gpuCapacity)
+		node.Resources.GPU.Quantity.Allocatable.Set(gpuCapacity)
 	}
 }
 
@@ -753,8 +764,7 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 func subAllocatedNLZ(log logr.Logger, nodeName, resourceName string, allocated *resource.Quantity, val resource.Quantity) {
 	before := allocated.DeepCopy()
 	allocated.Sub(val)
-	zero := resource.NewQuantity(0, resource.DecimalSI)
-	if allocated.Cmp(*zero) < 0 {
+	if allocated.Cmp(*quantityZero) < 0 {
 		log.Error(errAllocatedUnderflowClamp, "allocated underflow clamped", "node", nodeName, "resource", resourceName, "allocated_before", before.String(), "subtracted", val.String())
 		allocated.Set(0)
 	}

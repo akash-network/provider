@@ -23,48 +23,29 @@ import (
 )
 
 var (
-	errNegativeQuantityClamped = errors.New("inventory resource quantity was negative (device plugin or allocation bug), clamped to 0 to prevent uint64 overflow")
+	_ ctypes.Inventory = (*inventory)(nil)
+
+	errNegativeQuantity = errors.New("negative resource quantity clamped to 0")
+	quantityZero        = resource.NewQuantity(0, resource.DecimalSI)
 )
 
-const (
-	stageAllocatableCPU              = "allocatable_cpu"
-	stageAllocatableGPU              = "allocatable_gpu"
-	stageAllocatableMemory           = "allocatable_memory"
-	stageAllocatableStorage          = "allocatable_storage"
-	stageAllocatableStorageEphemeral = "allocatable_storage_ephemeral"
-	stageAvailableCPU                = "available_cpu"
-	stageAvailableGPU                = "available_gpu"
-	stageAvailableMemory             = "available_memory"
-	stageAvailableStorage            = "available_storage"
-	stageAvailableStorageEphemeral   = "available_storage_ephemeral"
-)
-
-var _ ctypes.Inventory = (*inventory)(nil)
-
-func safeQuantityToUint64(log logr.Logger, q *resource.Quantity, stage string, keysAndValues ...interface{}) uint64 {
-	if q == nil {
-		return 0
-	}
-	v := q.Value()
+func clampUint64(log logr.Logger, v int64, what string) uint64 {
 	if v < 0 {
-		kvs := append([]interface{}{"stage", stage, "value", v}, keysAndValues...)
-		log.Error(errNegativeQuantityClamped, "negative quantity clamped", kvs...)
+		log.Error(errNegativeQuantity, "clamped to 0", "what", what, "value", v)
 		return 0
 	}
 	return uint64(v)
 }
 
-func safeMilliQuantityToUint64(log logr.Logger, q *resource.Quantity, stage string, keysAndValues ...interface{}) uint64 {
-	if q == nil {
+// clampAvailableUint64 guards against ResourcePair.Available() returning MaxInt64
+// when allocatable is -1 (the "unlimited" sentinel). If allocatable is negative
+// for any reason, the Available() result is unreliable.
+func clampAvailableUint64(log logr.Logger, allocatable *resource.Quantity, v int64, what string) uint64 {
+	if allocatable.Cmp(*quantityZero) < 0 {
+		log.Error(errNegativeQuantity, "available clamped: negative allocatable", "what", what)
 		return 0
 	}
-	v := q.MilliValue()
-	if v < 0 {
-		kvs := append([]interface{}{"stage", stage, "milliValue", v}, keysAndValues...)
-		log.Error(errNegativeQuantityClamped, "negative quantity clamped", kvs...)
-		return 0
-	}
-	return uint64(v)
+	return clampUint64(log, v, what)
 }
 
 func newInventory(ctx context.Context, clState inventoryV1.Cluster) *inventory {
@@ -383,49 +364,37 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 	log := inv.log
 	for _, nd := range inv.Nodes {
 		ndLog := log.WithValues("node", nd.Name)
-		gpuAllocatable := safeQuantityToUint64(ndLog, nd.Resources.GPU.Quantity.Allocatable, stageAllocatableGPU)
+
+		cpuAllocatable := clampUint64(ndLog, nd.Resources.CPU.Quantity.Allocatable.MilliValue(), "allocatable_cpu")
+		gpuAllocatable := clampUint64(ndLog, nd.Resources.GPU.Quantity.Allocatable.Value(), "allocatable_gpu")
+		memoryAllocatable := clampUint64(ndLog, nd.Resources.Memory.Quantity.Allocatable.Value(), "allocatable_memory")
+		storageEphAllocatable := clampUint64(ndLog, nd.Resources.EphemeralStorage.Allocatable.Value(), "allocatable_storage_ephemeral")
+
 		invNode := inventoryV1.NodeMetrics{
 			Name: nd.Name,
 			Allocatable: inventoryV1.ResourcesMetric{
-				CPU:              safeMilliQuantityToUint64(ndLog, nd.Resources.CPU.Quantity.Allocatable, stageAllocatableCPU),
+				CPU:              cpuAllocatable,
 				GPU:              gpuAllocatable,
-				Memory:           safeQuantityToUint64(ndLog, nd.Resources.Memory.Quantity.Allocatable, stageAllocatableMemory),
-				StorageEphemeral: safeQuantityToUint64(ndLog, nd.Resources.EphemeralStorage.Allocatable, stageAllocatableStorageEphemeral),
+				Memory:           memoryAllocatable,
+				StorageEphemeral: storageEphAllocatable,
 			},
 		}
 
-		cpuTotal += safeMilliQuantityToUint64(ndLog, nd.Resources.CPU.Quantity.Allocatable, stageAllocatableCPU)
+		cpuTotal += cpuAllocatable
 		gpuTotal += gpuAllocatable
-		memoryTotal += safeQuantityToUint64(ndLog, nd.Resources.Memory.Quantity.Allocatable, stageAllocatableMemory)
-		storageEphemeralTotal += safeQuantityToUint64(ndLog, nd.Resources.EphemeralStorage.Allocatable, stageAllocatableStorageEphemeral)
+		memoryTotal += memoryAllocatable
+		storageEphemeralTotal += storageEphAllocatable
 
-		avail := nd.Resources.CPU.Quantity.Available()
-		invNode.Available.CPU = safeMilliQuantityToUint64(ndLog, avail, stageAvailableCPU)
+		invNode.Available.CPU = clampAvailableUint64(ndLog, nd.Resources.CPU.Quantity.Allocatable, nd.Resources.CPU.Quantity.Available().MilliValue(), "available_cpu")
 		cpuAvailable += invNode.Available.CPU
 
-		avail = nd.Resources.GPU.Quantity.Available()
-		if nd.Resources.GPU.Quantity.Allocatable != nil && nd.Resources.GPU.Quantity.Allocatable.Value() < 0 {
-			ndLog.Error(errNegativeQuantityClamped, stageAvailableGPU+" clamped: allocatable negative (device plugin)", "allocatable", nd.Resources.GPU.Quantity.Allocatable.Value())
-			invNode.Available.GPU = 0
-		} else {
-			allocatableVal := int64(0)
-			allocatedVal := int64(0)
-			if nd.Resources.GPU.Quantity.Allocatable != nil {
-				allocatableVal = nd.Resources.GPU.Quantity.Allocatable.Value()
-			}
-			if nd.Resources.GPU.Quantity.Allocated != nil {
-				allocatedVal = nd.Resources.GPU.Quantity.Allocated.Value()
-			}
-			invNode.Available.GPU = safeQuantityToUint64(ndLog, avail, stageAvailableGPU, "allocatable", allocatableVal, "allocated", allocatedVal)
-		}
+		invNode.Available.GPU = clampAvailableUint64(ndLog, nd.Resources.GPU.Quantity.Allocatable, nd.Resources.GPU.Quantity.Available().Value(), "available_gpu")
 		gpuAvailable += invNode.Available.GPU
 
-		avail = nd.Resources.Memory.Quantity.Available()
-		invNode.Available.Memory = safeQuantityToUint64(ndLog, avail, stageAvailableMemory)
+		invNode.Available.Memory = clampAvailableUint64(ndLog, nd.Resources.Memory.Quantity.Allocatable, nd.Resources.Memory.Quantity.Available().Value(), "available_memory")
 		memoryAvailable += invNode.Available.Memory
 
-		avail = nd.Resources.EphemeralStorage.Available()
-		invNode.Available.StorageEphemeral = safeQuantityToUint64(ndLog, avail, stageAvailableStorageEphemeral)
+		invNode.Available.StorageEphemeral = clampAvailableUint64(ndLog, nd.Resources.EphemeralStorage.Allocatable, nd.Resources.EphemeralStorage.Available().Value(), "available_storage_ephemeral")
 		storageEphemeralAvailable += invNode.Available.StorageEphemeral
 
 		ret.Nodes = append(ret.Nodes, invNode)
@@ -433,10 +402,8 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 
 	for _, class := range inv.Storage {
 		classLog := log.WithValues("storageClass", class.Info.Class)
-		storageTotal[class.Info.Class] = safeQuantityToUint64(classLog, class.Quantity.Allocatable, stageAllocatableStorage)
-
-		tmp := class.Quantity.Available()
-		storageAvailable[class.Info.Class] = safeQuantityToUint64(classLog, tmp, stageAvailableStorage)
+		storageTotal[class.Info.Class] = clampUint64(classLog, class.Quantity.Allocatable.Value(), "allocatable_storage")
+		storageAvailable[class.Info.Class] = clampAvailableUint64(classLog, class.Quantity.Allocatable, class.Quantity.Available().Value(), "available_storage")
 	}
 
 	ret.TotalAllocatable = inventoryV1.MetricTotal{

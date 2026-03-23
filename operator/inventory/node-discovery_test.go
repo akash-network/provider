@@ -9,12 +9,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
-func TestSanitizeGPUQuantity(t *testing.T) {
+func TestSanitizeResourceQuantity(t *testing.T) {
 	log := logr.Discard()
 
-	assert.Equal(t, int64(10000), sanitizeGPUQuantity(log, "node1", "nvidia.com/gpu", 10000))
-	assert.Equal(t, int64(0), sanitizeGPUQuantity(log, "node1", "nvidia.com/gpu", -1))
-	assert.Equal(t, int64(0), sanitizeGPUQuantity(log, "node1", "nvidia.com/gpu", -1000))
+	assert.Equal(t, int64(10000), sanitizeResourceQuantity(log, "node1", "nvidia.com/gpu", 10000))
+	assert.Equal(t, int64(0), sanitizeResourceQuantity(log, "node1", "nvidia.com/gpu", -1))
+	assert.Equal(t, int64(0), sanitizeResourceQuantity(log, "node1", "memory", -1000))
+	assert.Equal(t, int64(0), sanitizeResourceQuantity(log, "node1", "cpu", 0))
 }
 
 func TestSubAllocatedNLZ_underflow_clamped(t *testing.T) {
