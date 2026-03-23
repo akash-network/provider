@@ -351,7 +351,7 @@ func (s *service) handleLease(ev event.LeaseWon, isNew bool) {
 	if isNew && s.config.ManifestTimeout > time.Duration(0) {
 		// Create watchdog if it does not exist AND a manifest has not been received yet
 		if watchdog := s.watchdogs[ev.LeaseID.DeploymentID()]; watchdog == nil {
-			watchdog = newWatchdog(s.session, s.lc.ShuttingDown(), s.watchdogch, ev.LeaseID, s.config.ManifestTimeout)
+			watchdog = newWatchdog(s.session, s.lc.ShuttingDown(), s.watchdogch, ev.LeaseID, s.config.ManifestTimeout, s.config.BroadcastTimeout)
 			s.watchdogs[ev.LeaseID.DeploymentID()] = watchdog
 		}
 	}

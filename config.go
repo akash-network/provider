@@ -21,6 +21,7 @@ type Config struct {
 	BidDeposit                  sdk.Coin
 	BidTimeout                  time.Duration
 	ManifestTimeout             time.Duration
+	BroadcastTimeout            time.Duration
 	BalanceCheckerCfg           BalanceCheckerConfig
 	Attributes                  attrtypes.Attributes
 	MaxGroupVolumes             int
@@ -33,6 +34,7 @@ func NewDefaultConfig() Config {
 	return Config{
 		ClusterWaitReadyDuration: time.Second * 10,
 		BidDeposit:               mtypes.DefaultBidMinDeposit,
+		BroadcastTimeout:         12 * time.Second,
 		BalanceCheckerCfg: BalanceCheckerConfig{
 			LeaseFundsCheckInterval: 1 * time.Minute,
 			WithdrawalPeriod:        24 * time.Hour,

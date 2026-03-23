@@ -105,6 +105,7 @@ func NewService(ctx context.Context,
 	manifestConfig := manifest.ServiceConfig{
 		HTTPServicesRequireAtLeastOneHost: !cfg.DeploymentIngressStaticHosts,
 		ManifestTimeout:                   cfg.ManifestTimeout,
+		BroadcastTimeout:                  cfg.BroadcastTimeout,
 		RPCQueryTimeout:                   cfg.RPCQueryTimeout,
 		CachedResultMaxAge:                cfg.CachedResultMaxAge,
 	}
