@@ -361,6 +361,59 @@ func Test_BidOrderAndThenClosedUnreserve(t *testing.T) {
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
 }
 
+func Test_BidOrderAndThenGroupClosedUnreserveAndCloseBid(t *testing.T) {
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
+
+	testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	// Should have called reserve once at this point
+	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
+
+	// Deployment/group closed without lease - chain emits EventGroupClosed
+	ev := &dtypes.EventGroupClosed{
+		ID: scaffold.groupID,
+	}
+	require.True(t, ev.ID.Equals(order.orderID.GroupID()))
+	err := scaffold.testBus.Publish(ev)
+	require.NoError(t, err)
+
+	// Wait for this to complete. Group closed event has happened so it stops on its own
+	<-order.lc.Done()
+
+	// Should have called unreserve once
+	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
+
+	// Should have broadcast MsgCloseBid (cleanup when order closes with bid placed)
+	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	closeBidMsg := requireMsgType[*mvbeta.MsgCloseBid](t, broadcast)
+	require.Equal(t, closeBidMsg.ID, mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr))
+}
+
+func Test_BidOrderAndThenGroupClosedDifferentGroupIgnored(t *testing.T) {
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
+
+	testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	scaffold.cluster.AssertCalled(t, "Reserve", scaffold.orderID, mock.Anything)
+
+	// EventGroupClosed for a different group - order should ignore it
+	otherGroupID := scaffold.groupID
+	otherGroupID.GSeq++
+	ev := &dtypes.EventGroupClosed{
+		ID: otherGroupID,
+	}
+	require.False(t, ev.ID.Equals(order.orderID.GroupID()))
+	err := scaffold.testBus.Publish(ev)
+	require.NoError(t, err)
+
+	// Order should still be running; close it with EventOrderClosed
+	orderClosedEv := &mtypes.EventOrderClosed{ID: scaffold.orderID}
+	err = scaffold.testBus.Publish(orderClosedEv)
+	require.NoError(t, err)
+
+	<-order.lc.Done()
+
+	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
+}
+
 func Test_OrderCloseBeforeReserveReturn(t *testing.T) {
 	order, scaffold, reservationFulfilledNotify := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, nil, testBidCreatedAt)
 
