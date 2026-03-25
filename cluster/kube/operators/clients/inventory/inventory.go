@@ -25,7 +25,7 @@ import (
 var (
 	_ ctypes.Inventory = (*inventory)(nil)
 
-	errNegativeQuantity = errors.New("negative resource quantity clamped to 0")
+	errNegativeQuantity = errors.New("negative resource quantity")
 	quantityZero        = resource.NewQuantity(0, resource.DecimalSI)
 )
 
@@ -37,12 +37,13 @@ func clampUint64(log logr.Logger, v int64, what string) uint64 {
 	return uint64(v)
 }
 
-// clampAvailableUint64 guards against ResourcePair.Available() returning MaxInt64
-// when allocatable is -1 (the "unlimited" sentinel). If allocatable is negative
-// for any reason, the Available() result is unreliable.
+// clampAvailableUint64 is a defense-in-depth guard for ResourcePair.Available().
+// Available() treats allocatable == -1 as an "unlimited" sentinel and returns MaxInt64.
+// Normal code path sanitizes inputs so -1 never reaches here, but if it did
+// (e.g. skipped sanitization), the uint64 result would be catastrophically wrong.
 func clampAvailableUint64(log logr.Logger, allocatable *resource.Quantity, v int64, what string) uint64 {
 	if allocatable.Cmp(*quantityZero) < 0 {
-		log.Error(errNegativeQuantity, "available clamped: negative allocatable", "what", what)
+		log.Error(errNegativeQuantity, "allocatable is negative, available clamped to 0", "what", what, "allocatable", allocatable.String())
 		return 0
 	}
 	return clampUint64(log, v, what)
