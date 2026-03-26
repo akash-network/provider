@@ -41,6 +41,7 @@ CHAIN_MIN_DEPOSIT        := 10000000000000
 CHAIN_ACCOUNT_DEPOSIT    := $(shell echo $$(($(CHAIN_MIN_DEPOSIT) * 10)))
 CHAIN_VALIDATOR_DELEGATE := $(shell echo $$(($(CHAIN_MIN_DEPOSIT) / 2)))
 CHAIN_TOKEN_DENOM        := uakt
+CHAIN_DEPOSIT_DENOM      := uact
 
 KEY_NAMES := main provider validator other
 
@@ -93,7 +94,6 @@ node-init-genesis:
 	cp "$(GENESIS_PATH)" "$(GENESIS_PATH).orig"
 	cat "$(GENESIS_PATH).orig" | \
 		jq -M '.app_state.gov.voting_params.voting_period = "30s"' | \
-		jq -rM '(..|objects|select(has("denom"))).denom           |= "$(CHAIN_TOKEN_DENOM)"' | \
 		jq -rM '(..|objects|select(has("bond_denom"))).bond_denom |= "$(CHAIN_TOKEN_DENOM)"' | \
 		jq -rM '(..|objects|select(has("mint_denom"))).mint_denom |= "$(CHAIN_TOKEN_DENOM)"' > \
 		"$(GENESIS_PATH)"
@@ -119,7 +119,7 @@ node-init-genesis-accounts: $(patsubst %,node-init-genesis-account-%,$(GENESIS_A
 node-init-genesis-account-%:
 	$(AKASH) genesis add-account \
 		"$(shell $(AKASH) $(KEY_OPTS) keys show "$(@:node-init-genesis-account-%=%)" -a)" \
-		"$(CHAIN_MIN_DEPOSIT)$(CHAIN_TOKEN_DENOM)"
+		"$(CHAIN_MIN_DEPOSIT)$(CHAIN_DEPOSIT_DENOM),$(CHAIN_MIN_DEPOSIT)$(CHAIN_TOKEN_DENOM)"
 
 .INTERMEDIATE: node-init-gentx
 node-init-gentx:

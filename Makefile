@@ -46,11 +46,11 @@ endif
 build_tags    := $(strip $(BUILD_TAGS))
 build_tags_cs := $(subst $(WHITESPACE),$(COMMA),$(build_tags))
 
-ldflags := -X github.com/cosmos/cosmos-sdk/version.Name=provider-services \
--X github.com/cosmos/cosmos-sdk/version.AppName=provider-services \
--X github.com/cosmos/cosmos-sdk/version.BuildTags="$(build_tags_cs)" \
--X github.com/cosmos/cosmos-sdk/version.Version=$(shell git describe --tags | sed 's/^v//') \
--X github.com/cosmos/cosmos-sdk/version.Commit=$(GIT_HEAD_COMMIT_LONG)
+ldflags := -X github.com/akash-network/provider/version.Name=provider-services \
+-X github.com/akash-network/provider/version.AppName=provider-services \
+-X github.com/akash-network/provider/version.BuildTags="$(build_tags_cs)" \
+-X github.com/akash-network/provider/version.Version=$(RELEASE_TAG) \
+-X github.com/akash-network/provider/version.Commit=$(GIT_HEAD_COMMIT_LONG)
 
 GORELEASER_LDFLAGS := $(ldflags)
 
