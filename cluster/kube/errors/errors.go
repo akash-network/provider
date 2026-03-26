@@ -21,8 +21,8 @@ var (
 	ErrAlreadyExists             = fmt.Errorf("%w: resource already exists", errKubeClient)
 )
 
-// IsClusterUnavailable reports whether err indicates the cluster is unreachable.
-func IsClusterUnavailable(err error) bool {
+// IsKubeAPIUnreachable reports whether err indicates the kube API server is unreachable.
+func IsKubeAPIUnreachable(err error) bool {
 	if err == nil {
 		return false
 	}

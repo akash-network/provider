@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 func TestDefaultErrorHandler(t *testing.T) {

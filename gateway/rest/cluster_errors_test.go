@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 func TestClusterErrorToHTTP(t *testing.T) {

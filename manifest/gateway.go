@@ -6,7 +6,7 @@ import (
 
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 // ManifestSubmitErrorToHTTP maps manifest submit errors to HttpError for gateway responses.

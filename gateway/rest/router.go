@@ -34,8 +34,8 @@ import (
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	pmanifest "github.com/akash-network/provider/manifest"
-	"github.com/akash-network/provider/pkg/httperror"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/utils/httperror"
 	"github.com/akash-network/provider/version"
 )
 

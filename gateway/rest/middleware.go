@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 

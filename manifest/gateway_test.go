@@ -9,7 +9,7 @@ import (
 
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 func TestManifestSubmitErrorToHTTP(t *testing.T) {

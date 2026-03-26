@@ -37,7 +37,7 @@ import (
 	clmocks "github.com/akash-network/provider/mocks/cluster/types"
 	pmmock "github.com/akash-network/provider/mocks/manifest"
 	"github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 	"github.com/akash-network/provider/version"
 )
 

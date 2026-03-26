@@ -15,8 +15,8 @@ import (
 	ajwt "pkg.akt.dev/go/util/jwt"
 	atls "pkg.akt.dev/go/util/tls"
 
-	"github.com/akash-network/provider/pkg/httperror"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 type CertGetter interface {

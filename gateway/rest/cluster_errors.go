@@ -7,14 +7,14 @@ import (
 	kubeErrors "k8s.io/apimachinery/pkg/api/errors"
 
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 func clusterErrorToHTTP(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case kubeclienterrors.IsClusterUnavailable(err):
+	case kubeclienterrors.IsKubeAPIUnreachable(err):
 		return httperror.NewHttpError(http.StatusServiceUnavailable, err)
 	case errors.Is(err, kubeclienterrors.ErrNoDeploymentForLease):
 		fallthrough

@@ -10,7 +10,7 @@ import (
 	gcontext "github.com/gorilla/context"
 
 	gwutils "github.com/akash-network/provider/gateway/utils"
-	"github.com/akash-network/provider/pkg/httperror"
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 // AuthHeaderTokenExtractor is a TokenExtractor that takes a request
