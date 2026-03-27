@@ -16,12 +16,7 @@ import (
 	atls "pkg.akt.dev/go/util/tls"
 
 	"github.com/akash-network/provider/tools/fromctx"
-)
-
-var (
-	ErrAuthAmbiguous = errors.New("auth: ambiguous authentication. may not use mTLS and JWT at the same time")
-	ErrJWTInvalid    = errors.New("jwt: invalid")
-	ErrJWTMissing    = errors.New("jwt: missing")
+	"github.com/akash-network/provider/utils/httperror"
 )
 
 type CertGetter interface {
@@ -122,15 +117,15 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 	}
 
 	if (claims.Leases.Access != ajwt.AccessTypeNone) && (token != "") {
-		return nil, ErrAuthAmbiguous
+		return nil, httperror.ErrAuthAmbiguous
 	}
 
 	if token != "" {
 		// reset claims if token is provided
 		claims = &ajwt.Claims{}
 
-		token, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {
-			issStr, err := token.Claims.GetIssuer()
+		parsedToken, err := jwt.ParseWithClaims(token, claims, func(t *jwt.Token) (interface{}, error) {
+			issStr, err := t.Claims.GetIssuer()
 			if err != nil {
 				return nil, err
 			}
@@ -148,24 +143,36 @@ func AuthProcess(ctx context.Context, peerCerts []*x509.Certificate, token strin
 			pk, err := pstorage.GetAccountPublicKey(ctx, iss)
 			if err != nil {
 				if errors.Is(err, os.ErrNotExist) {
-					return nil, ErrJWTInvalid
+					return nil, httperror.ErrJWTInvalid
 				}
 				return nil, err
 			}
 
-			verifier := ajwt.NewVerifier(pk, iss)
-
-			return verifier, nil
+			return ajwt.NewVerifier(pk, iss), nil
 		}, jwt.WithValidMethods([]string{"ES256K", "ES256KADR36"}))
 
-		if err == nil && !token.Valid {
-			err = ErrJWTInvalid
-		}
-
-		if err != nil {
-			return nil, err
+		if err != nil || !parsedToken.Valid {
+			return nil, jwtErrorToHTTP(parsedToken, err)
 		}
 	}
 
 	return claims, nil
+}
+
+// jwtErrorToHTTP maps JWT parse results to HttpError for gateway responses.
+func jwtErrorToHTTP(token *jwt.Token, err error) *httperror.HttpError {
+	switch {
+	case err == nil && (token == nil || !token.Valid):
+		return httperror.ErrJWTInvalid
+	case errors.Is(err, jwt.ErrTokenInvalidClaims):
+		return httperror.ErrJWTInvalidClaims
+	case errors.Is(err, jwt.ErrTokenExpired):
+		return httperror.ErrJWTExpired
+	case errors.Is(err, jwt.ErrTokenNotValidYet):
+		fallthrough
+	case errors.Is(err, jwt.ErrTokenUsedBeforeIssued):
+		return httperror.ErrJWTInvalid
+	default:
+		return httperror.ErrJWTInvalid
+	}
 }
