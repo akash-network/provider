@@ -432,7 +432,7 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	}
 
 	if !bytes.Equal(version, versionExpected) {
-		m.log.Info("deployment version mismatch", "expected", m.data.Deployment.Hash, "got", version)
+		m.log.Error("deployment version mismatch", "expected", hex.EncodeToString(m.data.Deployment.Hash), "got", hex.EncodeToString(version))
 		return ErrManifestVersion
 	}
 
