@@ -404,7 +404,9 @@ func TestInventoryMetrics_negative_quantities_clamped(t *testing.T) {
 				}
 			},
 			check: func(t *testing.T, m inventoryV1.Metrics) {
-				assert.Equal(t, uint64(0), m.TotalAllocatable.Storage["default"])
+				v, exists := m.TotalAllocatable.Storage["default"]
+				require.True(t, exists, "storage class key must be present")
+				assert.Equal(t, uint64(0), v)
 			},
 		},
 		{

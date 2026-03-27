@@ -685,6 +685,17 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 func updateNodeInfo(ctx context.Context, knode *corev1.Node, node *v1.Node) {
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
+	// Reset all fields before repopulating from knode so that resources
+	// removed between updates (e.g. GPU device plugin unregistered) don't leave stale values.
+	node.Resources.CPU.Quantity.Allocatable.SetMilli(0)
+	node.Resources.CPU.Quantity.Capacity.SetMilli(0)
+	node.Resources.Memory.Quantity.Allocatable.Set(0)
+	node.Resources.Memory.Quantity.Capacity.Set(0)
+	node.Resources.EphemeralStorage.Allocatable.Set(0)
+	node.Resources.EphemeralStorage.Capacity.Set(0)
+	node.Resources.GPU.Quantity.Allocatable.Set(0)
+	node.Resources.GPU.Quantity.Capacity.Set(0)
+
 	for name, r := range knode.Status.Allocatable {
 		switch name {
 		case corev1.ResourceCPU:
@@ -717,7 +728,7 @@ func updateNodeInfo(ctx context.Context, knode *corev1.Node, node *v1.Node) {
 
 	gpuAllocatable := node.Resources.GPU.Quantity.Allocatable.Value()
 	gpuCapacity := node.Resources.GPU.Quantity.Capacity.Value()
-	if gpuCapacity > 0 && gpuAllocatable > gpuCapacity {
+	if gpuAllocatable > gpuCapacity {
 		log.Error(errGPUExceedsCapacity, "clamping allocatable to capacity",
 			"node", knode.Name, "allocatable", gpuAllocatable, "capacity", gpuCapacity)
 		node.Resources.GPU.Quantity.Allocatable.Set(gpuCapacity)
