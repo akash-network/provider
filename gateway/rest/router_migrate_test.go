@@ -2,6 +2,7 @@ package rest
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -206,6 +207,59 @@ func TestRouteMigrateHostnameTransferFails(t *testing.T) {
 		require.Error(t, err)
 		require.Regexp(t, `^.*remote server returned 500.*$`, err)
 		require.Equal(t, 2, len(test.clusterService.Calls))
+	}
+
+	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
+	runRouterTest(t, []routerTestAuth{routerTestAuthJWT}, testFn)
+}
+
+func TestRouteMigrateEndpointDeclareIPFails(t *testing.T) {
+	const endpointName = "my-ip"
+	const dseq = uint64(444)
+	const gseq = uint32(445)
+	const serviceName = "web"
+
+	testFn := func(test *routerTest, _ http.Header) {
+		caddr := sdk.AccAddress(test.ckey.PubKey().Address())
+		paddr := sdk.AccAddress(test.pkey.PubKey().Address())
+
+		leaseID := testutil.LeaseID(t)
+		leaseID.Owner = caddr.String()
+		leaseID.Provider = paddr.String()
+
+		mgroup := crd.ManifestGroup{
+			Name: "default",
+			Services: []crd.ManifestService{
+				{
+					Name:  serviceName,
+					Image: "nginx",
+					Count: 1,
+					Expose: []crd.ManifestServiceExpose{
+						{
+							Port:         80,
+							ExternalPort: 80,
+							Proto:        "TCP",
+							Service:      serviceName,
+							Global:       true,
+							IP:           endpointName,
+						},
+					},
+				},
+			},
+		}
+
+		test.clusterService.On("FindActiveLease", mock.Anything, mock.Anything, dseq, gseq).Return(true, leaseID, mgroup, nil)
+		test.pcclient.On("DeclareIP", mock.Anything, leaseID, serviceName, uint32(80), uint32(80), mock.Anything, mock.Anything, true).
+			Return(errors.New("declare ip failed"))
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+		defer cancel()
+		err := test.gwclient.MigrateEndpoints(ctx, []string{endpointName}, dseq, gseq)
+		require.Error(t, err)
+		require.IsType(t, apclient.ClientResponseError{}, err)
+		cre := err.(apclient.ClientResponseError)
+		require.Equal(t, http.StatusInternalServerError, cre.Status)
+		require.Regexp(t, `(?s)^.*declare ip failed.*$`, cre.ClientError())
 	}
 
 	runRouterTest(t, []routerTestAuth{routerTestAuthCert}, testFn)
