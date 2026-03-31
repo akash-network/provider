@@ -349,3 +349,63 @@ func (_c *Client_StatusV1_Call) RunAndReturn(run func(ctx context.Context) (*v1.
 	_c.Call.Return(run)
 	return _c
 }
+
+// ScreenBid provides a mock function for the type Client
+func (_mock *Client) ScreenBid(ctx context.Context, req *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error) {
+	ret := _mock.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ScreenBid")
+	}
+
+	var r0 *v1.BidScreeningResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error)); ok {
+		return returnFunc(ctx, req)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1.BidScreeningRequest) *v1.BidScreeningResponse); ok {
+		r0 = returnFunc(ctx, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v1.BidScreeningResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *v1.BidScreeningRequest) error); ok {
+		r1 = returnFunc(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_ScreenBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScreenBid'
+type Client_ScreenBid_Call struct {
+	*mock.Call
+}
+
+// ScreenBid is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req *v1.BidScreeningRequest
+func (_e *Client_Expecter) ScreenBid(ctx interface{}, req interface{}) *Client_ScreenBid_Call {
+	return &Client_ScreenBid_Call{Call: _e.mock.On("ScreenBid", ctx, req)}
+}
+
+func (_c *Client_ScreenBid_Call) Run(run func(ctx context.Context, req *v1.BidScreeningRequest)) *Client_ScreenBid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(
+			args[0].(context.Context),
+			args[1].(*v1.BidScreeningRequest),
+		)
+	})
+	return _c
+}
+
+func (_c *Client_ScreenBid_Call) Return(response *v1.BidScreeningResponse, err error) *Client_ScreenBid_Call {
+	_c.Call.Return(response, err)
+	return _c
+}
+
+func (_c *Client_ScreenBid_Call) RunAndReturn(run func(ctx context.Context, req *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error)) *Client_ScreenBid_Call {
+	_c.Call.Return(run)
+	return _c
+}

@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"pkg.akt.dev/go/util/ctxlog"
 
@@ -35,11 +33,11 @@ const (
 
 type grpcProviderV1 struct {
 	ctx    context.Context
-	client provider.StatusClient
+	client provider.Client
 }
 
 func (gm *grpcProviderV1) BidScreening(ctx context.Context, request *providerv1.BidScreeningRequest) (*providerv1.BidScreeningResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "BidScreening not implemented")
+	return gm.client.ScreenBid(ctx, request)
 }
 
 var _ providerv1.ProviderRPCServer = (*grpcProviderV1)(nil)
@@ -57,7 +55,7 @@ func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
 	return val.(*ajwt.Claims)
 }
 
-func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.Client) error {
 	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
 	if err != nil {
 		return err
