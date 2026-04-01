@@ -58,23 +58,16 @@ clean-kube:
 .PHONY: kube-deployments-rollout
 kube-deployments-rollout: #$(patsubst %, kube-deployment-rollout-%,$(KUSTOMIZE_INSTALLS))
 
-.PHONY: kube-setup-hostname-operator-ingress
-kube-setup-hostname-operator-ingress:
-	@echo "Configuring hostname operator for NGINX Ingress mode..."
-	kubectl wait --for=condition=available deployment/operator-hostname -n akash-services --timeout=90s
-	kubectl patch configmap operator-hostname -n akash-services --type=strategic --patch-file hostname-operator-ingress-patch.yaml
-	kubectl rollout restart deployment/operator-hostname -n akash-services
-	kubectl rollout status deployment/operator-hostname -n akash-services --timeout=60s
-
 .PHONY: kube-setup-kube
 ifeq ($(GATEWAY_API),true)
 kube-setup-kube: kube-setup-hostname-operator-gateway
 else
-kube-setup-kube: kube-setup-hostname-operator-ingress
+kube-setup-kube:
 endif
 
 .PHONY: kube-setup-ingress-gateway
 kube-setup-ingress-gateway:
+	kubectl kustomize $(KUSTOMIZE_ROOT)/nginx-gateway-fabric/crds | kubectl apply --server-side -f -
 	kubectl kustomize $(KUSTOMIZE_ROOT)/nginx-gateway-fabric | kubectl apply -f -
 	kubectl apply -f "$(METALLB_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_IP_CONFIG_PATH)"
