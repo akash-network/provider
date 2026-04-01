@@ -235,6 +235,51 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 			}
 			result = append(result, &policy)
 		}
+
+		// Allow egress to the Kubernetes API server for services with permissions.
+		// This uses the real API server endpoint IP (not the ClusterIP) because
+		// CNIs like Calico evaluate network policies after DNAT, so the ClusterIP
+		// would not match.
+		if b.settings.APIServerEndpointIP != "" && b.settings.APIServerEndpointPort > 0 &&
+			service.Params != nil && service.Params.Permissions != nil && len(service.Params.Permissions.Read) > 0 {
+			apiServerPort := intstr.FromInt32(b.settings.APIServerEndpointPort)
+			policyName := fmt.Sprintf("akash-%s-apiserver", serviceName)
+			policy := netv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:    b.labels(),
+					Name:      policyName,
+					Namespace: LidNS(b.deployment.LeaseID()),
+				},
+				Spec: netv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							AkashManifestServiceLabelName: serviceName,
+						},
+					},
+					PolicyTypes: []netv1.PolicyType{
+						netv1.PolicyTypeEgress,
+					},
+					Egress: []netv1.NetworkPolicyEgressRule{
+						{
+							To: []netv1.NetworkPolicyPeer{
+								{
+									IPBlock: &netv1.IPBlock{
+										CIDR: b.settings.APIServerEndpointIP + "/32",
+									},
+								},
+							},
+							Ports: []netv1.NetworkPolicyPort{
+								{
+									Protocol: &tcpProtocol,
+									Port:     &apiServerPort,
+								},
+							},
+						},
+					},
+				},
+			}
+			result = append(result, &policy)
+		}
 	}
 
 	return result, nil

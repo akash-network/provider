@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/viper"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kruntime "k8s.io/apimachinery/pkg/util/runtime"
 	aclient "pkg.akt.dev/go/node/client/discovery"
 
@@ -537,6 +538,28 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.StorageCommitLevel = overcommitPercentStorage
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
+
+	// Discover the real API server endpoint IP and port for network policies.
+	// CNIs like Calico evaluate egress rules after DNAT, so we need the actual
+	// endpoint address rather than the ClusterIP (e.g. 10.96.0.1).
+	if deploymentNetworkPoliciesEnabled {
+		if kc, err := fromctx.KubeClientFromCtx(ctx); err == nil {
+			if ep, err := kc.CoreV1().Endpoints("default").Get(ctx, "kubernetes", metav1.GetOptions{}); err == nil {
+				for _, subset := range ep.Subsets {
+					if len(subset.Addresses) > 0 && len(subset.Ports) > 0 {
+						kubeSettings.APIServerEndpointIP = subset.Addresses[0].IP
+						kubeSettings.APIServerEndpointPort = subset.Ports[0].Port
+						logger.Info("discovered API server endpoint for network policies",
+							"ip", kubeSettings.APIServerEndpointIP,
+							"port", kubeSettings.APIServerEndpointPort)
+						break
+					}
+				}
+			} else {
+				logger.Error("failed to discover API server endpoint for network policies", "err", err)
+			}
+		}
+	}
 
 	if err := builder.ValidateSettings(kubeSettings); err != nil {
 		return err
