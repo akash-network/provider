@@ -240,7 +240,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 		// This uses the real API server endpoint IP (not the ClusterIP) because
 		// CNIs like Calico evaluate network policies after DNAT, so the ClusterIP
 		// would not match.
-		if b.settings.APIServerEndpoint != nil && serviceHasReadPermissions(service) {
+		if serviceHasReadPermissions(service) {
 			port := b.settings.APIServerEndpoint.Port
 			if port < 0 || port > 65535 {
 				return nil, fmt.Errorf("invalid API server port: %d", port)
