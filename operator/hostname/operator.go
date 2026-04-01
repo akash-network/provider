@@ -58,7 +58,7 @@ type hostnameOperator struct {
 	flagHostnamesData  common.PrepareFlagFn
 	flagIgnoreListData common.PrepareFlagFn
 	ingressConfig      kube.IngressConfig
-	gatewayImpl        gateway.GatewayImplementation
+	gatewayImpl        gateway.GatewayProvider
 }
 
 func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, config common.OperatorConfig, ilc common.IgnoreListConfig) (*hostnameOperator, error) {
@@ -90,23 +90,23 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
 	ingressMode := builder.IngressMode(gwCfg.IngressMode)
 
-	// Initialize Gateway implementation if using gateway-api mode
-	var gatewayImpl gateway.GatewayImplementation
+	// Initialize Gateway provider if using gateway-api mode
+	var gatewayImpl gateway.GatewayProvider
 	if ingressMode == builder.IngressModeGateway {
-		impl, err := gateway.GetImplementation(gwCfg.Implementation, logger)
+		impl, err := gateway.GetProvider(gwCfg.Provider, logger)
 		if err != nil {
-			return nil, fmt.Errorf("hostname operator: failed to get gateway implementation: %w", err)
+			return nil, fmt.Errorf("hostname operator: failed to get gateway provider: %w", err)
 		}
 		gatewayImpl = impl
-		logger.Info("initialized gateway implementation",
-			"implementation", impl.Name())
+		logger.Info("initialized gateway provider",
+			"provider", impl.Name())
 	}
 
 	logger.Info("initializing hostname operator",
 		"ingress-mode", gwCfg.IngressMode,
 		"gateway-name", gwCfg.Name,
 		"gateway-namespace", gwCfg.Namespace,
-		"gateway-implementation", gwCfg.Implementation)
+		"gateway-provider", gwCfg.Provider)
 
 	op := &hostnameOperator{
 		ctx:           ctx,

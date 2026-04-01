@@ -349,8 +349,8 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().String(FlagGatewayImplementation, "nginx", "Gateway implementation: 'nginx' for NGINX Gateway Fabric (default)")
-	if err := viper.BindPFlag(FlagGatewayImplementation, cmd.Flags().Lookup(FlagGatewayImplementation)); err != nil {
+	cmd.Flags().String(FlagGatewayProvider, "nginx", "Gateway provider: 'nginx' for NGINX Gateway Fabric (default)")
+	if err := viper.BindPFlag(FlagGatewayProvider, cmd.Flags().Lookup(FlagGatewayProvider)); err != nil {
 		return err
 	}
 

@@ -334,7 +334,7 @@ type GatewayConfig struct {
 	IngressMode    string
 	Name           string
 	Namespace      string
-	Implementation string
+	Provider string
 }
 
 func GatewayConfigFromCtx(ctx context.Context) (GatewayConfig, error) {
@@ -342,7 +342,7 @@ func GatewayConfigFromCtx(ctx context.Context) (GatewayConfig, error) {
 	if val == nil {
 		return GatewayConfig{
 			IngressMode:    "ingress",
-			Implementation: "nginx",
+			Provider: "nginx",
 		}, nil
 	}
 

@@ -67,7 +67,7 @@ type client struct {
 	ingressMode       builder.IngressMode
 	gatewayName       string
 	gatewayNamespace  string
-	gatewayImpl       gateway.GatewayImplementation
+	gatewayImpl       gateway.GatewayProvider
 }
 
 func (c *client) String() string {
@@ -119,23 +119,23 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
 	ingressMode := builder.IngressMode(gwCfg.IngressMode)
 
-	// Initialize Gateway implementation if using gateway-api mode
-	var gatewayImpl gateway.GatewayImplementation
+	// Initialize Gateway provider if using gateway-api mode
+	var gatewayImpl gateway.GatewayProvider
 	if ingressMode == builder.IngressModeGateway {
-		impl, err := gateway.GetImplementation(gwCfg.Implementation, log)
+		impl, err := gateway.GetProvider(gwCfg.Provider, log)
 		if err != nil {
-			return nil, fmt.Errorf("kube: failed to get gateway implementation: %w", err)
+			return nil, fmt.Errorf("kube: failed to get gateway provider: %w", err)
 		}
 		gatewayImpl = impl
-		log.Info("initialized gateway implementation",
-			"implementation", impl.Name())
+		log.Info("initialized gateway provider",
+			"provider", impl.Name())
 	}
 
 	log.Info("initializing kube client",
 		"ingress-mode", gwCfg.IngressMode,
 		"gateway-name", gwCfg.Name,
 		"gateway-namespace", gwCfg.Namespace,
-		"gateway-implementation", gwCfg.Implementation)
+		"gateway-provider", gwCfg.Provider)
 
 	cl := &client{
 		ctx:               ctx,

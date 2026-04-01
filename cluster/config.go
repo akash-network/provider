@@ -25,7 +25,7 @@ type Config struct {
 	IngressMode                     builder.IngressMode
 	GatewayName                     string
 	GatewayNamespace                string
-	GatewayImplementation           string
+	GatewayProvider           string
 	ClusterSettings                 map[interface{}]interface{}
 }
 
@@ -41,6 +41,6 @@ func NewDefaultConfig() Config {
 		IngressMode:                     builder.IngressModeIngress,
 		GatewayName:                     "akash-gateway",
 		GatewayNamespace:                "akash-gateway",
-		GatewayImplementation:           "nginx",
+		GatewayProvider:           "nginx",
 	}
 }

@@ -128,7 +128,7 @@ const (
 	FlagIngressMode                      = "ingress-mode"
 	FlagGatewayName                      = "gateway-name"
 	FlagGatewayNamespace                 = "gateway-namespace"
-	FlagGatewayImplementation            = "gateway-implementation"
+	FlagGatewayProvider                  = "gateway-provider"
 )
 
 const (
@@ -587,13 +587,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 	gatewayName := viper.GetString(FlagGatewayName)
 	gatewayNamespace := viper.GetString(FlagGatewayNamespace)
-	gatewayImplementation := viper.GetString(FlagGatewayImplementation)
+	gatewayProvider := viper.GetString(FlagGatewayProvider)
 
 	// Add ingress mode and gateway settings
 	kubeSettings.IngressMode = ingressMode
 	kubeSettings.GatewayName = gatewayName
 	kubeSettings.GatewayNamespace = gatewayNamespace
-	kubeSettings.GatewayImplementation = gatewayImplementation
+	kubeSettings.GatewayProvider = gatewayProvider
 
 	if err := builder.ValidateSettings(kubeSettings); err != nil {
 		return err
@@ -603,7 +603,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		"ingress-mode", ingressMode,
 		"gateway-name", gatewayName,
 		"gateway-namespace", gatewayNamespace,
-		"gateway-implementation", gatewayImplementation)
+		"gateway-provider", gatewayProvider)
 
 	if ingressMode == builder.IngressModeGateway {
 		if gatewayName == "" {
@@ -620,7 +620,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			IngressMode:    string(ingressMode),
 			Name:           gatewayName,
 			Namespace:      gatewayNamespace,
-			Implementation: gatewayImplementation,
+			Provider:    gatewayProvider,
 		},
 	}
 
@@ -684,7 +684,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.IngressMode = ingressMode
 	config.GatewayName = gatewayName
 	config.GatewayNamespace = gatewayNamespace
-	config.GatewayImplementation = gatewayImplementation
+	config.GatewayProvider = gatewayProvider
 
 	bidDeposit, err := sdk.ParseCoinNormalized(viper.GetString(FlagBidDeposit))
 	if err != nil {

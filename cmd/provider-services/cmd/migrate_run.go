@@ -49,7 +49,7 @@ func MigrateRunCmd() *cobra.Command {
 				Name:           gatewayName,
 				Namespace:      gatewayNamespace,
 				IngressMode:    "ingress",
-				Implementation: "nginx",
+				Provider:    "nginx",
 			})
 
 			return nil

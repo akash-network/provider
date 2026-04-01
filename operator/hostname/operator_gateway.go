@@ -19,7 +19,7 @@ func (op *hostnameOperator) connectHostnameToDeploymentGateway(ctx context.Conte
 	config := gateway.HTTPRouteConfig{
 		GatewayName:      op.ingressConfig.GatewayName,
 		GatewayNamespace: op.ingressConfig.GatewayNamespace,
-		Implementation:   op.gatewayImpl,
+		Provider:         op.gatewayImpl,
 	}
 
 	return gateway.CreateOrUpdateHTTPRoute(ctx, op.dc, config, directive, gateway.NoopHTTPRouteObserver{})

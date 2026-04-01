@@ -30,7 +30,7 @@ var HTTPRouteGVR = schema.GroupVersionResource{
 type HTTPRouteConfig struct {
 	GatewayName      string
 	GatewayNamespace string
-	Implementation   GatewayImplementation
+	Provider   GatewayProvider
 }
 
 // HTTPRouteObserver allows callers to observe HTTPRoute operations for metrics or logging.
@@ -48,7 +48,7 @@ func (NoopHTTPRouteObserver) OnUpdate(error) {}
 func (NoopHTTPRouteObserver) OnDelete(error) {}
 
 // CreateOrUpdateHTTPRoute creates or updates an HTTPRoute for a hostname directive.
-// It uses the provided Implementation to build annotations and the HTTPRoute spec.
+// It uses the provided Provider to build annotations and the HTTPRoute spec.
 func CreateOrUpdateHTTPRoute(
 	ctx context.Context,
 	dc dynamic.Interface,
@@ -63,8 +63,8 @@ func CreateOrUpdateHTTPRoute(
 	labels[builder.AkashManagedLabelName] = "true"
 	builder.AppendLeaseLabels(directive.LeaseID, labels)
 
-	annotations := config.Implementation.BuildAnnotations(directive)
-	spec := config.Implementation.BuildHTTPRouteSpec(
+	annotations := config.Provider.BuildAnnotations(directive)
+	spec := config.Provider.BuildHTTPRouteSpec(
 		config.GatewayName,
 		config.GatewayNamespace,
 		directive.Hostname,

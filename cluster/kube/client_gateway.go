@@ -47,7 +47,7 @@ func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directi
 	config := gateway.HTTPRouteConfig{
 		GatewayName:      c.gatewayName,
 		GatewayNamespace: c.gatewayNamespace,
-		Implementation:   c.gatewayImpl,
+		Provider:         c.gatewayImpl,
 	}
 
 	return gateway.CreateOrUpdateHTTPRoute(ctx, c.dc, config, directive, httpRouteMetricsObserver{})

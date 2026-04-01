@@ -21,8 +21,8 @@ type nginxGateway struct {
 	log log.Logger
 }
 
-// NewNginxGateway creates a new NGINX Gateway Fabric implementation.
-func NewNginxGateway(logger log.Logger) GatewayImplementation {
+// NewNginxGateway creates a new NGINX Gateway Fabric provider.
+func NewNginxGateway(logger log.Logger) GatewayProvider {
 	return &nginxGateway{log: logger}
 }
 

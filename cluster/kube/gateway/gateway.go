@@ -8,12 +8,12 @@ import (
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
-// Implementation defines the interface for Gateway API implementations.
-// Each implementation (NGINX, Istio, Kong, etc.) provides its own strategy for:
+// GatewayProvider defines the interface for Gateway API providers.
+// Each provider (NGINX, Istio, Kong, etc.) provides its own strategy for:
 // - Converting directive options to HTTPRoute annotations/filters
 // - Building HTTPRoute rules with implementation-specific enhancements
 // - Handling unsupported features with warnings
-type GatewayImplementation interface {
+type GatewayProvider interface {
 	// Name returns the implementation identifier (e.g., "nginx", "istio", "kong")
 	Name() string
 
@@ -44,7 +44,7 @@ type GatewayImplementation interface {
 //
 // NOTE: When adding new option fields to ConnectToDeploymentDirective, you must add
 // a corresponding check here. A test using reflection verifies all fields are covered.
-func ValidateDirective(impl GatewayImplementation, directive chostname.ConnectToDeploymentDirective) []string {
+func ValidateDirective(impl GatewayProvider, directive chostname.ConnectToDeploymentDirective) []string {
 	supported := make(map[string]bool)
 	for _, name := range impl.SupportedDirectives() {
 		supported[name] = true
