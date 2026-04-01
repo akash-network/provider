@@ -39,7 +39,7 @@ type Settings struct {
 	// (from the "kubernetes" endpoints in the default namespace, not the ClusterIP).
 	// This is needed for network policies because CNIs like Calico evaluate
 	// egress rules after DNAT, so the ClusterIP is not what gets matched.
-	APIServerEndpoint *net.TCPAddr
+	APIServerEndpoint net.TCPAddr
 
 	CPUCommitLevel     float64
 	GPUCommitLevel     float64

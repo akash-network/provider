@@ -551,7 +551,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			if ep, err := kc.CoreV1().Endpoints(corev1.NamespaceDefault).Get(ctx, kubeAPIServerEndpointName, metav1.GetOptions{}); err == nil {
 				for _, subset := range ep.Subsets {
 					if len(subset.Addresses) > 0 && len(subset.Ports) > 0 {
-						kubeSettings.APIServerEndpoint = &net.TCPAddr{
+						kubeSettings.APIServerEndpoint = net.TCPAddr{
 							IP:   net.ParseIP(subset.Addresses[0].IP),
 							Port: int(subset.Ports[0].Port),
 						}
