@@ -35,7 +35,7 @@ type Settings struct {
 	// NetworkPoliciesEnabled determines if NetworkPolicies should be installed.
 	NetworkPoliciesEnabled bool
 
-	// APIServerEndpoint is the real address of the Kubernetes API server
+	// APIServerEndpoint is the address of the Kubernetes API server
 	// (from the "kubernetes" endpoints in the default namespace, not the ClusterIP).
 	// This is needed for network policies because CNIs like Calico evaluate
 	// egress rules after DNAT, so the ClusterIP is not what gets matched.
