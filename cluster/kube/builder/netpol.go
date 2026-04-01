@@ -241,7 +241,11 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 		// CNIs like Calico evaluate network policies after DNAT, so the ClusterIP
 		// would not match.
 		if b.settings.APIServerEndpoint != nil && serviceHasReadPermissions(service) {
-			apiServerPort := intstr.FromInt32(int32(b.settings.APIServerEndpoint.Port))
+			port := b.settings.APIServerEndpoint.Port
+			if port < 0 || port > 65535 {
+				return nil, fmt.Errorf("invalid API server port: %d", port)
+			}
+			apiServerPort := intstr.FromInt32(int32(port))
 			policyName := fmt.Sprintf("akash-apiserver-%s", serviceName)
 			policy := netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{
