@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/akash-network/provider/cluster/kube"
+	"github.com/akash-network/provider/cluster/kube/builder"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	"github.com/akash-network/provider/operator/common"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -35,11 +35,12 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
+			gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
 			logger.Info("hostname operator configuration",
-				"ingress-mode", fromctx.MustIngressModeFromCtx(ctx),
-				"gateway-name", fromctx.MustGatewayNameFromCtx(ctx),
-				"gateway-namespace", fromctx.MustGatewayNamespaceFromCtx(ctx),
-				"gateway-implementation", fromctx.MustGatewayImplementationFromCtx(ctx))
+				"ingress-mode", gwCfg.IngressMode,
+				"gateway-name", gwCfg.Name,
+				"gateway-namespace", gwCfg.Namespace,
+				"gateway-implementation", gwCfg.Implementation)
 
 			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {
@@ -118,27 +119,29 @@ func addGatewayApiFlags(cmd *cobra.Command) {
 }
 
 func withGatewayApi(ctx context.Context) (context.Context, error) {
-	ingressMode := viper.GetString("ingress-mode")
-	if ingressMode != kube.IngressModeIngress && ingressMode != kube.IngressModeGateway {
-		return nil, fmt.Errorf("invalid ingress-mode %q: must be %q or %q", ingressMode, kube.IngressModeIngress, kube.IngressModeGateway)
+	ingressMode, err := builder.ParseIngressMode(viper.GetString("ingress-mode"))
+	if err != nil {
+		return nil, err
 	}
 	gatewayName := viper.GetString("gateway-name")
 	gatewayNamespace := viper.GetString("gateway-namespace")
 	gatewayImplementation := viper.GetString("gateway-implementation")
 
-	if ingressMode == kube.IngressModeGateway {
+	if ingressMode == builder.IngressModeGateway {
 		if gatewayName == "" {
-			return nil, fmt.Errorf("gateway-name is required when ingress-mode is %s", kube.IngressModeGateway)
+			return nil, fmt.Errorf("gateway-name is required when ingress-mode is %s", builder.IngressModeGateway)
 		}
 		if gatewayNamespace == "" {
-			return nil, fmt.Errorf("gateway-namespace is required when ingress-mode is %s", kube.IngressModeGateway)
+			return nil, fmt.Errorf("gateway-namespace is required when ingress-mode is %s", builder.IngressModeGateway)
 		}
 	}
 
-	ctx = context.WithValue(ctx, fromctx.CtxKeyIngressMode, ingressMode)
-	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayName, gatewayName)
-	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayNamespace, gatewayNamespace)
-	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayImplementation, gatewayImplementation)
+	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayConfig, fromctx.GatewayConfig{
+		IngressMode:    string(ingressMode),
+		Name:           gatewayName,
+		Namespace:      gatewayNamespace,
+		Implementation: gatewayImplementation,
+	})
 
 	return ctx, nil
 }

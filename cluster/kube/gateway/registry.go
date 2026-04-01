@@ -11,11 +11,11 @@ import (
 // Implementations register themselves via the Register method,
 // typically during package initialization.
 type Registry struct {
-	implementations map[string]func(log.Logger) Implementation
+	implementations map[string]func(log.Logger) GatewayImplementation
 }
 
 var defaultRegistry = &Registry{
-	implementations: make(map[string]func(log.Logger) Implementation),
+	implementations: make(map[string]func(log.Logger) GatewayImplementation),
 }
 
 func init() {
@@ -24,14 +24,14 @@ func init() {
 }
 
 // Register adds a Gateway implementation factory to the registry.
-// The factory function takes a logger and returns an Implementation instance.
-func (r *Registry) Register(name string, factory func(log.Logger) Implementation) {
+// The factory function takes a logger and returns a GatewayImplementation instance.
+func (r *Registry) Register(name string, factory func(log.Logger) GatewayImplementation) {
 	r.implementations[name] = factory
 }
 
 // Get retrieves a Gateway implementation by name.
 // Returns an error if the implementation is not registered.
-func (r *Registry) Get(name string, logger log.Logger) (Implementation, error) {
+func (r *Registry) Get(name string, logger log.Logger) (GatewayImplementation, error) {
 	factory, exists := r.implementations[name]
 	if !exists {
 		return nil, fmt.Errorf("unknown gateway implementation: %s (supported: %v)",
@@ -52,6 +52,6 @@ func (r *Registry) SupportedNames() []string {
 
 // GetImplementation retrieves a Gateway implementation from the default registry.
 // This is the primary entry point for obtaining Gateway implementations.
-func GetImplementation(name string, logger log.Logger) (Implementation, error) {
+func GetImplementation(name string, logger log.Logger) (GatewayImplementation, error) {
 	return defaultRegistry.Get(name, logger)
 }

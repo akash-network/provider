@@ -70,7 +70,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 	}
 
 	// Add Gateway API ingress rule if gateway-api mode is enabled
-	if b.settings.IngressMode == "gateway-api" && b.settings.GatewayNamespace != "" {
+	if b.settings.IngressMode == IngressModeGateway && b.settings.GatewayNamespace != "" {
 		ingressRules = append(ingressRules, netv1.NetworkPolicyIngressRule{
 			// Allow Network Connections from Gateway API namespace
 			From: []netv1.NetworkPolicyPeer{

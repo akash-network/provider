@@ -49,6 +49,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(clusterNSCmd())
 	cmd.AddCommand(migrate())
 	cmd.AddCommand(SDL2ManifestCmd())
+	cmd.AddCommand(precheckCmd())
 	cmd.AddCommand(MigrateHostnamesCmd())
 	cmd.AddCommand(MigrateEndpointsCmd())
 

@@ -63,8 +63,9 @@ func (m *ingressToHTTPRouteMigration) Run(ctx context.Context) error {
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
 
-	gatewayName := fromctx.MustGatewayNameFromCtx(ctx)
-	gatewayNamespace := fromctx.MustGatewayNamespaceFromCtx(ctx)
+	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
+	gatewayName := gwCfg.Name
+	gatewayNamespace := gwCfg.Namespace
 
 	labelSelector := fmt.Sprintf("%s=true", builder.AkashManagedLabelName)
 

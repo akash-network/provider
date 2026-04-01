@@ -24,23 +24,20 @@ import (
 type Key string
 
 const (
-	CtxKeyKubeConfig            = Key(providerflags.FlagKubeConfig)
-	CtxKeyKubeRESTClient        = Key("kube-restclient")
-	CtxKeyKubeClientSet         = Key("kube-clientset")
-	CtxKeyAkashClientSet        = Key("akash-clientset")
-	CtxKeyPubSub                = Key("pubsub")
-	CtxKeyLifecycle             = Key("lifecycle")
-	CtxKeyErrGroup              = Key("errgroup")
-	CtxKeyLogc                  = ctxlog.CtxKeyLog
-	CtxKeyStartupCh             = Key("startup-ch")
-	CtxKeyInventoryUnderTest    = Key("inventory-under-test")
-	CtxKeyPersistentConfig      = Key("persistent-config")
-	CtxKeyCertIssuer            = Key("cert-issuer")
-	CtxKeyAccountQuerier        = Key("account-querier")
-	CtxKeyIngressMode           = Key("ingress-mode")
-	CtxKeyGatewayName           = Key("gateway-name")
-	CtxKeyGatewayNamespace      = Key("gateway-namespace")
-	CtxKeyGatewayImplementation = Key("gateway-implementation")
+	CtxKeyKubeConfig         = Key(providerflags.FlagKubeConfig)
+	CtxKeyKubeRESTClient     = Key("kube-restclient")
+	CtxKeyKubeClientSet      = Key("kube-clientset")
+	CtxKeyAkashClientSet     = Key("akash-clientset")
+	CtxKeyPubSub             = Key("pubsub")
+	CtxKeyLifecycle          = Key("lifecycle")
+	CtxKeyErrGroup           = Key("errgroup")
+	CtxKeyLogc               = ctxlog.CtxKeyLog
+	CtxKeyStartupCh          = Key("startup-ch")
+	CtxKeyInventoryUnderTest = Key("inventory-under-test")
+	CtxKeyPersistentConfig   = Key("persistent-config")
+	CtxKeyCertIssuer         = Key("cert-issuer")
+	CtxKeyAccountQuerier     = Key("account-querier")
+	CtxKeyGatewayConfig      = Key("gateway-config")
 )
 
 var (
@@ -332,91 +329,33 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	return false
 }
 
-func IngressModeFromCtx(ctx context.Context) (string, error) {
-	val := ctx.Value(CtxKeyIngressMode)
+// GatewayConfig holds all gateway-related configuration stored in context.
+type GatewayConfig struct {
+	IngressMode    string
+	Name           string
+	Namespace      string
+	Implementation string
+}
+
+func GatewayConfigFromCtx(ctx context.Context) (GatewayConfig, error) {
+	val := ctx.Value(CtxKeyGatewayConfig)
 	if val == nil {
-		return "ingress", nil
+		return GatewayConfig{
+			IngressMode:    "ingress",
+			Implementation: "nginx",
+		}, nil
 	}
 
-	v, valid := val.(string)
+	v, valid := val.(GatewayConfig)
 	if !valid {
-		return "", ErrValueInvalidType
+		return GatewayConfig{}, ErrValueInvalidType
 	}
 
 	return v, nil
 }
 
-func MustIngressModeFromCtx(ctx context.Context) string {
-	val, err := IngressModeFromCtx(ctx)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return val
-}
-
-func GatewayNameFromCtx(ctx context.Context) (string, error) {
-	val := ctx.Value(CtxKeyGatewayName)
-	if val == nil {
-		return "", nil
-	}
-
-	v, valid := val.(string)
-	if !valid {
-		return "", ErrValueInvalidType
-	}
-
-	return v, nil
-}
-
-func MustGatewayNameFromCtx(ctx context.Context) string {
-	val, err := GatewayNameFromCtx(ctx)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return val
-}
-
-func GatewayNamespaceFromCtx(ctx context.Context) (string, error) {
-	val := ctx.Value(CtxKeyGatewayNamespace)
-	if val == nil {
-		return "", nil
-	}
-
-	v, valid := val.(string)
-	if !valid {
-		return "", ErrValueInvalidType
-	}
-
-	return v, nil
-}
-
-func MustGatewayNamespaceFromCtx(ctx context.Context) string {
-	val, err := GatewayNamespaceFromCtx(ctx)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return val
-}
-
-func GatewayImplementationFromCtx(ctx context.Context) (string, error) {
-	val := ctx.Value(CtxKeyGatewayImplementation)
-	if val == nil {
-		return "nginx", nil
-	}
-
-	v, valid := val.(string)
-	if !valid {
-		return "", ErrValueInvalidType
-	}
-
-	return v, nil
-}
-
-func MustGatewayImplementationFromCtx(ctx context.Context) string {
-	val, err := GatewayImplementationFromCtx(ctx)
+func MustGatewayConfigFromCtx(ctx context.Context) GatewayConfig {
+	val, err := GatewayConfigFromCtx(ctx)
 	if err != nil {
 		panic(err.Error())
 	}

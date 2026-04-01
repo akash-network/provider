@@ -24,12 +24,10 @@ import (
 
 const (
 	akashIngressClassName = "akash-ingress-class"
-	IngressModeGateway    = "gateway-api"
-	IngressModeIngress    = "ingress"
 )
 
 type IngressConfig struct {
-	IngressMode      string
+	IngressMode      builder.IngressMode
 	GatewayName      string
 	GatewayNamespace string
 }
@@ -83,7 +81,7 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chos
 		"hostname", directive.Hostname,
 		"ingress-mode", c.ingressMode)
 
-	if c.ingressMode == IngressModeGateway {
+	if c.ingressMode == builder.IngressModeGateway {
 		c.log.Info("using Gateway API mode for hostname connection")
 		return c.connectHostnameToDeploymentGateway(ctx, directive)
 	}
@@ -127,7 +125,7 @@ func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chos
 }
 
 func (c *client) RemoveHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error {
-	if c.ingressMode == IngressModeGateway {
+	if c.ingressMode == builder.IngressModeGateway {
 		return c.removeHostnameFromDeploymentGateway(ctx, hostname, leaseID, allowMissing)
 	}
 
@@ -184,7 +182,7 @@ func ingressRules(hostname string, kubeServiceName string, kubeServicePort int32
 }
 
 func (c *client) GetHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
-	if c.ingressMode == IngressModeGateway {
+	if c.ingressMode == builder.IngressModeGateway {
 		return c.getHostnameDeploymentConnectionsGateway(ctx)
 	}
 

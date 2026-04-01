@@ -58,7 +58,7 @@ type hostnameOperator struct {
 	flagHostnamesData  common.PrepareFlagFn
 	flagIgnoreListData common.PrepareFlagFn
 	ingressConfig      kube.IngressConfig
-	gatewayImpl        gateway.Implementation
+	gatewayImpl        gateway.GatewayImplementation
 }
 
 func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, config common.OperatorConfig, ilc common.IgnoreListConfig) (*hostnameOperator, error) {
@@ -87,15 +87,13 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		return nil, err
 	}
 
-	ingressMode := fromctx.MustIngressModeFromCtx(ctx)
-	gatewayName := fromctx.MustGatewayNameFromCtx(ctx)
-	gatewayNamespace := fromctx.MustGatewayNamespaceFromCtx(ctx)
-	gatewayImplementation := fromctx.MustGatewayImplementationFromCtx(ctx)
+	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
+	ingressMode := builder.IngressMode(gwCfg.IngressMode)
 
 	// Initialize Gateway implementation if using gateway-api mode
-	var gatewayImpl gateway.Implementation
-	if ingressMode == kube.IngressModeGateway {
-		impl, err := gateway.GetImplementation(gatewayImplementation, logger)
+	var gatewayImpl gateway.GatewayImplementation
+	if ingressMode == builder.IngressModeGateway {
+		impl, err := gateway.GetImplementation(gwCfg.Implementation, logger)
 		if err != nil {
 			return nil, fmt.Errorf("hostname operator: failed to get gateway implementation: %w", err)
 		}
@@ -105,10 +103,10 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 	}
 
 	logger.Info("initializing hostname operator",
-		"ingress-mode", ingressMode,
-		"gateway-name", gatewayName,
-		"gateway-namespace", gatewayNamespace,
-		"gateway-implementation", gatewayImplementation)
+		"ingress-mode", gwCfg.IngressMode,
+		"gateway-name", gwCfg.Name,
+		"gateway-namespace", gwCfg.Namespace,
+		"gateway-implementation", gwCfg.Implementation)
 
 	op := &hostnameOperator{
 		ctx:           ctx,
@@ -123,8 +121,8 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		leasesIgnored: common.NewIgnoreList(ilc),
 		ingressConfig: kube.IngressConfig{
 			IngressMode:      ingressMode,
-			GatewayName:      gatewayName,
-			GatewayNamespace: gatewayNamespace,
+			GatewayName:      gwCfg.Name,
+			GatewayNamespace: gwCfg.Namespace,
 		},
 		gatewayImpl: gatewayImpl,
 	}
@@ -503,7 +501,7 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 }
 
 func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
-	if op.ingressConfig.IngressMode == kube.IngressModeGateway {
+	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
 		return op.getHostnameDeploymentConnectionsGateway(ctx)
 	}
 
@@ -682,7 +680,7 @@ func (op *hostnameOperator) getManifestGroup(ctx context.Context, lID mtypes.Lea
 }
 
 func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error {
-	if op.ingressConfig.IngressMode == kube.IngressModeGateway {
+	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
 		return op.removeHostnameFromDeploymentGateway(ctx, hostname, leaseID, allowMissing)
 	}
 
@@ -720,7 +718,7 @@ func (op *hostnameOperator) connectHostnameToDeployment(ctx context.Context, dir
 		"hostname", directive.Hostname,
 		"ingress-mode", op.ingressConfig.IngressMode)
 
-	if op.ingressConfig.IngressMode == kube.IngressModeGateway {
+	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
 		op.log.Info("hostname operator using Gateway API mode")
 		return op.connectHostnameToDeploymentGateway(ctx, directive)
 	}

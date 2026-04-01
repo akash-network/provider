@@ -10,6 +10,24 @@ import (
 	vutil "pkg.akt.dev/node/v2/util/validation"
 )
 
+// IngressMode represents the ingress mode for the cluster.
+type IngressMode string
+
+const (
+	IngressModeIngress IngressMode = "ingress"
+	IngressModeGateway IngressMode = "gateway-api"
+)
+
+// ParseIngressMode parses a string into an IngressMode, returning an error if the value is invalid.
+func ParseIngressMode(s string) (IngressMode, error) {
+	switch IngressMode(s) {
+	case IngressModeIngress, IngressModeGateway:
+		return IngressMode(s), nil
+	default:
+		return "", fmt.Errorf("invalid ingress-mode %q: must be %q or %q", s, IngressModeIngress, IngressModeGateway)
+	}
+}
+
 // Settings configures k8s object generation such that it is customized to the
 // cluster environment that is being used.
 // For instance, GCP requires a different service type than minikube.
@@ -52,7 +70,7 @@ type Settings struct {
 	DockerImagePullSecretsName string
 
 	// Ingress mode: "ingress" or "gateway-api"
-	IngressMode string
+	IngressMode IngressMode
 
 	// Gateway name when using gateway-api mode
 	GatewayName string

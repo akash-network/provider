@@ -42,7 +42,7 @@ provider-run:
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none" \
 		--ip-operator=true \
-		$(if $(filter true,$(GATEWAY_API)),--ingress-mode=gateway-api --gateway-name=akash-gateway --gateway-namespace=akash-gateway)
+		$(if $(filter true,$(GATEWAY_API)),--ingress-mode=gateway-api)
 
 .PHONY: provider-lease-ping
 provider-lease-ping:
@@ -75,17 +75,10 @@ endif
 
 .PHONY: kube-setup-ingress-gateway
 kube-setup-ingress-gateway:
-	kubectl kustomize "https://github.com/nginx/nginx-gateway-fabric/config/crd/gateway-api/standard?ref=v2.4.1&timeout=90s" | kubectl apply -f -
-	helm install ngf oci://ghcr.io/nginx/charts/nginx-gateway-fabric \
-		--version 2.4.1 \
-		--create-namespace \
-		-n nginx-gateway \
-		--set nginx.service.type=NodePort \
-		--set-json 'nginx.service.nodePorts=[{"port":31437,"listenerPort":80},{"port":31438,"listenerPort":443}]'
+	kubectl kustomize $(KUSTOMIZE_ROOT)/nginx-gateway-fabric | kubectl apply -f -
 	kubectl apply -f "$(METALLB_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_IP_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_SERVICE_PATH)"
-	kubectl apply -f gateway-resources.yaml
 	@echo "Waiting for Gateway to be ready..."
 	@kubectl wait --for=condition=Programmed gateway/akash-gateway -n akash-gateway --timeout=120s
 

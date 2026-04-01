@@ -546,6 +546,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	// Discover all API server endpoint addresses for network policies.
 	// HA control planes expose multiple backends in the "kubernetes" Endpoints
 	// object; all must be allowed because CNIs like Calico evaluate egress
@@ -580,9 +581,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("kube client unavailable: %w", err)
 		}
 	}
-	ingressMode := viper.GetString(FlagIngressMode)
-	if ingressMode != kube.IngressModeIngress && ingressMode != kube.IngressModeGateway {
-		return fmt.Errorf("invalid ingress-mode %q: must be %q or %q", ingressMode, kube.IngressModeIngress, kube.IngressModeGateway)
+	ingressMode, err := builder.ParseIngressMode(viper.GetString(FlagIngressMode))
+	if err != nil {
+		return err
 	}
 	gatewayName := viper.GetString(FlagGatewayName)
 	gatewayNamespace := viper.GetString(FlagGatewayNamespace)
@@ -604,21 +605,23 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		"gateway-namespace", gatewayNamespace,
 		"gateway-implementation", gatewayImplementation)
 
-	if ingressMode == kube.IngressModeGateway {
+	if ingressMode == builder.IngressModeGateway {
 		if gatewayName == "" {
-			return fmt.Errorf("gateway-name is required when ingress-mode is %s", kube.IngressModeGateway)
+			return fmt.Errorf("gateway-name is required when ingress-mode is %s", builder.IngressModeGateway)
 		}
 		if gatewayNamespace == "" {
-			return fmt.Errorf("gateway-namespace is required when ingress-mode is %s", kube.IngressModeGateway)
+			return fmt.Errorf("gateway-namespace is required when ingress-mode is %s", builder.IngressModeGateway)
 		}
 	}
 
 	clusterSettings := map[interface{}]interface{}{
-		builder.SettingsKey:                 kubeSettings,
-		fromctx.CtxKeyIngressMode:           ingressMode,
-		fromctx.CtxKeyGatewayName:           gatewayName,
-		fromctx.CtxKeyGatewayNamespace:      gatewayNamespace,
-		fromctx.CtxKeyGatewayImplementation: gatewayImplementation,
+		builder.SettingsKey: kubeSettings,
+		fromctx.CtxKeyGatewayConfig: fromctx.GatewayConfig{
+			IngressMode:    string(ingressMode),
+			Name:           gatewayName,
+			Namespace:      gatewayNamespace,
+			Implementation: gatewayImplementation,
+		},
 	}
 
 	// Apply cluster settings to context

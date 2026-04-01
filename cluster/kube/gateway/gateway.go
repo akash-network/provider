@@ -13,7 +13,7 @@ import (
 // - Converting directive options to HTTPRoute annotations/filters
 // - Building HTTPRoute rules with implementation-specific enhancements
 // - Handling unsupported features with warnings
-type Implementation interface {
+type GatewayImplementation interface {
 	// Name returns the implementation identifier (e.g., "nginx", "istio", "kong")
 	Name() string
 
@@ -44,7 +44,7 @@ type Implementation interface {
 //
 // NOTE: When adding new option fields to ConnectToDeploymentDirective, you must add
 // a corresponding check here. A test using reflection verifies all fields are covered.
-func ValidateDirective(impl Implementation, directive chostname.ConnectToDeploymentDirective) []string {
+func ValidateDirective(impl GatewayImplementation, directive chostname.ConnectToDeploymentDirective) []string {
 	supported := make(map[string]bool)
 	for _, name := range impl.SupportedDirectives() {
 		supported[name] = true

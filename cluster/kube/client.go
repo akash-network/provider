@@ -64,10 +64,10 @@ type client struct {
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
-	ingressMode       string
+	ingressMode       builder.IngressMode
 	gatewayName       string
 	gatewayNamespace  string
-	gatewayImpl       gateway.Implementation
+	gatewayImpl       gateway.GatewayImplementation
 }
 
 func (c *client) String() string {
@@ -116,15 +116,13 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		return nil, fmt.Errorf("kube: unable to fetch leases namespace: %w", err)
 	}
 
-	ingressMode := fromctx.MustIngressModeFromCtx(ctx)
-	gatewayName := fromctx.MustGatewayNameFromCtx(ctx)
-	gatewayNamespace := fromctx.MustGatewayNamespaceFromCtx(ctx)
-	gatewayImplementation := fromctx.MustGatewayImplementationFromCtx(ctx)
+	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
+	ingressMode := builder.IngressMode(gwCfg.IngressMode)
 
 	// Initialize Gateway implementation if using gateway-api mode
-	var gatewayImpl gateway.Implementation
-	if ingressMode == IngressModeGateway {
-		impl, err := gateway.GetImplementation(gatewayImplementation, log)
+	var gatewayImpl gateway.GatewayImplementation
+	if ingressMode == builder.IngressModeGateway {
+		impl, err := gateway.GetImplementation(gwCfg.Implementation, log)
 		if err != nil {
 			return nil, fmt.Errorf("kube: failed to get gateway implementation: %w", err)
 		}
@@ -134,10 +132,10 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 	}
 
 	log.Info("initializing kube client",
-		"ingress-mode", ingressMode,
-		"gateway-name", gatewayName,
-		"gateway-namespace", gatewayNamespace,
-		"gateway-implementation", gatewayImplementation)
+		"ingress-mode", gwCfg.IngressMode,
+		"gateway-name", gwCfg.Name,
+		"gateway-namespace", gwCfg.Namespace,
+		"gateway-implementation", gwCfg.Implementation)
 
 	cl := &client{
 		ctx:               ctx,
@@ -148,8 +146,8 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		log:               log.With("client", "kube"),
 		kubeContentConfig: kubecfg,
 		ingressMode:       ingressMode,
-		gatewayName:       gatewayName,
-		gatewayNamespace:  gatewayNamespace,
+		gatewayName:       gwCfg.Name,
+		gatewayNamespace:  gwCfg.Namespace,
 		gatewayImpl:       gatewayImpl,
 	}
 

@@ -45,8 +45,12 @@ func MigrateRunCmd() *cobra.Command {
 			gatewayName := viper.GetString(FlagGatewayName)
 			gatewayNamespace := viper.GetString(FlagGatewayNamespace)
 
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyGatewayName, gatewayName)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyGatewayNamespace, gatewayNamespace)
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyGatewayConfig, fromctx.GatewayConfig{
+				Name:           gatewayName,
+				Namespace:      gatewayNamespace,
+				IngressMode:    "ingress",
+				Implementation: "nginx",
+			})
 
 			return nil
 		},
