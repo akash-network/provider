@@ -240,10 +240,9 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 		// This uses the real API server endpoint IP (not the ClusterIP) because
 		// CNIs like Calico evaluate network policies after DNAT, so the ClusterIP
 		// would not match.
-		if b.settings.APIServerEndpointIP != "" && b.settings.APIServerEndpointPort > 0 &&
-			service.Params != nil && service.Params.Permissions != nil && len(service.Params.Permissions.Read) > 0 {
-			apiServerPort := intstr.FromInt32(b.settings.APIServerEndpointPort)
-			policyName := fmt.Sprintf("akash-%s-apiserver", serviceName)
+		if b.settings.APIServerEndpoint != nil && serviceHasReadPermissions(service) {
+			apiServerPort := intstr.FromInt32(int32(b.settings.APIServerEndpoint.Port))
+			policyName := fmt.Sprintf("akash-apiserver-%s", serviceName)
 			policy := netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels:    b.labels(),
@@ -264,7 +263,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 							To: []netv1.NetworkPolicyPeer{
 								{
 									IPBlock: &netv1.IPBlock{
-										CIDR: b.settings.APIServerEndpointIP + "/32",
+										CIDR: b.settings.APIServerEndpoint.IP.String() + "/32",
 									},
 								},
 							},
@@ -283,6 +282,10 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 	}
 
 	return result, nil
+}
+
+func serviceHasReadPermissions(service manitypes.Service) bool {
+	return service.Params != nil && service.Params.Permissions != nil && len(service.Params.Permissions.Read) > 0
 }
 
 // Update a single NetworkPolicy with correct labels.

@@ -3,6 +3,7 @@ package builder
 import (
 	"errors"
 	"fmt"
+	"net"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -34,13 +35,11 @@ type Settings struct {
 	// NetworkPoliciesEnabled determines if NetworkPolicies should be installed.
 	NetworkPoliciesEnabled bool
 
-	// APIServerEndpointIP is the real IP address of the Kubernetes API server
+	// APIServerEndpoint is the real address of the Kubernetes API server
 	// (from the "kubernetes" endpoints in the default namespace, not the ClusterIP).
 	// This is needed for network policies because CNIs like Calico evaluate
 	// egress rules after DNAT, so the ClusterIP is not what gets matched.
-	APIServerEndpointIP string
-	// APIServerEndpointPort is the port of the Kubernetes API server endpoint.
-	APIServerEndpointPort int32
+	APIServerEndpoint *net.TCPAddr
 
 	CPUCommitLevel     float64
 	GPUCommitLevel     float64
