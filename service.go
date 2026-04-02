@@ -231,6 +231,13 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 }
 
 func (s *service) ScreenBid(ctx context.Context, req *provider.BidScreeningRequest) (*provider.BidScreeningResponse, error) {
+	if req.GetGroupSpec() == nil {
+		return &provider.BidScreeningResponse{
+			Passed:  false,
+			Reasons: []string{"missing group spec"},
+		}, nil
+	}
+
 	result, err := s.bidengine.ScreenBid(ctx, req.GroupSpec)
 	if err != nil {
 		return nil, err
