@@ -541,27 +541,29 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
 
-	// Discover the API server endpoint IP and port for network policies.
-	// CNIs like Calico evaluate egress rules after DNAT, so we need the actual
-	// endpoint address rather than the ClusterIP (e.g. 10.96.0.1).
+	// Discover all API server endpoint addresses for network policies.
+	// HA control planes expose multiple backends in the "kubernetes" Endpoints
+	// object; all must be allowed because CNIs like Calico evaluate egress
+	// rules after DNAT, so the ClusterIP is not what gets matched.
 	if deploymentNetworkPoliciesEnabled {
 		const kubeAPIServerEndpointName = "kubernetes"
 
 		if kc, err := fromctx.KubeClientFromCtx(ctx); err == nil {
 			if ep, err := kc.CoreV1().Endpoints(corev1.NamespaceDefault).Get(ctx, kubeAPIServerEndpointName, metav1.GetOptions{}); err == nil {
 				for _, subset := range ep.Subsets {
-					if len(subset.Addresses) > 0 && len(subset.Ports) > 0 {
-						kubeSettings.APIServerEndpoint = net.TCPAddr{
-							IP:   net.ParseIP(subset.Addresses[0].IP),
-							Port: int(subset.Ports[0].Port),
+					for _, addr := range subset.Addresses {
+						for _, port := range subset.Ports {
+							kubeSettings.APIServerEndpoints = append(kubeSettings.APIServerEndpoints, net.TCPAddr{
+								IP:   net.ParseIP(addr.IP),
+								Port: int(port.Port),
+							})
 						}
-						logger.Info("discovered API server endpoint for network policies",
-							"endpoint", kubeSettings.APIServerEndpoint.String())
-						break
 					}
 				}
+				logger.Info("discovered API server endpoints for network policies",
+					"endpoints", kubeSettings.APIServerEndpoints)
 			} else {
-				logger.Error("failed to discover API server endpoint for network policies", "err", err)
+				logger.Error("failed to discover API server endpoints for network policies", "err", err)
 			}
 		}
 	}

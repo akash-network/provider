@@ -35,11 +35,11 @@ type Settings struct {
 	// NetworkPoliciesEnabled determines if NetworkPolicies should be installed.
 	NetworkPoliciesEnabled bool
 
-	// APIServerEndpoint is the address of the Kubernetes API server
+	// APIServerEndpoints are the addresses of all Kubernetes API server backends
 	// (from the "kubernetes" endpoints in the default namespace, not the ClusterIP).
-	// This is needed for network policies because CNIs like Calico evaluate
-	// egress rules after DNAT, so the ClusterIP is not what gets matched.
-	APIServerEndpoint net.TCPAddr
+	// HA control planes have multiple backends; all must be allowed in network
+	// policies because CNIs like Calico evaluate egress rules after DNAT.
+	APIServerEndpoints []net.TCPAddr
 
 	CPUCommitLevel     float64
 	GPUCommitLevel     float64

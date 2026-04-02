@@ -236,16 +236,31 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 			result = append(result, &policy)
 		}
 
-		// Allow egress to the Kubernetes API server for services with permissions.
-		// This uses the real API server endpoint IP (not the ClusterIP) because
-		// CNIs like Calico evaluate network policies after DNAT, so the ClusterIP
-		// would not match.
-		if serviceHasReadPermissions(service) {
-			port := b.settings.APIServerEndpoint.Port
-			if port < 0 || port > 65535 {
-				return nil, fmt.Errorf("invalid API server port: %d", port)
+		// Allow egress to all Kubernetes API server backends for services with
+		// permissions. HA control planes have multiple backends; all must be
+		// allowed because CNIs like Calico evaluate egress rules after DNAT.
+		if len(b.settings.APIServerEndpoints) > 0 && serviceHasReadPermissions(service) {
+			peers := make([]netv1.NetworkPolicyPeer, 0, len(b.settings.APIServerEndpoints))
+			ports := make([]netv1.NetworkPolicyPort, 0, len(b.settings.APIServerEndpoints))
+			seen := make(map[int32]struct{})
+
+			for _, ep := range b.settings.APIServerEndpoints {
+				peers = append(peers, netv1.NetworkPolicyPeer{
+					IPBlock: &netv1.IPBlock{
+						CIDR: ep.IP.String() + "/32",
+					},
+				})
+				p := int32(ep.Port)
+				if _, ok := seen[p]; !ok {
+					seen[p] = struct{}{}
+					apiServerPort := intstr.FromInt32(p)
+					ports = append(ports, netv1.NetworkPolicyPort{
+						Protocol: &tcpProtocol,
+						Port:     &apiServerPort,
+					})
+				}
 			}
-			apiServerPort := intstr.FromInt32(int32(port))
+
 			policyName := fmt.Sprintf("akash-apiserver-%s", serviceName)
 			policy := netv1.NetworkPolicy{
 				ObjectMeta: metav1.ObjectMeta{
@@ -264,19 +279,8 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 					},
 					Egress: []netv1.NetworkPolicyEgressRule{
 						{
-							To: []netv1.NetworkPolicyPeer{
-								{
-									IPBlock: &netv1.IPBlock{
-										CIDR: b.settings.APIServerEndpoint.IP.String() + "/32",
-									},
-								},
-							},
-							Ports: []netv1.NetworkPolicyPort{
-								{
-									Protocol: &tcpProtocol,
-									Port:     &apiServerPort,
-								},
-							},
+							To:    peers,
+							Ports: ports,
 						},
 					},
 				},
