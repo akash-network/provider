@@ -549,22 +549,30 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		const kubeAPIServerEndpointName = "kubernetes"
 
 		if kc, err := fromctx.KubeClientFromCtx(ctx); err == nil {
-			if ep, err := kc.CoreV1().Endpoints(corev1.NamespaceDefault).Get(ctx, kubeAPIServerEndpointName, metav1.GetOptions{}); err == nil {
-				for _, subset := range ep.Subsets {
-					for _, addr := range subset.Addresses {
-						for _, port := range subset.Ports {
-							kubeSettings.APIServerEndpoints = append(kubeSettings.APIServerEndpoints, net.TCPAddr{
-								IP:   net.ParseIP(addr.IP),
-								Port: int(port.Port),
-							})
-						}
+			ep, err := kc.CoreV1().Endpoints(corev1.NamespaceDefault).Get(ctx, kubeAPIServerEndpointName, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to discover API server endpoints: %w", err)
+			}
+
+			for _, subset := range ep.Subsets {
+				for _, addr := range subset.Addresses {
+					for _, port := range subset.Ports {
+						kubeSettings.APIServerEndpoints = append(kubeSettings.APIServerEndpoints, net.TCPAddr{
+							IP:   net.ParseIP(addr.IP),
+							Port: int(port.Port),
+						})
 					}
 				}
-				logger.Info("discovered API server endpoints for network policies",
-					"endpoints", kubeSettings.APIServerEndpoints)
-			} else {
-				logger.Error("failed to discover API server endpoints for network policies", "err", err)
 			}
+
+			if len(kubeSettings.APIServerEndpoints) == 0 {
+				return fmt.Errorf("no API server endpoints found in %s/%s", corev1.NamespaceDefault, kubeAPIServerEndpointName)
+			}
+
+			logger.Info("discovered API server endpoints for network policies",
+				"endpoints", kubeSettings.APIServerEndpoints)
+		} else {
+			return fmt.Errorf("kube client unavailable: %w", err)
 		}
 	}
 
