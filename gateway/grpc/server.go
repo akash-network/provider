@@ -7,6 +7,7 @@ import (
 	"net"
 	"time"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
@@ -123,6 +124,12 @@ func authInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		ctx = ContextWithClaims(ctx, claims)
+
+		if claims.Issuer != "" {
+			if owner, err := sdk.AccAddressFromBech32(claims.Issuer); err == nil {
+				ctx = provider.ContextWithOwner(ctx, owner)
+			}
+		}
 
 		return handler(ctx, req)
 	}

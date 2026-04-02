@@ -263,7 +263,9 @@ func (s *service) BidScreening(ctx context.Context, req *providerv1.BidScreening
 	group := &dtypes.Group{GroupSpec: *gspec}
 
 	owner := ownerFromCtx(ctx)
-	if owner.Empty() && len(req.GetHostnames()) > 0 {
+	ownerEmpty := owner == nil || owner.Empty()
+
+	if ownerEmpty && len(req.GetHostnames()) > 0 {
 		return &providerv1.BidScreeningResponse{
 			Passed:  false,
 			Reasons: []string{"missing owner in context; required for hostname availability check"},
@@ -304,8 +306,13 @@ func (s *service) BidScreening(ctx context.Context, req *providerv1.BidScreening
 	}
 
 	// Step 3: Calculate price with allocated resources
+	var ownerStr string
+	if !ownerEmpty {
+		ownerStr = owner.String()
+	}
+
 	priceReq := bidengine.Request{
-		Owner:              owner.String(),
+		Owner:              ownerStr,
 		GSpec:              gspec,
 		PricePrecision:     bidengine.DefaultPricePrecision,
 		AllocatedResources: reservation.GetAllocatedResources(),
