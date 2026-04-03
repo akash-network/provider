@@ -88,6 +88,8 @@ type IntegrationTestSuite struct {
 	appHost string
 	appPort string
 
+	grpcHost string
+
 	ipMarketplace bool
 
 	addrOracle        sdk.AccAddress
@@ -251,7 +253,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(s.network.WaitForNextBlock())
 	clitestutil.ValidateTxSuccessful(s.ctx, s.T(), cctx, res.Bytes())
 
-	numPorts := 4
+	numPorts := 5
 	if s.ipMarketplace {
 		numPorts += 2
 	}
@@ -261,6 +263,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 	// address for provider to listen on
 	provHost := fmt.Sprintf("localhost:%d", ports[0])
+	s.grpcHost = fmt.Sprintf("localhost:%d", ports[numPorts-1])
 	provURL := url.URL{
 		Host:   provHost,
 		Scheme: "https",
@@ -426,7 +429,8 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		WithFlag(pcmd.FlagPersistentConfigBackend, "memory").
 		WithFlag("deployment-runtime-class", "none").
 		WithFlag("hostname-operator-endpoint", hostnameOperatorHost).
-		WithFlag(pcmd.FlagBidPricingStrategy, "randomRange")
+		WithFlag(pcmd.FlagBidPricingStrategy, "randomRange").
+		WithFlag(pcmd.FlagGatewayGRPCListenAddress, s.grpcHost)
 
 	if s.ipMarketplace {
 		ipOperatorPort = ports[2]
@@ -497,6 +501,9 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// Wait for the provider gateway to be up and running
 	s.T().Log("waiting for provider gateway")
 	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
+
+	s.T().Log("waiting for provider gRPC gateway")
+	waitForTCPSocket(s.ctx, dialer, s.grpcHost, s.T())
 
 	// Create programmatic oracle client (bypasses CLI/Viper to avoid data races)
 	oracleCctx := cctx.WithFrom(s.addrOracle.String())
@@ -741,6 +748,7 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EStorageClassRam))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2ECustomCurrency))
+	suite.Run(t, new(E2EBidScreening))
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 
