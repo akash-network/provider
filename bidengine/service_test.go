@@ -150,7 +150,7 @@ func Test_ScreenBid_AllStepsPass(t *testing.T) {
 	mockRG.On("GetAllocatedResources").Return(allocatedResources)
 	mockRG.On("ClusterParams").Return(nil)
 
-	scaffold.cluster.On("DryRunReserve", mock.Anything).Return(mockRG, nil)
+	scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(mockRG, nil)
 
 	result, err := scaffold.service.ScreenBid(context.Background(), gspec)
 	require.NoError(t, err)
@@ -160,7 +160,7 @@ func Test_ScreenBid_AllStepsPass(t *testing.T) {
 	require.Equal(t, expectedPrice, result.Price)
 	require.Equal(t, allocatedResources, result.AllocatedResources)
 
-	scaffold.cluster.AssertCalled(t, "DryRunReserve", mock.Anything)
+	scaffold.cluster.AssertCalled(t, "DryRunReserve", mock.Anything, mock.Anything)
 }
 
 func Test_ScreenBid_EligibilityFails(t *testing.T) {
@@ -180,7 +180,7 @@ func Test_ScreenBid_EligibilityFails(t *testing.T) {
 	require.Contains(t, result.Reasons, "incompatible provider attributes")
 
 	// DryRunReserve should NOT have been called
-	scaffold.cluster.AssertNotCalled(t, "DryRunReserve", mock.Anything)
+	scaffold.cluster.AssertNotCalled(t, "DryRunReserve", mock.Anything, mock.Anything)
 }
 
 func Test_ScreenBid_DryRunReserveFails(t *testing.T) {
@@ -190,7 +190,7 @@ func Test_ScreenBid_DryRunReserveFails(t *testing.T) {
 	gspec := validGroupSpec()
 
 	reserveErr := errors.New("not enough GPUs")
-	scaffold.cluster.On("DryRunReserve", mock.Anything).Return(nil, reserveErr)
+	scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(nil, reserveErr)
 
 	result, err := scaffold.service.ScreenBid(context.Background(), gspec)
 	require.NoError(t, err)
@@ -213,7 +213,7 @@ func Test_ScreenBid_PricingFails(t *testing.T) {
 	mockRG.On("GetAllocatedResources").Return(allocatedResources)
 	mockRG.On("ClusterParams").Return(nil)
 
-	scaffold.cluster.On("DryRunReserve", mock.Anything).Return(mockRG, nil)
+	scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(mockRG, nil)
 
 	result, err := scaffold.service.ScreenBid(context.Background(), gspec)
 	require.NoError(t, err)

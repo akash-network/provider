@@ -5,6 +5,8 @@
 package cluster
 
 import (
+	"context"
+
 	"github.com/akash-network/provider/cluster/types/v1beta3"
 	mock "github.com/stretchr/testify/mock"
 	"pkg.akt.dev/go/node/deployment/v1beta4"
@@ -36,6 +38,74 @@ type Cluster_Expecter struct {
 
 func (_m *Cluster) EXPECT() *Cluster_Expecter {
 	return &Cluster_Expecter{mock: &_m.Mock}
+}
+
+// DryRunReserve provides a mock function for the type Cluster
+func (_mock *Cluster) DryRunReserve(ctx context.Context, resources v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error) {
+	ret := _mock.Called(ctx, resources)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DryRunReserve")
+	}
+
+	var r0 v1beta3.ReservationGroup
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error)); ok {
+		return returnFunc(ctx, resources)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.ResourceGroup) v1beta3.ReservationGroup); ok {
+		r0 = returnFunc(ctx, resources)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(v1beta3.ReservationGroup)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, v1beta4.ResourceGroup) error); ok {
+		r1 = returnFunc(ctx, resources)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Cluster_DryRunReserve_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DryRunReserve'
+type Cluster_DryRunReserve_Call struct {
+	*mock.Call
+}
+
+// DryRunReserve is a helper method to define mock.On call
+//   - ctx context.Context
+//   - resources v1beta4.ResourceGroup
+func (_e *Cluster_Expecter) DryRunReserve(ctx interface{}, resources interface{}) *Cluster_DryRunReserve_Call {
+	return &Cluster_DryRunReserve_Call{Call: _e.mock.On("DryRunReserve", ctx, resources)}
+}
+
+func (_c *Cluster_DryRunReserve_Call) Run(run func(ctx context.Context, resources v1beta4.ResourceGroup)) *Cluster_DryRunReserve_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.ResourceGroup
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.ResourceGroup)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Cluster_DryRunReserve_Call) Return(reservationGroup v1beta3.ReservationGroup, err error) *Cluster_DryRunReserve_Call {
+	_c.Call.Return(reservationGroup, err)
+	return _c
+}
+
+func (_c *Cluster_DryRunReserve_Call) RunAndReturn(run func(ctx context.Context, resources v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error)) *Cluster_DryRunReserve_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Reserve provides a mock function for the type Cluster
@@ -153,68 +223,6 @@ func (_c *Cluster_Unreserve_Call) Return(err error) *Cluster_Unreserve_Call {
 }
 
 func (_c *Cluster_Unreserve_Call) RunAndReturn(run func(orderID v1.OrderID) error) *Cluster_Unreserve_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// DryRunReserve provides a mock function for the type Cluster
-func (_mock *Cluster) DryRunReserve(resourceGroup v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error) {
-	ret := _mock.Called(resourceGroup)
-
-	if len(ret) == 0 {
-		panic("no return value specified for DryRunReserve")
-	}
-
-	var r0 v1beta3.ReservationGroup
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error)); ok {
-		return returnFunc(resourceGroup)
-	}
-	if returnFunc, ok := ret.Get(0).(func(v1beta4.ResourceGroup) v1beta3.ReservationGroup); ok {
-		r0 = returnFunc(resourceGroup)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(v1beta3.ReservationGroup)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(v1beta4.ResourceGroup) error); ok {
-		r1 = returnFunc(resourceGroup)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// Cluster_DryRunReserve_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DryRunReserve'
-type Cluster_DryRunReserve_Call struct {
-	*mock.Call
-}
-
-// DryRunReserve is a helper method to define mock.On call
-//   - resourceGroup v1beta4.ResourceGroup
-func (_e *Cluster_Expecter) DryRunReserve(resourceGroup interface{}) *Cluster_DryRunReserve_Call {
-	return &Cluster_DryRunReserve_Call{Call: _e.mock.On("DryRunReserve", resourceGroup)}
-}
-
-func (_c *Cluster_DryRunReserve_Call) Run(run func(resourceGroup v1beta4.ResourceGroup)) *Cluster_DryRunReserve_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 v1beta4.ResourceGroup
-		if args[0] != nil {
-			arg0 = args[0].(v1beta4.ResourceGroup)
-		}
-		run(
-			arg0,
-		)
-	})
-	return _c
-}
-
-func (_c *Cluster_DryRunReserve_Call) Return(reservationGroup v1beta3.ReservationGroup, err error) *Cluster_DryRunReserve_Call {
-	_c.Call.Return(reservationGroup, err)
-	return _c
-}
-
-func (_c *Cluster_DryRunReserve_Call) RunAndReturn(run func(resourceGroup v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error)) *Cluster_DryRunReserve_Call {
 	_c.Call.Return(run)
 	return _c
 }

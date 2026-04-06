@@ -264,7 +264,7 @@ func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint: u
 	}
 }
 
-func (is *inventoryService) dryRunReserve(resources dtypes.ResourceGroup) (ctypes.ReservationGroup, error) {
+func (is *inventoryService) dryRunReserve(ctx context.Context, resources dtypes.ResourceGroup) (ctypes.ReservationGroup, error) {
 	for idx, res := range resources.GetResourceUnits() {
 		if res.CPU == nil {
 			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
@@ -285,8 +285,17 @@ func (is *inventoryService) dryRunReserve(resources dtypes.ResourceGroup) (ctype
 
 	select {
 	case is.dryRunReservech <- req:
-		response := <-ch
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-is.lc.ShuttingDown():
+		return nil, ErrNotRunning
+	}
+
+	select {
+	case response := <-ch:
 		return response.value, response.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	case <-is.lc.ShuttingDown():
 		return nil, ErrNotRunning
 	}

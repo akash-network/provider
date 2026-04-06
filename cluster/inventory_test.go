@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	lifecycle "github.com/boz/go-lifecycle"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	tpubsub "github.com/troian/pubsub"
@@ -717,4 +718,136 @@ func TestInventory_OverReservations(t *testing.T) {
 
 	// No ports used yet
 	require.Equal(t, uint(1000-countOfRandomPortService), inv.availableExternalPorts) // nolint: gosec
+}
+
+func TestDryRunReserve_ContextCancellation(t *testing.T) {
+	mkGroup := func() *dvbeta.GroupSpec {
+		return &dvbeta.GroupSpec{
+			Name: "test",
+			Resources: []dvbeta.ResourceUnit{
+				{
+					Resources: rtypes.Resources{
+						CPU:    &rtypes.CPU{Units: rtypes.NewResourceValue(100)},
+						GPU:    &rtypes.GPU{Units: rtypes.NewResourceValue(0)},
+						Memory: &rtypes.Memory{Quantity: rtypes.NewResourceValue(128 * unit.Mi)},
+						Storage: rtypes.Volumes{
+							{Quantity: rtypes.NewResourceValue(1 * unit.Gi)},
+						},
+					},
+					Count: 1,
+				},
+			},
+		}
+	}
+
+	newBlockingService := func() (*inventoryService, lifecycle.Lifecycle) {
+		lc := lifecycle.New()
+		is := &inventoryService{
+			dryRunReservech: make(chan dryRunReserveRequest), // unbuffered, no reader
+			lc:              lc,
+		}
+		return is, lc
+	}
+
+	t.Run("ctx_already_canceled", func(t *testing.T) {
+		is, lc := newBlockingService()
+		defer lc.ShutdownInitiated(nil)
+		defer lc.ShutdownCompleted()
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		_, err := is.dryRunReserve(ctx, mkGroup())
+		require.ErrorIs(t, err, context.Canceled)
+	})
+
+	t.Run("service_already_shutting_down", func(t *testing.T) {
+		lc := lifecycle.New()
+		lc.ShutdownInitiated(nil)
+		defer lc.ShutdownCompleted()
+
+		is := &inventoryService{
+			dryRunReservech: make(chan dryRunReserveRequest),
+			lc:              lc,
+		}
+
+		_, err := is.dryRunReserve(context.Background(), mkGroup())
+		require.ErrorIs(t, err, ErrNotRunning)
+	})
+
+	t.Run("ctx_canceled_waiting_to_send", func(t *testing.T) {
+		is, lc := newBlockingService()
+		defer lc.ShutdownInitiated(nil)
+		defer lc.ShutdownCompleted()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := is.dryRunReserve(ctx, mkGroup())
+			errCh <- err
+		}()
+
+		cancel()
+		require.ErrorIs(t, <-errCh, context.Canceled)
+	})
+
+	t.Run("service_shutdown_waiting_to_send", func(t *testing.T) {
+		is, lc := newBlockingService()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := is.dryRunReserve(context.Background(), mkGroup())
+			errCh <- err
+		}()
+
+		lc.ShutdownInitiated(nil)
+		require.ErrorIs(t, <-errCh, ErrNotRunning)
+		lc.ShutdownCompleted()
+	})
+
+	t.Run("ctx_canceled_waiting_for_response", func(t *testing.T) {
+		is, lc := newBlockingService()
+		defer lc.ShutdownInitiated(nil)
+		defer lc.ShutdownCompleted()
+
+		ctx, cancel := context.WithCancel(context.Background())
+
+		requestReceived := make(chan struct{})
+		go func() {
+			<-is.dryRunReservech // consume request but never respond
+			close(requestReceived)
+		}()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := is.dryRunReserve(ctx, mkGroup())
+			errCh <- err
+		}()
+
+		<-requestReceived
+		cancel()
+		require.ErrorIs(t, <-errCh, context.Canceled)
+	})
+
+	t.Run("service_shutdown_waiting_for_response", func(t *testing.T) {
+		is, lc := newBlockingService()
+
+		requestReceived := make(chan struct{})
+		go func() {
+			<-is.dryRunReservech // consume request but never respond
+			close(requestReceived)
+		}()
+
+		errCh := make(chan error, 1)
+		go func() {
+			_, err := is.dryRunReserve(context.Background(), mkGroup())
+			errCh <- err
+		}()
+
+		<-requestReceived
+		lc.ShutdownInitiated(nil)
+		require.ErrorIs(t, <-errCh, ErrNotRunning)
+		lc.ShutdownCompleted()
+	})
 }

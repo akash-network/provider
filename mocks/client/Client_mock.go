@@ -226,6 +226,74 @@ func (_c *Client_Manifest_Call) RunAndReturn(run func() manifest.Client) *Client
 	return _c
 }
 
+// ScreenBid provides a mock function for the type Client
+func (_mock *Client) ScreenBid(ctx context.Context, req *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error) {
+	ret := _mock.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ScreenBid")
+	}
+
+	var r0 *v1.BidScreeningResponse
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error)); ok {
+		return returnFunc(ctx, req)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1.BidScreeningRequest) *v1.BidScreeningResponse); ok {
+		r0 = returnFunc(ctx, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*v1.BidScreeningResponse)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *v1.BidScreeningRequest) error); ok {
+		r1 = returnFunc(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_ScreenBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScreenBid'
+type Client_ScreenBid_Call struct {
+	*mock.Call
+}
+
+// ScreenBid is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req *v1.BidScreeningRequest
+func (_e *Client_Expecter) ScreenBid(ctx interface{}, req interface{}) *Client_ScreenBid_Call {
+	return &Client_ScreenBid_Call{Call: _e.mock.On("ScreenBid", ctx, req)}
+}
+
+func (_c *Client_ScreenBid_Call) Run(run func(ctx context.Context, req *v1.BidScreeningRequest)) *Client_ScreenBid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *v1.BidScreeningRequest
+		if args[1] != nil {
+			arg1 = args[1].(*v1.BidScreeningRequest)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_ScreenBid_Call) Return(bidScreeningResponse *v1.BidScreeningResponse, err error) *Client_ScreenBid_Call {
+	_c.Call.Return(bidScreeningResponse, err)
+	return _c
+}
+
+func (_c *Client_ScreenBid_Call) RunAndReturn(run func(ctx context.Context, req *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error)) *Client_ScreenBid_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Status provides a mock function for the type Client
 func (_mock *Client) Status(context1 context.Context) (*rest.ProviderStatus, error) {
 	ret := _mock.Called(context1)
@@ -346,66 +414,6 @@ func (_c *Client_StatusV1_Call) Return(status *v1.Status, err error) *Client_Sta
 }
 
 func (_c *Client_StatusV1_Call) RunAndReturn(run func(ctx context.Context) (*v1.Status, error)) *Client_StatusV1_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// ScreenBid provides a mock function for the type Client
-func (_mock *Client) ScreenBid(ctx context.Context, req *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error) {
-	ret := _mock.Called(ctx, req)
-
-	if len(ret) == 0 {
-		panic("no return value specified for ScreenBid")
-	}
-
-	var r0 *v1.BidScreeningResponse
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error)); ok {
-		return returnFunc(ctx, req)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, *v1.BidScreeningRequest) *v1.BidScreeningResponse); ok {
-		r0 = returnFunc(ctx, req)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*v1.BidScreeningResponse)
-		}
-	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, *v1.BidScreeningRequest) error); ok {
-		r1 = returnFunc(ctx, req)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
-}
-
-// Client_ScreenBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ScreenBid'
-type Client_ScreenBid_Call struct {
-	*mock.Call
-}
-
-// ScreenBid is a helper method to define mock.On call
-//   - ctx context.Context
-//   - req *v1.BidScreeningRequest
-func (_e *Client_Expecter) ScreenBid(ctx interface{}, req interface{}) *Client_ScreenBid_Call {
-	return &Client_ScreenBid_Call{Call: _e.mock.On("ScreenBid", ctx, req)}
-}
-
-func (_c *Client_ScreenBid_Call) Run(run func(ctx context.Context, req *v1.BidScreeningRequest)) *Client_ScreenBid_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(
-			args[0].(context.Context),
-			args[1].(*v1.BidScreeningRequest),
-		)
-	})
-	return _c
-}
-
-func (_c *Client_ScreenBid_Call) Return(response *v1.BidScreeningResponse, err error) *Client_ScreenBid_Call {
-	_c.Call.Return(response, err)
-	return _c
-}
-
-func (_c *Client_ScreenBid_Call) RunAndReturn(run func(ctx context.Context, req *v1.BidScreeningRequest) (*v1.BidScreeningResponse, error)) *Client_ScreenBid_Call {
 	_c.Call.Return(run)
 	return _c
 }
