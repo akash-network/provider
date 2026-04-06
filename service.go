@@ -253,6 +253,12 @@ func (s *service) ScreenBid(ctx context.Context, req *provider.BidScreeningReque
 		if len(offers) > 0 {
 			resp.ResourceOffer = &offers[0]
 		}
+		if len(offers) > 1 {
+			resp.Reasons = append(resp.Reasons, fmt.Sprintf(
+				"screening passed, but resource offers for %d of %d service types are not included in this response; proto currently supports a single resource_offer field",
+				len(offers)-1, len(offers),
+			))
+		}
 		resp.Price = &result.Price
 	}
 

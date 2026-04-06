@@ -139,6 +139,55 @@ func Test_ServiceScreenBid_Error(t *testing.T) {
 	require.Nil(t, resp)
 }
 
+func Test_ServiceScreenBid_MultiServiceTruncation(t *testing.T) {
+	gspec := validTestGroupSpec()
+	secondUnit := dvbeta.ResourceUnit{
+		Resources: rtypes.Resources{
+			ID: 2,
+			CPU: &rtypes.CPU{
+				Units: rtypes.NewResourceValue(200),
+			},
+			Memory: &rtypes.Memory{
+				Quantity: rtypes.NewResourceValue(2 * 1024 * 1024 * 1024),
+			},
+			GPU: &rtypes.GPU{
+				Units: rtypes.NewResourceValue(0),
+			},
+			Storage: rtypes.Volumes{
+				rtypes.Storage{
+					Quantity: rtypes.NewResourceValue(1024 * 1024 * 1024),
+				},
+			},
+		},
+		Count: 1,
+		Price: sdk.NewInt64DecCoin(sdkutil.DenomUact, 20),
+	}
+	// Intentionally not appending to gspec.Resources to avoid mutating the original slice.
+	multiResources := append(gspec.Resources, secondUnit) //nolint:gocritic
+	expectedPrice := sdk.NewInt64DecCoin(sdkutil.DenomUact, 42)
+
+	fbe := &fakeBidEngine{
+		result: &bidengine.ScreenBidResult{
+			Passed:             true,
+			AllocatedResources: multiResources,
+			Price:              expectedPrice,
+		},
+	}
+
+	svc := &service{bidengine: fbe}
+
+	resp, err := svc.ScreenBid(context.Background(), &provider.BidScreeningRequest{
+		GroupSpec: gspec,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.True(t, resp.Passed)
+	require.NotNil(t, resp.ResourceOffer)
+	require.NotNil(t, resp.Price)
+	require.Len(t, resp.Reasons, 1)
+	require.Contains(t, resp.Reasons[0], "1 of 2")
+}
+
 func Test_ServiceScreenBid_PassedWithEmptyResources(t *testing.T) {
 	gspec := validTestGroupSpec()
 	expectedPrice := sdk.NewInt64DecCoin(sdkutil.DenomUact, 10)
