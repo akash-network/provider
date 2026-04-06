@@ -212,6 +212,9 @@ func (s *service) ScreenBid(ctx context.Context, gspec *dtypes.GroupSpec) (*Scre
 	// Step 2: Dry-run reserve to check inventory capacity (same path as real bid)
 	rg, err := s.cluster.DryRunReserve(ctx, gspec)
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, cluster.ErrNotRunning) {
+			return nil, err
+		}
 		return &ScreenBidResult{
 			Passed:  false,
 			Reasons: []string{fmt.Sprintf("insufficient capacity: %v", err)},

@@ -27,6 +27,7 @@ import (
 	"pkg.akt.dev/go/testutil"
 	"pkg.akt.dev/go/util/pubsub"
 
+	"github.com/akash-network/provider/cluster"
 	cmocks "github.com/akash-network/provider/mocks/cluster"
 	clmocks "github.com/akash-network/provider/mocks/cluster/types"
 	"github.com/akash-network/provider/operator/waiter"
@@ -199,6 +200,30 @@ func Test_ScreenBid_DryRunReserveFails(t *testing.T) {
 	require.Len(t, result.Reasons, 1)
 	require.Contains(t, result.Reasons[0], "insufficient capacity")
 	require.Contains(t, result.Reasons[0], "not enough GPUs")
+}
+
+func Test_ScreenBid_DryRunReserve_OperationalErrors(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{name: "context_canceled", err: context.Canceled},
+		{name: "context_deadline_exceeded", err: context.DeadlineExceeded},
+		{name: "cluster_not_running", err: cluster.ErrNotRunning},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			pricing := &mockPricingStrategy{price: sdk.NewInt64DecCoin(sdkutil.DenomUact, 1)}
+			scaffold := setupScreenBidService(t, nil, pricing)
+
+			scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(nil, tc.err)
+
+			result, err := scaffold.service.ScreenBid(context.Background(), validGroupSpec())
+			require.ErrorIs(t, err, tc.err)
+			require.Nil(t, result)
+		})
+	}
 }
 
 func Test_ScreenBid_PricingFails(t *testing.T) {
