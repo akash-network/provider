@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"net"
 
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -247,7 +248,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 			for _, ep := range b.settings.APIServerEndpoints {
 				peers = append(peers, netv1.NetworkPolicyPeer{
 					IPBlock: &netv1.IPBlock{
-						CIDR: ep.IP.String() + "/32",
+						CIDR: hostCIDR(ep.IP),
 					},
 				})
 				p := int32(ep.Port) //nolint:gosec // port values are always in range 1-65535
@@ -290,6 +291,15 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 	}
 
 	return result, nil
+}
+
+// hostCIDR returns a single-host CIDR string for the given IP,
+// using /32 for IPv4 and /128 for IPv6.
+func hostCIDR(ip net.IP) string {
+	if ip.To4() != nil {
+		return ip.String() + "/32"
+	}
+	return ip.String() + "/128"
 }
 
 func serviceHasReadPermissions(service manitypes.Service) bool {
