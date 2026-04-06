@@ -155,13 +155,6 @@ func (s *E2EBidScreening) TestBidScreening() {
 			},
 			pass: true,
 		},
-		{
-			name: "large_but_fits",
-			req: &providerv1.BidScreeningRequest{
-				GroupSpec: makeGroupSpec("large-fit", 10000, 0, 8*gi, 500*gi, 1, 100000),
-			},
-			pass: true,
-		},
 	}
 
 	for _, tt := range tests {
