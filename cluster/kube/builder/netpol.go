@@ -250,7 +250,7 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 						CIDR: ep.IP.String() + "/32",
 					},
 				})
-				p := int32(ep.Port)
+				p := int32(ep.Port) //nolint:gosec // port values are always in range 1-65535
 				if _, ok := seen[p]; !ok {
 					seen[p] = struct{}{}
 					apiServerPort := intstr.FromInt32(p)
