@@ -33,6 +33,7 @@ import (
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	cfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
+	"github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -303,10 +304,23 @@ func (is *inventoryService) dryRunReserve(ctx context.Context, resources dtypes.
 
 func (is *inventoryService) handleDryRunRequest(req dryRunReserveRequest, state *inventoryServiceState) {
 	resourcesToCommit := is.resourcesToCommit(req.resources)
-	rg := &dryRunReservation{resources: resourcesToCommit}
 
-	err := state.inventory.Adjust(rg, ctypes.WithDryRun())
-	if err != nil {
+	endpointQty := util.GetEndpointQuantityOfResourceGroup(resourcesToCommit, rtypes.Endpoint_LEASED_IP)
+	if endpointQty != 0 {
+		if is.clients.ip == nil {
+			req.ch <- dryRunReserveResponse{err: errNoLeasedIPsAvailable}
+			return
+		}
+		numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
+		pending := countPendingIPs(state)
+		if endpointQty > (numIPUnused - pending) {
+			req.ch <- dryRunReserveResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, endpointQty)}
+			return
+		}
+	}
+
+	rg := &dryRunReservation{resources: resourcesToCommit}
+	if err := state.inventory.Adjust(rg, ctypes.WithDryRun()); err != nil {
 		is.log.Info("dry-run reserve: insufficient capacity", "error", err)
 		req.ch <- dryRunReserveResponse{err: err}
 		return
