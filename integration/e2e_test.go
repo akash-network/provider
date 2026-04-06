@@ -430,7 +430,8 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		WithFlag("deployment-runtime-class", "none").
 		WithFlag("hostname-operator-endpoint", hostnameOperatorHost).
 		WithFlag(pcmd.FlagBidPricingStrategy, "randomRange").
-		WithFlag(pcmd.FlagGatewayGRPCListenAddress, s.grpcHost)
+		WithFlag(pcmd.FlagGatewayGRPCListenAddress, s.grpcHost).
+		WithFlag(pcmd.FlagDeploymentBlockedHostnames, testBlockedHostname)
 
 	if s.ipMarketplace {
 		ipOperatorPort = ports[2]

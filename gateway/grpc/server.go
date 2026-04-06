@@ -37,6 +37,15 @@ type grpcProviderV1 struct {
 }
 
 func (gm *grpcProviderV1) BidScreening(ctx context.Context, request *providerv1.BidScreeningRequest) (*providerv1.BidScreeningResponse, error) {
+	if len(request.Hostnames) > 0 {
+		claims := ClaimsFromCtx(ctx)
+		if err := gm.client.Hostname().CanReserveHostnames(request.Hostnames, claims.IssuerAddress()); err != nil {
+			return &providerv1.BidScreeningResponse{
+				Passed:  false,
+				Reasons: []string{fmt.Sprintf("hostname unavailable: %v", err)},
+			}, nil
+		}
+	}
 	return gm.client.ScreenBid(ctx, request)
 }
 
@@ -117,7 +126,7 @@ func authInterceptor() grpc.UnaryServerInterceptor {
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			tokens := md["authorization"]
 			if len(tokens) == 1 {
-				tokString = tokens[1]
+				tokString = tokens[0]
 			}
 		}
 

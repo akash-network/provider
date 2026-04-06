@@ -28,6 +28,9 @@ type E2EBidScreening struct {
 const (
 	mi = 1024 * 1024
 	gi = 1024 * 1024 * 1024
+
+	// testBlockedHostname is configured as blocked in the E2E provider startup.
+	testBlockedHostname = "blocked.test.akash.network"
 )
 
 func (s *E2EBidScreening) dialGRPC() (*grpc.ClientConn, providerv1.ProviderRPCClient) {
@@ -49,10 +52,10 @@ func (s *E2EBidScreening) TestBidScreening() {
 	defer conn.Close()
 
 	tests := []struct {
-		name    string
-		req     *providerv1.BidScreeningRequest
-		pass    bool
-		reason  string // substring expected in reasons (if non-empty)
+		name   string
+		req    *providerv1.BidScreeningRequest
+		pass   bool
+		reason string // substring expected in reasons (if non-empty)
 	}{
 		{
 			name: "valid_small_deployment",
@@ -154,6 +157,23 @@ func (s *E2EBidScreening) TestBidScreening() {
 				GroupSpec: makeManyResourcesGroupSpec(5),
 			},
 			pass: true,
+		},
+		{
+			name: "hostname_available",
+			req: &providerv1.BidScreeningRequest{
+				GroupSpec: makeGroupSpec("hostname-ok", 100, 0, 16*mi, 128*mi, 1, 1000),
+				Hostnames: []string{"valid.example.com"},
+			},
+			pass: true,
+		},
+		{
+			name: "hostname_blocked",
+			req: &providerv1.BidScreeningRequest{
+				GroupSpec: makeGroupSpec("hostname-blocked", 100, 0, 16*mi, 128*mi, 1, 1000),
+				Hostnames: []string{testBlockedHostname},
+			},
+			pass:   false,
+			reason: "hostname",
 		},
 	}
 
