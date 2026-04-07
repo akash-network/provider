@@ -39,11 +39,6 @@ func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directi
 		"gateway-namespace", c.gatewayNamespace,
 		"implementation", c.gatewayImpl.Name())
 
-	warnings := gateway.ValidateDirective(c.gatewayImpl, directive)
-	for _, warning := range warnings {
-		c.log.Warn("gateway option not supported", "warning", warning)
-	}
-
 	config := gateway.HTTPRouteConfig{
 		GatewayName:      c.gatewayName,
 		GatewayNamespace: c.gatewayNamespace,

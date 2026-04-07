@@ -11,11 +11,6 @@ import (
 )
 
 func (op *hostnameOperator) connectHostnameToDeploymentGateway(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
-	warnings := gateway.ValidateDirective(op.gatewayImpl, directive)
-	for _, warning := range warnings {
-		op.log.Warn("gateway option not supported", "warning", warning)
-	}
-
 	config := gateway.HTTPRouteConfig{
 		GatewayName:      op.ingressConfig.GatewayName,
 		GatewayNamespace: op.ingressConfig.GatewayNamespace,

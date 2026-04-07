@@ -149,25 +149,6 @@ func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentD
 	return annotations
 }
 
-// SupportedDirectives returns the directive options supported by NGINX Gateway Fabric.
-// Each option maps to an NGINX-specific annotation:
-//   - ReadTimeout -> nginx.org/proxy-read-timeout
-//   - SendTimeout -> nginx.org/proxy-send-timeout
-//   - MaxBodySize -> nginx.org/client-max-body-size
-//   - NextTimeout -> nginx.org/proxy-next-upstream-timeout
-//   - NextTries   -> nginx.org/proxy-next-upstream-tries
-//   - NextCases   -> nginx.org/proxy-next-upstream
-func (n *nginxGateway) SupportedDirectives() []string {
-	return []string{
-		"ReadTimeout",
-		"SendTimeout",
-		"MaxBodySize",
-		"NextTimeout",
-		"NextTries",
-		"NextCases",
-	}
-}
-
 // strPtr returns a pointer to the given string.
 // TODO: go 1.26 makes this helper unnecessary.
 func strPtr(s string) *string {

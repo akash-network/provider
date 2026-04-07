@@ -30,7 +30,7 @@ var HTTPRouteGVR = schema.GroupVersionResource{
 type HTTPRouteConfig struct {
 	GatewayName      string
 	GatewayNamespace string
-	Provider   GatewayProvider
+	Provider         GatewayProvider
 }
 
 // HTTPRouteObserver allows callers to observe HTTPRoute operations for metrics or logging.
