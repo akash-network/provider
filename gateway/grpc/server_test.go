@@ -61,8 +61,8 @@ func Test_BidScreening_DelegatesToClient(t *testing.T) {
 		Passed: true,
 		Price:  &price,
 	}
-	if len(offers) > 0 {
-		expectedResp.ResourceOffer = &offers[0]
+	for i := range offers {
+		expectedResp.ResourceOffers = append(expectedResp.ResourceOffers, &offers[i])
 	}
 
 	pclient.On("ScreenBid", mock.Anything, req).Return(expectedResp, nil)
@@ -123,7 +123,7 @@ func Test_BidScreening_FailedScreening(t *testing.T) {
 	require.NotNil(t, resp)
 	require.False(t, resp.Passed)
 	require.Equal(t, reasons, resp.Reasons)
-	require.Nil(t, resp.ResourceOffer)
+	require.Empty(t, resp.ResourceOffers)
 	require.Nil(t, resp.Price)
 
 	pclient.AssertCalled(t, "ScreenBid", mock.Anything, req)

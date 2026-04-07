@@ -97,7 +97,7 @@ func Test_ServiceScreenBid_Passed(t *testing.T) {
 	require.NotNil(t, resp.Price)
 	require.Equal(t, expectedPrice.Denom, resp.Price.Denom)
 	require.True(t, expectedPrice.Amount.Equal(resp.Price.Amount))
-	require.NotNil(t, resp.ResourceOffer)
+	require.Len(t, resp.ResourceOffers, 1)
 }
 
 func Test_ServiceScreenBid_Failed(t *testing.T) {
@@ -120,7 +120,7 @@ func Test_ServiceScreenBid_Failed(t *testing.T) {
 	require.NotNil(t, resp)
 	require.False(t, resp.Passed)
 	require.Equal(t, reasons, resp.Reasons)
-	require.Nil(t, resp.ResourceOffer)
+	require.Empty(t, resp.ResourceOffers)
 	require.Nil(t, resp.Price)
 }
 
@@ -139,7 +139,7 @@ func Test_ServiceScreenBid_Error(t *testing.T) {
 	require.Nil(t, resp)
 }
 
-func Test_ServiceScreenBid_MultiServiceTruncation(t *testing.T) {
+func Test_ServiceScreenBid_MultiService(t *testing.T) {
 	gspec := validTestGroupSpec()
 	secondUnit := dvbeta.ResourceUnit{
 		Resources: rtypes.Resources{
@@ -162,7 +162,6 @@ func Test_ServiceScreenBid_MultiServiceTruncation(t *testing.T) {
 		Count: 1,
 		Price: sdk.NewInt64DecCoin(sdkutil.DenomUact, 20),
 	}
-	// Intentionally not appending to gspec.Resources to avoid mutating the original slice.
 	multiResources := append(gspec.Resources, secondUnit) //nolint:gocritic
 	expectedPrice := sdk.NewInt64DecCoin(sdkutil.DenomUact, 42)
 
@@ -182,10 +181,9 @@ func Test_ServiceScreenBid_MultiServiceTruncation(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.True(t, resp.Passed)
-	require.NotNil(t, resp.ResourceOffer)
+	require.Len(t, resp.ResourceOffers, 2)
 	require.NotNil(t, resp.Price)
-	require.Len(t, resp.Reasons, 1)
-	require.Contains(t, resp.Reasons[0], "1 of 2")
+	require.Empty(t, resp.Reasons)
 }
 
 func Test_ServiceScreenBid_PassedWithEmptyResources(t *testing.T) {
@@ -208,7 +206,6 @@ func Test_ServiceScreenBid_PassedWithEmptyResources(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp)
 	require.True(t, resp.Passed)
-	// With nil resources, ResourceOfferFromRU returns empty slice, so ResourceOffer is nil
-	require.Nil(t, resp.ResourceOffer)
+	require.Empty(t, resp.ResourceOffers)
 	require.NotNil(t, resp.Price)
 }

@@ -190,7 +190,7 @@ func (s *E2EBidScreening) TestBidScreening() {
 				s.Require().NotNil(resp.Price, "passed screening should include price")
 				s.Require().NotEmpty(resp.Price.Denom, "price should have denom")
 				s.Require().True(resp.Price.Amount.IsPositive(), "price should be positive")
-				s.Require().NotNil(resp.ResourceOffer, "passed screening should include resource offer")
+				s.Require().NotEmpty(resp.ResourceOffers, "passed screening should include resource offers")
 			} else {
 				s.Require().NotEmpty(resp.Reasons, "failed screening should include reasons")
 				if tt.reason != "" {
