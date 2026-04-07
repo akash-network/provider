@@ -448,6 +448,16 @@ func createBidScreeningHandler(log log.Logger, pclient provider.Client) http.Han
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if len(screeningReq.Hostnames) > 0 {
+			claims := requestClaims(req)
+			if err := pclient.Hostname().CanReserveHostnames(screeningReq.Hostnames, claims.IssuerAddress()); err != nil {
+				writeJSON(log, w, &providerv1.BidScreeningResponse{
+					Passed:  false,
+					Reasons: []string{fmt.Sprintf("hostname unavailable: %v", err)},
+				})
+				return
+			}
+		}
 		resp, err := pclient.ScreenBid(req.Context(), &screeningReq)
 		if err != nil {
 			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
