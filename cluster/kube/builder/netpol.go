@@ -30,6 +30,7 @@ func BuildNetPol(settings Settings, deployment IClusterDeployment) NetPol {
 
 // Create a set of NetworkPolicies to restrict the ingress traffic to a Tenant's
 // Deployment namespace.
+
 func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 	if !b.settings.NetworkPoliciesEnabled {
 		return []*netv1.NetworkPolicy{}, nil
