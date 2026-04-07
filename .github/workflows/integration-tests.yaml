@@ -16,7 +16,7 @@ jobs:
   crd-e2e:
     env:
       KIND_NAME: kube
-    runs-on: core-e2e
+    runs-on: core-runner
     steps:
       - name: Cleanup build folder
         run: |
