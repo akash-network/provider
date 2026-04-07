@@ -12,7 +12,7 @@ import (
 )
 
 func TestRolePolicyRules(t *testing.T) {
-	t.Skip("skipping test. flapping on GH actions")
+	//t.Skip("skipping test. flapping on GH actions")
 
 	log := testutil.Logger(t)
 	const fakeHostname = "ahostname.dev"

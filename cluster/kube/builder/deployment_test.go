@@ -94,7 +94,7 @@ func TestDeploySetsEnvironmentVariables(t *testing.T) {
 }
 
 func TestDeploymentPermissions(t *testing.T) {
-	t.Skip("skipping test. flapping on GH actions")
+	//t.Skip("skipping test. flapping on GH actions")
 
 	tests := []struct {
 		name          string
