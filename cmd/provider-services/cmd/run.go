@@ -545,8 +545,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 	// Discover all API server endpoint addresses for network policies.
 	// HA control planes expose multiple backends in the "kubernetes" Endpoints
 	// object; all must be allowed because CNIs like Calico evaluate egress
@@ -617,9 +615,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	clusterSettings := map[interface{}]interface{}{
 		builder.SettingsKey: kubeSettings,
 		fromctx.CtxKeyGatewayConfig: fromctx.GatewayConfig{
-			IngressMode:    string(ingressMode),
-			Name:           gatewayName,
-			Namespace:      gatewayNamespace,
+			IngressMode: string(ingressMode),
+			Name:        gatewayName,
+			Namespace:   gatewayNamespace,
 			Provider:    gatewayProvider,
 		},
 	}
