@@ -236,6 +236,28 @@ func (s *service) ScreenBid(ctx context.Context, gspec *dtypes.GroupSpec) (*Scre
 		}, nil
 	}
 
+	maxPrice := gspec.Price()
+
+	if maxPrice.GetDenom() != price.GetDenom() {
+		return &ScreenBidResult{
+			Passed:             false,
+			AllocatedResources: rg.GetAllocatedResources(),
+			ClusterParams:      rg.ClusterParams(),
+			Price:              price,
+			Reasons:            []string{fmt.Sprintf("unsupported denomination: calculated %s, max-price %s", price.Denom, maxPrice.Denom)},
+		}, nil
+	}
+
+	if maxPrice.IsLT(price) {
+		return &ScreenBidResult{
+			Passed:             false,
+			AllocatedResources: rg.GetAllocatedResources(),
+			ClusterParams:      rg.ClusterParams(),
+			Price:              price,
+			Reasons:            []string{fmt.Sprintf("price too high: calculated %s, max-price %s", price, maxPrice)},
+		}, nil
+	}
+
 	return &ScreenBidResult{
 		Passed:             true,
 		AllocatedResources: rg.GetAllocatedResources(),

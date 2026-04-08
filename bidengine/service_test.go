@@ -226,6 +226,71 @@ func Test_ScreenBid_DryRunReserve_OperationalErrors(t *testing.T) {
 	}
 }
 
+func Test_ScreenBid_PriceTooHigh(t *testing.T) {
+	// Group max price is 23 uakt; provider calculates 100 uakt - bid should not be placed
+	calculatedPrice := sdk.NewInt64DecCoin(sdkutil.DenomUact, 100)
+	pricing := &mockPricingStrategy{price: calculatedPrice}
+	scaffold := setupScreenBidService(t, nil, pricing)
+
+	gspec := validGroupSpec()
+
+	mockRG := &clmocks.ReservationGroup{}
+	mockRG.On("GetAllocatedResources").Return(gspec.Resources)
+	mockRG.On("ClusterParams").Return(nil)
+	scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(mockRG, nil)
+
+	result, err := scaffold.service.ScreenBid(context.Background(), gspec)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.Passed)
+	require.Equal(t, calculatedPrice, result.Price)
+	require.Len(t, result.Reasons, 1)
+	require.Contains(t, result.Reasons[0], "price too high")
+}
+
+func Test_ScreenBid_DenomMismatch(t *testing.T) {
+	// Group max price is in uakt; provider calculates in uusdc - bid would be rejected
+	calculatedPrice := sdk.NewInt64DecCoin("uusdc", 5)
+	pricing := &mockPricingStrategy{price: calculatedPrice}
+	scaffold := setupScreenBidService(t, nil, pricing)
+
+	gspec := validGroupSpec()
+
+	mockRG := &clmocks.ReservationGroup{}
+	mockRG.On("GetAllocatedResources").Return(gspec.Resources)
+	mockRG.On("ClusterParams").Return(nil)
+	scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(mockRG, nil)
+
+	result, err := scaffold.service.ScreenBid(context.Background(), gspec)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.False(t, result.Passed)
+	require.Equal(t, calculatedPrice, result.Price)
+	require.Len(t, result.Reasons, 1)
+	require.Contains(t, result.Reasons[0], "unsupported denomination")
+}
+
+func Test_ScreenBid_PriceWithinLimit(t *testing.T) {
+	// Group max price is 23 uakt; provider calculates 10 uakt - passes
+	calculatedPrice := sdk.NewInt64DecCoin(sdkutil.DenomUact, 10)
+	pricing := &mockPricingStrategy{price: calculatedPrice}
+	scaffold := setupScreenBidService(t, nil, pricing)
+
+	gspec := validGroupSpec()
+
+	mockRG := &clmocks.ReservationGroup{}
+	mockRG.On("GetAllocatedResources").Return(gspec.Resources)
+	mockRG.On("ClusterParams").Return(nil)
+	scaffold.cluster.On("DryRunReserve", mock.Anything, mock.Anything).Return(mockRG, nil)
+
+	result, err := scaffold.service.ScreenBid(context.Background(), gspec)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, result.Passed)
+	require.Equal(t, calculatedPrice, result.Price)
+	require.Empty(t, result.Reasons)
+}
+
 func Test_ScreenBid_PricingFails(t *testing.T) {
 	pricingErr := errors.New("pricing script crashed")
 	pricing := &mockPricingStrategy{err: pricingErr}
