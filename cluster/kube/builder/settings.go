@@ -3,6 +3,7 @@ package builder
 import (
 	"errors"
 	"fmt"
+	"net"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -33,6 +34,12 @@ type Settings struct {
 
 	// NetworkPoliciesEnabled determines if NetworkPolicies should be installed.
 	NetworkPoliciesEnabled bool
+
+	// APIServerEndpoints are the addresses of all Kubernetes API server backends
+	// (from the "kubernetes" endpoints in the default namespace, not the ClusterIP).
+	// HA control planes have multiple backends; all must be allowed in network
+	// policies because CNIs like Calico evaluate egress rules after DNAT.
+	APIServerEndpoints []net.TCPAddr
 
 	CPUCommitLevel     float64
 	GPUCommitLevel     float64

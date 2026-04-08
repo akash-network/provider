@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -15,6 +16,8 @@ import (
 	"github.com/spf13/viper"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kruntime "k8s.io/apimachinery/pkg/util/runtime"
 	aclient "pkg.akt.dev/go/node/client/discovery"
 
@@ -538,6 +541,41 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.StorageCommitLevel = overcommitPercentStorage
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
+
+	// Discover all API server endpoint addresses for network policies.
+	// HA control planes expose multiple backends in the "kubernetes" Endpoints
+	// object; all must be allowed because CNIs like Calico evaluate egress
+	// rules after DNAT, so the ClusterIP is not what gets matched.
+	if deploymentNetworkPoliciesEnabled {
+		const kubeAPIServerEndpointName = "kubernetes"
+
+		if kc, err := fromctx.KubeClientFromCtx(ctx); err == nil {
+			ep, err := kc.CoreV1().Endpoints(corev1.NamespaceDefault).Get(ctx, kubeAPIServerEndpointName, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("failed to discover API server endpoints: %w", err)
+			}
+
+			for _, subset := range ep.Subsets {
+				for _, addr := range subset.Addresses {
+					for _, port := range subset.Ports {
+						kubeSettings.APIServerEndpoints = append(kubeSettings.APIServerEndpoints, net.TCPAddr{
+							IP:   net.ParseIP(addr.IP),
+							Port: int(port.Port),
+						})
+					}
+				}
+			}
+
+			if len(kubeSettings.APIServerEndpoints) == 0 {
+				return fmt.Errorf("no API server endpoints found in %s/%s", corev1.NamespaceDefault, kubeAPIServerEndpointName)
+			}
+
+			logger.Info("discovered API server endpoints for network policies",
+				"endpoints", kubeSettings.APIServerEndpoints)
+		} else {
+			return fmt.Errorf("kube client unavailable: %w", err)
+		}
+	}
 
 	if err := builder.ValidateSettings(kubeSettings); err != nil {
 		return err

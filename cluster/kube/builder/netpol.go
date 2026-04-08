@@ -2,6 +2,7 @@ package builder
 
 import (
 	"fmt"
+	"net"
 
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
@@ -235,9 +236,74 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 			}
 			result = append(result, &policy)
 		}
+
+		// Allow egress to all Kubernetes API server backends for services with
+		// permissions. HA control planes have multiple backends; all must be
+		// allowed because CNIs like Calico evaluate egress rules after DNAT.
+		if len(b.settings.APIServerEndpoints) > 0 && serviceHasReadPermissions(service) {
+			peers := make([]netv1.NetworkPolicyPeer, 0, len(b.settings.APIServerEndpoints))
+			ports := make([]netv1.NetworkPolicyPort, 0, len(b.settings.APIServerEndpoints))
+			seen := make(map[int32]struct{})
+
+			for _, ep := range b.settings.APIServerEndpoints {
+				peers = append(peers, netv1.NetworkPolicyPeer{
+					IPBlock: &netv1.IPBlock{
+						CIDR: hostCIDR(ep.IP),
+					},
+				})
+				p := int32(ep.Port) //nolint:gosec // port values are always in range 1-65535
+				if _, ok := seen[p]; !ok {
+					seen[p] = struct{}{}
+					apiServerPort := intstr.FromInt32(p)
+					ports = append(ports, netv1.NetworkPolicyPort{
+						Protocol: &tcpProtocol,
+						Port:     &apiServerPort,
+					})
+				}
+			}
+
+			policyName := fmt.Sprintf("akash-apiserver-%s", serviceName)
+			policy := netv1.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels:    b.labels(),
+					Name:      policyName,
+					Namespace: LidNS(b.deployment.LeaseID()),
+				},
+				Spec: netv1.NetworkPolicySpec{
+					PodSelector: metav1.LabelSelector{
+						MatchLabels: map[string]string{
+							AkashManifestServiceLabelName: serviceName,
+						},
+					},
+					PolicyTypes: []netv1.PolicyType{
+						netv1.PolicyTypeEgress,
+					},
+					Egress: []netv1.NetworkPolicyEgressRule{
+						{
+							To:    peers,
+							Ports: ports,
+						},
+					},
+				},
+			}
+			result = append(result, &policy)
+		}
 	}
 
 	return result, nil
+}
+
+// hostCIDR returns a single-host CIDR string for the given IP,
+// using /32 for IPv4 and /128 for IPv6.
+func hostCIDR(ip net.IP) string {
+	if ip.To4() != nil {
+		return ip.String() + "/32"
+	}
+	return ip.String() + "/128"
+}
+
+func serviceHasReadPermissions(service manitypes.Service) bool {
+	return service.Params != nil && service.Params.Permissions != nil && len(service.Params.Permissions.Read) > 0
 }
 
 // Update a single NetworkPolicy with correct labels.
