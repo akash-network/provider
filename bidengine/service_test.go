@@ -198,7 +198,7 @@ func Test_ScreenBid_DryRunReserveFails(t *testing.T) {
 	require.NotNil(t, result)
 	require.False(t, result.Passed)
 	require.Len(t, result.Reasons, 1)
-	require.Contains(t, result.Reasons[0], "insufficient capacity")
+	require.Contains(t, result.Reasons[0], "capacity check failed")
 	require.Contains(t, result.Reasons[0], "not enough GPUs")
 }
 

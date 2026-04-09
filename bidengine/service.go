@@ -23,6 +23,7 @@ import (
 	mquery "pkg.akt.dev/node/v2/x/market/query"
 
 	"github.com/akash-network/provider/cluster"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -215,9 +216,13 @@ func (s *service) ScreenBid(ctx context.Context, gspec *dtypes.GroupSpec) (*Scre
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, cluster.ErrNotRunning) {
 			return nil, err
 		}
+		reason := fmt.Sprintf("capacity check failed: %v", err)
+		if errors.Is(err, ctypes.ErrInsufficientCapacity) {
+			reason = "provider does not have sufficient resources for this deployment"
+		}
 		return &ScreenBidResult{
 			Passed:  false,
-			Reasons: []string{fmt.Sprintf("insufficient capacity: %v", err)},
+			Reasons: []string{reason},
 		}, nil
 	}
 
