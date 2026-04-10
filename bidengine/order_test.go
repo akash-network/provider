@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -953,7 +954,7 @@ func Test_CheckBidEligibility_MultipleReasonsAccumulated(t *testing.T) {
 
 	foundVolumes := false
 	for _, r := range reasons {
-		if len(r) > 0 && r[:5] == "group" {
+		if strings.HasPrefix(r, "group") {
 			foundVolumes = true
 		}
 	}
