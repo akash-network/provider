@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -737,3 +738,225 @@ func Test_ShouldntBidIfOrderAttrsDontMatch(t *testing.T) {
 
 // TODO - add test failing the call to Broadcast on TxClient and
 // and then confirm that the reservation is cancelled
+
+// --- CheckBidEligibility tests ---
+
+// configurable test double for ProviderAttrSignatureService
+type fakeProviderAttrSignatureService struct {
+	attrs    attrtypes.Attributes
+	attrsErr error
+	audited  map[string]audittypes.AuditedProviders
+	auditErr error
+}
+
+func (f *fakeProviderAttrSignatureService) GetAttributes() (attrtypes.Attributes, error) {
+	return f.attrs, f.attrsErr
+}
+
+func (f *fakeProviderAttrSignatureService) GetAuditorAttributeSignatures(auditor string) (audittypes.AuditedProviders, error) {
+	if f.auditErr != nil {
+		return nil, f.auditErr
+	}
+	return f.audited[auditor], nil
+}
+
+// validGroupSpec returns a GroupSpec that passes ValidateBasic
+func validGroupSpec() *dvbeta.GroupSpec {
+	gspec := &dvbeta.GroupSpec{
+		Name:         "test-group",
+		Requirements: attrtypes.PlacementRequirements{},
+		Resources:    make(dvbeta.ResourceUnits, 1),
+	}
+
+	clusterResources := rtypes.Resources{
+		ID: 1,
+		CPU: &rtypes.CPU{
+			Units: rtypes.NewResourceValue(uint64(dvbeta.GetValidationConfig().Unit.Min.CPU)),
+		},
+		Memory: &rtypes.Memory{
+			Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Memory),
+		},
+		GPU: &rtypes.GPU{
+			Units: rtypes.NewResourceValue(uint64(dvbeta.GetValidationConfig().Unit.Min.GPU)),
+		},
+		Storage: rtypes.Volumes{
+			rtypes.Storage{
+				Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage),
+			},
+		},
+	}
+
+	price := sdk.NewInt64DecCoin(sdkutil.DenomUact, 23)
+	gspec.Resources[0] = dvbeta.ResourceUnit{
+		Resources: clusterResources,
+		Count:     1,
+		Price:     price,
+	}
+	return gspec
+}
+
+func Test_CheckBidEligibility_AllPass(t *testing.T) {
+	gspec := validGroupSpec()
+	pass := &fakeProviderAttrSignatureService{}
+
+	passed, reasons, err := CheckBidEligibility(gspec, nil, nil, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.NoError(t, err)
+	require.True(t, passed)
+	require.Empty(t, reasons)
+}
+
+func Test_CheckBidEligibility_IncompatibleProviderAttributes(t *testing.T) {
+	gspec := validGroupSpec()
+	// order requires provider to have attribute "region"="us"
+	gspec.Requirements.Attributes = attrtypes.Attributes{
+		{Key: "region", Value: "us"},
+	}
+
+	// provider has no matching attributes
+	providerAttrs := attrtypes.Attributes{
+		{Key: "region", Value: "eu"},
+	}
+
+	pass := &fakeProviderAttrSignatureService{}
+
+	passed, reasons, err := CheckBidEligibility(gspec, providerAttrs, nil, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.NoError(t, err)
+	require.False(t, passed)
+	require.Contains(t, reasons, "incompatible provider attributes")
+}
+
+func Test_CheckBidEligibility_IncompatibleOrderAttributes(t *testing.T) {
+	gspec := validGroupSpec()
+
+	// provider's bid attributes require order to have "tier"="premium"
+	bidAttrs := attrtypes.Attributes{
+		{Key: "tier", Value: "premium"},
+	}
+
+	pass := &fakeProviderAttrSignatureService{}
+
+	passed, reasons, err := CheckBidEligibility(gspec, nil, bidAttrs, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.NoError(t, err)
+	require.False(t, passed)
+	require.Contains(t, reasons, "incompatible order attributes")
+}
+
+func Test_CheckBidEligibility_IncompatibleResourceRequirements(t *testing.T) {
+	gspec := validGroupSpec()
+	// Set GPU units > 0 so attributes are valid, then require specific GPU model
+	gspec.Resources[0].Resources.GPU.Units = rtypes.NewResourceValue(1)
+	gspec.Resources[0].Resources.GPU.Attributes = attrtypes.Attributes{
+		{Key: "vendor/nvidia/model/a100", Value: "true"},
+	}
+
+	// provider returns no capability attributes — can't match GPU requirements
+	pass := &fakeProviderAttrSignatureService{}
+
+	passed, reasons, err := CheckBidEligibility(gspec, nil, nil, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.NoError(t, err)
+	require.False(t, passed)
+	require.Contains(t, reasons, "incompatible attributes for resources requirements")
+}
+
+func Test_CheckBidEligibility_GroupVolumesExceedLimit(t *testing.T) {
+	gspec := validGroupSpec()
+	// Add many storage volumes to exceed the limit
+	gspec.Resources[0].Resources.Storage = rtypes.Volumes{
+		rtypes.Storage{Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage)},
+		rtypes.Storage{Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage)},
+		rtypes.Storage{Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage)},
+	}
+
+	pass := &fakeProviderAttrSignatureService{}
+
+	// Set maxGroupVolumes to 2, but we have 3 volumes
+	passed, reasons, err := CheckBidEligibility(gspec, nil, nil, 2, pass, "provider-owner")
+	require.NoError(t, err)
+	require.False(t, passed)
+	require.Len(t, reasons, 1)
+	require.Contains(t, reasons[0], "group volumes count exceeds limit")
+}
+
+func Test_CheckBidEligibility_GetAttributesError(t *testing.T) {
+	gspec := validGroupSpec()
+	attrErr := errors.New("failed to get attributes")
+	pass := &fakeProviderAttrSignatureService{attrsErr: attrErr}
+
+	passed, reasons, err := CheckBidEligibility(gspec, nil, nil, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.ErrorIs(t, err, attrErr)
+	require.False(t, passed)
+	require.Nil(t, reasons)
+}
+
+func Test_CheckBidEligibility_GetAuditorSignaturesError(t *testing.T) {
+	gspec := validGroupSpec()
+	gspec.Requirements.SignedBy.AllOf = []string{"auditor1"}
+
+	auditErr := errors.New("failed to get auditor signatures")
+	pass := &fakeProviderAttrSignatureService{auditErr: auditErr}
+
+	passed, reasons, err := CheckBidEligibility(gspec, nil, nil, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.ErrorIs(t, err, auditErr)
+	require.False(t, passed)
+	require.Nil(t, reasons)
+}
+
+func Test_CheckBidEligibility_SignatureRequirementsNotMet(t *testing.T) {
+	gspec := validGroupSpec()
+	gspec.Requirements.SignedBy.AllOf = []string{"auditor1"}
+
+	// Return empty audited providers (no matching signatures)
+	pass := &fakeProviderAttrSignatureService{
+		audited: map[string]audittypes.AuditedProviders{
+			"auditor1": {},
+		},
+	}
+
+	passed, reasons, err := CheckBidEligibility(gspec, nil, nil, constants.DefaultMaxGroupVolumes, pass, "provider-owner")
+	require.NoError(t, err)
+	require.False(t, passed)
+	require.Contains(t, reasons, "attribute signature requirements not met")
+}
+
+func Test_CheckBidEligibility_MultipleReasonsAccumulated(t *testing.T) {
+	gspec := validGroupSpec()
+	// Require provider attributes the provider doesn't have
+	gspec.Requirements.Attributes = attrtypes.Attributes{
+		{Key: "region", Value: "us"},
+	}
+
+	// provider has wrong attributes
+	providerAttrs := attrtypes.Attributes{
+		{Key: "region", Value: "eu"},
+	}
+
+	// bid attributes not matching order
+	bidAttrs := attrtypes.Attributes{
+		{Key: "tier", Value: "premium"},
+	}
+
+	// Also add excessive volumes
+	gspec.Resources[0].Resources.Storage = rtypes.Volumes{
+		rtypes.Storage{Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage)},
+		rtypes.Storage{Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage)},
+		rtypes.Storage{Quantity: rtypes.NewResourceValue(dvbeta.GetValidationConfig().Unit.Min.Storage)},
+	}
+
+	pass := &fakeProviderAttrSignatureService{}
+
+	passed, reasons, err := CheckBidEligibility(gspec, providerAttrs, bidAttrs, 2, pass, "provider-owner")
+	require.NoError(t, err)
+	require.False(t, passed)
+	// Should have at least: incompatible provider attributes, incompatible order attributes, volumes exceeded
+	require.GreaterOrEqual(t, len(reasons), 3)
+	require.Contains(t, reasons, "incompatible provider attributes")
+	require.Contains(t, reasons, "incompatible order attributes")
+
+	foundVolumes := false
+	for _, r := range reasons {
+		if strings.HasPrefix(r, "group") {
+			foundVolumes = true
+		}
+	}
+	require.True(t, foundVolumes, "expected a volumes-related reason")
+}

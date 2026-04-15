@@ -134,6 +134,74 @@ func (_c *Service_Done_Call) RunAndReturn(run func() <-chan struct{}) *Service_D
 	return _c
 }
 
+// DryRunReserve provides a mock function for the type Service
+func (_mock *Service) DryRunReserve(ctx context.Context, resources v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error) {
+	ret := _mock.Called(ctx, resources)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DryRunReserve")
+	}
+
+	var r0 v1beta3.ReservationGroup
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error)); ok {
+		return returnFunc(ctx, resources)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, v1beta4.ResourceGroup) v1beta3.ReservationGroup); ok {
+		r0 = returnFunc(ctx, resources)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(v1beta3.ReservationGroup)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, v1beta4.ResourceGroup) error); ok {
+		r1 = returnFunc(ctx, resources)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Service_DryRunReserve_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DryRunReserve'
+type Service_DryRunReserve_Call struct {
+	*mock.Call
+}
+
+// DryRunReserve is a helper method to define mock.On call
+//   - ctx context.Context
+//   - resources v1beta4.ResourceGroup
+func (_e *Service_Expecter) DryRunReserve(ctx interface{}, resources interface{}) *Service_DryRunReserve_Call {
+	return &Service_DryRunReserve_Call{Call: _e.mock.On("DryRunReserve", ctx, resources)}
+}
+
+func (_c *Service_DryRunReserve_Call) Run(run func(ctx context.Context, resources v1beta4.ResourceGroup)) *Service_DryRunReserve_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 v1beta4.ResourceGroup
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.ResourceGroup)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Service_DryRunReserve_Call) Return(reservationGroup v1beta3.ReservationGroup, err error) *Service_DryRunReserve_Call {
+	_c.Call.Return(reservationGroup, err)
+	return _c
+}
+
+func (_c *Service_DryRunReserve_Call) RunAndReturn(run func(ctx context.Context, resources v1beta4.ResourceGroup) (v1beta3.ReservationGroup, error)) *Service_DryRunReserve_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // FindActiveLease provides a mock function for the type Service
 func (_mock *Service) FindActiveLease(ctx context.Context, owner types.Address, dseq uint64, gseq uint32) (bool, v1.LeaseID, v2beta2.ManifestGroup, error) {
 	ret := _mock.Called(ctx, owner, dseq, gseq)

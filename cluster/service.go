@@ -78,6 +78,7 @@ type checkDeploymentExistsRequest struct {
 type Cluster interface {
 	Reserve(mtypes.OrderID, dtypes.ResourceGroup) (ctypes.Reservation, error)
 	Unreserve(mtypes.OrderID) error
+	DryRunReserve(ctx context.Context, resources dtypes.ResourceGroup) (ctypes.ReservationGroup, error)
 }
 
 // StatusClient is the interface which includes status of service
@@ -227,6 +228,10 @@ func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) 
 
 func (s *service) Unreserve(order mtypes.OrderID) error {
 	return s.inventory.unreserve(order)
+}
+
+func (s *service) DryRunReserve(ctx context.Context, resources dtypes.ResourceGroup) (ctypes.ReservationGroup, error) {
+	return s.inventory.dryRunReserve(ctx, resources)
 }
 
 func (s *service) HostnameService() ctypes.HostnameServiceClient {

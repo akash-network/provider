@@ -3,6 +3,7 @@ package bidengine
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
@@ -10,8 +11,10 @@ import (
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	sclient "pkg.akt.dev/go/node/client/v1beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	apclient "pkg.akt.dev/go/provider/client"
@@ -20,6 +23,7 @@ import (
 	mquery "pkg.akt.dev/node/v2/x/market/query"
 
 	"github.com/akash-network/provider/cluster"
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -46,9 +50,19 @@ var orderManagerGauge = promauto.NewGauge(prometheus.GaugeOpts{
 	ConstLabels: nil,
 })
 
+// ScreenBidResult contains the result of a bid screening/precheck operation.
+type ScreenBidResult struct {
+	Passed             bool
+	Reasons            []string
+	AllocatedResources dtypes.ResourceUnits
+	ClusterParams      interface{}
+	Price              sdk.DecCoin
+}
+
 // Service handles bidding on orders.
 type Service interface {
 	StatusClient
+	ScreenBid(ctx context.Context, gspec *dtypes.GroupSpec) (*ScreenBidResult, error)
 	Close() error
 	Done() <-chan struct{}
 }
@@ -177,6 +191,84 @@ func (s *service) StatusV1(ctx context.Context) (*provider.BidEngineStatus, erro
 	}
 
 	return &provider.BidEngineStatus{Orders: res.Orders}, nil
+}
+
+func (s *service) ScreenBid(ctx context.Context, gspec *dtypes.GroupSpec) (*ScreenBidResult, error) {
+	// Step 1: Check bid eligibility using the same logic as the real bid flow
+	passed, reasons, err := CheckBidEligibility(
+		gspec,
+		s.session.Provider().Attributes,
+		s.cfg.Attributes,
+		s.cfg.MaxGroupVolumes,
+		s.pass,
+		s.session.Provider().Owner,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if !passed {
+		return &ScreenBidResult{Passed: false, Reasons: reasons}, nil
+	}
+
+	// Step 2: Dry-run reserve to check inventory capacity (same path as real bid)
+	rg, err := s.cluster.DryRunReserve(ctx, gspec)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, cluster.ErrNotRunning) {
+			return nil, err
+		}
+		reason := fmt.Sprintf("capacity check failed: %v", err)
+		if errors.Is(err, ctypes.ErrInsufficientCapacity) {
+			reason = "provider does not have sufficient resources for this deployment"
+		}
+		return &ScreenBidResult{
+			Passed:  false,
+			Reasons: []string{reason},
+		}, nil
+	}
+
+	// Step 3: Calculate price using the same pricing strategy as real bids
+	priceReq := Request{
+		GSpec:              gspec,
+		PricePrecision:     DefaultPricePrecision,
+		AllocatedResources: rg.GetAllocatedResources(),
+	}
+
+	price, err := s.cfg.PricingStrategy.CalculatePrice(ctx, priceReq)
+	if err != nil {
+		return &ScreenBidResult{
+			Passed:  false,
+			Reasons: []string{fmt.Sprintf("pricing calculation failed: %v", err)},
+		}, nil
+	}
+
+	maxPrice := gspec.Price()
+
+	if maxPrice.GetDenom() != price.GetDenom() {
+		return &ScreenBidResult{
+			Passed:             false,
+			AllocatedResources: rg.GetAllocatedResources(),
+			ClusterParams:      rg.ClusterParams(),
+			Price:              price,
+			Reasons:            []string{fmt.Sprintf("unsupported denomination: calculated %s, max-price %s", price.Denom, maxPrice.Denom)},
+		}, nil
+	}
+
+	if maxPrice.IsLT(price) {
+		return &ScreenBidResult{
+			Passed:             false,
+			AllocatedResources: rg.GetAllocatedResources(),
+			ClusterParams:      rg.ClusterParams(),
+			Price:              price,
+			Reasons:            []string{fmt.Sprintf("price too high: calculated %s, max-price %s", price, maxPrice)},
+		}, nil
+	}
+
+	return &ScreenBidResult{
+		Passed:             true,
+		AllocatedResources: rg.GetAllocatedResources(),
+		ClusterParams:      rg.ClusterParams(),
+		Price:              price,
+	}, nil
 }
 
 func (s *service) updateOrderManagerGauge() {

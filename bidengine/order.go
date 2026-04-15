@@ -19,6 +19,7 @@ import (
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
+	atrtypes "pkg.akt.dev/go/node/types/attributes/v1"
 	deposit "pkg.akt.dev/go/node/types/deposit/v1"
 	metricsutils "pkg.akt.dev/go/util/metrics"
 	"pkg.akt.dev/go/util/pubsub"
@@ -521,74 +522,100 @@ loop:
 }
 
 func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
-	// does provider have required attributes?
-	if !group.GroupSpec.MatchAttributes(o.session.Provider().Attributes) {
-		o.log.Debug("unable to fulfill: incompatible provider attributes")
-		return false, nil
-	}
-
-	// does order have required attributes?
-	if !o.cfg.Attributes.SubsetOf(group.GroupSpec.Requirements.Attributes) {
-		o.log.Debug("unable to fulfill: incompatible order attributes")
-		return false, nil
-	}
-
-	attr, err := o.pass.GetAttributes()
+	passed, reasons, err := CheckBidEligibility(
+		&group.GroupSpec,
+		o.session.Provider().Attributes,
+		o.cfg.Attributes,
+		o.cfg.MaxGroupVolumes,
+		o.pass,
+		o.session.Provider().Owner,
+	)
 	if err != nil {
 		return false, err
 	}
+	for _, reason := range reasons {
+		o.log.Debug("unable to fulfill: " + reason)
+	}
+	return passed, nil
+}
+
+// CheckBidEligibility checks whether a provider should bid on a given group spec.
+// Returns (shouldBid, reasons, error) where reasons lists why bidding was declined.
+// This is used by both the live bid flow and the bid screening/precheck endpoint.
+func CheckBidEligibility(
+	gspec *dtypes.GroupSpec,
+	providerAttrs atrtypes.Attributes,
+	bidAttrs atrtypes.Attributes,
+	maxGroupVolumes int,
+	pass ProviderAttrSignatureService,
+	providerOwner string,
+) (bool, []string, error) {
+	var reasons []string
+
+	// does provider have required attributes?
+	if !gspec.MatchAttributes(providerAttrs) {
+		reasons = append(reasons, "incompatible provider attributes")
+	}
+
+	// does order have required attributes?
+	if !bidAttrs.SubsetOf(gspec.Requirements.Attributes) {
+		reasons = append(reasons, "incompatible order attributes")
+	}
+
+	attr, err := pass.GetAttributes()
+	if err != nil {
+		return false, nil, err
+	}
 
 	// does provider have required capabilities?
-	if !group.GroupSpec.MatchResourcesRequirements(attr) {
-		o.log.Debug("unable to fulfill: incompatible attributes for resources requirements", "wanted", group.GroupSpec, "have", attr)
-		return false, nil
+	if !gspec.MatchResourcesRequirements(attr) {
+		reasons = append(reasons, "incompatible attributes for resources requirements")
 	}
 
-	for _, resources := range group.GroupSpec.GetResourceUnits() {
-		if len(resources.Storage) > o.cfg.MaxGroupVolumes {
-			o.log.Info(fmt.Sprintf("unable to fulfill: group volumes count exceeds (%d > %d)", len(resources.Storage), o.cfg.MaxGroupVolumes))
-			return false, nil
+	for _, resources := range gspec.GetResourceUnits() {
+		if len(resources.Storage) > maxGroupVolumes {
+			reasons = append(reasons, fmt.Sprintf("group volumes count exceeds limit (%d > %d)", len(resources.Storage), maxGroupVolumes))
 		}
 	}
-	signatureRequirements := group.GroupSpec.Requirements.SignedBy
+
+	signatureRequirements := gspec.Requirements.SignedBy
 	if signatureRequirements.Size() != 0 {
 		// Check that the signature requirements are met for each attribute
 		var provAttr atypes.AuditedProviders
 		ownAttrs := atypes.AuditedProvider{
-			Owner:      o.session.Provider().Owner,
+			Owner:      providerOwner,
 			Auditor:    "",
-			Attributes: o.session.Provider().Attributes,
+			Attributes: providerAttrs,
 		}
 		provAttr = append(provAttr, ownAttrs)
 		auditors := make([]string, 0)
-		auditors = append(auditors, group.GroupSpec.Requirements.SignedBy.AllOf...)
-		auditors = append(auditors, group.GroupSpec.Requirements.SignedBy.AnyOf...)
+		auditors = append(auditors, gspec.Requirements.SignedBy.AllOf...)
+		auditors = append(auditors, gspec.Requirements.SignedBy.AnyOf...)
 
 		gotten := make(map[string]struct{})
 		for _, auditor := range auditors {
-			_, done := gotten[auditor]
-			if done {
+			if _, done := gotten[auditor]; done {
 				continue
 			}
-			result, err := o.pass.GetAuditorAttributeSignatures(auditor)
+			result, err := pass.GetAuditorAttributeSignatures(auditor)
 			if err != nil {
-				return false, err
+				return false, nil, err
 			}
 			provAttr = append(provAttr, result...)
 			gotten[auditor] = struct{}{}
 		}
 
-		ok := group.GroupSpec.MatchRequirements(provAttr)
-		if !ok {
-			o.log.Debug("attribute signature requirements not met")
-			return false, nil
+		if !gspec.MatchRequirements(provAttr) {
+			reasons = append(reasons, "attribute signature requirements not met")
 		}
 	}
 
-	if err := group.GroupSpec.ValidateBasic(); err != nil {
-		o.log.Error("unable to fulfill: group validation error",
-			"error", err)
-		return false, nil
+	if err := gspec.ValidateBasic(); err != nil {
+		reasons = append(reasons, fmt.Sprintf("group validation error: %v", err))
 	}
-	return true, nil
+
+	if len(reasons) > 0 {
+		return false, reasons, nil
+	}
+	return true, nil, nil
 }

@@ -24,6 +24,7 @@ import (
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
+	providerv1 "pkg.akt.dev/go/provider/v1"
 	ajwt "pkg.akt.dev/go/util/jwt"
 	"pkg.akt.dev/node/v2/util/wsutil"
 
@@ -122,6 +123,14 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 	router.HandleFunc("/status",
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
+
+	identifiedRouter := router.NewRoute().Subrouter()
+	identifiedRouter.Use(requireOwner)
+
+	// POST /v1/bid-screening - requires valid identity (mTLS or JWT), matching gRPC auth level
+	identifiedRouter.HandleFunc("/v1/bid-screening",
+		createBidScreeningHandler(log, pclient)).
+		Methods(http.MethodPost)
 
 	authedRouter := router.NewRoute().Subrouter()
 	authedRouter.Use(
@@ -429,6 +438,32 @@ func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerF
 			Akash: version.NewInfo(),
 			Kube:  kube,
 		})
+	}
+}
+
+func createBidScreeningHandler(log log.Logger, pclient provider.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+		var screeningReq providerv1.BidScreeningRequest
+		if err := json.NewDecoder(req.Body).Decode(&screeningReq); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(screeningReq.Hostnames) > 0 {
+			claims := requestClaims(req)
+			if err := pclient.Hostname().CanReserveHostnames(screeningReq.Hostnames, claims.IssuerAddress()); err != nil {
+				writeJSON(log, w, &providerv1.BidScreeningResponse{
+					Passed:  false,
+					Reasons: []string{fmt.Sprintf("hostname unavailable: %v", err)},
+				})
+				return
+			}
+		}
+		resp, err := pclient.ScreenBid(req.Context(), &screeningReq)
+		if err != nil {
+			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
+			return
+		}
+		writeJSON(log, w, resp)
 	}
 }
 

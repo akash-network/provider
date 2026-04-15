@@ -33,6 +33,7 @@ import (
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	cfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
+	"github.com/akash-network/provider/cluster/util"
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -87,6 +88,34 @@ type inventoryResponse struct {
 	err   error
 }
 
+type dryRunReserveRequest struct {
+	resources dtypes.ResourceGroup
+	ch        chan<- dryRunReserveResponse
+}
+
+type dryRunReserveResponse struct {
+	value ctypes.ReservationGroup
+	err   error
+}
+
+// dryRunReservation is a lightweight ReservationGroup used for dry-run inventory checks.
+// It does not track order ID or allocation status.
+type dryRunReservation struct {
+	resources         dtypes.ResourceGroup
+	adjustedResources dtypes.ResourceUnits
+	clusterParams     interface{}
+}
+
+var _ ctypes.ReservationGroup = (*dryRunReservation)(nil)
+
+func (r *dryRunReservation) Resources() dtypes.ResourceGroup { return r.resources }
+func (r *dryRunReservation) SetAllocatedResources(val dtypes.ResourceUnits) {
+	r.adjustedResources = val
+}
+func (r *dryRunReservation) GetAllocatedResources() dtypes.ResourceUnits { return r.adjustedResources }
+func (r *dryRunReservation) SetClusterParams(val interface{})            { r.clusterParams = val }
+func (r *dryRunReservation) ClusterParams() interface{}                  { return r.clusterParams }
+
 type inventoryService struct {
 	config                 Config
 	client                 Client
@@ -96,6 +125,7 @@ type inventoryService struct {
 	lookupch               chan inventoryRequest
 	reservech              chan inventoryRequest
 	unreservech            chan inventoryRequest
+	dryRunReservech        chan dryRunReserveRequest
 	reservationCount       int64
 	readych                chan struct{}
 	log                    log.Logger
@@ -132,6 +162,7 @@ func newInventoryService(
 		lookupch:               make(chan inventoryRequest),
 		reservech:              make(chan inventoryRequest),
 		unreservech:            make(chan inventoryRequest),
+		dryRunReservech:        make(chan dryRunReserveRequest),
 		readych:                make(chan struct{}),
 		log:                    log.With("cmp", "inventory-service"),
 		lc:                     lifecycle.New(),
@@ -232,6 +263,70 @@ func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint: u
 	case <-is.lc.ShuttingDown():
 		return ErrNotRunning
 	}
+}
+
+func (is *inventoryService) dryRunReserve(ctx context.Context, resources dtypes.ResourceGroup) (ctypes.ReservationGroup, error) {
+	for idx, res := range resources.GetResourceUnits() {
+		if res.CPU == nil {
+			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
+		}
+		if res.GPU == nil {
+			return nil, fmt.Errorf("%w: GPU resource at idx %d is nil", ErrInvalidResource, idx)
+		}
+		if res.Memory == nil {
+			return nil, fmt.Errorf("%w: Memory resource at idx %d is nil", ErrInvalidResource, idx)
+		}
+	}
+
+	ch := make(chan dryRunReserveResponse, 1)
+	req := dryRunReserveRequest{
+		resources: resources,
+		ch:        ch,
+	}
+
+	select {
+	case is.dryRunReservech <- req:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-is.lc.ShuttingDown():
+		return nil, ErrNotRunning
+	}
+
+	select {
+	case response := <-ch:
+		return response.value, response.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-is.lc.ShuttingDown():
+		return nil, ErrNotRunning
+	}
+}
+
+func (is *inventoryService) handleDryRunRequest(req dryRunReserveRequest, state *inventoryServiceState) {
+	resourcesToCommit := is.resourcesToCommit(req.resources)
+
+	endpointQty := util.GetEndpointQuantityOfResourceGroup(resourcesToCommit, rtypes.Endpoint_LEASED_IP)
+	if endpointQty != 0 {
+		if is.clients.ip == nil {
+			req.ch <- dryRunReserveResponse{err: errNoLeasedIPsAvailable}
+			return
+		}
+		numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
+		pending := countPendingIPs(state)
+		if endpointQty > (numIPUnused - pending) {
+			req.ch <- dryRunReserveResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, endpointQty)}
+			return
+		}
+	}
+
+	rg := &dryRunReservation{resources: resourcesToCommit}
+	if err := state.inventory.Adjust(rg, ctypes.WithDryRun()); err != nil {
+		is.log.Info("dry-run reserve: insufficient capacity", "error", err)
+		req.ch <- dryRunReserveResponse{err: err}
+		return
+	}
+
+	req.ch <- dryRunReserveResponse{value: rg}
 }
 
 func (is *inventoryService) status(ctx context.Context) (inventoryV1.InventoryMetrics, error) {
@@ -488,6 +583,7 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 
 	invch := is.clients.inventory.ResultChan()
 	var reservech <-chan inventoryRequest
+	var dryRunCh <-chan dryRunReserveRequest
 
 	resumeProcessingReservations := func() {
 		reservech = is.reservech
@@ -569,6 +665,8 @@ loop:
 			updateIPs()
 		case req := <-reservech:
 			is.handleRequest(req, state)
+		case req := <-dryRunCh:
+			is.handleDryRunRequest(req, state)
 		case req := <-is.lookupch:
 			// lookup registration
 			for _, res := range state.reservations {
@@ -647,6 +745,9 @@ loop:
 		case inv := <-invupch:
 			currinv = inv.Dup()
 			state.inventory = inv
+
+			// enable dry-run reserve processing now that inventory is available
+			dryRunCh = is.dryRunReservech
 
 			updateIPs()
 

@@ -14,6 +14,7 @@ import (
 	aclient "pkg.akt.dev/go/node/client/discovery"
 	sclient "pkg.akt.dev/go/node/client/v1beta3"
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	apclient "pkg.akt.dev/go/provider/client"
 	provider "pkg.akt.dev/go/provider/v1"
 
@@ -41,6 +42,7 @@ type Client interface {
 	Cluster() cluster.Client
 	Hostname() ctypes.HostnameServiceClient
 	ClusterService() cluster.Service
+	ScreenBid(ctx context.Context, req *provider.BidScreeningRequest) (*provider.BidScreeningResponse, error)
 }
 
 // Service is the interface that includes StatusClient interface.
@@ -226,6 +228,36 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 		},
 		Timestamp: time.Now().UTC(),
 	}, nil
+}
+
+func (s *service) ScreenBid(ctx context.Context, req *provider.BidScreeningRequest) (*provider.BidScreeningResponse, error) {
+	if req.GetGroupSpec() == nil {
+		return &provider.BidScreeningResponse{
+			Passed:  false,
+			Reasons: []string{"missing group spec"},
+		}, nil
+	}
+
+	result, err := s.bidengine.ScreenBid(ctx, req.GroupSpec)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &provider.BidScreeningResponse{
+		Passed:  result.Passed,
+		Reasons: result.Reasons,
+	}
+
+	if result.Passed {
+		offers := mvbeta.ResourceOfferFromRU(result.AllocatedResources)
+		resp.ResourceOffers = make([]*mvbeta.ResourceOffer, len(offers))
+		for i := range offers {
+			resp.ResourceOffers[i] = &offers[i]
+		}
+		resp.Price = &result.Price
+	}
+
+	return resp, nil
 }
 
 func (s *service) run() {
