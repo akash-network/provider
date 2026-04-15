@@ -1,9 +1,14 @@
 package inventory
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
@@ -14,24 +19,48 @@ import (
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
+	"github.com/akash-network/provider/tools/fromctx"
 )
 
-var _ ctypes.Inventory = (*inventory)(nil)
+var (
+	_ ctypes.Inventory = (*inventory)(nil)
 
-func newInventory(clState inventoryV1.Cluster) *inventory {
-	inv := &inventory{
-		Cluster: clState,
+	errNegativeQuantity = errors.New("negative resource quantity")
+	quantityZero        = resource.NewQuantity(0, resource.DecimalSI)
+)
+
+func clampUint64(log logr.Logger, v int64, what string) uint64 {
+	if v < 0 {
+		log.Error(errNegativeQuantity, "clamped to 0", "what", what, "value", v)
+		return 0
 	}
+	return uint64(v)
+}
 
-	return inv
+// clampAvailableUint64 is a defense-in-depth guard for ResourcePair.Available().
+// Available() treats allocatable == -1 as an "unlimited" sentinel and returns MaxInt64.
+// Normal code path sanitizes inputs so -1 never reaches here, but if it did
+// (e.g. skipped sanitization), the uint64 result would be catastrophically wrong.
+func clampAvailableUint64(log logr.Logger, allocatable *resource.Quantity, v int64, what string) uint64 {
+	if allocatable.Cmp(*quantityZero) < 0 {
+		log.Error(errNegativeQuantity, "allocatable is negative, available clamped to 0", "what", what, "allocatable", allocatable.String())
+		return 0
+	}
+	return clampUint64(log, v, what)
+}
+
+func newInventory(ctx context.Context, clState inventoryV1.Cluster) *inventory {
+	return &inventory{
+		Cluster: clState,
+		ctx:     ctx,
+	}
 }
 
 func (inv *inventory) dup() inventory {
-	dup := inventory{
+	return inventory{
 		Cluster: *inv.Cluster.Dup(),
+		ctx:     inv.ctx,
 	}
-
-	return dup
 }
 
 func (inv *inventory) Dup() ctypes.Inventory {
@@ -332,47 +361,49 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 		Nodes: make([]inventoryV1.NodeMetrics, 0, len(inv.Nodes)),
 	}
 
+	log := fromctx.LogrFromCtx(inv.ctx).WithName("inventory.metrics")
 	for _, nd := range inv.Nodes {
+		ndLog := log.WithValues("node", nd.Name)
+
+		cpuAllocatable := clampUint64(ndLog, nd.Resources.CPU.Quantity.Allocatable.MilliValue(), "allocatable_cpu")
+		gpuAllocatable := clampUint64(ndLog, nd.Resources.GPU.Quantity.Allocatable.Value(), "allocatable_gpu")
+		memoryAllocatable := clampUint64(ndLog, nd.Resources.Memory.Quantity.Allocatable.Value(), "allocatable_memory")
+		storageEphAllocatable := clampUint64(ndLog, nd.Resources.EphemeralStorage.Allocatable.Value(), "allocatable_storage_ephemeral")
+
 		invNode := inventoryV1.NodeMetrics{
 			Name: nd.Name,
 			Allocatable: inventoryV1.ResourcesMetric{
-				CPU:              uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue()), // nolint: gosec
-				GPU:              uint64(nd.Resources.GPU.Quantity.Allocatable.Value()),      // nolint: gosec
-				Memory:           uint64(nd.Resources.Memory.Quantity.Allocatable.Value()),   // nolint: gosec
-				StorageEphemeral: uint64(nd.Resources.EphemeralStorage.Allocatable.Value()),  // nolint: gosec
+				CPU:              cpuAllocatable,
+				GPU:              gpuAllocatable,
+				Memory:           memoryAllocatable,
+				StorageEphemeral: storageEphAllocatable,
 			},
 		}
 
-		cpuTotal += uint64(nd.Resources.CPU.Quantity.Allocatable.MilliValue())             // nolint: gosec
-		gpuTotal += uint64(nd.Resources.GPU.Quantity.Allocatable.Value())                  // nolint: gosec
-		memoryTotal += uint64(nd.Resources.Memory.Quantity.Allocatable.Value())            // nolint: gosec
-		storageEphemeralTotal += uint64(nd.Resources.EphemeralStorage.Allocatable.Value()) // nolint: gosec
+		cpuTotal += cpuAllocatable
+		gpuTotal += gpuAllocatable
+		memoryTotal += memoryAllocatable
+		storageEphemeralTotal += storageEphAllocatable
 
-		avail := nd.Resources.CPU.Quantity.Available()
-		invNode.Available.CPU = uint64(avail.MilliValue()) // nolint: gosec
+		invNode.Available.CPU = clampAvailableUint64(ndLog, nd.Resources.CPU.Quantity.Allocatable, nd.Resources.CPU.Quantity.Available().MilliValue(), "available_cpu")
 		cpuAvailable += invNode.Available.CPU
 
-		avail = nd.Resources.GPU.Quantity.Available()
-		invNode.Available.GPU = uint64(avail.Value()) // nolint: gosec
+		invNode.Available.GPU = clampAvailableUint64(ndLog, nd.Resources.GPU.Quantity.Allocatable, nd.Resources.GPU.Quantity.Available().Value(), "available_gpu")
 		gpuAvailable += invNode.Available.GPU
 
-		avail = nd.Resources.Memory.Quantity.Available()
-		invNode.Available.Memory = uint64(avail.Value()) // nolint: gosec
+		invNode.Available.Memory = clampAvailableUint64(ndLog, nd.Resources.Memory.Quantity.Allocatable, nd.Resources.Memory.Quantity.Available().Value(), "available_memory")
 		memoryAvailable += invNode.Available.Memory
 
-		avail = nd.Resources.EphemeralStorage.Available()
-		invNode.Available.StorageEphemeral = uint64(avail.Value()) // nolint: gosec
+		invNode.Available.StorageEphemeral = clampAvailableUint64(ndLog, nd.Resources.EphemeralStorage.Allocatable, nd.Resources.EphemeralStorage.Available().Value(), "available_storage_ephemeral")
 		storageEphemeralAvailable += invNode.Available.StorageEphemeral
 
 		ret.Nodes = append(ret.Nodes, invNode)
 	}
 
 	for _, class := range inv.Storage {
-		tmp := class.Quantity.Allocatable.DeepCopy()
-		storageTotal[class.Info.Class] = uint64(tmp.Value()) //nolint: gosec
-
-		tmp = *class.Quantity.Available()
-		storageAvailable[class.Info.Class] = uint64(tmp.Value()) //nolint: gosec
+		classLog := log.WithValues("storageClass", class.Info.Class)
+		storageTotal[class.Info.Class] = clampUint64(classLog, class.Quantity.Allocatable.Value(), "allocatable_storage")
+		storageAvailable[class.Info.Class] = clampAvailableUint64(classLog, class.Quantity.Allocatable, class.Quantity.Available().Value(), "available_storage")
 	}
 
 	ret.TotalAllocatable = inventoryV1.MetricTotal{
