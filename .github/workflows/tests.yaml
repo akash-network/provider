@@ -16,7 +16,7 @@ on:
 
 jobs:
   build-bins:
-    runs-on: 
+    runs-on: core-e2e
     steps:
       - name: Cleanup build folder
         run: |
@@ -52,7 +52,7 @@ jobs:
         run: make lint
 
   release-dry-run:
-    runs-on: 
+    runs-on: core-e2e
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
     steps:
