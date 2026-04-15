@@ -70,6 +70,11 @@ spec:
                 configMapKeyRef:
                   name: operator-hostname
                   key: event-failure-limit
+            - name: AP_INGRESS_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: operator-hostname
+                  key: ingress-mode
             - name: AP_POD_NAME
               valueFrom:
                 fieldRef:

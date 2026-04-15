@@ -1,6 +1,10 @@
 package cluster
 
-import "time"
+import (
+	"time"
+
+	"github.com/akash-network/provider/cluster/kube/builder"
+)
 
 type Config struct {
 	InventoryResourcePollPeriod     time.Duration
@@ -18,6 +22,10 @@ type Config struct {
 	MonitorRetryPeriodJitter        time.Duration
 	MonitorHealthcheckPeriod        time.Duration
 	MonitorHealthcheckPeriodJitter  time.Duration
+	IngressMode                     builder.IngressMode
+	GatewayName                     string
+	GatewayNamespace                string
+	GatewayProvider                 string
 	ClusterSettings                 map[interface{}]interface{}
 }
 
@@ -30,5 +38,9 @@ func NewDefaultConfig() Config {
 		MonitorRetryPeriodJitter:        time.Second * 15,
 		MonitorHealthcheckPeriod:        time.Second * 10, // nolint revive
 		MonitorHealthcheckPeriodJitter:  time.Second * 5,
+		IngressMode:                     builder.IngressModeIngress,
+		GatewayName:                     "akash-gateway",
+		GatewayNamespace:                "akash-gateway",
+		GatewayProvider:                 "nginx",
 	}
 }
