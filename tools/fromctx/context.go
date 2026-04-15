@@ -37,6 +37,7 @@ const (
 	CtxKeyPersistentConfig   = Key("persistent-config")
 	CtxKeyCertIssuer         = Key("cert-issuer")
 	CtxKeyAccountQuerier     = Key("account-querier")
+	CtxKeyGatewayConfig      = Key("gateway-config")
 )
 
 var (
@@ -326,6 +327,40 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 	}
 
 	return false
+}
+
+// GatewayConfig holds all gateway-related configuration stored in context.
+type GatewayConfig struct {
+	IngressMode string
+	Name        string
+	Namespace   string
+	Provider    string
+}
+
+func GatewayConfigFromCtx(ctx context.Context) (GatewayConfig, error) {
+	val := ctx.Value(CtxKeyGatewayConfig)
+	if val == nil {
+		return GatewayConfig{
+			IngressMode: "ingress",
+			Provider:    "nginx",
+		}, nil
+	}
+
+	v, valid := val.(GatewayConfig)
+	if !valid {
+		return GatewayConfig{}, ErrValueInvalidType
+	}
+
+	return v, nil
+}
+
+func MustGatewayConfigFromCtx(ctx context.Context) GatewayConfig {
+	val, err := GatewayConfigFromCtx(ctx)
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return val
 }
 
 func ApplyToContext(ctx context.Context, config map[interface{}]interface{}) context.Context {

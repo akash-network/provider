@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: operator-hostname
+data:
+  ingress-mode: gateway-api

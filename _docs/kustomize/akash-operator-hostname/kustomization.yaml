@@ -19,3 +19,6 @@ configMapGenerator:
       - retry-delay=3s
       - ignore-list-age-limit=2613600s
       - event-failure-limit=3
+      - ingress-mode=ingress
+generatorOptions:
+  disableNameSuffixHash: true
