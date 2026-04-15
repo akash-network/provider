@@ -15,6 +15,34 @@ type LeaseIDConnection interface {
 	GetServiceName() string
 }
 
+// LeaseIDHostnameConnection is a concrete implementation of LeaseIDConnection
+// used by both the cluster client and hostname operator for tracking hostname
+// to deployment connections.
+type LeaseIDHostnameConnection struct {
+	LeaseID      mtypes.LeaseID
+	Hostname     string
+	ExternalPort int32
+	ServiceName  string
+}
+
+var _ LeaseIDConnection = LeaseIDHostnameConnection{}
+
+func (lh LeaseIDHostnameConnection) GetHostname() string {
+	return lh.Hostname
+}
+
+func (lh LeaseIDHostnameConnection) GetLeaseID() mtypes.LeaseID {
+	return lh.LeaseID
+}
+
+func (lh LeaseIDHostnameConnection) GetExternalPort() int32 {
+	return lh.ExternalPort
+}
+
+func (lh LeaseIDHostnameConnection) GetServiceName() string {
+	return lh.ServiceName
+}
+
 type ResourceEvent interface {
 	GetLeaseID() mtypes.LeaseID
 	GetEventType() ctypes.ProviderResourceEvent
