@@ -761,6 +761,27 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
 }
 
+func TestIntegrationBatch1(t *testing.T) {
+	integrationTestOnly(t)
+
+	suite.Run(t, new(E2EContainerToContainer))
+	suite.Run(t, new(E2EAppNodePort))
+	suite.Run(t, new(E2EDeploymentUpdate))
+	suite.Run(t, new(E2EApp))
+	suite.Run(t, new(E2EMigrateHostname))
+}
+
+func TestIntegrationBatch2(t *testing.T) {
+	integrationTestOnly(t)
+
+	suite.Run(t, new(E2EPersistentStorageDefault))
+	suite.Run(t, new(E2EPersistentStorageBeta2))
+	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
+	suite.Run(t, new(E2EStorageClassRam))
+	suite.Run(t, new(E2ECustomCurrency))
+	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+}
+
 // TestQueryApp enables rapid testing of the querying functionality locally
 // Not for CI tests.
 func TestQueryApp(t *testing.T) {
