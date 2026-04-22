@@ -121,7 +121,7 @@ func makeMocks(s *orderTestScaffold) {
 	txMocks := &clientmocks.TxClient{}
 	s.broadcasts = make(chan []sdk.Msg, 1)
 
-	txMocks.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	txMocks.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		s.broadcasts <- args.Get(1).([]sdk.Msg)
 	}).Return(&sdk.Result{}, nil)
 
@@ -553,7 +553,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 		Reason: mtypes.LeaseClosedReasonUnspecified,
 	}}
 
-	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
+	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything, mock.Anything)
 }
 
 func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
@@ -578,7 +578,7 @@ func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 		ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
 	}
 
-	scaffold.txClient.AssertNotCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
+	scaffold.txClient.AssertNotCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything, mock.Anything)
 }
 
 func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
@@ -605,7 +605,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
 			Reason: mtypes.LeaseClosedReasonUnspecified,
 		},
 	}
-	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
+	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything, mock.Anything)
 
 	// Should have called unreserve
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID)

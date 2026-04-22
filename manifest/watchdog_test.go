@@ -38,7 +38,7 @@ func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *
 	scaffold.broadcasts = make(chan []sdk.Msg, 1)
 
 	txClientMock := &clientmocks.TxClient{}
-	txClientMock.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	txClientMock.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
 		scaffold.broadcasts <- args.Get(1).([]sdk.Msg)
 	}).Return(&sdk.Result{}, nil)
 

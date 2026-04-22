@@ -96,6 +96,7 @@ const (
 	FlagManifestTimeout                  = "manifest-timeout"
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
+	FlagWithdrawalBatchMaxMsgs           = "withdrawal-batch-max-msgs"
 	FlagLeaseFundsMonitorInterval        = "lease-funds-monitor-interval"
 	FlagMinimumBalance                   = "minimum-balance"
 	FlagProviderConfig                   = "provider-config"
@@ -203,6 +204,10 @@ func RunCmd() *cobra.Command {
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+			}
+
+			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < 10 || maxMsgs > 100 {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [10, 100]`, FlagWithdrawalBatchMaxMsgs, maxMsgs) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
@@ -675,6 +680,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.BalanceCheckerCfg = provider.BalanceCheckerConfig{
 		WithdrawalPeriod:        viper.GetDuration(FlagWithdrawalPeriod),
 		LeaseFundsCheckInterval: viper.GetDuration(FlagLeaseFundsMonitorInterval),
+		WithdrawalBatchMaxMsgs:  viper.GetInt(FlagWithdrawalBatchMaxMsgs),
 	}
 
 	config.BidPricingStrategy = pricing

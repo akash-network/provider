@@ -76,7 +76,7 @@ func (wd *watchdog) run() {
 				Reason: mtypes.LeaseClosedReasonManifestTimeout,
 			}
 
-			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError(), aclient.WithPriority())) // bidClose should be priority to release the reserved resources ASAP
 		})
 	case err = <-wd.lc.ShutdownRequest():
 	}
