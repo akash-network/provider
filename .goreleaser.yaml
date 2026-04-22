@@ -237,112 +237,51 @@ checksum:
   # Default is `{{ .ProjectName }}_{{ .Version }}_checksums.txt`.
   name_template: "provider-services_{{ .Version }}_checksums.txt"
 
-dockers:
-  - dockerfile: Dockerfile
+dockers_v2:
+  - id: provider-services
     ids:
       - provider-services-linux-amd64
-    use: buildx
-    goarch: amd64
-    goos: linux
-    build_flag_templates:
-      - --pull
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
-  - dockerfile: Dockerfile
-    ids:
       - provider-services-linux-arm64
-    use: buildx
-    goarch: arm64
-    goos: linux
-    build_flag_templates:
-      - --pull
-      - --platform=linux/arm64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
-  - dockerfile: Dockerfile.debug
+    dockerfile: Dockerfile
+    images:
+      - "{{ .Env.DOCKER_IMAGE }}"
+    tags:
+      - "{{ .ShortCommit }}"
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: "{{ .ProjectName }}"
+      org.opencontainers.image.url: "https://github.com/akash-network/provider"
+      org.opencontainers.image.source: "https://github.com/akash-network/provider"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: '{{ time "2006-01-02T15:04:05Z07:00" }}'
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+  - id: provider-services-debug
     ids:
       - provider-services-linux-amd64-debug
-    use: buildx
-    goarch: amd64
-    goos: linux
-    build_flag_templates:
-      - --pull
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
-  - dockerfile: Dockerfile.debug
-    ids:
       - provider-services-linux-arm64-debug
-    use: buildx
-    goarch: arm64
-    goos: linux
-    build_flag_templates:
-      - --pull
-      - --platform=linux/arm64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.source=https://github.com/akash-network/provider
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
-docker_manifests:
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:latest"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-debug"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64-debug"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-debug"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64-debug"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:latest-debug"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
+    dockerfile: Dockerfile.debug
+    images:
+      - "{{ .Env.DOCKER_IMAGE }}"
+    tags:
+      - "{{ .ShortCommit }}-debug"
+      - "{{ .Version }}-debug"
+      - latest-debug
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: "{{ .ProjectName }}"
+      org.opencontainers.image.url: "https://github.com/akash-network/provider"
+      org.opencontainers.image.source: "https://github.com/akash-network/provider"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: '{{ time "2006-01-02T15:04:05Z07:00" }}'
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
 
 
 nfpms:
