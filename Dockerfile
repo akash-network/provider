@@ -1,7 +1,8 @@
 FROM ubuntu:noble
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
-COPY provider-services /usr/bin/
+ARG TARGETPLATFORM
+COPY ${TARGETPLATFORM}/provider-services /usr/bin/
 
 ENV DEBIAN_FRONTEND=noninteractive
 
