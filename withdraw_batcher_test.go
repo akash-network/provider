@@ -3,9 +3,11 @@ package provider
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
+	"cosmossdk.io/log"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +18,8 @@ import (
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	"pkg.akt.dev/go/testutil"
 )
+
+func testLogger() log.Logger { return log.NewLogger(io.Discard) }
 
 // batcherFixture wires a withdrawBatcher to a mock TxClient whose broadcast
 // can be blocked until released, enabling deterministic in-flight tests.
@@ -47,7 +51,7 @@ func newBatcherFixture(t *testing.T, maxMsgs int, block bool) *batcherFixture {
 		}).
 		Return(&sdk.TxResponse{}, nil)
 
-	f.batcher = newWithdrawBatcher(f.tx, time.Second, maxMsgs)
+	f.batcher = newWithdrawBatcher(f.tx, testLogger(), time.Second, maxMsgs)
 
 	return f
 }
@@ -241,7 +245,7 @@ func TestWithdrawBatcher_EnqueueDedupesAfterFailure(t *testing.T) {
 		}).
 		Return(&sdk.TxResponse{}, nil).Once()
 
-	b := newWithdrawBatcher(tx, time.Second, 50)
+	b := newWithdrawBatcher(tx, testLogger(), time.Second, 50)
 	lidA := testutil.LeaseID(t)
 	lidB := testutil.LeaseID(t)
 
@@ -277,7 +281,7 @@ func TestWithdrawBatcher_ErrorPropagatesToDone(t *testing.T) {
 	tx.On("BroadcastMsgs", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, wantErr)
 
-	b := newWithdrawBatcher(tx, time.Second, 50)
+	b := newWithdrawBatcher(tx, testLogger(), time.Second, 50)
 	b.Enqueue(testutil.LeaseID(t))
 	require.True(t, b.Flush(context.Background()))
 
@@ -303,7 +307,7 @@ func TestWithdrawBatcher_TimeoutAppliedPerCall(t *testing.T) {
 		}).
 		Return(nil, context.DeadlineExceeded)
 
-	b := newWithdrawBatcher(tx, 50*time.Millisecond, 50)
+	b := newWithdrawBatcher(tx, testLogger(), 50*time.Millisecond, 50)
 	b.Enqueue(testutil.LeaseID(t))
 	require.True(t, b.Flush(context.Background()))
 	err := <-b.Done()

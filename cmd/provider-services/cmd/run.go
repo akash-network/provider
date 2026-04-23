@@ -190,6 +190,10 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Store logger in context before TxPersistentPreRunE so that the
+			// serialBroadcaster (created during DiscoverClient) picks it up via ctxlog.Logger(ctx).
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, log.NewLogger(os.Stderr))
+
 			err := TxPersistentPreRunE(cmd, args)
 			if err != nil {
 				return err
@@ -270,7 +274,7 @@ func RunCmd() *cobra.Command {
 				return err
 			}
 
-			logger := log.NewLogger(os.Stderr)
+			logger := ctxlog.LogcFromCtx(cmd.Context())
 
 			kubeLog := logger.With("component", "k8s")
 

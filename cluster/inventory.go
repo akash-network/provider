@@ -419,6 +419,11 @@ func countPendingIPs(state *inventoryServiceState) uint {
 }
 
 func (is *inventoryService) handleRequest(req inventoryRequest, state *inventoryServiceState) {
+	if state.inventory == nil {
+		req.ch <- inventoryResponse{err: errInventoryNotAvailableYet}
+		return
+	}
+
 	// convert the resources to the committed amount
 	resourcesToCommit := is.resourcesToCommit(req.resources)
 	// create new registration if capacity available

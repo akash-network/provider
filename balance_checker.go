@@ -78,17 +78,18 @@ func newBalanceChecker(
 	bus pubsub.Bus,
 	cfg BalanceCheckerConfig,
 ) (*balanceChecker, error) {
+	bcLog := clientSession.Log().With("cmp", "balance-checker")
 	bc := &balanceChecker{
 		ctx:     ctx,
 		session: clientSession,
-		log:     clientSession.Log().With("cmp", "balance-checker"),
+		log:     bcLog,
 		bus:     bus,
 		lc:      lifecycle.New(),
 		ownAddr: accAddr,
 		aqc:     aqc,
 		leases:  make(map[mtypes.LeaseID]*leaseState),
 		cfg:     cfg,
-		batcher: newWithdrawBatcher(clientSession.Client().Tx(), withdrawTimeout, cfg.WithdrawalBatchMaxMsgs),
+		batcher: newWithdrawBatcher(clientSession.Client().Tx(), bcLog.With("cmp", "withdraw-batcher"), withdrawTimeout, cfg.WithdrawalBatchMaxMsgs),
 	}
 
 	startCh := make(chan error, 1)

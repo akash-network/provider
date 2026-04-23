@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	"cosmossdk.io/log"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
@@ -24,6 +25,7 @@ import (
 // goroutine must be called from a single goroutine.
 type withdrawBatcher struct {
 	tx      aclient.TxClient
+	log     log.Logger
 	timeout time.Duration
 	maxMsgs int
 
@@ -32,12 +34,13 @@ type withdrawBatcher struct {
 	doneCh   chan error
 }
 
-func newWithdrawBatcher(tx aclient.TxClient, timeout time.Duration, maxMsgs int) *withdrawBatcher {
+func newWithdrawBatcher(tx aclient.TxClient, logger log.Logger, timeout time.Duration, maxMsgs int) *withdrawBatcher {
 	if maxMsgs < 1 {
 		panic(fmt.Sprintf("withdrawBatcher: maxMsgs must be >= 1, got %d", maxMsgs))
 	}
 	return &withdrawBatcher{
 		tx:      tx,
+		log:     logger,
 		timeout: timeout,
 		maxMsgs: maxMsgs,
 		doneCh:  make(chan error, 1),
@@ -51,9 +54,11 @@ func newWithdrawBatcher(tx aclient.TxClient, timeout time.Duration, maxMsgs int)
 // would risk failing the entire atomic tx on the second message.
 func (b *withdrawBatcher) Enqueue(lid mtypes.LeaseID) {
 	if slices.Contains(b.pending, lid) {
+		b.log.Debug("batcher: enqueue dedup", "lease", lid, "pending", len(b.pending), "inFlight", b.inFlight)
 		return
 	}
 	b.pending = append(b.pending, lid)
+	b.log.Debug("batcher: enqueue", "lease", lid, "pending", len(b.pending), "inFlight", b.inFlight)
 }
 
 // Remove drops a lease id from the pending batch.
@@ -77,7 +82,11 @@ func (b *withdrawBatcher) Pending() int {
 // Flush starts a broadcast with up to maxMsgs pending lease ids when idle.
 // Returns true if a broadcast was started, false if nothing to do or already in-flight.
 func (b *withdrawBatcher) Flush(ctx context.Context) bool {
-	if b.inFlight || len(b.pending) == 0 {
+	if b.inFlight {
+		b.log.Debug("batcher: flush skipped (in-flight)", "pending", len(b.pending))
+		return false
+	}
+	if len(b.pending) == 0 {
 		return false
 	}
 
@@ -91,8 +100,12 @@ func (b *withdrawBatcher) Flush(ctx context.Context) bool {
 	b.pending = b.pending[n:]
 	b.inFlight = true
 
+	b.log.Info("batcher: flush", "batch", n, "remaining", len(b.pending), "maxMsgs", b.maxMsgs)
+
 	go func() {
+		start := time.Now()
 		err := b.broadcast(ctx, batch)
+		b.log.Info("batcher: broadcast done", "batch", n, "dur", time.Since(start), "err", err)
 		select {
 		case <-ctx.Done():
 		case b.doneCh <- err:
