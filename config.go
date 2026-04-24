@@ -20,6 +20,7 @@ type Config struct {
 	BidPricingStrategy          bidengine.BidPricingStrategy
 	BidDeposit                  sdk.Coin
 	BidTimeout                  time.Duration
+	BidBatchMaxMsgs             int
 	ManifestTimeout             time.Duration
 	BalanceCheckerCfg           BalanceCheckerConfig
 	Attributes                  attrtypes.Attributes

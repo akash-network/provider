@@ -93,6 +93,7 @@ const (
 	FlagAuthPem                          = "auth-pem"
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
+	FlagBidBatchMaxMsgs                  = "bid-batch-max-msgs"
 	FlagManifestTimeout                  = "manifest-timeout"
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
@@ -489,6 +490,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
+	bidBatchMaxMsgs := viper.GetInt(FlagBidBatchMaxMsgs)
+	if bidBatchMaxMsgs < 1 || bidBatchMaxMsgs > 50 {
+		return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [1, 50]`, FlagBidBatchMaxMsgs, bidBatchMaxMsgs) // nolint: err113
+	}
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
 	metricsListener := viper.GetString(FlagMetricsListener)
 	providerConfig := viper.GetString(FlagProviderConfig)
@@ -663,6 +668,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressStaticHosts = deploymentIngressStaticHosts
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
+	config.BidBatchMaxMsgs = bidBatchMaxMsgs
 	config.ManifestTimeout = manifestTimeout
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod

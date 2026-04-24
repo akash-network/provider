@@ -90,6 +90,7 @@ func NewService(ctx context.Context,
 		PricingStrategy: cfg.BidPricingStrategy,
 		Deposit:         cfg.BidDeposit,
 		BidTimeout:      cfg.BidTimeout,
+		BidBatchMaxMsgs: cfg.BidBatchMaxMsgs,
 		Attributes:      cfg.Attributes,
 		MaxGroupVolumes: cfg.MaxGroupVolumes,
 	})

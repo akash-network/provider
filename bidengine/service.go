@@ -3,6 +3,7 @@ package bidengine
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
@@ -78,21 +79,34 @@ func NewService(
 	ctx, cancel := context.WithCancel(pctx)
 	group, _ := errgroup.WithContext(ctx)
 
+	const bidBroadcastTimeout = 30 * time.Second
+
+	if cfg.BidBatchMaxMsgs <= 0 {
+		cfg.BidBatchMaxMsgs = 10
+	}
+
 	s := &service{
-		session:  session,
-		cluster:  cluster,
-		bus:      bus,
-		sub:      sub,
-		statusch: make(chan chan<- *apclient.BidEngineStatus),
-		orders:   make(map[string]*order),
-		drainch:  make(chan *order),
-		ordersch: make(chan []mtypes.OrderID, 1000),
-		group:    group,
-		cancel:   cancel,
-		lc:       lifecycle.New(),
-		cfg:      cfg,
-		pass:     providerAttrService,
-		waiter:   waiter,
+		session:     session,
+		cluster:     cluster,
+		bus:         bus,
+		sub:         sub,
+		statusch:    make(chan chan<- *apclient.BidEngineStatus),
+		orders:      make(map[string]*order),
+		drainch:     make(chan *order),
+		ordersch:    make(chan []mtypes.OrderID, 1000),
+		bidSubmitCh: make(chan bidRequest, 100),
+		bidBatcher: newBidBatcher(
+			session.Client().Tx(),
+			session.Log().With("cmp", "bid-batcher"),
+			bidBroadcastTimeout,
+			cfg.BidBatchMaxMsgs,
+		),
+		group:  group,
+		cancel: cancel,
+		lc:     lifecycle.New(),
+		cfg:    cfg,
+		pass:   providerAttrService,
+		waiter: waiter,
 	}
 
 	go s.lc.WatchContext(pctx)
@@ -127,6 +141,11 @@ type service struct {
 	drainch chan *order
 	// ordersch receives new orders to process from the blockchain.
 	ordersch chan []mtypes.OrderID
+
+	// bidSubmitCh receives MsgCreateBid requests from order goroutines.
+	bidSubmitCh chan bidRequest
+	// bidBatcher coalesces MsgCreateBid requests into batched transactions.
+	bidBatcher *bidBatcher
 
 	group *errgroup.Group
 	// cancel holds the cancel function of the service context.
@@ -318,6 +337,12 @@ loop:
 			ch <- &apclient.BidEngineStatus{
 				Orders: uint32(len(s.orders)), // nolint: gosec
 			}
+		case req := <-s.bidSubmitCh:
+			s.bidBatcher.Enqueue(req)
+			s.bidBatcher.Flush(ctx)
+		case <-s.bidBatcher.Done():
+			s.bidBatcher.MarkDone()
+			s.bidBatcher.Flush(ctx)
 		case order := <-s.drainch:
 			// child done
 			key := mquery.OrderPath(order.orderID)
