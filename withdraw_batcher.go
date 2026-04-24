@@ -30,7 +30,7 @@ type withdrawBatcher struct {
 	timeout time.Duration
 	maxMsgs int
 
-	inUse atomic.Int32
+	inUse atomic.Bool
 
 	pending  []mtypes.LeaseID
 	inFlight bool
@@ -38,13 +38,13 @@ type withdrawBatcher struct {
 }
 
 func (b *withdrawBatcher) enter() {
-	if !b.inUse.CompareAndSwap(0, 1) {
+	if b.inUse.Swap(true) { // Swap returns the previous value
 		panic("withdrawBatcher: concurrent use detected")
 	}
 }
 
 func (b *withdrawBatcher) exit() {
-	b.inUse.Store(0)
+	b.inUse.Store(false)
 }
 
 func newWithdrawBatcher(tx aclient.TxClient, logger log.Logger, timeout time.Duration, maxMsgs int) *withdrawBatcher {
