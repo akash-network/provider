@@ -815,7 +815,7 @@ func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 	})
 
 	if result != nil {
-		c.log.Error("teardown lease: unable to delete namespace", "ns", builder.LidNS(lid), "error", result)
+		c.log.Error("teardown lease: unable to delete namespace", "ns", builder.LidNS(lid), "err", result)
 		if kerrors.IsNotFound(result) {
 			result = nil
 		}
@@ -825,7 +825,7 @@ func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 	})
 
 	if err != nil {
-		c.log.Error("teardown lease: unable to delete manifest", "ns", builder.LidNS(lid), "error", err)
+		c.log.Error("teardown lease: unable to delete manifest", "ns", builder.LidNS(lid), "err", err)
 	}
 
 	return result

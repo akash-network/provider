@@ -384,7 +384,7 @@ func (m *manager) validateRequests() {
 		default:
 		}
 		if err := m.validateRequest(req); err != nil {
-			m.log.Error("invalid manifest", "error", err.Error())
+			m.log.Error("invalid manifest", "err", err.Error())
 			req.ch <- err
 			continue
 		}

@@ -236,7 +236,7 @@ loop:
 				if matchBidNotFound.MatchString(err.Error()) {
 					bidFound = false
 				} else {
-					o.session.Log().Error("could not get existing bid", "error", err, "errtype", fmt.Sprintf("%T", err))
+					o.session.Log().Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
 					break loop
 				}
 			}
@@ -334,7 +334,7 @@ loop:
 			o.log.Info("group fetched")
 
 			if result.Error() != nil {
-				o.log.Error("fetching group", "error", result.Error())
+				o.log.Error("fetching group", "err", result.Error())
 				break loop
 			}
 
@@ -350,7 +350,7 @@ loop:
 
 			if result.Error() != nil {
 				shouldBidCounter.WithLabelValues(metricsutils.FailLabel).Inc()
-				o.log.Error("failure during checking should bid", "error", result.Error())
+				o.log.Error("failure during checking should bid", "err", result.Error())
 				break loop
 			}
 
@@ -373,7 +373,7 @@ loop:
 
 			if result.Error() != nil {
 				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel)
-				o.log.Error("reserving resources", "error", result.Error())
+				o.log.Error("reserving resources", "err", result.Error())
 				break loop
 			}
 
@@ -409,7 +409,7 @@ loop:
 		case result := <-pricech:
 			pricech = nil
 			if result.Error() != nil {
-				o.log.Error("error calculating price", "error", result.Error())
+				o.log.Error("error calculating price", "err", result.Error())
 				break loop
 			}
 
@@ -443,7 +443,7 @@ loop:
 			bidch = nil
 			if result.Error() != nil {
 				bidCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
-				o.log.Error("bid failed", "error", result.Error())
+				o.log.Error("bid failed", "err", result.Error())
 				break loop
 			}
 
@@ -478,7 +478,7 @@ loop:
 		if reservation != nil {
 			o.log.Debug("unreserving reservation")
 			if err := o.cluster.Unreserve(reservation.OrderID()); err != nil {
-				o.log.Error("error unreserving reservation", "error", err)
+				o.log.Error("error unreserving reservation", "err", err)
 				reservationCounter.WithLabelValues("close", metricsutils.FailLabel)
 			} else {
 				reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel)
@@ -495,7 +495,7 @@ loop:
 
 			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 			if err != nil {
-				o.log.Error("closing bid", "error", err)
+				o.log.Error("closing bid", "err", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
 			} else {
 				o.log.Info("bid closed", "order-id", o.orderID)
@@ -587,7 +587,7 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 
 	if err := group.GroupSpec.ValidateBasic(); err != nil {
 		o.log.Error("unable to fulfill: group validation error",
-			"error", err)
+			"err", err)
 		return false, nil
 	}
 	return true, nil

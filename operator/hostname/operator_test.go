@@ -78,7 +78,7 @@ package hostname
 // 	require.Equal(t, directive.NextTimeout, uint32(60000))
 // 	require.Equal(t, directive.MaxBodySize, uint32(1048576))
 // 	require.Equal(t, directive.NextTries, uint32(3))
-// 	require.Equal(t, directive.NextCases, []string{"error", "timeout"})
+// 	require.Equal(t, directive.NextCases, []string{"error",  "timeout"})
 // }
 //
 // func TestBuildDirectiveWithValues(t *testing.T) {
