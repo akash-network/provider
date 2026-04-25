@@ -91,72 +91,44 @@ builds:
 archives:
   - formats:
       - binary
-dockers:
-  - dockerfile: Dockerfile
+dockers_v2:
+  - id: provider-services
     ids:
       - provider-services-linux-amd64
-    use: buildx
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url={{.GitURL}}
-      - --label=org.opencontainers.image.source={{.GitURL}}
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
-  - dockerfile: Dockerfile
-    ids:
       - provider-services-linux-arm64
-    use: buildx
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - --platform=linux/arm64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url={{.GitURL}}
-      - --label=org.opencontainers.image.source={{.GitURL}}
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
-  - dockerfile: Dockerfile.debug
+    dockerfile: Dockerfile
+    images:
+      - "{{ .Env.DOCKER_IMAGE }}"
+    tags:
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: "{{ .ProjectName }}"
+      org.opencontainers.image.url: "{{.GitURL}}"
+      org.opencontainers.image.source: "{{.GitURL}}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: '{{ time "2006-01-02T15:04:05Z07:00" }}'
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+  - id: provider-services-debug
     ids:
       - provider-services-linux-amd64-debug
-    use: buildx
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - --platform=linux/amd64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url={{.GitURL}}
-      - --label=org.opencontainers.image.source={{.GitURL}}
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
-  - dockerfile: Dockerfile.debug
-    ids:
       - provider-services-linux-arm64-debug
-    use: buildx
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - --platform=linux/arm64
-      - --label=org.opencontainers.image.title={{ .ProjectName }}
-      - --label=org.opencontainers.image.description={{ .ProjectName }}
-      - --label=org.opencontainers.image.url={{.GitURL}}
-      - --label=org.opencontainers.image.source={{.GitURL}}
-      - --label=org.opencontainers.image.version={{ .Version }}
-      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
-      - --label=org.opencontainers.image.revision={{ .FullCommit }}
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
+    dockerfile: Dockerfile.debug
+    images:
+      - "{{ .Env.DOCKER_IMAGE }}"
+    tags:
+      - latest-debug
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.title: "{{ .ProjectName }}"
+      org.opencontainers.image.description: "{{ .ProjectName }}"
+      org.opencontainers.image.url: "{{.GitURL}}"
+      org.opencontainers.image.source: "{{.GitURL}}"
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.created: '{{ time "2006-01-02T15:04:05Z07:00" }}'
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
