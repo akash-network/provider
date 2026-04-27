@@ -107,7 +107,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 
 	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
 	if err != nil {
-		s.log.Error("unable to publish LeaseAddFundsMonitor event", "error", err, "lease", lid)
+		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lease", lid)
 	}
 
 	return dm

@@ -692,10 +692,10 @@ func wsLogWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) {
 
 	logs, err := cfg.client.LeaseLogs(cctx, cfg.lid, cfg.services, cfg.follow, cfg.tailLines)
 	if err != nil {
-		cfg.log.Error("couldn't fetch logs", "error", err.Error())
+		cfg.log.Error("couldn't fetch logs", "err", err.Error())
 		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(err), ""))
 		if err != nil {
-			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
+			cfg.log.Error("couldn't push control message through websocket", "err", err.Error())
 		}
 		return
 	}
@@ -786,10 +786,10 @@ func wsEventWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) 
 
 	evts, err := cfg.client.LeaseEvents(cctx, cfg.lid, cfg.services, cfg.follow)
 	if err != nil {
-		cfg.log.Error("couldn't fetch events", "error", err.Error())
+		cfg.log.Error("couldn't fetch events", "err", err.Error())
 		err = ws.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocketCloseCodeFrom(err), ""))
 		if err != nil {
-			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
+			cfg.log.Error("couldn't push control message through websocket", "err", err.Error())
 		}
 		return
 	}
@@ -799,7 +799,7 @@ func wsEventWriter(ctx context.Context, ws *websocket.Conn, cfg wsStreamConfig) 
 			websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocketLeaseNotFound, ""))
 		if err != nil {
-			cfg.log.Error("couldn't push control message through websocket", "error", err.Error())
+			cfg.log.Error("couldn't push control message through websocket", "err", err.Error())
 		}
 		return
 	}
