@@ -275,7 +275,7 @@ loop:
 	for {
 		select {
 		case shutdownErr := <-s.lc.ShutdownRequest():
-			s.session.Log().Debug("received shutdown request", "error", shutdownErr)
+			s.session.Log().Debug("received shutdown request", "err", shutdownErr)
 			s.lc.ShutdownInitiated(shutdownErr)
 			break loop
 		case orders := <-s.ordersch:
@@ -284,7 +284,7 @@ loop:
 				s.session.Log().Debug("creating catchup order", "order", key)
 				order, err := newOrder(s, orderID, s.cfg, s.pass, true)
 				if err != nil {
-					s.session.Log().Error("creating catchup order", "order", key, "error", err)
+					s.session.Log().Error("creating catchup order", "order", key, "err", err)
 					continue
 				}
 				s.orders[key] = order
@@ -306,7 +306,7 @@ loop:
 				// create an order object for managing the bid process and order lifecycle
 				order, err := newOrder(s, ev.ID, s.cfg, s.pass, false)
 				if err != nil {
-					s.session.Log().Error("handling order", "order", key, "error", err)
+					s.session.Log().Error("handling order", "order", key, "err", err)
 					break
 				}
 

@@ -60,7 +60,7 @@ func (w *operatorWaiter) run(ctx context.Context) {
 		for {
 			err := waitable.Check(ctx)
 			if err != nil {
-				w.log.Error("not yet ready", "waitable", waitable, "error", err)
+				w.log.Error("not yet ready", "waitable", waitable, "err", err)
 
 				select {
 				case <-ctx.Done():
