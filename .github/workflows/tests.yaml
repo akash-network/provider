@@ -97,7 +97,7 @@ jobs:
           if [[ $(git ls-files '*.yml' ':!:.codecov.yml' | wc -l) -ne 0 ]]; then git ls-files '*.yml' ':!:.codecov.yml' && exit 1;fi
 
   shellcheck:
-    runs-on: [self-hosted, akash]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
