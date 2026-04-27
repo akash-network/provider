@@ -35,7 +35,7 @@ jobs:
       - run: make docker-image
 
   tests:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
@@ -43,7 +43,7 @@ jobs:
       - run: make test-full
 
   lint:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
@@ -76,7 +76,7 @@ jobs:
         run: make release
 
   coverage:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
@@ -89,7 +89,7 @@ jobs:
           files: .cache/tests/coverage.txt
 
   yamlcheck:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
       - name: check-yml-count
@@ -97,7 +97,7 @@ jobs:
           if [[ $(git ls-files '*.yml' ':!:.codecov.yml' | wc -l) -ne 0 ]]; then git ls-files '*.yml' ':!:.codecov.yml' && exit 1;fi
 
   shellcheck:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
       - name: Setup environment
