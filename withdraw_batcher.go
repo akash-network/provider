@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"cosmossdk.io/log"
@@ -21,17 +22,29 @@ import (
 //   - In-flight: subsequent Enqueue calls accumulate in pending.
 //   - On MarkDone: callers invoke Flush which drains up to maxMsgs from pending.
 //
-// Not safe for concurrent use. All methods except the internal broadcast
-// goroutine must be called from a single goroutine.
+// Not safe for concurrent use. All public methods must be called from a single
+// goroutine. Concurrent calls panic to surface developer mistakes early.
 type withdrawBatcher struct {
 	tx      aclient.TxClient
 	log     log.Logger
 	timeout time.Duration
 	maxMsgs int
 
+	inUse atomic.Bool
+
 	pending  []mtypes.LeaseID
 	inFlight bool
 	doneCh   chan error
+}
+
+func (b *withdrawBatcher) enter() {
+	if b.inUse.Swap(true) { // Swap returns the previous value
+		panic("withdrawBatcher: concurrent use detected")
+	}
+}
+
+func (b *withdrawBatcher) exit() {
+	b.inUse.Store(false)
 }
 
 func newWithdrawBatcher(tx aclient.TxClient, logger log.Logger, timeout time.Duration, maxMsgs int) *withdrawBatcher {
@@ -53,6 +66,8 @@ func newWithdrawBatcher(tx aclient.TxClient, logger log.Logger, timeout time.Dur
 // dedupe so the next batch doesn't carry a duplicate MsgWithdrawLease, which
 // would risk failing the entire atomic tx on the second message.
 func (b *withdrawBatcher) Enqueue(lid mtypes.LeaseID) {
+	b.enter()
+	defer b.exit()
 	if slices.Contains(b.pending, lid) {
 		b.log.Debug("batcher: enqueue dedup", "lease", lid, "pending", len(b.pending), "inFlight", b.inFlight)
 		return
@@ -64,6 +79,8 @@ func (b *withdrawBatcher) Enqueue(lid mtypes.LeaseID) {
 // Remove drops a lease id from the pending batch.
 // Does not affect an in-flight broadcast.
 func (b *withdrawBatcher) Remove(lid mtypes.LeaseID) {
+	b.enter()
+	defer b.exit()
 	b.pending = slices.DeleteFunc(b.pending, func(p mtypes.LeaseID) bool {
 		return p == lid
 	})
@@ -71,17 +88,23 @@ func (b *withdrawBatcher) Remove(lid mtypes.LeaseID) {
 
 // InFlight reports whether a broadcast is currently running.
 func (b *withdrawBatcher) InFlight() bool {
+	b.enter()
+	defer b.exit()
 	return b.inFlight
 }
 
 // Pending reports the number of queued lease ids not yet broadcast.
 func (b *withdrawBatcher) Pending() int {
+	b.enter()
+	defer b.exit()
 	return len(b.pending)
 }
 
 // Flush starts a broadcast with up to maxMsgs pending lease ids when idle.
 // Returns true if a broadcast was started, false if nothing to do or already in-flight.
 func (b *withdrawBatcher) Flush(ctx context.Context) bool {
+	b.enter()
+	defer b.exit()
 	if b.inFlight {
 		b.log.Debug("batcher: flush skipped (in-flight)", "pending", len(b.pending))
 		return false
@@ -90,10 +113,7 @@ func (b *withdrawBatcher) Flush(ctx context.Context) bool {
 		return false
 	}
 
-	n := len(b.pending)
-	if n > b.maxMsgs {
-		n = b.maxMsgs
-	}
+	n := min(len(b.pending), b.maxMsgs)
 
 	batch := make([]mtypes.LeaseID, n)
 	copy(batch, b.pending[:n])
@@ -105,7 +125,7 @@ func (b *withdrawBatcher) Flush(ctx context.Context) bool {
 	go func() {
 		start := time.Now()
 		err := b.broadcast(ctx, batch)
-		b.log.Info("batcher: broadcast done", "batch", n, "dur", time.Since(start), "err", err)
+		b.log.Info("batcher: broadcast done", "batch", n, "duration", time.Since(start), "err", err)
 		select {
 		case <-ctx.Done():
 		case b.doneCh <- err:
@@ -123,6 +143,8 @@ func (b *withdrawBatcher) Done() <-chan error {
 
 // MarkDone clears the in-flight flag. Must be called after reading Done().
 func (b *withdrawBatcher) MarkDone() {
+	b.enter()
+	defer b.exit()
 	b.inFlight = false
 }
 

@@ -137,8 +137,10 @@ const (
 )
 
 const (
-	serviceIPOperator       = "ip-operator"
-	serviceHostnameOperator = "hostname-operator"
+	serviceIPOperator         = "ip-operator"
+	serviceHostnameOperator   = "hostname-operator"
+	withdrawalBatchMaxMsgsMin = 10
+	withdrawalBatchMaxMsgsMax = 100
 )
 
 var (
@@ -214,8 +216,8 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
-			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < 10 || maxMsgs > 100 {
-				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [10, 100]`, FlagWithdrawalBatchMaxMsgs, maxMsgs) // nolint: err113
+			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < withdrawalBatchMaxMsgsMin || maxMsgs > withdrawalBatchMaxMsgsMax {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagWithdrawalBatchMaxMsgs, maxMsgs, withdrawalBatchMaxMsgsMin, withdrawalBatchMaxMsgsMax) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {

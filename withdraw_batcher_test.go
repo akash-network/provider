@@ -19,6 +19,8 @@ import (
 	"pkg.akt.dev/go/testutil"
 )
 
+const twoSecondsTestTimeout = 2 * time.Second
+
 func testLogger() log.Logger { return log.NewLogger(io.Discard) }
 
 // batcherFixture wires a withdrawBatcher to a mock TxClient whose broadcast
@@ -61,7 +63,7 @@ func (f *batcherFixture) waitCaptured() []sdk.Msg {
 	select {
 	case msgs := <-f.captured:
 		return msgs
-	case <-time.After(2 * time.Second):
+	case <-time.After(twoSecondsTestTimeout):
 		f.t.Fatal("timed out waiting for broadcast")
 		return nil
 	}
@@ -72,7 +74,7 @@ func (f *batcherFixture) waitDone() error {
 	select {
 	case err := <-f.batcher.Done():
 		return err
-	case <-time.After(2 * time.Second):
+	case <-time.After(twoSecondsTestTimeout):
 		f.t.Fatal("timed out waiting for batch completion")
 		return nil
 	}
