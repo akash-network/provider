@@ -311,7 +311,7 @@ loop:
 				scheduledWithdraw := false
 
 				if res.err != nil {
-					bc.log.Info("couldn't check lease balance. retrying in 1m", "leaseId", res.lid, "err", res.err.Error())
+					bc.log.Info("couldn't check lease balance. retrying in 1m", "leaseId", res.lid, "err", res.err)
 					timerPeriod = time.Minute
 				} else if !withdraw && !lState.scheduledWithdrawAt.IsZero() {
 					withdrawIn := time.Until(lState.scheduledWithdrawAt)

@@ -384,7 +384,7 @@ func (m *manager) validateRequests() {
 		default:
 		}
 		if err := m.validateRequest(req); err != nil {
-			m.log.Error("invalid manifest", "err", err.Error())
+			m.log.Error("invalid manifest", "err", err)
 			req.ch <- err
 			continue
 		}
@@ -474,7 +474,7 @@ func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest
 			if !m.config.HTTPServicesRequireAtLeastOneHost {
 				continue
 			}
-			// For each service that exposes via an Ingress, then require a hsotname
+			// For each service that exposes via an Ingress, then require a hostname
 			for _, service := range mgroup.Services {
 				for _, expose := range service.Expose {
 					if expose.IsIngress() && len(expose.Hosts) == 0 {

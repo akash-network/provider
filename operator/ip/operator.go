@@ -541,7 +541,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	owner := vars["owner"]
 	_, err = sdktypes.AccAddressFromBech32(owner) // Validate this is a bech32 address
 	if err != nil {
-		op.log.Error("could not parse owner address as bech32", "onwer", owner, "err", err)
+		op.log.Error("could not parse owner address as bech32", "owner", owner, "err", err)
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
