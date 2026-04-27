@@ -517,7 +517,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	dseqStr := vars["dseq"]
 	dseq, err := strconv.ParseUint(dseqStr, 10, 64)
 	if err != nil {
-		op.log.Error("could not parse path component as uint64", "dseq", dseqStr, "error", err)
+		op.log.Error("could not parse path component as uint64", "dseq", dseqStr, "err", err)
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -525,7 +525,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	gseqStr := vars["gseq"]
 	gseq, err := strconv.ParseUint(gseqStr, 10, 32)
 	if err != nil {
-		op.log.Error("could not parse path component as uint32", "gseq", gseqStr, "error", err)
+		op.log.Error("could not parse path component as uint32", "gseq", gseqStr, "err", err)
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -533,7 +533,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	oseqStr := vars["oseq"]
 	oseq, err := strconv.ParseUint(oseqStr, 10, 32)
 	if err != nil {
-		op.log.Error("could not parse path component as uint32", "oseq", oseqStr, "error", err)
+		op.log.Error("could not parse path component as uint32", "oseq", oseqStr, "err", err)
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -541,7 +541,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	owner := vars["owner"]
 	_, err = sdktypes.AccAddressFromBech32(owner) // Validate this is a bech32 address
 	if err != nil {
-		op.log.Error("could not parse owner address as bech32", "onwer", owner, "error", err)
+		op.log.Error("could not parse owner address as bech32", "owner", owner, "err", err)
 		rw.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -556,7 +556,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 
 	ipStatus, err := op.mllbc.GetIPAddressStatusForLease(req.Context(), leaseID)
 	if err != nil {
-		op.log.Error("Could not get IP address status", "lease-id", leaseID, "error", err)
+		op.log.Error("Could not get IP address status", "lease-id", leaseID, "err", err)
 		handleHTTPError(op, rw, req, err, http.StatusInternalServerError)
 		return
 	}
@@ -584,7 +584,7 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 	}
 	err = encoder.Encode(responseData)
 	if err != nil {
-		op.log.Error("failed writing JSON of ip status response", "error", err)
+		op.log.Error("failed writing JSON of ip status response", "err", err)
 	}
 }
 
