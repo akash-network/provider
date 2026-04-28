@@ -182,7 +182,7 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Int(FlagBidBatchMaxMsgs, 10, "max number of MsgCreateBid messages coalesced into a single broadcast. valid range [1, 50]")
+	cmd.Flags().Int(FlagBidBatchMaxMsgs, 10, fmt.Sprintf("max number of MsgCreateBid messages coalesced into a single broadcast. valid range [%d, %d]", batchMaxMsgsMin, batchMaxMsgsMax))
 	if err := viper.BindPFlag(FlagBidBatchMaxMsgs, cmd.Flags().Lookup(FlagBidBatchMaxMsgs)); err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Int(FlagWithdrawalBatchMaxMsgs, 50, fmt.Sprintf("max number of MsgWithdrawLease messages coalesced into a single broadcast. valid range [%d, %d]", withdrawalBatchMaxMsgsMin, withdrawalBatchMaxMsgsMax))
+	cmd.Flags().Int(FlagWithdrawalBatchMaxMsgs, 50, fmt.Sprintf("max number of MsgWithdrawLease messages coalesced into a single broadcast. valid range [%d, %d]", batchMaxMsgsMin, batchMaxMsgsMax))
 	if err := viper.BindPFlag(FlagWithdrawalBatchMaxMsgs, cmd.Flags().Lookup(FlagWithdrawalBatchMaxMsgs)); err != nil {
 		return err
 	}

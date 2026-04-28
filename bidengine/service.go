@@ -82,7 +82,7 @@ func NewService(
 	const bidBroadcastTimeout = 30 * time.Second
 
 	if cfg.BidBatchMaxMsgs <= 0 {
-		cfg.BidBatchMaxMsgs = 10
+		panic("BidBatchMaxMsgs must be > 0")
 	}
 
 	s := &service{

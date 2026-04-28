@@ -17,6 +17,8 @@ import (
 	clientmocks "pkg.akt.dev/go/mocks/node/client"
 )
 
+const twoSecondsTestTimeout = 2 * time.Second
+
 func testBidLogger() log.Logger { return log.NewLogger(io.Discard) }
 
 func newBidReq() bidRequest {
@@ -31,7 +33,7 @@ func waitReply(t *testing.T, req bidRequest) error {
 	select {
 	case err := <-req.replyCh:
 		return err
-	case <-time.After(2 * time.Second):
+	case <-time.After(twoSecondsTestTimeout):
 		t.Fatal("timed out waiting for reply")
 		return nil
 	}
@@ -41,7 +43,7 @@ func waitDone(t *testing.T, b *bidBatcher) {
 	t.Helper()
 	select {
 	case <-b.Done():
-	case <-time.After(2 * time.Second):
+	case <-time.After(twoSecondsTestTimeout):
 		t.Fatal("timed out waiting for batcher done")
 	}
 }
@@ -80,7 +82,7 @@ func (f *bidFixture) waitCaptured() []sdk.Msg {
 	select {
 	case msgs := <-f.captured:
 		return msgs
-	case <-time.After(2 * time.Second):
+	case <-time.After(twoSecondsTestTimeout):
 		f.t.Fatal("timed out waiting for broadcast")
 		return nil
 	}
@@ -88,24 +90,23 @@ func (f *bidFixture) waitCaptured() []sdk.Msg {
 
 // --- parseMsgFailIndex ---
 
-func TestParseMsgFailIndex_valid(t *testing.T) {
-	err := errors.New("tx failed: message index: 2: insufficient funds")
-	require.Equal(t, 2, parseMsgFailIndex(err))
-}
+func TestParseMsgFailIndex(t *testing.T) {
+	tests := []struct {
+		name     string
+		errMsg   string
+		expected int
+	}{
+		{name: "valid_index", errMsg: "tx failed: message index: 2: insufficient funds", expected: 2},
+		{name: "zero_index", errMsg: "message index: 0: bad", expected: 0},
+		{name: "no_index", errMsg: "out of gas", expected: -1},
+		{name: "extra_whitespace", errMsg: "message index:   7: bad msg", expected: 7},
+	}
 
-func TestParseMsgFailIndex_zero(t *testing.T) {
-	err := errors.New("message index: 0: bad")
-	require.Equal(t, 0, parseMsgFailIndex(err))
-}
-
-func TestParseMsgFailIndex_no_index(t *testing.T) {
-	err := errors.New("out of gas")
-	require.Equal(t, -1, parseMsgFailIndex(err))
-}
-
-func TestParseMsgFailIndex_whitespace(t *testing.T) {
-	err := errors.New("message index:   7: bad msg")
-	require.Equal(t, 7, parseMsgFailIndex(err))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, parseMsgFailIndex(errors.New(tc.errMsg)))
+		})
+	}
 }
 
 // --- Flush / Done / MarkDone state machine ---

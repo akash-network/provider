@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"cosmossdk.io/log"
@@ -45,16 +46,29 @@ func parseMsgFailIndex(err error) int {
 // failed, fans the error to that caller, removes it, and retries the remaining
 // messages. This continues until all messages are resolved individually.
 //
-// Not safe for concurrent use. All methods must be called from service.run().
+// Not safe for concurrent use. All public methods must be called from a single
+// goroutine. Concurrent calls panic to surface developer mistakes early.
 type bidBatcher struct {
 	tx      aclient.TxClient
 	log     log.Logger
 	timeout time.Duration
 	maxMsgs int
 
+	inUse atomic.Bool
+
 	pending  []bidRequest
 	inFlight bool
 	doneCh   chan struct{}
+}
+
+func (b *bidBatcher) enter() {
+	if b.inUse.Swap(true) {
+		panic("bidBatcher: concurrent use detected")
+	}
+}
+
+func (b *bidBatcher) exit() {
+	b.inUse.Store(false)
 }
 
 func newBidBatcher(tx aclient.TxClient, logger log.Logger, timeout time.Duration, maxMsgs int) *bidBatcher {
@@ -71,14 +85,20 @@ func newBidBatcher(tx aclient.TxClient, logger log.Logger, timeout time.Duration
 }
 
 func (b *bidBatcher) InFlight() bool {
+	b.enter()
+	defer b.exit()
 	return b.inFlight
 }
 
 func (b *bidBatcher) Pending() int {
+	b.enter()
+	defer b.exit()
 	return len(b.pending)
 }
 
 func (b *bidBatcher) Enqueue(req bidRequest) {
+	b.enter()
+	defer b.exit()
 	b.pending = append(b.pending, req)
 	b.log.Debug("bid batcher: enqueue", "pending", len(b.pending), "inFlight", b.inFlight)
 }
@@ -86,6 +106,8 @@ func (b *bidBatcher) Enqueue(req bidRequest) {
 // Flush starts a broadcast with up to maxMsgs pending requests when idle.
 // Returns true if a broadcast was started.
 func (b *bidBatcher) Flush(ctx context.Context) bool {
+	b.enter()
+	defer b.exit()
 	if b.inFlight {
 		b.log.Debug("bid batcher: flush skipped (in-flight)", "pending", len(b.pending))
 		return false
@@ -94,10 +116,7 @@ func (b *bidBatcher) Flush(ctx context.Context) bool {
 		return false
 	}
 
-	n := len(b.pending)
-	if n > b.maxMsgs {
-		n = b.maxMsgs
-	}
+	n := min(len(b.pending), b.maxMsgs)
 
 	batch := make([]bidRequest, n)
 	copy(batch, b.pending[:n])
@@ -125,6 +144,8 @@ func (b *bidBatcher) Done() <-chan struct{} {
 
 // MarkDone clears the in-flight flag. Must be called after receiving from Done().
 func (b *bidBatcher) MarkDone() {
+	b.enter()
+	defer b.exit()
 	b.inFlight = false
 }
 
@@ -132,11 +153,9 @@ func (b *bidBatcher) MarkDone() {
 // by parsing the Cosmos SDK "message index: N" error. Each resolved request
 // receives its own error or nil via its replyCh.
 func (b *bidBatcher) broadcastWithRetry(ctx context.Context, batch []bidRequest) {
-	remaining := batch
-
-	for len(remaining) > 0 {
-		msgs := make([]sdk.Msg, len(remaining))
-		for i, req := range remaining {
+	for len(batch) > 0 {
+		msgs := make([]sdk.Msg, len(batch))
+		for i, req := range batch {
 			msgs[i] = req.msg
 		}
 
@@ -145,25 +164,25 @@ func (b *bidBatcher) broadcastWithRetry(ctx context.Context, batch []bidRequest)
 		cancel()
 
 		if err == nil {
-			b.log.Info("bid batcher: batch succeeded", "count", len(remaining))
-			for _, req := range remaining {
+			b.log.Info("bid batcher: batch succeeded", "count", len(batch))
+			for _, req := range batch {
 				req.replyCh <- nil
 			}
 			return
 		}
 
 		idx := parseMsgFailIndex(err)
-		if idx < 0 || idx >= len(remaining) {
+		if idx < 0 || idx >= len(batch) {
 			// Error is not message-specific (e.g. network/sequence error): fail all.
-			b.log.Error("bid batcher: unrecoverable batch error", "err", err, "remaining", len(remaining))
-			for _, req := range remaining {
+			b.log.Error("bid batcher: unrecoverable batch error", "err", err, "remaining", len(batch))
+			for _, req := range batch {
 				req.replyCh <- err
 			}
 			return
 		}
 
-		b.log.Error("bid batcher: message failed, retrying remainder", "idx", idx, "err", err, "remaining", len(remaining)-1)
-		remaining[idx].replyCh <- err
-		remaining = slices.Delete(remaining, idx, idx+1)
+		b.log.Error("bid batcher: message failed, retrying remainder", "idx", idx, "err", err, "remaining", len(batch)-1)
+		batch[idx].replyCh <- err
+		batch = slices.Delete(batch, idx, idx+1)
 	}
 }

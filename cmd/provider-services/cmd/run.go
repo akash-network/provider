@@ -94,53 +94,50 @@ const (
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
 	FlagBidBatchMaxMsgs                  = "bid-batch-max-msgs"
-
-	bidBatchMaxMsgsMin                 = 1
-	bidBatchMaxMsgsMax                 = 50
-	FlagManifestTimeout                = "manifest-timeout"
-	FlagMetricsListener                = "metrics-listener"
-	FlagWithdrawalPeriod               = "withdrawal-period"
-	FlagWithdrawalBatchMaxMsgs         = "withdrawal-batch-max-msgs"
-	FlagLeaseFundsMonitorInterval      = "lease-funds-monitor-interval"
-	FlagMinimumBalance                 = "minimum-balance"
-	FlagProviderConfig                 = "provider-config"
-	FlagCachedResultMaxAge             = "cached-result-max-age"
-	FlagRPCQueryTimeout                = "rpc-query-timeout"
-	FlagBidPriceIPScale                = "bid-price-ip-scale"
-	FlagEnableIPOperator               = "ip-operator"
-	FlagTxBroadcastTimeout             = "tx-broadcast-timeout"
-	FlagMonitorMaxRetries              = "monitor-max-retries"
-	FlagMonitorRetryPeriod             = "monitor-retry-period"
-	FlagMonitorRetryPeriodJitter       = "monitor-retry-period-jitter"
-	FlagMonitorHealthcheckPeriod       = "monitor-healthcheck-period"
-	FlagMonitorHealthcheckPeriodJitter = "monitor-healthcheck-period-jitter"
-	FlagPersistentConfigBackend        = "persistent-config-backend"
-	FlagPersistentConfigPath           = "persistent-config-path"
-	FlagGatewayTLSCert                 = "gateway-tls-cert"
-	FlagGatewayTLSKey                  = "gateway-tls-key"
-	FlagCertIssuerEnabled              = "cert-issuer-enabled"
-	FlagCertIssuerKID                  = "cert-issuer-kid"
-	FlagCertIssuerHMAC                 = "cert-issuer-hmac"
-	FlagCertIssuerStorageDir           = "cert-issuer-storage-dir"
-	FlagCertIssuerCADirURL             = "cert-issuer-ca-dir-url"
-	FlagCertIssuerHTTPChallengePort    = "cert-issuer-http-challenge-port"
-	FlagCertIssuerTLSChallengePort     = "cert-issuer-tls-challenge-port"
-	FlagCertIssuerDNSProviders         = "cert-issuer-dns-providers"
-	FlagCertIssuerDNSResolvers         = "cert-issuer-dns-resolvers"
-	FlagCertIssuerEmail                = "cert-issuer-email"
-	FlagMigrationsEnabled              = "migrations-enabled"
-	FlagMigrationsStatePath            = "migrations-state-path"
-	FlagIngressMode                    = "ingress-mode"
-	FlagGatewayName                    = "gateway-name"
-	FlagGatewayNamespace               = "gateway-namespace"
-	FlagGatewayProvider                = "gateway-provider"
+	FlagManifestTimeout                  = "manifest-timeout"
+	FlagMetricsListener                  = "metrics-listener"
+	FlagWithdrawalPeriod                 = "withdrawal-period"
+	FlagWithdrawalBatchMaxMsgs           = "withdrawal-batch-max-msgs"
+	FlagLeaseFundsMonitorInterval        = "lease-funds-monitor-interval"
+	FlagMinimumBalance                   = "minimum-balance"
+	FlagProviderConfig                   = "provider-config"
+	FlagCachedResultMaxAge               = "cached-result-max-age"
+	FlagRPCQueryTimeout                  = "rpc-query-timeout"
+	FlagBidPriceIPScale                  = "bid-price-ip-scale"
+	FlagEnableIPOperator                 = "ip-operator"
+	FlagTxBroadcastTimeout               = "tx-broadcast-timeout"
+	FlagMonitorMaxRetries                = "monitor-max-retries"
+	FlagMonitorRetryPeriod               = "monitor-retry-period"
+	FlagMonitorRetryPeriodJitter         = "monitor-retry-period-jitter"
+	FlagMonitorHealthcheckPeriod         = "monitor-healthcheck-period"
+	FlagMonitorHealthcheckPeriodJitter   = "monitor-healthcheck-period-jitter"
+	FlagPersistentConfigBackend          = "persistent-config-backend"
+	FlagPersistentConfigPath             = "persistent-config-path"
+	FlagGatewayTLSCert                   = "gateway-tls-cert"
+	FlagGatewayTLSKey                    = "gateway-tls-key"
+	FlagCertIssuerEnabled                = "cert-issuer-enabled"
+	FlagCertIssuerKID                    = "cert-issuer-kid"
+	FlagCertIssuerHMAC                   = "cert-issuer-hmac"
+	FlagCertIssuerStorageDir             = "cert-issuer-storage-dir"
+	FlagCertIssuerCADirURL               = "cert-issuer-ca-dir-url"
+	FlagCertIssuerHTTPChallengePort      = "cert-issuer-http-challenge-port"
+	FlagCertIssuerTLSChallengePort       = "cert-issuer-tls-challenge-port"
+	FlagCertIssuerDNSProviders           = "cert-issuer-dns-providers"
+	FlagCertIssuerDNSResolvers           = "cert-issuer-dns-resolvers"
+	FlagCertIssuerEmail                  = "cert-issuer-email"
+	FlagMigrationsEnabled                = "migrations-enabled"
+	FlagMigrationsStatePath              = "migrations-state-path"
+	FlagIngressMode                      = "ingress-mode"
+	FlagGatewayName                      = "gateway-name"
+	FlagGatewayNamespace                 = "gateway-namespace"
+	FlagGatewayProvider                  = "gateway-provider"
 )
 
 const (
-	serviceIPOperator         = "ip-operator"
-	serviceHostnameOperator   = "hostname-operator"
-	withdrawalBatchMaxMsgsMin = 10
-	withdrawalBatchMaxMsgsMax = 100
+	serviceIPOperator       = "ip-operator"
+	serviceHostnameOperator = "hostname-operator"
+	batchMaxMsgsMin         = 10
+	batchMaxMsgsMax         = 100
 )
 
 var (
@@ -216,8 +213,12 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
-			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < withdrawalBatchMaxMsgsMin || maxMsgs > withdrawalBatchMaxMsgsMax {
-				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagWithdrawalBatchMaxMsgs, maxMsgs, withdrawalBatchMaxMsgsMin, withdrawalBatchMaxMsgsMax) // nolint: err113
+			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < batchMaxMsgsMin || maxMsgs > batchMaxMsgsMax {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagWithdrawalBatchMaxMsgs, maxMsgs, batchMaxMsgsMin, batchMaxMsgsMax) // nolint: err113
+			}
+
+			if maxMsgs := viper.GetInt(FlagBidBatchMaxMsgs); maxMsgs < batchMaxMsgsMin || maxMsgs > batchMaxMsgsMax {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagBidBatchMaxMsgs, maxMsgs, batchMaxMsgsMin, batchMaxMsgsMax) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
@@ -495,10 +496,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
+
 	bidBatchMaxMsgs := viper.GetInt(FlagBidBatchMaxMsgs)
-	if bidBatchMaxMsgs < bidBatchMaxMsgsMin || bidBatchMaxMsgs > bidBatchMaxMsgsMax {
-		return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagBidBatchMaxMsgs, bidBatchMaxMsgs, bidBatchMaxMsgsMin, bidBatchMaxMsgsMax) // nolint: err113
-	}
+
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
 	metricsListener := viper.GetString(FlagMetricsListener)
 	providerConfig := viper.GetString(FlagProviderConfig)
