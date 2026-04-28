@@ -21,7 +21,6 @@ import (
 
 	"pkg.akt.dev/go/util/pubsub"
 	netutil "pkg.akt.dev/node/v2/util/network"
-	"pkg.akt.dev/node/v2/util/runner"
 	"pkg.akt.dev/node/v2/x/escrow/client/util"
 
 	"github.com/akash-network/provider/event"
@@ -43,6 +42,7 @@ const (
 type BalanceCheckerConfig struct {
 	WithdrawalPeriod        time.Duration
 	LeaseFundsCheckInterval time.Duration
+	WithdrawalBatchMaxMsgs  int
 }
 
 type leaseState struct {
@@ -60,6 +60,7 @@ type balanceChecker struct {
 	aqc     aclient.QueryClient
 	leases  map[mtypes.LeaseID]*leaseState
 	cfg     BalanceCheckerConfig
+	batcher *withdrawBatcher
 }
 
 type leaseCheckResponse struct {
@@ -77,16 +78,18 @@ func newBalanceChecker(
 	bus pubsub.Bus,
 	cfg BalanceCheckerConfig,
 ) (*balanceChecker, error) {
+	bcLog := clientSession.Log().With("cmp", "balance-checker")
 	bc := &balanceChecker{
 		ctx:     ctx,
 		session: clientSession,
-		log:     clientSession.Log().With("cmp", "balance-checker"),
+		log:     bcLog,
 		bus:     bus,
 		lc:      lifecycle.New(),
 		ownAddr: accAddr,
 		aqc:     aqc,
 		leases:  make(map[mtypes.LeaseID]*leaseState),
 		cfg:     cfg,
+		batcher: newWithdrawBatcher(clientSession.Client().Tx(), bcLog.With("cmp", "withdraw-batcher"), withdrawTimeout, cfg.WithdrawalBatchMaxMsgs),
 	}
 
 	startCh := make(chan error, 1)
@@ -199,18 +202,6 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	return resp
 }
 
-func (bc *balanceChecker) startWithdraw(ctx context.Context, lid mtypes.LeaseID) error {
-	ctx, cancel := context.WithTimeout(ctx, withdrawTimeout)
-	defer cancel()
-
-	msg := &mvbeta.MsgWithdrawLease{
-		ID: lid,
-	}
-
-	_, err := bc.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
-	return err
-}
-
 func (bc *balanceChecker) run(startCh chan<- error) {
 	ctx, cancel := context.WithCancel(bc.ctx)
 
@@ -228,15 +219,12 @@ func (bc *balanceChecker) run(startCh chan<- error) {
 	}()
 
 	leaseCheckCh := make(chan leaseCheckResponse, 1)
-	var resultch chan runner.Result
 
 	subscriber, err := bc.bus.Subscribe()
 	startCh <- err
 	if err != nil {
 		return
 	}
-
-	resultch = make(chan runner.Result, 1)
 
 loop:
 	for {
@@ -282,6 +270,7 @@ loop:
 				}
 
 				delete(bc.leases, ev.LeaseID)
+				bc.batcher.Remove(ev.LeaseID)
 			}
 		case res := <-leaseCheckCh:
 			// we may have timer fired just a heart beat ahead of lease remove event.
@@ -325,17 +314,20 @@ loop:
 			}
 
 			if withdraw {
-				go func() {
-					select {
-					case <-ctx.Done():
-					case resultch <- runner.NewResult(res.lid, bc.startWithdraw(ctx, res.lid)):
-					}
-				}()
+				bc.batcher.Enqueue(res.lid)
+				bc.batcher.Flush(ctx)
 			}
-		case res := <-resultch:
-			if err := res.Error(); err != nil {
-				bc.log.Error("failed to do lease withdrawal", "err", err, "LeaseID", res.Value().(mtypes.LeaseID))
+		case err := <-bc.batcher.Done():
+			bc.batcher.MarkDone()
+			if err != nil {
+				// Skip immediate re-flush on failure: let the next per-lease
+				// timer trigger Enqueue+Flush, which gives natural backoff.
+				// Pending ids stay queued; Enqueue dedupes so a lease that
+				// re-triggers while still pending won't duplicate the msg.
+				bc.log.Error("failed to do lease withdrawal", "err", err, "pending", bc.batcher.Pending())
+				continue loop
 			}
+			bc.batcher.Flush(ctx)
 		}
 	}
 }

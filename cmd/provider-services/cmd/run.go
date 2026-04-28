@@ -96,6 +96,7 @@ const (
 	FlagManifestTimeout                  = "manifest-timeout"
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
+	FlagWithdrawalBatchMaxMsgs           = "withdrawal-batch-max-msgs"
 	FlagLeaseFundsMonitorInterval        = "lease-funds-monitor-interval"
 	FlagMinimumBalance                   = "minimum-balance"
 	FlagProviderConfig                   = "provider-config"
@@ -132,8 +133,10 @@ const (
 )
 
 const (
-	serviceIPOperator       = "ip-operator"
-	serviceHostnameOperator = "hostname-operator"
+	serviceIPOperator         = "ip-operator"
+	serviceHostnameOperator   = "hostname-operator"
+	withdrawalBatchMaxMsgsMin = 10
+	withdrawalBatchMaxMsgsMax = 100
 )
 
 var (
@@ -189,6 +192,10 @@ func RunCmd() *cobra.Command {
 		Short:        "run akash provider",
 		SilenceUsage: true,
 		PreRunE: func(cmd *cobra.Command, args []string) error {
+			// Store logger in context before TxPersistentPreRunE so that the
+			// serialBroadcaster (created during DiscoverClient) picks it up via ctxlog.Logger(ctx).
+			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, log.NewLogger(os.Stderr))
+
 			err := TxPersistentPreRunE(cmd, args)
 			if err != nil {
 				return err
@@ -203,6 +210,10 @@ func RunCmd() *cobra.Command {
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+			}
+
+			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < withdrawalBatchMaxMsgsMin || maxMsgs > withdrawalBatchMaxMsgsMax {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagWithdrawalBatchMaxMsgs, maxMsgs, withdrawalBatchMaxMsgsMin, withdrawalBatchMaxMsgsMax) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
@@ -265,7 +276,7 @@ func RunCmd() *cobra.Command {
 				return err
 			}
 
-			logger := log.NewLogger(os.Stderr)
+			logger := ctxlog.LogcFromCtx(cmd.Context())
 
 			kubeLog := logger.With("component", "k8s")
 
@@ -675,6 +686,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.BalanceCheckerCfg = provider.BalanceCheckerConfig{
 		WithdrawalPeriod:        viper.GetDuration(FlagWithdrawalPeriod),
 		LeaseFundsCheckInterval: viper.GetDuration(FlagLeaseFundsMonitorInterval),
+		WithdrawalBatchMaxMsgs:  viper.GetInt(FlagWithdrawalBatchMaxMsgs),
 	}
 
 	config.BidPricingStrategy = pricing

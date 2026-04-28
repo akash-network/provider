@@ -36,6 +36,7 @@ func NewDefaultConfig() Config {
 		BalanceCheckerCfg: BalanceCheckerConfig{
 			LeaseFundsCheckInterval: 1 * time.Minute,
 			WithdrawalPeriod:        24 * time.Hour,
+			WithdrawalBatchMaxMsgs:  50,
 		},
 		MaxGroupVolumes: constants.DefaultMaxGroupVolumes,
 		Config:          cluster.NewDefaultConfig(),

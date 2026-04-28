@@ -199,7 +199,7 @@ func (m *deploymentMonitor) runCloseLease(ctx context.Context) <-chan runner.Res
 			ID:     m.deployment.LeaseID().BidID(),
 			Reason: mv1.LeaseClosedReasonUnstable,
 		}
-		res, err := m.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+		res, err := m.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError(), aclient.WithPriority())
 		if err != nil {
 			m.log.Error("closing deployment", "err", err)
 		} else {

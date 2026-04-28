@@ -436,7 +436,7 @@ loop:
 				Sources: deposit.Sources{deposit.SourceBalance},
 			}, offer)
 			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError(), aclient.WithPriority()))
 			})
 
 		case result := <-bidch:
@@ -493,7 +493,7 @@ loop:
 				Reason: mtypes.LeaseClosedReasonUnspecified,
 			}
 
-			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError(), aclient.WithPriority())
 			if err != nil {
 				o.log.Error("closing bid", "err", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
