@@ -35,6 +35,8 @@ var ordersCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 // ErrNotRunning declares new error with message "not running"
 var ErrNotRunning = errors.New("not running")
 
+const broadcastTimeout = 30 * time.Second
+
 // StatusClient interface predefined with Status method
 type StatusClient interface {
 	Status(context.Context) (*apclient.BidEngineStatus, error)
@@ -79,8 +81,6 @@ func NewService(
 	ctx, cancel := context.WithCancel(pctx)
 	group, _ := errgroup.WithContext(ctx)
 
-	const bidBroadcastTimeout = 30 * time.Second
-
 	if cfg.BidBatchMaxMsgs <= 0 {
 		panic("BidBatchMaxMsgs must be > 0")
 	}
@@ -98,7 +98,7 @@ func NewService(
 		bidBatcher: newBidBatcher(
 			session.Client().Tx(),
 			session.Log().With("cmp", "bid-batcher"),
-			bidBroadcastTimeout,
+			broadcastTimeout,
 			cfg.BidBatchMaxMsgs,
 		),
 		group:  group,

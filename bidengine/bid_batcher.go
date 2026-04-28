@@ -108,11 +108,11 @@ func (b *bidBatcher) Enqueue(req bidRequest) {
 func (b *bidBatcher) Flush(ctx context.Context) bool {
 	b.enter()
 	defer b.exit()
-	if b.inFlight {
-		b.log.Debug("bid batcher: flush skipped (in-flight)", "pending", len(b.pending))
+	if len(b.pending) == 0 {
 		return false
 	}
-	if len(b.pending) == 0 {
+	if b.inFlight {
+		b.log.Debug("bid batcher: flush skipped (in-flight)", "pending", len(b.pending))
 		return false
 	}
 
