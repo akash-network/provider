@@ -226,7 +226,7 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Duration(FlagTxBroadcastTimeout, 30*time.Second, "tx broadcast timeout. defaults to 30s")
+	cmd.Flags().Duration(FlagTxBroadcastTimeout, 12*time.Second, "tx broadcast timeout")
 	if err := viper.BindPFlag(FlagTxBroadcastTimeout, cmd.Flags().Lookup(FlagTxBroadcastTimeout)); err != nil {
 		return err
 	}
