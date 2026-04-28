@@ -1,6 +1,6 @@
 module github.com/akash-network/provider
 
-go 1.25.5
+go 1.25.9
 
 require (
 	cosmossdk.io/errors v1.0.2
@@ -10,7 +10,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1
 	github.com/cometbft/cometbft v0.38.21
-	github.com/cosmos/cosmos-sdk v0.53.5
+	github.com/cosmos/cosmos-sdk v0.53.6
 	github.com/desertbit/timer v1.0.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-acme/lego/v4 v4.26.0
@@ -51,11 +51,11 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.2.7
+	pkg.akt.dev/go v0.2.11-rc2
 	pkg.akt.dev/go/cli v0.2.2
 	pkg.akt.dev/go/sdl v0.2.0
 	pkg.akt.dev/node v1.2.2
-	pkg.akt.dev/node/v2 v2.0.0
+	pkg.akt.dev/node/v2 v2.1.0-rc9
 	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
@@ -179,7 +179,7 @@ require (
 	github.com/cosmos/iavl v1.2.6 // indirect
 	github.com/cosmos/ibc-go/v10 v10.5.0 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
-	github.com/cosmos/ledger-cosmos-go v0.16.0 // indirect
+	github.com/cosmos/ledger-cosmos-go v1.0.0 // indirect
 	github.com/cosmos/rosetta v0.50.12 // indirect
 	github.com/cosmos/rosetta-sdk-go v0.10.0 // indirect
 	github.com/danieljoos/wincred v1.2.2 // indirect

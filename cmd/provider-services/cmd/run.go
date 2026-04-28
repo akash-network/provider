@@ -93,6 +93,7 @@ const (
 	FlagAuthPem                          = "auth-pem"
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
+	FlagBidBatchMaxMsgs                  = "bid-batch-max-msgs"
 	FlagManifestTimeout                  = "manifest-timeout"
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
@@ -133,10 +134,10 @@ const (
 )
 
 const (
-	serviceIPOperator         = "ip-operator"
-	serviceHostnameOperator   = "hostname-operator"
-	withdrawalBatchMaxMsgsMin = 10
-	withdrawalBatchMaxMsgsMax = 100
+	serviceIPOperator       = "ip-operator"
+	serviceHostnameOperator = "hostname-operator"
+	batchMaxMsgsMin         = 10
+	batchMaxMsgsMax         = 100
 )
 
 var (
@@ -212,8 +213,12 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
-			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < withdrawalBatchMaxMsgsMin || maxMsgs > withdrawalBatchMaxMsgsMax {
-				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagWithdrawalBatchMaxMsgs, maxMsgs, withdrawalBatchMaxMsgsMin, withdrawalBatchMaxMsgsMax) // nolint: err113
+			if maxMsgs := viper.GetInt(FlagWithdrawalBatchMaxMsgs); maxMsgs < batchMaxMsgsMin || maxMsgs > batchMaxMsgsMax {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagWithdrawalBatchMaxMsgs, maxMsgs, batchMaxMsgsMin, batchMaxMsgsMax) // nolint: err113
+			}
+
+			if maxMsgs := viper.GetInt(FlagBidBatchMaxMsgs); maxMsgs < batchMaxMsgsMin || maxMsgs > batchMaxMsgsMax {
+				return fmt.Errorf(`flag "%s" contains invalid value %d. expected range [%d, %d]`, FlagBidBatchMaxMsgs, maxMsgs, batchMaxMsgsMin, batchMaxMsgsMax) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
@@ -491,6 +496,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
+
+	bidBatchMaxMsgs := viper.GetInt(FlagBidBatchMaxMsgs)
+
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
 	metricsListener := viper.GetString(FlagMetricsListener)
 	providerConfig := viper.GetString(FlagProviderConfig)
@@ -665,6 +673,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressStaticHosts = deploymentIngressStaticHosts
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
+	config.BidBatchMaxMsgs = bidBatchMaxMsgs
 	config.ManifestTimeout = manifestTimeout
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod

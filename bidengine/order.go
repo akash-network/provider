@@ -53,6 +53,9 @@ type order struct {
 	// reservationFulfilledNotify is the channel to notify when resources are reserved.
 	reservationFulfilledNotify chan<- int
 
+	// bidSubmitCh is the service-level channel for submitting MsgCreateBid for batching.
+	bidSubmitCh chan<- bidRequest
+
 	// log is the logger instance
 	log log.Logger
 
@@ -124,6 +127,7 @@ func newOrderInternal(svc *service, oid mtypes.OrderID, cfg Config, pass Provide
 		log:                        log,
 		lc:                         lifecycle.New(),
 		reservationFulfilledNotify: reservationFulfilledNotify, // Normally nil in production
+		bidSubmitCh:                svc.bidSubmitCh,
 		pass:                       pass,
 	}
 
@@ -182,8 +186,8 @@ func (o *order) run(checkForExistingBid bool) {
 		storedGroupCh <-chan runner.Result
 		// Channel for receiving cluster reservation result.
 		clusterch <-chan runner.Result
-		// Channel for receiving bid creation transaction result.
-		bidch <-chan runner.Result
+		// Channel for receiving bid creation transaction result (reply from bidBatcher).
+		bidch <-chan error
 		// Channel for receiving bid price calculation result.
 		pricech <-chan runner.Result
 		// Channel for receiving existing bid query result.
@@ -430,20 +434,24 @@ loop:
 
 			offer := mvbeta.ResourceOfferFromRU(reservation.GetAllocatedResources())
 
-			// Begin submitting fulfillment
+			// Enqueue MsgCreateBid in the service-level bid batcher.
 			msg = mvbeta.NewMsgCreateBid(mtypes.MakeBidID(o.orderID, o.session.Provider().Address()), price, deposit.Deposit{
 				Amount:  o.cfg.Deposit,
 				Sources: deposit.Sources{deposit.SourceBalance},
 			}, offer)
-			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError(), aclient.WithPriority()))
-			})
+			replyCh := make(chan error, 1)
+			select {
+			case o.bidSubmitCh <- bidRequest{msg: msg, replyCh: replyCh}:
+				bidch = replyCh
+			case <-o.lc.ShutdownRequest():
+				break loop
+			}
 
-		case result := <-bidch:
+		case err := <-bidch:
 			bidch = nil
-			if result.Error() != nil {
+			if err != nil {
 				bidCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
-				o.log.Error("bid failed", "err", result.Error())
+				o.log.Error("bid failed", "err", err)
 				break loop
 			}
 
