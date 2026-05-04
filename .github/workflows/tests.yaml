@@ -24,6 +24,10 @@ jobs:
     outputs:
       cache_image: ${{ steps.tag.outputs.cache_image }}
     steps:
+      - name: Cleanup build folder
+        run: |
+          sudo rm -rf ./* || true
+          sudo rm -rf ./.??* || true
       - uses: actions/checkout@v4
       - name: Compute cache image tag
         id: tag
