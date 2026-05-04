@@ -79,7 +79,7 @@ jobs:
         run: |
           CACHE_IMAGE="${{ needs.build-cache.outputs.cache_image }}"
           docker pull "${CACHE_IMAGE}"
-          CID=$(docker create "${CACHE_IMAGE}")
+          CID=$(docker create "${CACHE_IMAGE}" /dev/null)
           mkdir -p .cache/lib
           docker cp "${CID}:/libs/." .cache/lib/
           GOPATH=$(go env GOPATH)
