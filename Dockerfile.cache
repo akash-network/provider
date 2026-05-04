@@ -52,6 +52,12 @@ RUN set -a; \
     export AP_ROOT GOTOOLCHAIN; \
     make wasmvm-libs
 
+# Go sets module dirs to 555 so the cache is immutable on disk.
+# docker cp uses Go's archive/tar which applies permissions immediately per entry:
+# it creates a dir with 555 then tries to write children into it — permission denied.
+# Adding u+w to dirs makes extraction work; files remain 444 (go build only reads them).
+RUN find /go/pkg/mod -type d -exec chmod u+w {} \;
+
 # ── Final image: only the cached artifacts ────────────────────────────────────
 FROM scratch
 COPY --from=builder /workspace/.cache/lib /libs
