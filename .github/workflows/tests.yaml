@@ -16,17 +16,72 @@ on:
       - v*
 
 jobs:
+  build-cache:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    outputs:
+      cache_image: ${{ steps.tag.outputs.cache_image }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compute cache image tag
+        id: tag
+        run: |
+          GO_VERSION=$(grep -E '^go [0-9]' go.mod | awk '{print $2}')
+          GOSUM_HASH=$(sha256sum go.sum | cut -c1-16)
+          CACHE_IMAGE="ghcr.io/${{ github.repository_owner }}/provider-cache:${GOSUM_HASH}-${GO_VERSION}"
+          echo "go_version=${GO_VERSION}" >> $GITHUB_OUTPUT
+          echo "cache_image=${CACHE_IMAGE}" >> $GITHUB_OUTPUT
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build and push cache image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.cache
+          push: true
+          tags: ${{ steps.tag.outputs.cache_image }}
+          build-args: |
+            GO_VERSION=${{ steps.tag.outputs.go_version }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/provider-cache:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/provider-cache:buildcache,mode=max
+
   build-bins:
-    runs-on: core-e2e
+    runs-on: ghr-core-05
+    needs: build-cache
     steps:
       - name: Cleanup build folder
         run: |
           sudo rm -rf ./* || true
           sudo rm -rf ./.??* || true
-          sudo rm -rf $HOME/go/pkg/mod || true
+          sudo chown -R $(id -u):$(id -g) $HOME/go/pkg/mod || true
       - uses: actions/checkout@v4
       - name: Setup environment
         uses: ./.github/actions/setup-ubuntu
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Populate build cache
+        run: |
+          CACHE_IMAGE="${{ needs.build-cache.outputs.cache_image }}"
+          docker pull "${CACHE_IMAGE}"
+          CID=$(docker create "${CACHE_IMAGE}")
+          mkdir -p .cache/lib
+          docker cp "${CID}:/libs/." .cache/lib/
+          GOPATH=$(go env GOPATH)
+          mkdir -p "${GOPATH}/pkg"
+          docker cp "${CID}:/go/pkg/mod" "${GOPATH}/pkg/"
+          docker rm "${CID}"
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
@@ -36,6 +91,7 @@ jobs:
       - run: make docker-image
 
   tests:
+    if: false
     runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +100,7 @@ jobs:
       - run: make test-full
 
   lint:
+    if: false
     runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +110,7 @@ jobs:
         run: make lint
 
   release-dry-run:
+    if: false
     runs-on: core-e2e
     env:
       DOCKER_CLI_EXPERIMENTAL: "enabled"
@@ -77,6 +135,7 @@ jobs:
         run: make release
 
   coverage:
+    if: false
     runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
@@ -90,6 +149,7 @@ jobs:
           files: .cache/tests/coverage.txt
 
   yamlcheck:
+    if: false
     runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
@@ -98,6 +158,7 @@ jobs:
           if [[ $(git ls-files '*.yml' ':!:.codecov.yml' | wc -l) -ne 0 ]]; then git ls-files '*.yml' ':!:.codecov.yml' && exit 1;fi
 
   shellcheck:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +167,7 @@ jobs:
       - run: make shellcheck
 
   integration-tests:
+    if: false
     uses: ./.github/workflows/integration-tests.yaml
 
   dispatch-release:

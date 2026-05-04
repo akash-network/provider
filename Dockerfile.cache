@@ -1,0 +1,58 @@
+# syntax=docker/dockerfile:1
+# Builds a lightweight cache image containing:
+#   /libs       — wasmvm static libs (used by goreleaser-cross at link time)
+#   /go/pkg/mod — Go module cache (pre-warms $GOPATH/pkg/mod on the runner)
+#
+# The image is content-addressed (tagged by go.sum hash + Go version) so
+# concurrent CI runs on the same inputs produce identical, safe pushes.
+
+ARG GO_VERSION
+
+FROM golang:${GO_VERSION} AS builder
+
+# Minimal extra tools required by make/init.mk and make/setup-cache.mk
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    make \
+    wget \
+    direnv \
+ && rm -rf /var/lib/apt/lists/*
+
+# Static variables known at image-write time
+ENV GOPATH=/go \
+    AKASH_DIRENV_SET=1 \
+    AKASH=/workspace/.cache/bin/akash \
+    PROVIDER_SERVICES=/workspace/.cache/bin/provider-services
+
+WORKDIR /workspace
+
+# ── Layer 1: Go module cache ──────────────────────────────────────────────────
+# Isolated from Makefile/script changes so this layer is only invalidated
+# when go.sum changes.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# ── Layer 2: wasmvm static libs ──────────────────────────────────────────────
+# WASMVM_VERSION is resolved from go.mod at make evaluation time via
+# `go list -mod=readonly -m`, so go.mod must already be present (it is).
+COPY .env Makefile ./
+COPY .github/repo .github/repo
+COPY make/ make/
+COPY script/ script/
+COPY _run/ _run/
+
+# Source .env so make sees versioned variables checked at evaluation time
+# (e.g. KINDEST_VERSION in _run/common-kind-vars.mk).
+# AP_ROOT and GOTOOLCHAIN are not in .env and are injected here.
+RUN set -a; \
+    AP_ROOT=/workspace; \
+    . /workspace/.env; \
+    set +a; \
+    GOTOOLCHAIN=$(./script/tools.sh gotoolchain); \
+    export AP_ROOT GOTOOLCHAIN; \
+    make wasmvm-libs
+
+# ── Final image: only the cached artifacts ────────────────────────────────────
+FROM scratch
+COPY --from=builder /workspace/.cache/lib /libs
+COPY --from=builder /go/pkg/mod           /go/pkg/mod

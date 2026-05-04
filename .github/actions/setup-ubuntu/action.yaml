@@ -35,6 +35,7 @@ runs:
       with:
         go-version: "${{ env.GOVERSION }}"
         check-latest: true
+        cache: false
     - name: set environment
       uses: HatsuneMiku3939/direnv-action@v1
       with:
