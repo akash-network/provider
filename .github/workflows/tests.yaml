@@ -83,6 +83,7 @@ jobs:
           mkdir -p .cache/lib
           docker cp "${CID}:/libs/." .cache/lib/
           GOPATH=$(go env GOPATH)
+          sudo rm -rf "${GOPATH}/pkg/mod"
           mkdir -p "${GOPATH}/pkg"
           docker cp "${CID}:/go/pkg/mod" "${GOPATH}/pkg/"
           docker rm "${CID}"
