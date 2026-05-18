@@ -691,6 +691,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.BidDeposit = bidDeposit
 	config.RPCQueryTimeout = rpcQueryTimeout
 	config.CachedResultMaxAge = cachedResultMaxAge
+	config.ProviderSigner, err = provider.NewProviderSigner(cctx, cl.Tx())
+	if err != nil {
+		return err
+	}
 
 	// This value can be nil, the operator is not mandatory
 	var ipOperatorClient cip.Client
