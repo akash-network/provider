@@ -59,6 +59,7 @@ import (
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
 	"github.com/akash-network/provider/tools/pconfig/memory"
 	aepinventory "github.com/akash-network/provider/verification/inventory"
+	aepposter "github.com/akash-network/provider/verification/poster"
 	"github.com/akash-network/provider/version"
 )
 
@@ -132,6 +133,13 @@ const (
 	FlagGatewayName                      = "gateway-name"
 	FlagGatewayNamespace                 = "gateway-namespace"
 	FlagGatewayProvider                  = "gateway-provider"
+)
+
+const (
+	FlagVerificationSnapshotPosterInterval           = "verification-snapshot-poster-interval"
+	FlagVerificationSnapshotPosterRetryDelay         = "verification-snapshot-poster-retry-delay"
+	FlagVerificationSnapshotPosterMaxRetries         = "verification-snapshot-poster-max-retries"
+	FlagVerificationSnapshotPosterPostBeforeDeadline = "verification-snapshot-poster-post-before-deadline"
 )
 
 const (
@@ -219,6 +227,23 @@ func RunCmd() *cobra.Command {
 
 			if viper.GetDuration(FlagMonitorHealthcheckPeriod) < 4*time.Second {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
+			}
+
+			snapshotPosterInterval := viper.GetDuration(FlagVerificationSnapshotPosterInterval)
+			snapshotPosterRetryDelay := viper.GetDuration(FlagVerificationSnapshotPosterRetryDelay)
+			snapshotPosterPostBeforeDeadline := viper.GetDuration(FlagVerificationSnapshotPosterPostBeforeDeadline)
+			snapshotPosterMaxRetries := viper.GetUint(FlagVerificationSnapshotPosterMaxRetries)
+			if snapshotPosterInterval < 0 {
+				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterInterval) // nolint: err113
+			}
+			if snapshotPosterRetryDelay < 0 {
+				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterRetryDelay) // nolint: err113
+			}
+			if snapshotPosterPostBeforeDeadline < 0 {
+				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterPostBeforeDeadline) // nolint: err113
+			}
+			if snapshotPosterInterval > 0 && snapshotPosterMaxRetries > 0 && snapshotPosterRetryDelay == 0 {
+				return fmt.Errorf(`flag "%s" value must be > 0 when "%s" is > 0`, FlagVerificationSnapshotPosterRetryDelay, FlagVerificationSnapshotPosterMaxRetries) // nolint: err113
 			}
 
 			pconfigBackend := viper.GetString(FlagPersistentConfigBackend)
@@ -500,6 +525,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	monitorRetryPeriodJitter := viper.GetDuration(FlagMonitorRetryPeriodJitter)
 	monitorHealthcheckPeriod := viper.GetDuration(FlagMonitorHealthcheckPeriod)
 	monitorHealthcheckPeriodJitter := viper.GetDuration(FlagMonitorHealthcheckPeriodJitter)
+	snapshotPosterInterval := viper.GetDuration(FlagVerificationSnapshotPosterInterval)
+	snapshotPosterRetryDelay := viper.GetDuration(FlagVerificationSnapshotPosterRetryDelay)
+	snapshotPosterMaxRetries := viper.GetUint(FlagVerificationSnapshotPosterMaxRetries)
+	snapshotPosterPostBeforeDeadline := viper.GetDuration(FlagVerificationSnapshotPosterPostBeforeDeadline)
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
@@ -793,6 +822,45 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	snapshotter, err := aepinventory.NewBuilder(snapshotPayload, config.ProviderSigner)
 	if err != nil {
 		return err
+	}
+
+	if snapshotPosterInterval > 0 {
+		posterSession := sessionMgr.ForModule("verification-snapshot-poster")
+		posterQuery, err := aepposter.NewQueryAdapter(posterSession.Client().Query().Verification())
+		if err != nil {
+			return err
+		}
+
+		runner, err := aepposter.NewRunner(aepposter.RunnerConfig{
+			Snapshotter:        snapshotter,
+			Query:              posterQuery,
+			Broadcaster:        config.ProviderSigner,
+			Interval:           snapshotPosterInterval,
+			RetryDelay:         snapshotPosterRetryDelay,
+			MaxRetries:         snapshotPosterMaxRetries,
+			PostBeforeDeadline: snapshotPosterPostBeforeDeadline,
+		})
+		if err != nil {
+			return err
+		}
+
+		group.Go(func() error {
+			posterSession.Log().Info("starting verification snapshot hash poster",
+				"interval", snapshotPosterInterval,
+				"retry-delay", snapshotPosterRetryDelay,
+				"max-retries", snapshotPosterMaxRetries)
+
+			err := runner.Run(ctx)
+			if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				posterSession.Log().Debug("verification snapshot hash poster shutdown complete")
+				return nil
+			}
+
+			posterSession.Log().Error("verification snapshot hash poster stopped", "err", err)
+			return err
+		})
+	} else {
+		logger.Info("verification snapshot hash poster disabled")
 	}
 
 	gwRest, err := gwrest.NewServer(

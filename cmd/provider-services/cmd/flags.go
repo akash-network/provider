@@ -359,5 +359,25 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Duration(FlagVerificationSnapshotPosterInterval, time.Minute, "interval for posting verification snapshot hashes; set to 0 to disable")
+	if err := viper.BindPFlag(FlagVerificationSnapshotPosterInterval, cmd.Flags().Lookup(FlagVerificationSnapshotPosterInterval)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Duration(FlagVerificationSnapshotPosterRetryDelay, 30*time.Second, "delay between verification snapshot hash post retries")
+	if err := viper.BindPFlag(FlagVerificationSnapshotPosterRetryDelay, cmd.Flags().Lookup(FlagVerificationSnapshotPosterRetryDelay)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Uint(FlagVerificationSnapshotPosterMaxRetries, 3, "maximum verification snapshot hash post retries per interval")
+	if err := viper.BindPFlag(FlagVerificationSnapshotPosterMaxRetries, cmd.Flags().Lookup(FlagVerificationSnapshotPosterMaxRetries)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Duration(FlagVerificationSnapshotPosterPostBeforeDeadline, 0, "lead time before compliance deadline to post verification snapshot hashes; 0 uses chain params")
+	if err := viper.BindPFlag(FlagVerificationSnapshotPosterPostBeforeDeadline, cmd.Flags().Lookup(FlagVerificationSnapshotPosterPostBeforeDeadline)); err != nil {
+		return err
+	}
+
 	return nil
 }
