@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 
 	inventoryv1 "pkg.akt.dev/go/inventory/v1"
 	verificationv1 "pkg.akt.dev/go/node/verification/v1"
@@ -41,6 +44,11 @@ const (
 	DecisionReasonDeadlineDue       DecisionReason = "deadline-due"
 	DecisionReasonDeadlineUnchanged DecisionReason = "deadline-unchanged"
 )
+
+var snapshotPosterCounter = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "provider_verification_snapshot_poster",
+	Help: "The total number of provider verification snapshot poster decisions",
+}, []string{"result"})
 
 type Snapshotter interface {
 	Build(context.Context, aepinventory.SnapshotRequest) (*aepinventory.Snapshot, error)
@@ -181,13 +189,19 @@ func (r *Runner) runOnceWithRetry(ctx context.Context) error {
 }
 
 func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {
-	prepared, err := BuildMsg(ctx, r.cfg.Snapshotter)
+	params, err := r.cfg.Query.Params(ctx)
 	if err != nil {
+		snapshotPosterCounter.WithLabelValues("query_error").Inc()
 		return nil, err
 	}
 
-	params, err := r.cfg.Query.Params(ctx)
+	result := &RunOnceResult{
+		Params: params,
+	}
+
+	prepared, err := BuildMsg(ctx, r.cfg.Snapshotter)
 	if err != nil {
+		snapshotPosterCounter.WithLabelValues("snapshot_error").Inc()
 		return nil, err
 	}
 
@@ -195,6 +209,7 @@ func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {
 	if errors.Is(err, ErrProviderSnapshotNotFound) {
 		record = nil
 	} else if err != nil {
+		snapshotPosterCounter.WithLabelValues("query_error").Inc()
 		return nil, err
 	}
 
@@ -205,23 +220,32 @@ func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {
 		PostBeforeDeadline: r.postBeforeDeadline(params),
 	})
 
-	result := &RunOnceResult{
-		Prepared: prepared,
-		Params:   params,
-		Record:   record,
-		Decision: decision,
-	}
+	result.Prepared = prepared
+	result.Record = record
+	result.Decision = decision
 
 	if !decision.Post {
+		recordPosterDecision(decision)
 		return result, nil
 	}
 
 	result.Response, err = r.cfg.Broadcaster.Broadcast(ctx, prepared.Msg)
 	if err != nil {
+		snapshotPosterCounter.WithLabelValues("broadcast_error").Inc()
 		return nil, err
 	}
+	recordPosterDecision(decision)
 
 	return result, nil
+}
+
+func recordPosterDecision(decision Decision) {
+	reason := decision.Reason
+	if reason == DecisionReasonNone {
+		reason = "unknown"
+	}
+
+	snapshotPosterCounter.WithLabelValues(strings.ReplaceAll(string(reason), "-", "_")).Inc()
 }
 
 func (r *Runner) postBeforeDeadline(params verificationv1.Params) time.Duration {

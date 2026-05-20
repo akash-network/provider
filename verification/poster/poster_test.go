@@ -429,7 +429,8 @@ func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
 			ComplianceDeadline: now.Add(2 * time.Hour),
 		},
 		params: verificationv1.Params{
-			SnapshotHashInterval: time.Hour,
+			SnapshotHashInterval:     time.Hour,
+			VerificationModuleActive: true,
 		},
 	}
 	broadcaster := &testBroadcaster{}
@@ -464,7 +465,8 @@ func TestRunnerRunOncePostsBeforeDeadlineUsingParamsInterval(t *testing.T) {
 			ComplianceDeadline: now.Add(5 * time.Minute),
 		},
 		params: verificationv1.Params{
-			SnapshotHashInterval: time.Hour,
+			SnapshotHashInterval:     time.Hour,
+			VerificationModuleActive: true,
 		},
 	}
 	broadcaster := &testBroadcaster{}
@@ -490,7 +492,9 @@ func TestRunnerRunOnceReturnsBroadcastError(t *testing.T) {
 	broadcastErr := errors.New("broadcast failed")
 	runner, err := NewRunner(RunnerConfig{
 		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)},
-		Query:       &testQueryClient{},
+		Query: &testQueryClient{
+			params: verificationv1.Params{VerificationModuleActive: true},
+		},
 		Broadcaster: &testBroadcaster{err: broadcastErr},
 		Now: func() time.Time {
 			return now
@@ -539,12 +543,43 @@ func TestNewRunnerValidatesDependencies(t *testing.T) {
 	}
 }
 
+func TestRunnerRunOncePostsWhenVerificationModuleInactive(t *testing.T) {
+	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
+	snapshotter := &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)}
+	query := &testQueryClient{
+		params: verificationv1.Params{
+			SnapshotHashInterval:     time.Hour,
+			VerificationModuleActive: false,
+		},
+		providerErr: ErrProviderSnapshotNotFound,
+	}
+	broadcaster := &testBroadcaster{}
+	runner, err := NewRunner(RunnerConfig{
+		Snapshotter: snapshotter,
+		Query:       query,
+		Broadcaster: broadcaster,
+	})
+	require.NoError(t, err)
+
+	result, err := runner.RunOnce(context.Background())
+	require.NoError(t, err)
+
+	require.Equal(t, Decision{Post: true, Reason: DecisionReasonMissingRecord}, result.Decision)
+	require.NotNil(t, result.Prepared)
+	require.Equal(t, 1, query.paramsCalls)
+	require.Equal(t, 1, query.providerCalls)
+	require.Equal(t, 1, snapshotter.called)
+	require.Equal(t, 1, broadcaster.calls)
+}
+
 func TestRunnerRunOnceSingleFlight(t *testing.T) {
 	block := make(chan struct{})
 	entered := make(chan struct{})
 	runner, err := NewRunner(RunnerConfig{
 		Snapshotter: &testSnapshotter{block: block, entered: entered},
-		Query:       &testQueryClient{},
+		Query: &testQueryClient{
+			params: verificationv1.Params{VerificationModuleActive: true},
+		},
 		Broadcaster: &testBroadcaster{},
 	})
 	require.NoError(t, err)
@@ -586,7 +621,9 @@ func TestRunnerRunRetriesBoundedFailures(t *testing.T) {
 
 	runner, err := NewRunner(RunnerConfig{
 		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)},
-		Query:       &testQueryClient{},
+		Query: &testQueryClient{
+			params: verificationv1.Params{VerificationModuleActive: true},
+		},
 		Broadcaster: broadcaster,
 		Interval:    time.Hour,
 		RetryDelay:  time.Millisecond,
