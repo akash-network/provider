@@ -178,14 +178,14 @@ func (r *Runner) runOnceWithRetry(ctx context.Context) error {
 			return err
 		}
 		if attempt == r.cfg.MaxRetries {
-			return err
+			return nil
 		}
 		if waitErr := wait(ctx, r.cfg.RetryDelay); waitErr != nil {
-			return err
+			return waitErr
 		}
 	}
 
-	return err
+	return nil
 }
 
 func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {

@@ -821,12 +821,24 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, accQuerier)
 
+	snapshotPayloadClock := func() time.Time {
+		statusResult, err := cctx.Client.Status(ctx)
+		if err == nil && statusResult != nil {
+			blockTime := statusResult.SyncInfo.LatestBlockTime
+			if !blockTime.IsZero() {
+				return blockTime.UTC()
+			}
+		}
+
+		return time.Now().UTC()
+	}
+
 	snapshotPayload, err := aepinventory.NewStatusPayloadSource(aepinventory.StatusPayloadSourceConfig{
 		Status:          service,
 		Provider:        config.ProviderSigner.Address().String(),
 		ChainID:         cctx.ChainID,
 		SoftwareVersion: version.Version,
-		Now:             time.Now,
+		Now:             snapshotPayloadClock,
 	})
 	if err != nil {
 		return err

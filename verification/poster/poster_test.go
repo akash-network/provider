@@ -638,3 +638,37 @@ func TestRunnerRunRetriesBoundedFailures(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, broadcaster.calls)
 }
+
+func TestRunnerRunContinuesAfterBoundedFailures(t *testing.T) {
+	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	broadcaster := &testBroadcaster{}
+	broadcaster.broadcast = func(context.Context, ...sdk.Msg) (*sdk.TxResponse, error) {
+		if broadcaster.calls == 2 {
+			cancel()
+		}
+
+		return nil, errors.New("broadcast failed")
+	}
+
+	runner, err := NewRunner(RunnerConfig{
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)},
+		Query: &testQueryClient{
+			params: verificationv1.Params{VerificationModuleActive: true},
+		},
+		Broadcaster: broadcaster,
+		Interval:    time.Hour,
+		RetryDelay:  time.Millisecond,
+		MaxRetries:  1,
+		Now: func() time.Time {
+			return now
+		},
+	})
+	require.NoError(t, err)
+
+	err = runner.Run(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 2, broadcaster.calls)
+}
