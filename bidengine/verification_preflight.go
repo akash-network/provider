@@ -40,7 +40,7 @@ func evaluateVerificationPreflight(
 	}
 
 	effectiveTier := bestVerificationTier(attestations)
-	if grace != nil && grace.GetStatus() == vtypes.VerificationGraceStatusActive {
+	if grace != nil && grace.GetStatus() == vtypes.VerificationGraceStatusActive && vtypes.TierBetter(grace.GetPreservedTier(), effectiveTier) {
 		effectiveTier = grace.GetPreservedTier()
 	}
 
@@ -102,6 +102,9 @@ func verificationAuditorsSatisfied(req *vtypes.VerificationRequirement, attestat
 	validAuditors := make(map[string]struct{})
 	for _, attestation := range attestations {
 		if attestation.GetStatus() != vtypes.AttestationStatusValid {
+			continue
+		}
+		if !vtypes.TierAtLeast(attestation.GetTier(), req.GetMinTier()) {
 			continue
 		}
 		if auditor := attestation.GetAuditor(); auditor != "" {

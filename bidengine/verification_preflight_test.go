@@ -139,7 +139,7 @@ func TestEvaluateVerificationPreflightTier(t *testing.T) {
 	}
 }
 
-func TestEvaluateVerificationPreflightActiveGraceUsesPreservedTier(t *testing.T) {
+func TestEvaluateVerificationPreflightActiveGraceOnlyImprovesTier(t *testing.T) {
 	result := evaluateVerificationPreflight(true, &vtypes.VerificationRequirement{
 		MinTier: vtypes.TierVerified,
 	}, []vtypes.AttestationRecord{
@@ -149,8 +149,8 @@ func TestEvaluateVerificationPreflightActiveGraceUsesPreservedTier(t *testing.T)
 		Status:        vtypes.VerificationGraceStatusActive,
 	})
 
-	require.False(t, result.allow)
-	require.Equal(t, "tier", result.reason)
+	require.True(t, result.allow)
+	require.Equal(t, "allow", result.reason)
 
 	result = evaluateVerificationPreflight(true, &vtypes.VerificationRequirement{
 		MinTier: vtypes.TierVerified,
@@ -161,6 +161,16 @@ func TestEvaluateVerificationPreflightActiveGraceUsesPreservedTier(t *testing.T)
 
 	require.True(t, result.allow)
 	require.Equal(t, "allow", result.reason)
+
+	result = evaluateVerificationPreflight(true, &vtypes.VerificationRequirement{
+		MinTier: vtypes.TierVerified,
+	}, nil, &vtypes.ProviderVerificationGraceRecord{
+		PreservedTier: vtypes.TierTrusted,
+		Status:        vtypes.VerificationGraceStatusExpired,
+	})
+
+	require.False(t, result.allow)
+	require.Equal(t, "tier", result.reason)
 }
 
 func TestEvaluateVerificationPreflightCapabilities(t *testing.T) {
@@ -230,6 +240,16 @@ func TestEvaluateVerificationPreflightAuditors(t *testing.T) {
 	}, attestations, nil)
 	require.False(t, result.allow)
 	require.Equal(t, "auditors", result.reason)
+
+	result = evaluateVerificationPreflight(true, &vtypes.VerificationRequirement{
+		MinTier:         vtypes.TierVerified,
+		MinAuditorCount: 2,
+	}, []vtypes.AttestationRecord{
+		validAttestation("akash1auditor1", vtypes.TierVerified),
+		validAttestation("akash1auditor2", vtypes.TierIdentified),
+	}, nil)
+	require.False(t, result.allow)
+	require.Equal(t, "auditors", result.reason)
 }
 
 func validAttestation(auditor string, tier vtypes.VerificationTier) vtypes.AttestationRecord {
@@ -281,12 +301,27 @@ func TestShouldBidVerificationPreflightQueryFailuresFallOpen(t *testing.T) {
 			},
 		},
 		{
+			name: "params nil response",
+			query: &verificationPreflightQueryClient{
+				paramsResp: nil,
+			},
+		},
+		{
 			name: "attestations failure",
 			query: &verificationPreflightQueryClient{
 				paramsResp: &vtypes.QueryParamsResponse{
 					Params: vtypes.Params{VerificationModuleActive: true},
 				},
 				attestationsErr: errors.New("attestations failed"),
+			},
+		},
+		{
+			name: "attestations nil response",
+			query: &verificationPreflightQueryClient{
+				paramsResp: &vtypes.QueryParamsResponse{
+					Params: vtypes.Params{VerificationModuleActive: true},
+				},
+				attestationsResp: nil,
 			},
 		},
 		{
