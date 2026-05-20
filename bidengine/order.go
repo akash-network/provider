@@ -586,6 +586,10 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 		}
 	}
 
+	if !o.shouldBidVerificationPreflight(context.Background(), group.GroupSpec.Requirements.Verification) {
+		return false, nil
+	}
+
 	if err := group.GroupSpec.ValidateBasic(); err != nil {
 		o.log.Error("unable to fulfill: group validation error",
 			"err", err)

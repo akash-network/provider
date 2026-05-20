@@ -126,7 +126,7 @@ func makeMocks(s *orderTestScaffold) {
 	}).Return(&sdk.Result{}, nil)
 
 	clientMocks := &clientmocks.Client{}
-	clientMocks.On("Query").Return(queryMocks)
+	clientMocks.On("Query").Return(bidengineTestQueryClient{QueryClient: queryMocks})
 	clientMocks.On("Tx").Return(txMocks)
 
 	s.client = clientMocks
@@ -207,7 +207,7 @@ func makeOrderForTest(
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
-	myService, err := NewService(ctx, scaffold.queryClient, mySession, scaffold.cluster, scaffold.testBus, waiter.NewNullWaiter(), cfg)
+	myService, err := NewService(ctx, bidengineTestQueryClient{QueryClient: scaffold.queryClient}, mySession, scaffold.cluster, scaffold.testBus, waiter.NewNullWaiter(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, myService)
 

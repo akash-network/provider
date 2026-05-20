@@ -52,7 +52,7 @@ func setupProviderAttributesTestScaffold(
 	retval.client = &clientmocks.Client{}
 
 	retval.queryClient = clientFactory(retval)
-	retval.client.On("Query").Return(retval.queryClient)
+	retval.client.On("Query").Return(bidengineTestQueryClient{QueryClient: retval.queryClient})
 	retval.s = session.New(testutil.Logger(t), retval.client, retval.provider, -1)
 	retval.bus = pubsub.NewBus()
 	var err error
