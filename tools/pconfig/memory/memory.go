@@ -27,12 +27,17 @@ type bidengine struct {
 	nextkey []byte
 }
 
+type verification struct {
+	snapshotPosterState []byte
+}
+
 type impl struct {
 	closed chan struct{}
 
-	lock      sync.RWMutex
-	accounts  map[string]account
-	bidengine bidengine
+	lock         sync.RWMutex
+	accounts     map[string]account
+	bidengine    bidengine
+	verification verification
 }
 
 var _ pconfig.Storage = (*impl)(nil)
@@ -47,6 +52,10 @@ func NewMemory() (pconfig.Storage, error) {
 }
 
 func (i *impl) BidEngine() pconfig.BidEngine {
+	return i
+}
+
+func (i *impl) Verification() pconfig.Verification {
 	return i
 }
 
@@ -213,6 +222,29 @@ func (i *impl) GetOrdersNextKey(_ context.Context) ([]byte, error) {
 
 	res := make([]byte, len(i.bidengine.nextkey))
 	copy(res, i.bidengine.nextkey)
+
+	return res, nil
+}
+
+func (i *impl) SetSnapshotPosterState(_ context.Context, state []byte) error {
+	defer i.lock.Unlock()
+	i.lock.Lock()
+
+	i.verification.snapshotPosterState = append([]byte(nil), state...)
+
+	return nil
+}
+
+func (i *impl) GetSnapshotPosterState(_ context.Context) ([]byte, error) {
+	defer i.lock.RUnlock()
+	i.lock.RLock()
+
+	if len(i.verification.snapshotPosterState) == 0 {
+		return nil, pconfig.ErrNotExists
+	}
+
+	res := make([]byte, len(i.verification.snapshotPosterState))
+	copy(res, i.verification.snapshotPosterState)
 
 	return res, nil
 }

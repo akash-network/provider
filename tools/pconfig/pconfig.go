@@ -40,9 +40,15 @@ type BidEngine interface {
 	GetOrdersNextKey(context.Context) ([]byte, error)
 }
 
+type Verification interface {
+	SetSnapshotPosterState(context.Context, []byte) error
+	GetSnapshotPosterState(context.Context) ([]byte, error)
+}
+
 type Storage interface {
 	StorageR
 	StorageW
 	BidEngine() BidEngine
+	Verification() Verification
 	Close() error
 }
