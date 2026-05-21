@@ -3,10 +3,13 @@ package poster
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
+	"math/rand"
 	"strings"
 	"time"
 
+	"cosmossdk.io/log"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -26,11 +29,14 @@ var (
 	errMissingSnapshotProvider  = errors.New("missing inventory snapshot provider")
 	errMissingSnapshotHash      = errors.New("missing inventory snapshot hash")
 	errMissingSnapshotTimestamp = errors.New("missing inventory snapshot timestamp")
+	errUnexpectedSnapshotNonce  = errors.New("unexpected nonce in on-chain snapshot hash payload")
 	errMissingQueryClient       = errors.New("missing verification query client")
 	errMissingBroadcaster       = errors.New("missing snapshot hash broadcaster")
 	errPosterAlreadyRunning     = errors.New("snapshot hash poster already running")
 	errInvalidRunInterval       = errors.New("invalid snapshot hash poster run interval")
 	errInvalidRetryDelay        = errors.New("invalid snapshot hash poster retry delay")
+	errInvalidRunJitter         = errors.New("invalid snapshot hash poster run jitter")
+	errInvalidRetryJitter       = errors.New("invalid snapshot hash poster retry jitter")
 )
 
 type DecisionReason string
@@ -49,6 +55,32 @@ var snapshotPosterCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "provider_verification_snapshot_poster",
 	Help: "The total number of provider verification snapshot poster decisions",
 }, []string{"result"})
+
+var snapshotPosterDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "provider_verification_snapshot_poster_duration",
+	Help:    "Snapshot hash poster run duration in seconds",
+	Buckets: prometheus.ExponentialBuckets(0.01, 2.0, 12),
+})
+
+var snapshotPosterLastSuccess = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "provider_verification_snapshot_poster_last_success",
+	Help: "Unix timestamp of the last successful provider verification snapshot hash post",
+})
+
+var snapshotPosterComplianceDeadline = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "provider_verification_snapshot_poster_compliance_deadline",
+	Help: "Unix timestamp of the current provider verification snapshot compliance deadline",
+})
+
+var snapshotPosterSuspended = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "provider_verification_snapshot_poster_suspended",
+	Help: "Whether the current provider verification snapshot record is suspended",
+})
+
+var snapshotPosterRetryDelay = promauto.NewGauge(prometheus.GaugeOpts{
+	Name: "provider_verification_snapshot_poster_retry_delay",
+	Help: "Current verification snapshot poster retry delay in seconds",
+})
 
 type Snapshotter interface {
 	Build(context.Context, aepinventory.SnapshotRequest) (*aepinventory.Snapshot, error)
@@ -85,8 +117,12 @@ type RunnerConfig struct {
 	Snapshotter        Snapshotter
 	Query              QueryClient
 	Broadcaster        Broadcaster
+	State              StateStore
+	Log                log.Logger
 	Interval           time.Duration
+	IntervalJitter     time.Duration
 	RetryDelay         time.Duration
+	RetryJitter        time.Duration
 	MaxRetries         uint
 	PostBeforeDeadline time.Duration
 	Now                func() time.Time
@@ -102,6 +138,7 @@ type RunOnceResult struct {
 	Params   verificationv1.Params
 	Record   *verificationv1.ProviderSnapshotRecord
 	Decision Decision
+	State    State
 	Response *sdk.TxResponse
 }
 
@@ -119,6 +156,9 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 		cfg.Now = func() time.Time {
 			return time.Now().UTC()
 		}
+	}
+	if cfg.Log == nil {
+		cfg.Log = log.NewNopLogger()
 	}
 
 	runner := &Runner{
@@ -154,13 +194,19 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.cfg.MaxRetries > 0 && r.cfg.RetryDelay <= 0 {
 		return errInvalidRetryDelay
 	}
+	if r.cfg.IntervalJitter < 0 {
+		return errInvalidRunJitter
+	}
+	if r.cfg.RetryJitter < 0 {
+		return errInvalidRetryJitter
+	}
 
 	for {
 		if err := r.runOnceWithRetry(ctx); err != nil {
 			return err
 		}
 
-		if err := wait(ctx, r.cfg.Interval); err != nil {
+		if err := wait(ctx, addJitter(r.cfg.Interval, r.cfg.IntervalJitter)); err != nil {
 			return nil
 		}
 	}
@@ -178,9 +224,20 @@ func (r *Runner) runOnceWithRetry(ctx context.Context) error {
 			return err
 		}
 		if attempt == r.cfg.MaxRetries {
+			r.cfg.Log.Error("verification snapshot hash post retries exhausted",
+				"attempts", attempt+1,
+				"err", err)
 			return nil
 		}
-		if waitErr := wait(ctx, r.cfg.RetryDelay); waitErr != nil {
+
+		delay := r.retryDelay(attempt)
+		snapshotPosterRetryDelay.Set(delay.Seconds())
+		r.cfg.Log.Error("verification snapshot hash post failed",
+			"attempt", attempt+1,
+			"next-retry", delay,
+			"err", err)
+
+		if waitErr := wait(ctx, delay); waitErr != nil {
 			return waitErr
 		}
 	}
@@ -189,6 +246,11 @@ func (r *Runner) runOnceWithRetry(ctx context.Context) error {
 }
 
 func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {
+	start := time.Now()
+	defer func() {
+		snapshotPosterDuration.Observe(time.Since(start).Seconds())
+	}()
+
 	params, err := r.cfg.Query.Params(ctx)
 	if err != nil {
 		snapshotPosterCounter.WithLabelValues("query_error").Inc()
@@ -212,6 +274,7 @@ func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {
 		snapshotPosterCounter.WithLabelValues("query_error").Inc()
 		return nil, err
 	}
+	recordSnapshotMetrics(record)
 
 	decision := ShouldPost(DecisionInput{
 		SnapshotHash:       prepared.Msg.SnapshotHash,
@@ -223,18 +286,35 @@ func (r *Runner) runOnce(ctx context.Context) (*RunOnceResult, error) {
 	result.Prepared = prepared
 	result.Record = record
 	result.Decision = decision
+	result.State = r.state(prepared, record, decision)
 
 	if !decision.Post {
 		recordPosterDecision(decision)
+		r.saveState(ctx, result.State)
+		r.cfg.Log.Debug("verification snapshot hash post skipped",
+			"provider", prepared.Msg.Provider,
+			"reason", decision.Reason,
+			"snapshot-hash", hex.EncodeToString(prepared.Msg.SnapshotHash))
 		return result, nil
 	}
 
 	result.Response, err = r.cfg.Broadcaster.Broadcast(ctx, prepared.Msg)
 	if err != nil {
 		snapshotPosterCounter.WithLabelValues("broadcast_error").Inc()
+		result.State.LastError = err.Error()
+		r.saveState(ctx, result.State)
 		return nil, err
 	}
 	recordPosterDecision(decision)
+	result.State.LastSuccessAt = result.State.LastAttemptAt
+	result.State.LastTxHash = result.Response.TxHash
+	r.saveState(ctx, result.State)
+	snapshotPosterLastSuccess.Set(float64(result.State.LastSuccessAt.Unix()))
+	r.cfg.Log.Info("posted verification snapshot hash",
+		"provider", prepared.Msg.Provider,
+		"reason", decision.Reason,
+		"snapshot-hash", hex.EncodeToString(prepared.Msg.SnapshotHash),
+		"tx", result.Response.TxHash)
 
 	return result, nil
 }
@@ -257,6 +337,26 @@ func (r *Runner) postBeforeDeadline(params verificationv1.Params) time.Duration 
 	}
 
 	return params.SnapshotHashInterval / 10
+}
+
+func (r *Runner) retryDelay(attempt uint) time.Duration {
+	delay := r.cfg.RetryDelay
+	for i := uint(0); i < attempt; i++ {
+		if delay > (1<<62)-delay {
+			break
+		}
+		delay *= 2
+	}
+
+	return addJitter(delay, r.cfg.RetryJitter)
+}
+
+func addJitter(delay time.Duration, jitter time.Duration) time.Duration {
+	if delay <= 0 || jitter <= 0 {
+		return delay
+	}
+
+	return delay + time.Duration(rand.Int63n(int64(jitter))) // nolint: gosec
 }
 
 func wait(ctx context.Context, delay time.Duration) error {
@@ -299,6 +399,9 @@ func BuildMsg(ctx context.Context, snapshotter Snapshotter) (*PreparedSnapshotHa
 	}
 	if payload.Timestamp.IsZero() {
 		return nil, errMissingSnapshotTimestamp
+	}
+	if len(payload.GetNonce()) != 0 {
+		return nil, errUnexpectedSnapshotNonce
 	}
 
 	msg := &verificationv1.MsgPostSnapshotHash{
@@ -354,5 +457,58 @@ func resourceSummary(summary inventoryv1.SnapshotResourceSummary) verificationv1
 		ActiveLeases:      summary.GetActiveLeases(),
 		SoftwareVersion:   summary.GetSoftwareVersion(),
 		SoftwareSignature: append([]byte(nil), summary.GetSoftwareSignature()...),
+	}
+}
+
+func recordSnapshotMetrics(record *verificationv1.ProviderSnapshotRecord) {
+	if record == nil {
+		snapshotPosterSuspended.Set(0)
+		snapshotPosterComplianceDeadline.Set(0)
+		return
+	}
+
+	if record.GetSuspended() {
+		snapshotPosterSuspended.Set(1)
+	} else {
+		snapshotPosterSuspended.Set(0)
+	}
+
+	deadline := record.GetComplianceDeadline()
+	if deadline.IsZero() {
+		snapshotPosterComplianceDeadline.Set(0)
+		return
+	}
+
+	snapshotPosterComplianceDeadline.Set(float64(deadline.Unix()))
+}
+
+func (r *Runner) state(prepared *PreparedSnapshotHash, record *verificationv1.ProviderSnapshotRecord, decision Decision) State {
+	state := State{
+		Version:           StateVersion,
+		HashDomain:        HashDomainSnapshotV1Full,
+		Provider:          prepared.Msg.Provider,
+		SnapshotHash:      append([]byte(nil), prepared.Msg.SnapshotHash...),
+		SnapshotTimestamp: prepared.Msg.SnapshotTimestamp,
+		ResourceSummary:   prepared.Msg.ResourceSummary,
+		LastAttemptAt:     r.cfg.Now(),
+		LastDecision:      string(decision.Reason),
+	}
+
+	if record != nil {
+		state.ComplianceDeadline = record.GetComplianceDeadline()
+		state.Suspended = record.GetSuspended()
+	}
+
+	return state
+}
+
+func (r *Runner) saveState(ctx context.Context, state State) {
+	if r.cfg.State == nil {
+		return
+	}
+
+	if err := r.cfg.State.Set(ctx, state); err != nil {
+		snapshotPosterCounter.WithLabelValues("state_error").Inc()
+		r.cfg.Log.Error("saving verification snapshot poster state", "err", err)
 	}
 }
