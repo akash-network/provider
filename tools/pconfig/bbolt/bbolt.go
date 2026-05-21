@@ -33,10 +33,12 @@ var (
 var (
 	bucketAccounts     = []byte("accounts")
 	bucketBidEngine    = []byte("bidengine")
+	bucketVerification = []byte("verification")
 	keyPubKey          = []byte("pubkey")
 	bucketCertificates = []byte("certificates")
 	keyCertificate     = []byte("certificate")
 	keyNextKey         = []byte("nextkey")
+	keySnapshotPoster  = []byte("snapshot-poster")
 )
 
 type impl struct {
@@ -63,6 +65,11 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 			return fmt.Errorf("create bucket: %s", err)
 		}
 
+		_, err = tx.CreateBucketIfNotExists(bucketVerification)
+		if err != nil {
+			return fmt.Errorf("create bucket: %s", err)
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -78,6 +85,10 @@ func NewBBolt(path string) (pconfig.Storage, error) {
 }
 
 func (b *impl) BidEngine() pconfig.BidEngine {
+	return b
+}
+
+func (b *impl) Verification() pconfig.Verification {
 	return b
 }
 
@@ -439,6 +450,48 @@ func (b *impl) GetOrdersNextKey(_ context.Context) ([]byte, error) {
 		return nil
 	})
 
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (b *impl) SetSnapshotPosterState(_ context.Context, state []byte) error {
+	select {
+	case <-b.closed:
+		return ErrDBClosed
+	default:
+	}
+
+	return b.db.Update(func(tx *bbolt.Tx) error {
+		verification := tx.Bucket(bucketVerification)
+		if verification == nil {
+			return ErrUninitialized
+		}
+
+		return verification.Put(keySnapshotPoster, state)
+	})
+}
+
+func (b *impl) GetSnapshotPosterState(_ context.Context) ([]byte, error) {
+	var res []byte
+
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		verification := tx.Bucket(bucketVerification)
+		if verification == nil {
+			return ErrUninitialized
+		}
+
+		val := verification.Get(keySnapshotPoster)
+		if len(val) == 0 {
+			return pconfig.ErrNotExists
+		}
+
+		res = append([]byte(nil), val...)
+
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
