@@ -254,3 +254,56 @@ func TestStorage_ConcurrentOperations(t *testing.T) {
 		}
 	}
 }
+
+func TestStorage_VerificationSnapshotPosterState(t *testing.T) {
+	dbs := initTestBackends(t)
+	require.Len(t, dbs, 2)
+
+	defer func() {
+		for _, db := range dbs {
+			db.cleanup()
+		}
+	}()
+
+	for _, db := range dbs {
+		t.Run(db.name, func(t *testing.T) {
+			ctx := context.Background()
+			state := []byte(`{"provider":"akash1provider"}`)
+
+			_, err := db.Verification().GetSnapshotPosterState(ctx)
+			require.ErrorIs(t, err, pconfig.ErrNotExists)
+
+			err = db.Verification().SetSnapshotPosterState(ctx, state)
+			require.NoError(t, err)
+
+			stored, err := db.Verification().GetSnapshotPosterState(ctx)
+			require.NoError(t, err)
+			require.Equal(t, state, stored)
+
+			state[0] = '['
+			require.Equal(t, []byte(`{"provider":"akash1provider"}`), stored)
+		})
+	}
+}
+
+func TestBBolt_VerificationSnapshotPosterStatePersists(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	state := []byte(`{"provider":"akash1provider"}`)
+
+	db, err := bbolt.NewBBolt(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, db.Verification().SetSnapshotPosterState(ctx, state))
+	require.NoError(t, db.Close())
+
+	db, err = bbolt.NewBBolt(dbPath)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
+
+	stored, err := db.Verification().GetSnapshotPosterState(ctx)
+	require.NoError(t, err)
+	require.Equal(t, state, stored)
+}
