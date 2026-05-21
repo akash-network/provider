@@ -136,7 +136,9 @@ const (
 
 const (
 	FlagVerificationSnapshotPosterInterval           = "verification-snapshot-poster-interval"
+	FlagVerificationSnapshotPosterIntervalJitter     = "verification-snapshot-poster-interval-jitter"
 	FlagVerificationSnapshotPosterRetryDelay         = "verification-snapshot-poster-retry-delay"
+	FlagVerificationSnapshotPosterRetryJitter        = "verification-snapshot-poster-retry-jitter"
 	FlagVerificationSnapshotPosterMaxRetries         = "verification-snapshot-poster-max-retries"
 	FlagVerificationSnapshotPosterPostBeforeDeadline = "verification-snapshot-poster-post-before-deadline"
 )
@@ -224,14 +226,22 @@ func RunCmd() *cobra.Command {
 			}
 
 			snapshotPosterInterval := viper.GetDuration(FlagVerificationSnapshotPosterInterval)
+			snapshotPosterIntervalJitter := viper.GetDuration(FlagVerificationSnapshotPosterIntervalJitter)
 			snapshotPosterRetryDelay := viper.GetDuration(FlagVerificationSnapshotPosterRetryDelay)
+			snapshotPosterRetryJitter := viper.GetDuration(FlagVerificationSnapshotPosterRetryJitter)
 			snapshotPosterPostBeforeDeadline := viper.GetDuration(FlagVerificationSnapshotPosterPostBeforeDeadline)
 			snapshotPosterMaxRetries := viper.GetUint(FlagVerificationSnapshotPosterMaxRetries)
 			if snapshotPosterInterval < 0 {
 				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterInterval) // nolint: err113
 			}
+			if snapshotPosterIntervalJitter < 0 {
+				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterIntervalJitter) // nolint: err113
+			}
 			if snapshotPosterRetryDelay < 0 {
 				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterRetryDelay) // nolint: err113
+			}
+			if snapshotPosterRetryJitter < 0 {
+				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterRetryJitter) // nolint: err113
 			}
 			if snapshotPosterPostBeforeDeadline < 0 {
 				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagVerificationSnapshotPosterPostBeforeDeadline) // nolint: err113
@@ -519,7 +529,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	monitorHealthcheckPeriod := viper.GetDuration(FlagMonitorHealthcheckPeriod)
 	monitorHealthcheckPeriodJitter := viper.GetDuration(FlagMonitorHealthcheckPeriodJitter)
 	snapshotPosterInterval := viper.GetDuration(FlagVerificationSnapshotPosterInterval)
+	snapshotPosterIntervalJitter := viper.GetDuration(FlagVerificationSnapshotPosterIntervalJitter)
 	snapshotPosterRetryDelay := viper.GetDuration(FlagVerificationSnapshotPosterRetryDelay)
+	snapshotPosterRetryJitter := viper.GetDuration(FlagVerificationSnapshotPosterRetryJitter)
 	snapshotPosterMaxRetries := viper.GetUint(FlagVerificationSnapshotPosterMaxRetries)
 	snapshotPosterPostBeforeDeadline := viper.GetDuration(FlagVerificationSnapshotPosterPostBeforeDeadline)
 
@@ -831,13 +843,25 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		if err != nil {
 			return err
 		}
+		persistentConfig, err := fromctx.PersistentConfigFromCtx(ctx)
+		if err != nil {
+			return err
+		}
+		posterState, err := aepposter.NewPersistentStateStore(persistentConfig.Verification())
+		if err != nil {
+			return err
+		}
 
 		runner, err := aepposter.NewRunner(aepposter.RunnerConfig{
 			Snapshotter:        snapshotter,
 			Query:              posterQuery,
 			Broadcaster:        config.ProviderSigner,
+			State:              posterState,
+			Log:                posterSession.Log(),
 			Interval:           snapshotPosterInterval,
+			IntervalJitter:     snapshotPosterIntervalJitter,
 			RetryDelay:         snapshotPosterRetryDelay,
+			RetryJitter:        snapshotPosterRetryJitter,
 			MaxRetries:         snapshotPosterMaxRetries,
 			PostBeforeDeadline: snapshotPosterPostBeforeDeadline,
 		})
@@ -848,7 +872,9 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		group.Go(func() error {
 			posterSession.Log().Info("starting verification snapshot hash poster",
 				"interval", snapshotPosterInterval,
+				"interval-jitter", snapshotPosterIntervalJitter,
 				"retry-delay", snapshotPosterRetryDelay,
+				"retry-jitter", snapshotPosterRetryJitter,
 				"max-retries", snapshotPosterMaxRetries)
 
 			err := runner.Run(ctx)

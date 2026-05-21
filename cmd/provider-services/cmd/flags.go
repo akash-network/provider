@@ -359,8 +359,18 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Duration(FlagVerificationSnapshotPosterIntervalJitter, 15*time.Second, "jitter window added to verification snapshot hash poster intervals")
+	if err := viper.BindPFlag(FlagVerificationSnapshotPosterIntervalJitter, cmd.Flags().Lookup(FlagVerificationSnapshotPosterIntervalJitter)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Duration(FlagVerificationSnapshotPosterRetryDelay, 30*time.Second, "delay between verification snapshot hash post retries")
 	if err := viper.BindPFlag(FlagVerificationSnapshotPosterRetryDelay, cmd.Flags().Lookup(FlagVerificationSnapshotPosterRetryDelay)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Duration(FlagVerificationSnapshotPosterRetryJitter, 5*time.Second, "jitter window added to verification snapshot hash post retries")
+	if err := viper.BindPFlag(FlagVerificationSnapshotPosterRetryJitter, cmd.Flags().Lookup(FlagVerificationSnapshotPosterRetryJitter)); err != nil {
 		return err
 	}
 
