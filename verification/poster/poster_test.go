@@ -126,6 +126,27 @@ func (b *testBroadcaster) Broadcast(ctx context.Context, msgs ...sdk.Msg) (*sdk.
 	return &sdk.TxResponse{TxHash: "snapshot-tx"}, nil
 }
 
+type testStateStore struct {
+	state State
+	err   error
+	calls int
+}
+
+func (s *testStateStore) Set(_ context.Context, state State) error {
+	s.calls++
+	if s.err != nil {
+		return s.err
+	}
+
+	s.state = state
+
+	return nil
+}
+
+func (s *testStateStore) Get(context.Context) (State, error) {
+	return s.state, s.err
+}
+
 func validSnapshot(t *testing.T, provider string, hash []byte, timestamp time.Time) *aepinventory.Snapshot {
 	t.Helper()
 
@@ -280,6 +301,26 @@ func TestBuildMsgRejectsMissingSnapshotTimestamp(t *testing.T) {
 	require.Nil(t, prepared)
 }
 
+func TestBuildMsgRejectsSnapshotNonce(t *testing.T) {
+	payload := inventoryv1.SnapshotPayload{
+		SchemaVersion: aepinventory.SnapshotPayloadSchemaVersion,
+		Provider:      "akash1provider",
+		ChainID:       "akashnet-2",
+		Nonce:         bytes.Repeat([]byte{1}, aepinventory.NonceSize),
+		Timestamp:     time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC),
+	}
+	payloadBytes, err := aepinventory.MarshalDeterministic(&payload)
+	require.NoError(t, err)
+
+	prepared, err := BuildMsg(context.Background(), &testSnapshotter{snapshot: &aepinventory.Snapshot{
+		Payload:  payloadBytes,
+		Provider: "akash1provider",
+		Hash:     aepinventory.HashPayload(payloadBytes),
+	}})
+	require.ErrorIs(t, err, errUnexpectedSnapshotNonce)
+	require.Nil(t, prepared)
+}
+
 func TestShouldPost(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
 	hash := bytes.Repeat([]byte{1}, 32)
@@ -386,10 +427,12 @@ func TestRunnerRunOncePostsWhenProviderSnapshotMissing(t *testing.T) {
 		providerErr: ErrProviderSnapshotNotFound,
 	}
 	broadcaster := &testBroadcaster{}
+	state := &testStateStore{}
 	runner, err := NewRunner(RunnerConfig{
 		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, provider, hash, now)},
 		Query:       query,
 		Broadcaster: broadcaster,
+		State:       state,
 		Now: func() time.Time {
 			return now
 		},
@@ -415,6 +458,12 @@ func TestRunnerRunOncePostsWhenProviderSnapshotMissing(t *testing.T) {
 	require.Equal(t, provider, msg.Provider)
 	require.Equal(t, hash, msg.SnapshotHash)
 	require.Equal(t, "snapshot-tx", result.Response.TxHash)
+	require.Equal(t, 1, state.calls)
+	require.Equal(t, HashDomainSnapshotV1Full, state.state.HashDomain)
+	require.Equal(t, provider, state.state.Provider)
+	require.Equal(t, hash, state.state.SnapshotHash)
+	require.Equal(t, "snapshot-tx", state.state.LastTxHash)
+	require.Equal(t, now, state.state.LastSuccessAt)
 }
 
 func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
@@ -434,10 +483,12 @@ func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
 		},
 	}
 	broadcaster := &testBroadcaster{}
+	state := &testStateStore{}
 	runner, err := NewRunner(RunnerConfig{
 		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, provider, hash, now)},
 		Query:       query,
 		Broadcaster: broadcaster,
+		State:       state,
 		Now: func() time.Time {
 			return now
 		},
@@ -451,6 +502,9 @@ func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
 	require.Equal(t, query.record, result.Record)
 	require.Equal(t, 0, broadcaster.calls)
 	require.Nil(t, result.Response)
+	require.Equal(t, 1, state.calls)
+	require.Equal(t, string(DecisionReasonDeadlineUnchanged), state.state.LastDecision)
+	require.True(t, state.state.LastSuccessAt.IsZero())
 }
 
 func TestRunnerRunOncePostsBeforeDeadlineUsingParamsInterval(t *testing.T) {
