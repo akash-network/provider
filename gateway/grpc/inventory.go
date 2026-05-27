@@ -42,8 +42,8 @@ func (gm *grpcInventoryV1) GetInventorySnapshot(ctx context.Context, req *invent
 	if err != nil {
 		return nil, err
 	}
-	if snapshot == nil {
-		return nil, status.Error(codes.Internal, "inventory snapshot builder returned nil snapshot")
+	if err := inventory.ValidateSnapshot(snapshot); err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &inventoryv1.GetInventorySnapshotResponse{

@@ -163,12 +163,21 @@ func TestStatusPayloadSourcePayload(t *testing.T) {
 		SoftwareVersion:   "v1.2.3",
 		SoftwareSignature: []byte("release-signature"),
 	}, decoded.ResourceSummary)
+	require.Len(t, decoded.EvidenceSections, 2)
+	require.Equal(t, EvidenceSectionProviderStatus, decoded.EvidenceSections[0].Name)
+	expectedStatusEvidence, err := MarshalDeterministic(status)
+	require.NoError(t, err)
+	require.Equal(t, expectedStatusEvidence, decoded.EvidenceSections[0].Payload)
+
+	var statusEvidence providerv1.Status
+	require.NoError(t, statusEvidence.Unmarshal(decoded.EvidenceSections[0].Payload))
+	require.Equal(t, status.Cluster.Leases.Active, statusEvidence.Cluster.Leases.Active)
 	require.Equal(t, []inventoryv1.SnapshotEvidenceSection{
 		{
 			Name:    "hardware",
 			Payload: []byte("collector-payload"),
 		},
-	}, decoded.EvidenceSections)
+	}, decoded.EvidenceSections[1:])
 
 	second, err := source.Payload(context.Background(), SnapshotRequest{Nonce: nonce})
 	require.NoError(t, err)
