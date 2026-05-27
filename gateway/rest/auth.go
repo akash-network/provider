@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"strings"
 
 	gcontext "github.com/gorilla/context"
 
@@ -16,17 +15,7 @@ import (
 // AuthHeaderTokenExtractor is a TokenExtractor that takes a request
 // and extracts the token from the Authorization header.
 func AuthHeaderTokenExtractor(r *http.Request) (string, error) {
-	authHeader := r.Header.Get("Authorization")
-	if authHeader == "" {
-		return "", nil // No error, just no JWT.
-	}
-
-	authHeaderParts := strings.Fields(authHeader)
-	if len(authHeaderParts) != 2 || strings.ToLower(authHeaderParts[0]) != "bearer" {
-		return "", httperror.ErrInvalidAuthHeader
-	}
-
-	return authHeaderParts[1], nil
+	return gwutils.AuthHeaderToken(r.Header.Values("Authorization"))
 }
 
 func DefaultErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {

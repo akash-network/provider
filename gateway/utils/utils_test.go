@@ -116,6 +116,52 @@ func TestAuthProcess_NoTokenReturnsClaims(t *testing.T) {
 	require.Equal(t, ajwt.AccessTypeNone, claims.Leases.Access)
 }
 
+func TestAuthHeaderToken(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers []string
+		want    string
+		wantErr error
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name:    "bearer",
+			headers: []string{"Bearer token"},
+			want:    "token",
+		},
+		{
+			name:    "lowercase bearer",
+			headers: []string{"bearer token"},
+			want:    "token",
+		},
+		{
+			name:    "malformed",
+			headers: []string{"token"},
+			wantErr: httperror.ErrInvalidAuthHeader,
+		},
+		{
+			name:    "multiple headers",
+			headers: []string{"Bearer token-a", "Bearer token-b"},
+			wantErr: httperror.ErrInvalidAuthHeader,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			token, err := AuthHeaderToken(test.headers)
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, test.want, token)
+		})
+	}
+}
+
 func mustCreateCertWithCN(t *testing.T, cn string) *x509.Certificate {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
