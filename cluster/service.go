@@ -379,6 +379,13 @@ loop:
 			case *mtypes.EventLeaseClosed:
 				_ = s.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: ev.ID})
 				s.teardownLease(ev.ID)
+			case *mtypes.EventLeaseReclaimStarted:
+				s.log.Info("lease reclamation started",
+					"lease", ev.ID,
+					"reason", ev.Reason,
+					"deadline", ev.Deadline)
+				// Workloads continue running during the reclamation window.
+				// Teardown occurs when EventLeaseClosed is received after the window elapses.
 			}
 		case ch := <-s.statusch:
 			ch <- &apclient.ClusterStatus{

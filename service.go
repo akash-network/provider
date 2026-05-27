@@ -87,11 +87,12 @@ func NewService(ctx context.Context,
 	}
 
 	bidengineSvc, err := bidengine.NewService(ctx, cl, session, clusterSvc, bus, waiter, bidengine.Config{
-		PricingStrategy: cfg.BidPricingStrategy,
-		Deposit:         cfg.BidDeposit,
-		BidTimeout:      cfg.BidTimeout,
-		Attributes:      cfg.Attributes,
-		MaxGroupVolumes: cfg.MaxGroupVolumes,
+		PricingStrategy:   cfg.BidPricingStrategy,
+		Deposit:           cfg.BidDeposit,
+		BidTimeout:        cfg.BidTimeout,
+		Attributes:        cfg.Attributes,
+		MaxGroupVolumes:   cfg.MaxGroupVolumes,
+		ReclamationWindow: cfg.ReclamationWindow,
 	})
 	if err != nil {
 		errmsg := "creating bidengine service"

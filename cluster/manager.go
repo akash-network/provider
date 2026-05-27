@@ -591,7 +591,8 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 		return err
 	}
 
-	if lease.GetLease().State != mv1.LeaseActive {
+	leaseState := lease.GetLease().State
+	if leaseState != mv1.LeaseActive && leaseState != mv1.LeaseReclaiming {
 		dm.log.Error("lease not active, not deploying")
 		return fmt.Errorf("%w: %s", ErrLeaseInactive, dm.deployment.LeaseID())
 	}

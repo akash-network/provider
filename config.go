@@ -26,6 +26,7 @@ type Config struct {
 	MaxGroupVolumes             int
 	RPCQueryTimeout             time.Duration
 	CachedResultMaxAge          time.Duration
+	ReclamationWindow           *time.Duration
 	cluster.Config
 }
 
