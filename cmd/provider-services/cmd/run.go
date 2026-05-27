@@ -791,7 +791,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	err = gwgrpc.NewServer(ctx, grpcaddr, accQuerier, service)
+	err = gwgrpc.NewServer(ctx, grpcaddr, accQuerier, service, nil)
 	if err != nil {
 		return err
 	}
