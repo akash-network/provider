@@ -435,6 +435,7 @@ loop:
 				Amount:  o.cfg.Deposit,
 				Sources: deposit.Sources{deposit.SourceBalance},
 			}, offer)
+			msg.ReclamationWindow = o.cfg.ReclamationWindow
 			bidch = runner.Do(func() runner.Result {
 				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 			})
