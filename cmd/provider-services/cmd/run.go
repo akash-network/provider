@@ -93,6 +93,7 @@ const (
 	FlagAuthPem                          = "auth-pem"
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
+	FlagReclamationWindow                = "reclamation-window"
 	FlagManifestTimeout                  = "manifest-timeout"
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
@@ -480,6 +481,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
+	reclamationWindow := viper.GetDuration(FlagReclamationWindow)
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
 	metricsListener := viper.GetString(FlagMetricsListener)
 	providerConfig := viper.GetString(FlagProviderConfig)
@@ -655,6 +657,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.DeploymentIngressDomain = deploymentIngressDomain
 	config.BidTimeout = bidTimeout
 	config.ManifestTimeout = manifestTimeout
+
+	if reclamationWindow > 0 {
+		config.ReclamationWindow = &reclamationWindow
+	}
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod
 	config.MonitorRetryPeriodJitter = monitorRetryPeriodJitter
