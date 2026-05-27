@@ -117,9 +117,9 @@ func authInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
-			tokens := md["authorization"]
-			if len(tokens) == 1 {
-				tokString = tokens[1]
+			tokString, err = gwutils.AuthHeaderToken(md.Get("authorization"))
+			if err != nil {
+				return nil, err
 			}
 		}
 
