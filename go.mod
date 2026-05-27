@@ -43,6 +43,7 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.49.0
 	golang.org/x/sync v0.19.0
+	golang.org/x/sys v0.41.0
 	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
@@ -51,9 +52,9 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.2.10
+	pkg.akt.dev/go v0.3.0-rc0
 	pkg.akt.dev/go/cli v0.2.2
-	pkg.akt.dev/go/sdl v0.2.0
+	pkg.akt.dev/go/sdl v0.3.0-rc0
 	pkg.akt.dev/node v1.2.2
 	pkg.akt.dev/node/v2 v2.1.0-rc10
 	sigs.k8s.io/gateway-api v1.4.1
@@ -363,7 +364,6 @@ require (
 	golang.org/x/exp v0.0.0-20250305212735-054e65f0b394 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/term v0.39.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	golang.org/x/time v0.14.0 // indirect

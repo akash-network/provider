@@ -52,7 +52,9 @@ type LeaseEvent struct {
 }
 
 type InventoryOptions struct {
-	DryRun bool
+	DryRun              bool
+	ConfidentialCompute bool
+	TEEType             string // "amd-sev-snp" or "intel-tdx"
 }
 
 type InventoryOption func(*InventoryOptions) *InventoryOptions
@@ -60,6 +62,20 @@ type InventoryOption func(*InventoryOptions) *InventoryOptions
 func WithDryRun() InventoryOption {
 	return func(opts *InventoryOptions) *InventoryOptions {
 		opts.DryRun = true
+		return opts
+	}
+}
+
+func WithConfidentialCompute() InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.ConfidentialCompute = true
+		return opts
+	}
+}
+
+func WithTEEType(teeType string) InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.TEEType = teeType
 		return opts
 	}
 }

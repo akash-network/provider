@@ -94,6 +94,13 @@ type Client interface {
 	DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto mani.ServiceProtocol, sharingKey string, overwrite bool) error
 	PurgeDeclaredIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, externalPort uint32, proto mani.ServiceProtocol) error
 	PurgeDeclaredIPs(ctx context.Context, lID mtypes.LeaseID) error
+
+	// AttestationQuote forwards an attestation quote request to the sidecar
+	// running inside a confidential compute pod. The requestBody (containing the
+	// tenant's nonce) is sent verbatim to the sidecar; the response (hardware-signed
+	// evidence) is returned verbatim. The provider never inspects or modifies
+	// either payload (invariants #1 and #5).
+	AttestationQuote(ctx context.Context, lID mtypes.LeaseID, requestBody []byte) ([]byte, int, error)
 }
 
 func ErrorIsOkToSendToClient(err error) bool {
@@ -308,6 +315,10 @@ func (c *nullClient) DeclareIP(_ context.Context, _ mtypes.LeaseID, _ string, _ 
 
 func (c *nullClient) PurgeDeclaredIPs(_ context.Context, _ mtypes.LeaseID) error {
 	return errNotImplemented
+}
+
+func (c *nullClient) AttestationQuote(_ context.Context, _ mtypes.LeaseID, _ []byte) ([]byte, int, error) {
+	return nil, 0, errNotImplemented
 }
 
 func (c *nullClient) ObserveIPState(_ context.Context) (<-chan cip.ResourceEvent, error) {

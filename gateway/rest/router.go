@@ -89,7 +89,7 @@ type wsStreamConfig struct {
 	client    cluster.ReadClient
 }
 
-func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, middlewares ...mux.MiddlewareFunc) *mux.Router {
+func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, attestCfg AttestationConfig, middlewares ...mux.MiddlewareFunc) *mux.Router {
 	router := mux.NewRouter()
 
 	// store provider address in context as a lease's endpoints below need it
@@ -123,6 +123,14 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
 
+	// GET /attestation/directory/{dseq}/{gseq}/{oseq}
+	// Attestation directory — explicitly UNTRUSTED (invariant #3).
+	// Returns advisory routing hints for the attestation sidecar.
+	// Unauthenticated: tenant needs this before establishing a trusted channel.
+	router.HandleFunc("/attestation/directory/{dseq}/{gseq}/{oseq}",
+		createAttestationDirectoryHandler(log, pclient.Cluster(), attestCfg)).
+		Methods(http.MethodGet)
+
 	authedRouter := router.NewRoute().Subrouter()
 	authedRouter.Use(
 		authorizeProviderMiddleware,
@@ -154,6 +162,13 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 	lrouter.Use(
 		requireLeaseID,
 	)
+
+	// POST /lease/<lease-id>/attestation/quote
+	// Calls the attestation sidecar inside the CC pod via direct K8s pod IP access.
+	// Provider forwards nonce/response verbatim (invariants #1, #5).
+	lrouter.HandleFunc("/attestation/quote",
+		createAttestationQuoteHandler(log, pclient.Cluster())).
+		Methods(http.MethodPost)
 
 	mrouter = lrouter.NewRoute().Subrouter()
 	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeGetManifest))

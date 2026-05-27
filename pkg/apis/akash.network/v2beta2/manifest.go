@@ -110,8 +110,9 @@ type SchedulerResources struct {
 }
 
 type SchedulerParams struct {
-	RuntimeClass string              `json:"runtime_class"`
-	Resources    *SchedulerResources `json:"resources,omitempty"`
+	RuntimeClass        string              `json:"runtime_class"`
+	Resources           *SchedulerResources `json:"resources,omitempty"`
+	AttestationDisabled bool                `json:"attestation_disabled,omitempty"`
 }
 
 type ClusterSettings struct {
@@ -310,6 +311,12 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 	resources, err := resourcesFromAkash(ams.Resources)
 	if err != nil {
 		return ManifestService{}, err
+	}
+
+	// If the tenant opted out of attestation sidecar injection, propagate
+	// this to the scheduler params so the webhook knows not to inject.
+	if schedulerParams != nil && ams.Params != nil && ams.Params.Attestation != nil && !ams.Params.Attestation.Enabled {
+		schedulerParams.AttestationDisabled = true
 	}
 
 	ms := ManifestService{

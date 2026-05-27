@@ -231,6 +231,8 @@ spec:
                                       memory_size:
                                         type: string
                                         format: uint64
+                              attestation_disabled:
+                                type: boolean
                           credentials:
                             type: object
                             nullable: true

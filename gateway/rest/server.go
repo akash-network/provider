@@ -26,6 +26,7 @@ func NewServer(
 	address string,
 	pid sdk.Address,
 	clusterConfig map[interface{}]interface{},
+	attestCfg AttestationConfig,
 ) (*http.Server, error) {
 	restMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +53,7 @@ func NewServer(
 	srv := &http.Server{
 		Addr:              address,
 		ReadHeaderTimeout: 3 * time.Second,
-		Handler:           newRouter(log, pid, pclient, clusterConfig, restMiddleware),
+		Handler:           newRouter(log, pid, pclient, clusterConfig, attestCfg, restMiddleware),
 		BaseContext: func(_ net.Listener) context.Context {
 			return ctx
 		},

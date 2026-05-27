@@ -51,6 +51,26 @@ const (
 )
 
 const (
+	// AkashAttestationDisabledAnnotation is set on pods where the tenant opted out
+	// of attestation sidecar injection via the SDL attestation.enabled=false parameter.
+	AkashAttestationDisabledAnnotation = "akash.network/attestation-disabled"
+)
+
+// Confidential compute runtime classes (Kata Containers + TEE)
+const (
+	RuntimeClassKataQemuSNP          = "kata-qemu-snp"
+	RuntimeClassKataQemuNvidiaGPUSNP = "kata-qemu-nvidia-gpu-snp"
+	RuntimeClassKataQemuTDX          = "kata-qemu-tdx"
+	RuntimeClassKataQemuNvidiaGPUTDX = "kata-qemu-nvidia-gpu-tdx"
+)
+
+// TEE type constants used in placement attributes and directory responses.
+const (
+	TEETypeAMDSEVSNP = "amd-sev-snp"
+	TEETypeIntelTDX  = "intel-tdx"
+)
+
+const (
 	envVarAkashGroupSequence         = "AKASH_GROUP_SEQUENCE"
 	envVarAkashDeploymentSequence    = "AKASH_DEPLOYMENT_SEQUENCE"
 	envVarAkashOrderSequence         = "AKASH_ORDER_SEQUENCE"
