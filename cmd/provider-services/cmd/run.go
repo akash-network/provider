@@ -58,6 +58,8 @@ import (
 	"github.com/akash-network/provider/tools/pconfig"
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
 	"github.com/akash-network/provider/tools/pconfig/memory"
+	aepinventory "github.com/akash-network/provider/verification/inventory"
+	"github.com/akash-network/provider/version"
 )
 
 const (
@@ -766,6 +768,22 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyAccountQuerier, accQuerier)
 
+	snapshotPayload, err := aepinventory.NewStatusPayloadSource(aepinventory.StatusPayloadSourceConfig{
+		Status:          service,
+		Provider:        config.ProviderSigner.Address().String(),
+		ChainID:         cctx.ChainID,
+		SoftwareVersion: version.Version,
+		Now:             time.Now,
+	})
+	if err != nil {
+		return err
+	}
+
+	snapshotter, err := aepinventory.NewBuilder(snapshotPayload, config.ProviderSigner)
+	if err != nil {
+		return err
+	}
+
 	gwRest, err := gwrest.NewServer(
 		ctx,
 		logger,
@@ -780,7 +798,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	err = gwgrpc.NewServer(ctx, grpcaddr, accQuerier, service, nil)
+	err = gwgrpc.NewServer(ctx, grpcaddr, accQuerier, service, snapshotter)
 	if err != nil {
 		return err
 	}
