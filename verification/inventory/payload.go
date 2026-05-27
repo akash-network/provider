@@ -13,7 +13,10 @@ import (
 	providerv1 "pkg.akt.dev/go/provider/v1"
 )
 
-const SnapshotPayloadSchemaVersion uint32 = 1
+const (
+	SnapshotPayloadSchemaVersion  uint32 = 1
+	EvidenceSectionProviderStatus        = "akash.provider.v1.Status"
+)
 
 var (
 	errMissingStatusClient    = errors.New("missing provider status client")
@@ -96,6 +99,11 @@ func (s *StatusPayloadSource) Payload(ctx context.Context, req SnapshotRequest) 
 	if err != nil {
 		return nil, err
 	}
+	statusEvidence, err := statusEvidenceSection(status)
+	if err != nil {
+		return nil, err
+	}
+	evidence = append([]inventoryv1.SnapshotEvidenceSection{statusEvidence}, evidence...)
 	leases := clusterStatus.GetLeases()
 
 	payload := &inventoryv1.SnapshotPayload{
@@ -115,6 +123,18 @@ func (s *StatusPayloadSource) Payload(ctx context.Context, req SnapshotRequest) 
 	}
 
 	return MarshalDeterministic(payload)
+}
+
+func statusEvidenceSection(status *providerv1.Status) (inventoryv1.SnapshotEvidenceSection, error) {
+	payload, err := MarshalDeterministic(status)
+	if err != nil {
+		return inventoryv1.SnapshotEvidenceSection{}, err
+	}
+
+	return inventoryv1.SnapshotEvidenceSection{
+		Name:    EvidenceSectionProviderStatus,
+		Payload: payload,
+	}, nil
 }
 
 func (s *StatusPayloadSource) collect(ctx context.Context) ([]inventoryv1.SnapshotEvidenceSection, error) {

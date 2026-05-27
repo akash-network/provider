@@ -35,8 +35,9 @@ type testSigner struct {
 	address sdk.AccAddress
 	err     error
 
-	payload []byte
-	called  bool
+	signature []byte
+	payload   []byte
+	called    bool
 }
 
 func (s *testSigner) Address() sdk.AccAddress {
@@ -48,6 +49,9 @@ func (s *testSigner) Sign(_ context.Context, payload []byte) ([]byte, error) {
 	s.payload = append([]byte(nil), payload...)
 	if s.err != nil {
 		return nil, s.err
+	}
+	if s.signature != nil {
+		return append([]byte(nil), s.signature...), nil
 	}
 
 	return []byte("signature"), nil
@@ -183,6 +187,78 @@ func TestBuilderBuild(t *testing.T) {
 	require.Equal(t, signer.address.String(), snapshot.Provider)
 }
 
+func TestValidateSnapshot(t *testing.T) {
+	valid := &Snapshot{
+		Payload:   []byte("payload"),
+		Hash:      []byte("hash"),
+		Signature: []byte("signature"),
+		Provider:  "akash1provider",
+	}
+
+	tests := []struct {
+		name     string
+		snapshot *Snapshot
+		wantErr  error
+	}{
+		{
+			name:     "success",
+			snapshot: valid,
+		},
+		{
+			name:    "nil snapshot",
+			wantErr: errMissingSnapshot,
+		},
+		{
+			name: "missing payload",
+			snapshot: &Snapshot{
+				Hash:      valid.Hash,
+				Signature: valid.Signature,
+				Provider:  valid.Provider,
+			},
+			wantErr: errMissingPayload,
+		},
+		{
+			name: "missing hash",
+			snapshot: &Snapshot{
+				Payload:   valid.Payload,
+				Signature: valid.Signature,
+				Provider:  valid.Provider,
+			},
+			wantErr: errMissingHash,
+		},
+		{
+			name: "missing signature",
+			snapshot: &Snapshot{
+				Payload:  valid.Payload,
+				Hash:     valid.Hash,
+				Provider: valid.Provider,
+			},
+			wantErr: errMissingSignature,
+		},
+		{
+			name: "missing provider",
+			snapshot: &Snapshot{
+				Payload:   valid.Payload,
+				Hash:      valid.Hash,
+				Signature: valid.Signature,
+			},
+			wantErr: errMissingProvider,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := ValidateSnapshot(test.snapshot)
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+		})
+	}
+}
+
 func TestBuilderBuildRejectsInvalidNonce(t *testing.T) {
 	source := &testPayloadSource{}
 	signer := &testSigner{address: testutil.AccAddress(t)}
@@ -193,6 +269,19 @@ func TestBuilderBuildRejectsInvalidNonce(t *testing.T) {
 	require.ErrorIs(t, err, errInvalidNonce)
 	require.Nil(t, snapshot)
 	require.False(t, source.called)
+	require.False(t, signer.called)
+}
+
+func TestBuilderBuildRejectsEmptyPayload(t *testing.T) {
+	source := &testPayloadSource{}
+	signer := &testSigner{address: testutil.AccAddress(t)}
+	builder, err := NewBuilder(source, signer)
+	require.NoError(t, err)
+
+	snapshot, err := builder.Build(context.Background(), SnapshotRequest{})
+	require.ErrorIs(t, err, errMissingPayload)
+	require.Nil(t, snapshot)
+	require.True(t, source.called)
 	require.False(t, signer.called)
 }
 
@@ -221,5 +310,19 @@ func TestBuilderBuildReturnsSignError(t *testing.T) {
 
 	snapshot, err := builder.Build(context.Background(), SnapshotRequest{})
 	require.ErrorIs(t, err, signErr)
+	require.Nil(t, snapshot)
+}
+
+func TestBuilderBuildRejectsEmptySignature(t *testing.T) {
+	source := &testPayloadSource{payload: []byte("payload")}
+	signer := &testSigner{
+		address:   testutil.AccAddress(t),
+		signature: []byte{},
+	}
+	builder, err := NewBuilder(source, signer)
+	require.NoError(t, err)
+
+	snapshot, err := builder.Build(context.Background(), SnapshotRequest{})
+	require.ErrorIs(t, err, errMissingSignature)
 	require.Nil(t, snapshot)
 }
