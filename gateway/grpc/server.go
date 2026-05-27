@@ -18,6 +18,7 @@ import (
 	"pkg.akt.dev/go/util/ctxlog"
 
 	"pkg.akt.dev/go/grpc/gogoreflection"
+	inventoryv1 "pkg.akt.dev/go/inventory/v1"
 	providerv1 "pkg.akt.dev/go/provider/v1"
 	ajwt "pkg.akt.dev/go/util/jwt"
 
@@ -57,7 +58,7 @@ func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
 	return val.(*ajwt.Claims)
 }
 
-func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient, snapshotter InventorySnapshotter) error {
 	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
 	if err != nil {
 		return err
@@ -81,6 +82,11 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 	}
 
 	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
+	if snapshotter != nil {
+		inventoryv1.RegisterInventoryServiceServer(grpcSrv, &grpcInventoryV1{
+			snapshotter: snapshotter,
+		})
+	}
 	gogoreflection.Register(grpcSrv)
 
 	group.Go(func() error {
