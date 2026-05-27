@@ -101,3 +101,18 @@ func TestGetInventorySnapshotRejectsNilSnapshot(t *testing.T) {
 	require.Nil(t, resp)
 	require.Equal(t, codes.Internal, status.Code(err))
 }
+
+func TestGetInventorySnapshotRejectsInvalidSnapshot(t *testing.T) {
+	server := &grpcInventoryV1{
+		snapshotter: &testInventorySnapshotter{snapshot: &inventory.Snapshot{
+			Hash:      []byte("hash"),
+			Signature: []byte("signature"),
+			Provider:  "akash1provider",
+		}},
+	}
+
+	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{})
+	require.Nil(t, resp)
+	require.Equal(t, codes.Internal, status.Code(err))
+	require.Contains(t, err.Error(), "missing inventory snapshot payload")
+}

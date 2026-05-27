@@ -17,6 +17,11 @@ var (
 	errInvalidNonce         = errors.New("invalid inventory snapshot nonce")
 	errMissingPayloadSource = errors.New("missing inventory snapshot payload source")
 	errMissingSigner        = errors.New("missing inventory snapshot signer")
+	errMissingSnapshot      = errors.New("missing inventory snapshot")
+	errMissingPayload       = errors.New("missing inventory snapshot payload")
+	errMissingHash          = errors.New("missing inventory snapshot hash")
+	errMissingSignature     = errors.New("missing inventory snapshot signature")
+	errMissingProvider      = errors.New("missing inventory snapshot provider")
 )
 
 type Collector interface {
@@ -83,7 +88,7 @@ func ValidateNonce(nonce []byte) error {
 
 func HashPayload(payload []byte) []byte {
 	hash := sha256.Sum256(payload)
-	return hash[:]
+	return append([]byte(nil), hash[:]...)
 }
 
 func MarshalDeterministic(msg proto.Message) ([]byte, error) {
@@ -117,6 +122,9 @@ func (b *Builder) Build(ctx context.Context, req SnapshotRequest) (*Snapshot, er
 	if err != nil {
 		return nil, err
 	}
+	if len(payload) == 0 {
+		return nil, errMissingPayload
+	}
 
 	hash := HashPayload(payload)
 
@@ -125,10 +133,39 @@ func (b *Builder) Build(ctx context.Context, req SnapshotRequest) (*Snapshot, er
 		return nil, err
 	}
 
-	return &Snapshot{
+	snapshot := &Snapshot{
 		Payload:   append([]byte(nil), payload...),
 		Hash:      hash,
 		Signature: append([]byte(nil), signature...),
 		Provider:  b.signer.Address().String(),
-	}, nil
+	}
+	if err := ValidateSnapshot(snapshot); err != nil {
+		return nil, err
+	}
+
+	return snapshot, nil
+}
+
+func ValidateSnapshot(snapshot *Snapshot) error {
+	if snapshot == nil {
+		return errMissingSnapshot
+	}
+
+	if len(snapshot.Payload) == 0 {
+		return errMissingPayload
+	}
+
+	if len(snapshot.Hash) == 0 {
+		return errMissingHash
+	}
+
+	if len(snapshot.Signature) == 0 {
+		return errMissingSignature
+	}
+
+	if snapshot.Provider == "" {
+		return errMissingProvider
+	}
+
+	return nil
 }
