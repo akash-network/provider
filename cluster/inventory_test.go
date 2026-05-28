@@ -400,6 +400,67 @@ func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Gro
 	return group
 }
 
+func TestInventory_StatusV1ReportsLeasedIPResourcePair(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	inv := <-cinventory.NewNull(ctx, "nodeA").ResultChan()
+	reservationWithIPs := func(quantity uint, confirmed bool) *reservation {
+		return &reservation{
+			resources:        &dvbeta.GroupSpec{},
+			endpointQuantity: quantity,
+			ipsConfirmed:     confirmed,
+		}
+	}
+
+	status, err := (&inventoryService{}).getStatusV1(&inventoryServiceState{
+		inventory: inv,
+		ipAddrUsage: cip.AddressUsage{
+			Available: 10,
+			InUse:     4,
+		},
+		reservations: []*reservation{
+			reservationWithIPs(2, false),
+			reservationWithIPs(3, true),
+			reservationWithIPs(1, false),
+		},
+	})
+	require.NoError(t, err)
+
+	leasedIP := status.GetLeasedIP()
+	require.Equal(t, int64(10), leasedIP.GetCapacity().Value())
+	require.Equal(t, int64(10), leasedIP.GetAllocatable().Value())
+	require.Equal(t, int64(7), leasedIP.GetAllocated().Value())
+	require.Equal(t, int64(3), leasedIP.Available().Value())
+}
+
+func TestInventory_StatusV1SaturatesLeasedIPResourcePairAvailable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	inv := <-cinventory.NewNull(ctx, "nodeA").ResultChan()
+	status, err := (&inventoryService{}).getStatusV1(&inventoryServiceState{
+		inventory: inv,
+		ipAddrUsage: cip.AddressUsage{
+			Available: 3,
+			InUse:     2,
+		},
+		reservations: []*reservation{
+			{
+				resources:        &dvbeta.GroupSpec{},
+				endpointQuantity: 4,
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	leasedIP := status.GetLeasedIP()
+	require.Equal(t, int64(3), leasedIP.GetCapacity().Value())
+	require.Equal(t, int64(3), leasedIP.GetAllocatable().Value())
+	require.Equal(t, int64(6), leasedIP.GetAllocated().Value())
+	require.Equal(t, int64(0), leasedIP.Available().Value())
+}
+
 func TestInventory_ReserveIPNoIPOperator(t *testing.T) {
 	config := Config{
 		InventoryResourcePollPeriod:     5 * time.Second,
