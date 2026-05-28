@@ -72,11 +72,18 @@ func RegisterWebhookConfiguration(ctx context.Context, kc kubernetes.Interface, 
 				MatchPolicy:             &matchPolicy,
 				TimeoutSeconds:          &timeoutSec,
 				ClientConfig:            clientConfig,
-				// Only intercept pod creation in Akash-managed namespaces.
-				// System pods and non-Akash workloads are never affected.
+				// Only intercept pod creation in tenant lease namespaces.
+				// Lease namespaces have both akash.network=true AND akash.network/namespace labels.
+				// This excludes akash-services (provider/operator pods) which only has akash.network=true.
 				NamespaceSelector: &metav1.LabelSelector{
 					MatchLabels: map[string]string{
-						builder.AkashManagedLabelName: "true",
+						builder.AkashManagedLabelName: builder.ValTrue,
+					},
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "akash.network/namespace",
+							Operator: metav1.LabelSelectorOpExists,
+						},
 					},
 				},
 				Rules: []admissionregistrationv1.RuleWithOperations{

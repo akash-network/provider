@@ -907,7 +907,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			Bytes: tlsCert.Certificate[0],
 		})
 		if webhookKC, kcErr := fromctx.KubeClientFromCtx(ctx); kcErr == nil {
-			ns := viper.GetString(providerflags.FlagK8sManifestNS)
+			webhookServiceNS := "akash-services"
 
 			// When running locally (mock mode), use a URL endpoint so the Kind
 			// cluster can reach the webhook on the host machine.
@@ -918,7 +918,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 			regErr := attestwebhook.RegisterWebhookConfiguration(
 				ctx, webhookKC, webhookLog,
-				"akash-provider", ns, caBundle, int32(webhookPort), webhookURL, //nolint:gosec // port is bounded by flag default
+				"akash-provider", webhookServiceNS, caBundle, int32(webhookPort), webhookURL, //nolint:gosec // port is bounded by flag default
 			)
 			if regErr != nil {
 				return fmt.Errorf("register attestation webhook: %w", regErr)
