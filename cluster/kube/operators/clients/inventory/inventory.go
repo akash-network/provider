@@ -55,14 +55,8 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, confidentialCom
 		return nil, false, true
 	}
 
-	// For CC CPU-only workloads (no GPU), set the runtime class based on TEE type
-	if confidentialCompute && sparams.RuntimeClass == "" {
-		switch teeType {
-		case builder.TEETypeIntelTDX:
-			sparams.RuntimeClass = builder.RuntimeClassKataQemuTDX
-		default:
-			sparams.RuntimeClass = builder.RuntimeClassKataQemuSNP
-		}
+	if !tryAdjustConfidentialCompute(&nd, sparams, confidentialCompute, teeType) {
+		return nil, false, true
 	}
 
 	if !nd.Resources.Memory.Quantity.SubNLZ(res.Memory.Quantity) {
@@ -219,6 +213,39 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 	}
 
 	return false
+}
+
+// tryAdjustConfidentialCompute adjusts cluster inventory for confidential
+// compute workloads. For CPU-only CC workloads (no GPU present), it sets the
+// appropriate runtime class based on the TEE type. It also reserves the
+// attestation sidecar resources that the webhook will inject into CC pods,
+// using limit values so inventory subtracts the full resource limit.
+func tryAdjustConfidentialCompute(nd *inventoryV1.Node, sparams *crd.SchedulerParams, confidentialCompute bool, teeType string) bool {
+	if !confidentialCompute {
+		return true
+	}
+
+	// For CC CPU-only workloads (no GPU), set the runtime class based on TEE type
+	if sparams.RuntimeClass == "" {
+		switch teeType {
+		case builder.TEETypeIntelTDX:
+			sparams.RuntimeClass = builder.RuntimeClassKataQemuTDX
+		default:
+			sparams.RuntimeClass = builder.RuntimeClassKataQemuSNP
+		}
+	}
+
+	sidecarCPU := rtypes.NewResourceValue(uint64(builder.SidecarCPULimitMillicores))
+	if !nd.Resources.CPU.Quantity.SubMilliNLZ(sidecarCPU) {
+		return false
+	}
+
+	sidecarMem := rtypes.NewResourceValue(uint64(builder.SidecarMemoryLimitBytes))
+	if !nd.Resources.Memory.Quantity.SubNLZ(sidecarMem) {
+		return false
+	}
+
+	return true
 }
 
 func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *rtypes.Storage) bool {

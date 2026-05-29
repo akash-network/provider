@@ -134,12 +134,12 @@ func buildSidecarContainer(image string, isGPU bool, extraEnv []corev1.EnvVar) c
 		},
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("10m"),
-				corev1.ResourceMemory: resource.MustParse("32Mi"),
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(builder.SidecarCPURequestMillicores, resource.DecimalSI),
+				corev1.ResourceMemory: *resource.NewQuantity(builder.SidecarMemoryRequestBytes, resource.DecimalSI),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    resource.MustParse("100m"),
-				corev1.ResourceMemory: resource.MustParse("64Mi"),
+				corev1.ResourceCPU:    *resource.NewMilliQuantity(builder.SidecarCPULimitMillicores, resource.DecimalSI),
+				corev1.ResourceMemory: *resource.NewQuantity(builder.SidecarMemoryLimitBytes, resource.DecimalSI),
 			},
 		},
 		Env: append([]corev1.EnvVar{

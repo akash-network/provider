@@ -356,7 +356,8 @@ type dataForScriptElement struct {
 }
 
 type dataForScript struct {
-	Resources      []dataForScriptElement `json:"resources"`
-	Price          sdk.DecCoin            `json:"price"`
-	PricePrecision *int                   `json:"price_precision,omitempty"`
+	Resources                  []dataForScriptElement `json:"resources"`
+	Price                      sdk.DecCoin            `json:"price"`
+	PricePrecision             *int                   `json:"price_precision,omitempty"`
+	ConfidentialComputeSidecar bool                   `json:"confidential_compute_sidecar"`
 }

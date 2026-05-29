@@ -64,6 +64,16 @@ const (
 	RuntimeClassKataQemuNvidiaGPUTDX = "kata-qemu-nvidia-gpu-tdx"
 )
 
+// Attestation sidecar resource limits. Inventory reserves limit values (not
+// requests), matching the pattern used for tenant workloads. These must stay
+// in sync with the limits set in webhook/sidecar.go:buildSidecarContainer.
+const (
+	SidecarCPULimitMillicores   int64 = 100
+	SidecarMemoryLimitBytes     int64 = 64 * 1024 * 1024 // 64Mi
+	SidecarCPURequestMillicores int64 = 10
+	SidecarMemoryRequestBytes   int64 = 32 * 1024 * 1024 // 32Mi
+)
+
 // TEE type constants used in placement attributes and directory responses.
 const (
 	TEETypeAMDSEVSNP = "amd-sev-snp"
