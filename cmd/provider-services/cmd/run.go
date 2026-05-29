@@ -197,6 +197,7 @@ func RunCmd() *cobra.Command {
 
 			leaseFundsMonInterval := viper.GetDuration(FlagLeaseFundsMonitorInterval)
 			withdrawPeriod := viper.GetDuration(FlagWithdrawalPeriod)
+			reclamationWindow := viper.GetDuration(FlagReclamationWindow)
 
 			if leaseFundsMonInterval < time.Minute || leaseFundsMonInterval > 24*time.Hour {
 				return fmt.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
@@ -204,6 +205,10 @@ func RunCmd() *cobra.Command {
 
 			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+			}
+
+			if reclamationWindow < 0 {
+				return fmt.Errorf(`flag "%s" value must be >= 0`, FlagReclamationWindow) // nolint: err113
 			}
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
