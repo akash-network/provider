@@ -48,7 +48,7 @@ import (
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
-	otypes "pkg.akt.dev/go/node/oracle/v1"
+	otypes "pkg.akt.dev/go/node/oracle/v2"
 	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
 	"pkg.akt.dev/go/testutil"
 	nodetestutil "pkg.akt.dev/node/v2/testutil"
@@ -598,10 +598,8 @@ func (s *IntegrationTestSuite) submitPriceEntry(ctx context.Context) error {
 			Denom:     sdkutil.DenomAkt,
 			BaseDenom: sdkutil.DenomUSD,
 		},
-		Price: otypes.PriceDataState{
-			Price:     sdkmath.LegacyNewDec(1),
-			Timestamp: now,
-		},
+		Price:     sdkmath.LegacyNewDec(1),
+		Timestamp: now,
 	}
 
 	resp, err := s.oracleClient.Tx().BroadcastMsgs(ctx, []sdk.Msg{msg},
