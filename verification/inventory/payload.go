@@ -37,6 +37,7 @@ type StatusPayloadSourceConfig struct {
 	ChainID           string
 	SoftwareVersion   string
 	SoftwareSignature []byte
+	SoftwareIdentity  *inventoryv1.SoftwareIdentity
 	Now               func() time.Time
 	Collectors        []Collector
 }
@@ -47,6 +48,7 @@ type StatusPayloadSource struct {
 	chainID           string
 	softwareVersion   string
 	softwareSignature []byte
+	softwareIdentity  *inventoryv1.SoftwareIdentity
 	now               func() time.Time
 	collectors        []Collector
 }
@@ -74,6 +76,7 @@ func NewStatusPayloadSource(cfg StatusPayloadSourceConfig) (*StatusPayloadSource
 		chainID:           cfg.ChainID,
 		softwareVersion:   cfg.SoftwareVersion,
 		softwareSignature: append([]byte(nil), cfg.SoftwareSignature...),
+		softwareIdentity:  cloneSoftwareIdentity(cfg.SoftwareIdentity),
 		now:               cfg.Now,
 		collectors:        append([]Collector(nil), cfg.Collectors...),
 	}, nil
@@ -118,6 +121,7 @@ func (s *StatusPayloadSource) Payload(ctx context.Context, req SnapshotRequest) 
 			leases.GetActive(),
 			s.softwareVersion,
 			s.softwareSignature,
+			s.softwareIdentity,
 		),
 		EvidenceSections: evidence,
 	}
@@ -163,7 +167,13 @@ func (s *StatusPayloadSource) collect(ctx context.Context) ([]inventoryv1.Snapsh
 	return sections, nil
 }
 
-func ResourceSummaryFromCluster(cluster inventoryv1.Cluster, activeLeases uint32, softwareVersion string, softwareSignature []byte) inventoryv1.SnapshotResourceSummary {
+func ResourceSummaryFromCluster(
+	cluster inventoryv1.Cluster,
+	activeLeases uint32,
+	softwareVersion string,
+	softwareSignature []byte,
+	softwareIdentity *inventoryv1.SoftwareIdentity,
+) inventoryv1.SnapshotResourceSummary {
 	var (
 		totalCPUMilli         uint64
 		totalGPUs             uint64
@@ -203,6 +213,24 @@ func ResourceSummaryFromCluster(cluster inventoryv1.Cluster, activeLeases uint32
 		ActiveLeases:      activeLeases,
 		SoftwareVersion:   softwareVersion,
 		SoftwareSignature: append([]byte(nil), softwareSignature...),
+		SoftwareIdentity:  cloneSoftwareIdentity(softwareIdentity),
+	}
+}
+
+func cloneSoftwareIdentity(identity *inventoryv1.SoftwareIdentity) *inventoryv1.SoftwareIdentity {
+	if identity == nil {
+		return nil
+	}
+
+	return &inventoryv1.SoftwareIdentity{
+		Version:         identity.GetVersion(),
+		ArtifactRef:     identity.GetArtifactRef(),
+		DigestAlgorithm: identity.GetDigestAlgorithm(),
+		Digest:          append([]byte(nil), identity.GetDigest()...),
+		SignatureType:   identity.GetSignatureType(),
+		Signature:       append([]byte(nil), identity.GetSignature()...),
+		SignatureRef:    identity.GetSignatureRef(),
+		PublicKeyRef:    identity.GetPublicKeyRef(),
 	}
 }
 
