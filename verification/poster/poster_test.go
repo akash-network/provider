@@ -180,6 +180,7 @@ func validSnapshot(t *testing.T, provider string, hash []byte, timestamp time.Ti
 
 func TestBuildMsgFromSignedInventorySnapshot(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
+	softwareIdentity := testInventorySoftwareIdentity()
 	payload := inventoryv1.SnapshotPayload{
 		SchemaVersion: aepinventory.SnapshotPayloadSchemaVersion,
 		Provider:      "akash1provider",
@@ -193,6 +194,7 @@ func TestBuildMsgFromSignedInventorySnapshot(t *testing.T) {
 			ActiveLeases:      11,
 			SoftwareVersion:   "v1.2.3",
 			SoftwareSignature: []byte("release-signature"),
+			SoftwareIdentity:  softwareIdentity,
 		},
 	}
 	payloadBytes, err := aepinventory.MarshalDeterministic(&payload)
@@ -220,7 +222,35 @@ func TestBuildMsgFromSignedInventorySnapshot(t *testing.T) {
 		ActiveLeases:      11,
 		SoftwareVersion:   "v1.2.3",
 		SoftwareSignature: []byte("release-signature"),
+		SoftwareIdentity:  testVerificationSoftwareIdentity(),
 	}, prepared.Msg.ResourceSummary)
+	require.NotSame(t, softwareIdentity, prepared.Msg.ResourceSummary.SoftwareIdentity)
+}
+
+func testInventorySoftwareIdentity() *inventoryv1.SoftwareIdentity {
+	return &inventoryv1.SoftwareIdentity{
+		Version:         "v1.2.3",
+		ArtifactRef:     "ghcr.io/akash-network/provider:v1.2.3",
+		DigestAlgorithm: "sha3-256",
+		Digest:          bytes.Repeat([]byte{2}, 32),
+		SignatureType:   "cosign_keyful",
+		Signature:       []byte("release-signature"),
+		SignatureRef:    "ghcr.io/akash-network/provider@sha256:signature",
+		PublicKeyRef:    "github.com/akash-network/releases/provider.pub",
+	}
+}
+
+func testVerificationSoftwareIdentity() *verificationv1.SoftwareIdentity {
+	return &verificationv1.SoftwareIdentity{
+		Version:         "v1.2.3",
+		ArtifactRef:     "ghcr.io/akash-network/provider:v1.2.3",
+		DigestAlgorithm: "sha3-256",
+		Digest:          bytes.Repeat([]byte{2}, 32),
+		SignatureType:   "cosign_keyful",
+		Signature:       []byte("release-signature"),
+		SignatureRef:    "ghcr.io/akash-network/provider@sha256:signature",
+		PublicKeyRef:    "github.com/akash-network/releases/provider.pub",
+	}
 }
 
 func TestBuildMsgValidatesSnapshotterAndSnapshot(t *testing.T) {
