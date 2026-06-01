@@ -119,6 +119,7 @@ func TestStatusPayloadSourcePayload(t *testing.T) {
 			},
 		},
 	}
+	softwareIdentity := testSoftwareIdentity()
 
 	source, err := NewStatusPayloadSource(StatusPayloadSourceConfig{
 		Status:            testStatusClient{status: status},
@@ -126,6 +127,7 @@ func TestStatusPayloadSourcePayload(t *testing.T) {
 		ChainID:           "akashnet-2",
 		SoftwareVersion:   "v1.2.3",
 		SoftwareSignature: []byte("release-signature"),
+		SoftwareIdentity:  softwareIdentity,
 		Now:               func() time.Time { return now },
 		Collectors: []Collector{
 			testCollector{
@@ -162,7 +164,9 @@ func TestStatusPayloadSourcePayload(t *testing.T) {
 		ActiveLeases:      7,
 		SoftwareVersion:   "v1.2.3",
 		SoftwareSignature: []byte("release-signature"),
+		SoftwareIdentity:  testSoftwareIdentity(),
 	}, decoded.ResourceSummary)
+	require.NotSame(t, softwareIdentity, decoded.ResourceSummary.SoftwareIdentity)
 	require.Equal(t, []inventoryv1.SnapshotEvidenceSection{
 		{
 			Name:    "hardware",
@@ -267,9 +271,22 @@ func TestResourceSummaryFromClusterSaturatesUint32(t *testing.T) {
 		},
 	}
 
-	summary := ResourceSummaryFromCluster(cluster, 0, "", nil)
+	summary := ResourceSummaryFromCluster(cluster, 0, "", nil, nil)
 	require.Equal(t, uint32(mathMaxUint32()), summary.TotalVCPUs)
 	require.Equal(t, uint32(mathMaxUint32()), summary.TotalGPUs)
+}
+
+func testSoftwareIdentity() *inventoryv1.SoftwareIdentity {
+	return &inventoryv1.SoftwareIdentity{
+		Version:         "v1.2.3",
+		ArtifactRef:     "ghcr.io/akash-network/provider:v1.2.3",
+		DigestAlgorithm: "sha3-256",
+		Digest:          bytes.Repeat([]byte{2}, 32),
+		SignatureType:   "cosign_keyful",
+		Signature:       []byte("release-signature"),
+		SignatureRef:    "ghcr.io/akash-network/provider@sha256:signature",
+		PublicKeyRef:    "github.com/akash-network/releases/provider.pub",
+	}
 }
 
 func testCluster() inventoryv1.Cluster {
