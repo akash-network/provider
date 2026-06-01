@@ -457,6 +457,24 @@ func resourceSummary(summary inventoryv1.SnapshotResourceSummary) verificationv1
 		ActiveLeases:      summary.GetActiveLeases(),
 		SoftwareVersion:   summary.GetSoftwareVersion(),
 		SoftwareSignature: append([]byte(nil), summary.GetSoftwareSignature()...),
+		SoftwareIdentity:  verificationSoftwareIdentity(summary.GetSoftwareIdentity()),
+	}
+}
+
+func verificationSoftwareIdentity(identity *inventoryv1.SoftwareIdentity) *verificationv1.SoftwareIdentity {
+	if identity == nil {
+		return nil
+	}
+
+	return &verificationv1.SoftwareIdentity{
+		Version:         identity.GetVersion(),
+		ArtifactRef:     identity.GetArtifactRef(),
+		DigestAlgorithm: identity.GetDigestAlgorithm(),
+		Digest:          append([]byte(nil), identity.GetDigest()...),
+		SignatureType:   identity.GetSignatureType(),
+		Signature:       append([]byte(nil), identity.GetSignature()...),
+		SignatureRef:    identity.GetSignatureRef(),
+		PublicKeyRef:    identity.GetPublicKeyRef(),
 	}
 }
 
