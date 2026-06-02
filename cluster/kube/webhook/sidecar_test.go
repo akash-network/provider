@@ -142,8 +142,8 @@ func TestBuildSidecarPatch_GPU(t *testing.T) {
 	err = json.Unmarshal(patchBytes, &patches)
 	require.NoError(t, err)
 
-	// Should have container patch + volumes array patch
-	require.Len(t, patches, 2) // container + volumes
+	// Production mode: container patch only, no volumes (guest kernel provides devices)
+	require.Len(t, patches, 1) // container only
 }
 
 func TestBuildSidecarPatch_CPUOnly(t *testing.T) {
@@ -166,8 +166,8 @@ func TestBuildSidecarPatch_CPUOnly(t *testing.T) {
 	err = json.Unmarshal(patchBytes, &patches)
 	require.NoError(t, err)
 
-	// Should have container patch + volumes array patch (TSM + sev-guest in one array)
-	require.Len(t, patches, 2)
+	// Production mode: container patch only, no volumes (guest kernel provides devices)
+	require.Len(t, patches, 1)
 }
 
 func TestBuildSidecarPatch_EmptyImage(t *testing.T) {

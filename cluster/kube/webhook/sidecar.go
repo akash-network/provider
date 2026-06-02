@@ -95,21 +95,22 @@ func BuildSidecarPatch(pod *corev1.Pod, sidecarImage string, extraEnv []corev1.E
 		})
 	}
 
-	// Add volumes if the pod has no volumes, create the array with all
-	// volumes at once; otherwise append individually.
-	if len(pod.Spec.Volumes) == 0 {
-		patches = append(patches, jsonPatch{
-			Op:    "add",
-			Path:  "/spec/volumes",
-			Value: volumes,
-		})
-	} else {
-		for _, vol := range volumes {
+	// Add volumes (only if there are any to add).
+	if len(volumes) > 0 {
+		if len(pod.Spec.Volumes) == 0 {
 			patches = append(patches, jsonPatch{
 				Op:    "add",
-				Path:  "/spec/volumes/-",
-				Value: vol,
+				Path:  "/spec/volumes",
+				Value: volumes,
 			})
+		} else {
+			for _, vol := range volumes {
+				patches = append(patches, jsonPatch{
+					Op:    "add",
+					Path:  "/spec/volumes/-",
+					Value: vol,
+				})
+			}
 		}
 	}
 
@@ -161,18 +162,10 @@ func buildSidecarContainer(image string, isGPU bool, extraEnv []corev1.EnvVar) c
 				MountPath: "/var/run/mock-tee/sev-guest",
 			})
 		}
-	} else {
-		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
-			Name:      tsmVolumeName,
-			MountPath: "/sys/kernel/config/tsm/report",
-		})
-		if !isGPU {
-			c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{
-				Name:      sevGuestVolumeName,
-				MountPath: "/dev/sev-guest",
-			})
-		}
 	}
+	// Production (non-mock) kata VMs: the sidecar accesses /dev/sev-guest
+	// and /sys/kernel/config/tsm/report directly from the guest kernel
+	// filesystem — no volume mounts needed.
 
 	return c
 }
@@ -202,33 +195,9 @@ func buildSidecarVolumes(isGPU bool, mockMode bool) []corev1.Volume {
 		return volumes
 	}
 
-	// Production: hostPath volumes inside the Kata VM guest filesystem.
-	hostPathDirOrCreate := corev1.HostPathDirectoryOrCreate
-	hostPathCharDev := corev1.HostPathCharDev
-
-	volumes := []corev1.Volume{
-		{
-			Name: tsmVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/sys/kernel/config/tsm/report",
-					Type: &hostPathDirOrCreate,
-				},
-			},
-		},
-	}
-
-	if !isGPU {
-		volumes = append(volumes, corev1.Volume{
-			Name: sevGuestVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				HostPath: &corev1.HostPathVolumeSource{
-					Path: "/dev/sev-guest",
-					Type: &hostPathCharDev,
-				},
-			},
-		})
-	}
-
-	return volumes
+	// Production: the sidecar accesses /dev/sev-guest and
+	// /sys/kernel/config/tsm/report directly from the kata guest kernel
+	// filesystem. HostPath volumes cannot be used because kubelet validates
+	// paths on the host node, where these devices do not exist.
+	return nil
 }
