@@ -3,10 +3,8 @@ jwt-host: https://localhost:8444
 attributes:
   - key: region
     value: us-west
-  - key: confidential-compute
-    value: "true"
-  - key: confidential-compute-tee
-    value: amd-sev-snp
+  - key: tee/type
+    value: sev-snp
   - key: capabilities/storage/1/persistent
     value: true
   - key: capabilities/storage/1/class

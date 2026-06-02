@@ -43,21 +43,19 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, confidentialCompute bool, teeType string) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
+
 
 	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU) {
 		return nil, false, true
 	}
 
-	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams, confidentialCompute, teeType) {
+	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
 		return nil, false, true
 	}
 
-	if !tryAdjustConfidentialCompute(&nd, sparams, confidentialCompute, teeType) {
-		return nil, false, true
-	}
 
 	if !nd.Resources.Memory.Quantity.SubNLZ(res.Memory.Quantity) {
 		return nil, false, true
@@ -126,7 +124,7 @@ func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *rtypes.CPU) bool {
 	return rp.SubMilliNLZ(res.Units)
 }
 
-func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams, confidentialCompute bool, teeType string) bool {
+func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams) bool {
 	reqCnt := res.Units.Value()
 
 	if reqCnt == 0 {
@@ -177,16 +175,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 
 			switch vendor {
 			case builder.GPUVendorNvidia:
-				if confidentialCompute {
-					switch teeType {
-					case builder.TEETypeIntelTDX:
-						sparams.RuntimeClass = builder.RuntimeClassKataQemuNvidiaGPUTDX
-					default:
-						sparams.RuntimeClass = builder.RuntimeClassKataQemuNvidiaGPUSNP
-					}
-				} else {
-					sparams.RuntimeClass = runtimeClassNvidia
-				}
+				sparams.RuntimeClass = runtimeClassNvidia
 			default:
 			}
 
@@ -300,7 +289,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, cfg.ConfidentialCompute, cfg.TEEType)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes
@@ -453,3 +442,4 @@ func sParamsEnsureResources(sparams *crd.SchedulerParams) {
 		sparams.Resources = &crd.SchedulerResources{}
 	}
 }
+

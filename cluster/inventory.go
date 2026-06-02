@@ -77,11 +77,9 @@ type invSnapshotResp struct {
 }
 
 type inventoryRequest struct {
-	order               mtypes.OrderID
-	resources           dtypes.ResourceGroup
-	confidentialCompute bool
-	teeType             string // "amd-sev-snp", "intel-tdx", or "" (defaults to amd-sev-snp)
-	ch                  chan<- inventoryResponse
+	order     mtypes.OrderID
+	resources dtypes.ResourceGroup
+	ch        chan<- inventoryResponse
 }
 
 type inventoryResponse struct {
@@ -196,15 +194,11 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.Resou
 		}
 	}
 
-	cc, teeType := detectConfidentialCompute(resources)
-
 	ch := make(chan inventoryResponse, 1)
 	req := inventoryRequest{
-		order:               order,
-		resources:           resources,
-		confidentialCompute: cc,
-		teeType:             teeType,
-		ch:                  ch,
+		order:     order,
+		resources: resources,
+		ch:        ch,
 	}
 
 	select {
@@ -453,15 +447,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
-	var adjustOpts []ctypes.InventoryOption
-	if req.confidentialCompute {
-		adjustOpts = append(adjustOpts, ctypes.WithConfidentialCompute())
-		if req.teeType != "" {
-			adjustOpts = append(adjustOpts, ctypes.WithTEEType(req.teeType))
-		}
-	}
-
-	err := state.inventory.Adjust(reservation, adjustOpts...)
+	err := state.inventory.Adjust(reservation)
 	if err != nil {
 		is.log.Info("insufficient capacity for reservation", "order", req.order)
 		inventoryRequestsCounter.WithLabelValues("reserve", "insufficient-capacity").Inc()
@@ -874,45 +860,3 @@ func reservationCountEndpoints(reservation *reservation) uint {
 	return externalPortCount
 }
 
-// detectConfidentialCompute checks if the resource group has the confidential-compute
-// placement attribute set, and extracts the TEE type if specified.
-// Returns (isCC, teeType) where teeType defaults to "amd-sev-snp" if not specified.
-func detectConfidentialCompute(resources dtypes.ResourceGroup) (bool, string) {
-	var attrs atypes.Attributes
-
-	switch g := resources.(type) {
-	case *dtypes.Group:
-		attrs = g.GroupSpec.Requirements.Attributes
-	case dtypes.Group:
-		attrs = g.GroupSpec.Requirements.Attributes
-	case *dtypes.GroupSpec:
-		attrs = g.Requirements.Attributes
-	case dtypes.GroupSpec:
-		attrs = g.Requirements.Attributes
-	default:
-		return false, ""
-	}
-
-	isCC := false
-	teeType := ""
-
-	for _, attr := range attrs {
-		if attr.Key == "confidential-compute" && attr.Value == "true" {
-			isCC = true
-		}
-		if attr.Key == "confidential-compute-tee" {
-			teeType = attr.Value
-		}
-	}
-
-	if !isCC {
-		return false, ""
-	}
-
-	// Default to AMD SEV-SNP if no TEE type specified
-	if teeType == "" {
-		teeType = "amd-sev-snp"
-	}
-
-	return true, teeType
-}

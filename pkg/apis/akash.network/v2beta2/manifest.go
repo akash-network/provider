@@ -313,10 +313,21 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 		return ManifestService{}, err
 	}
 
-	// If the tenant opted out of attestation sidecar injection, propagate
-	// this to the scheduler params so the webhook knows not to inject.
-	if schedulerParams != nil && ams.Params != nil && ams.Params.Attestation != nil && !ams.Params.Attestation.Enabled {
-		schedulerParams.AttestationDisabled = true
+	// Set runtime class and attestation from TEE service params.
+	// Note: proto3 bool defaults to false, but the intended default for attestation
+	// is true (sidecar injected). The Go SDL builder always sets this explicitly.
+	// Non-Go producers must set attestation=true when sidecar injection is desired.
+	if ams.Params != nil && ams.Params.TEE != nil {
+		if schedulerParams == nil {
+			schedulerParams = &SchedulerParams{}
+		}
+		rc := runtimeClassForTEEType(ams.Params.TEE.Type)
+		if rc != "" {
+			schedulerParams.RuntimeClass = rc
+		}
+		if !ams.Params.TEE.Attestation {
+			schedulerParams.AttestationDisabled = true
+		}
 	}
 
 	ms := ManifestService{
@@ -422,5 +433,22 @@ func manifestServiceExposeFromAkash(amse mani.ServiceExpose) ManifestServiceExpo
 			NextTimeout: amse.HTTPOptions.NextTimeout,
 			NextCases:   amse.HTTPOptions.NextCases,
 		},
+	}
+}
+
+// runtimeClassForTEEType maps SDL TEE type to Kata runtime class.
+// Duplicated from builder package to avoid import cycle.
+func runtimeClassForTEEType(teeType string) string {
+	switch teeType {
+	case "sev-snp":
+		return "kata-qemu-snp"
+	case "sev-snp-gpu":
+		return "kata-qemu-nvidia-gpu-snp"
+	case "tdx":
+		return "kata-qemu-tdx"
+	case "tdx-gpu":
+		return "kata-qemu-nvidia-gpu-tdx"
+	default:
+		return ""
 	}
 }

@@ -11,6 +11,9 @@ services:
           - hello.localhost
         to:
           - global: true
+    params:
+      tee:
+        type: sev-snp
 
 profiles:
   compute:
@@ -26,8 +29,6 @@ profiles:
     westcoast:
       attributes:
         region: us-west
-        confidential-compute: "true"
-        confidential-compute-tee: amd-sev-snp
       pricing:
         web:
           denom: uact

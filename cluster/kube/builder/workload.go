@@ -62,6 +62,23 @@ func TEETypeForRuntimeClass(rc string) string {
 	}
 }
 
+// RuntimeClassForTEEType maps an SDL TEE type to the corresponding Kata runtime class.
+// The TEE type values come from the SDL tee.type enum (sev-snp, sev-snp-gpu, tdx, tdx-gpu).
+func RuntimeClassForTEEType(teeType string) string {
+	switch teeType {
+	case "sev-snp":
+		return RuntimeClassKataQemuSNP
+	case "sev-snp-gpu":
+		return RuntimeClassKataQemuNvidiaGPUSNP
+	case "tdx":
+		return RuntimeClassKataQemuTDX
+	case "tdx-gpu":
+		return RuntimeClassKataQemuNvidiaGPUTDX
+	default:
+		return ""
+	}
+}
+
 type workloadBase interface {
 	builderBase
 	Name() string

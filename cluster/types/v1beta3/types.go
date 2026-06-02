@@ -52,9 +52,7 @@ type LeaseEvent struct {
 }
 
 type InventoryOptions struct {
-	DryRun              bool
-	ConfidentialCompute bool
-	TEEType             string // "amd-sev-snp" or "intel-tdx"
+	DryRun bool
 }
 
 type InventoryOption func(*InventoryOptions) *InventoryOptions
@@ -66,19 +64,6 @@ func WithDryRun() InventoryOption {
 	}
 }
 
-func WithConfidentialCompute() InventoryOption {
-	return func(opts *InventoryOptions) *InventoryOptions {
-		opts.ConfidentialCompute = true
-		return opts
-	}
-}
-
-func WithTEEType(teeType string) InventoryOption {
-	return func(opts *InventoryOptions) *InventoryOptions {
-		opts.TEEType = teeType
-		return opts
-	}
-}
 
 type Inventory interface {
 	Adjust(ReservationGroup, ...InventoryOption) error

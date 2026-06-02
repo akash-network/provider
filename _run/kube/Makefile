@@ -24,11 +24,19 @@ kube-setup-ingress-default: kube-setup-ingress-gateway
 	@echo "Gateway API ingress setup complete"
 endif
 
+# CC mode: use Kind config with containerd runtime patches (no restart needed)
+ifeq ($(CONFIDENTIAL_COMPUTE),true)
+KIND_CONFIG_FILE := $(CURDIR)/kind-config-cc.yaml
+endif
+
 # Confidential compute mode overrides
+DEV_REGISTRY             ?= ghcr.io/cloud-j-luna
+DEV_COMMIT               := $(shell git rev-parse --short HEAD)
+
 ifeq ($(CONFIDENTIAL_COMPUTE),true)
 SDL_PATH                   := deployment-cc.yaml
 PROVIDER_CONFIG_PATH       := provider-cc.yaml
-ATTESTATION_SIDECAR_IMAGE  ?= ghcr.io/akash-network/attestation-sidecar:latest
+ATTESTATION_SIDECAR_IMAGE  ?= $(DEV_REGISTRY)/attestation-sidecar:$(DEV_COMMIT)
 else
 SDL_PATH                   ?= grafana.yaml
 endif
@@ -81,15 +89,14 @@ kube-setup-cc:
 			nvidia.com/cc.ready.state=true \
 			--overwrite; \
 	done
-	@echo "Registering CC runtime handlers in containerd (aliased to runc)..."
-	@for node in $$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}'); do \
-		docker cp cc-containerd-setup.sh $$node:/cc-containerd-setup.sh; \
-		docker exec $$node bash /cc-containerd-setup.sh; \
-	done
-	@echo "Loading attestation sidecar image into Kind..."
-	$(KIND) load docker-image "$(ATTESTATION_SIDECAR_IMAGE)" --name "$(KIND_NAME)" 2>/dev/null || \
-		echo "Sidecar image not found locally. Build it first or set ATTESTATION_SIDECAR_IMAGE."
-	@echo "CC setup complete. RuntimeClasses, node labels, and containerd handlers applied."
+	@echo "Building and loading attestation sidecar image into Kind..."
+	@mkdir -p /tmp/akash-sidecar-build
+	GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+		go build -mod=vendor -ldflags="-s -w" -o /tmp/akash-sidecar-build/attestation-sidecar $(AP_ROOT)/sidecar/attestation
+	cp $(AP_ROOT)/sidecar/attestation/Dockerfile /tmp/akash-sidecar-build/Dockerfile
+	docker build -q -t "$(ATTESTATION_SIDECAR_IMAGE)" /tmp/akash-sidecar-build/
+	$(KIND) load docker-image "$(ATTESTATION_SIDECAR_IMAGE)" --name "$(KIND_NAME)"
+	@echo "CC setup complete. RuntimeClasses, node labels, and sidecar image loaded."
 
 .PHONY: kube-teardown-cc
 kube-teardown-cc:
