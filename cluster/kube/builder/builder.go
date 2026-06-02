@@ -72,6 +72,12 @@ const (
 	SidecarMemoryLimitBytes     int64 = 64 * 1024 * 1024 // 64Mi
 	SidecarCPURequestMillicores int64 = 10
 	SidecarMemoryRequestBytes   int64 = 32 * 1024 * 1024 // 32Mi
+
+	// Minimum resources for the primary container after sidecar subtraction.
+	// If the user's resources minus sidecar overhead falls below these values,
+	// clamp to these minimums. Prevents OOM kills from unusable resource limits.
+	MinPrimaryCPUMillicores int64 = 10               // 10m
+	MinPrimaryMemoryBytes   int64 = 16 * 1024 * 1024 // 16Mi
 )
 
 // TEE type constants used in placement attributes and directory responses.

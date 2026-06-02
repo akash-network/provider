@@ -157,10 +157,33 @@ func (b *Workload) container() corev1.Container {
 		},
 	}
 
+	// Whether the attestation sidecar will be injected into this pod.
+	// When true, we subtract the sidecar's resource footprint from the
+	// primary container so the pod total matches what the user requested.
+	sidecarActive := sparams != nil &&
+		IsConfidentialComputeRuntimeClass(sparams.RuntimeClass) &&
+		!sparams.AttestationDisabled
+
 	if cpu := service.Resources.CPU; cpu != nil {
-		requestedCPU := sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units)
-		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(requestedCPU.Value()), resource.Milli).DeepCopy() // nolint: gosec
-		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(cpu.Units.Value()), resource.Milli).DeepCopy()      // nolint: gosec
+		cpuLimit := int64(cpu.Units.Value())              // nolint: gosec
+		cpuRequest := int64(sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units).Value()) // nolint: gosec
+
+		if sidecarActive {
+			cpuLimit -= SidecarCPULimitMillicores
+			cpuRequest -= SidecarCPURequestMillicores
+			if cpuLimit < MinPrimaryCPUMillicores {
+				cpuLimit = MinPrimaryCPUMillicores
+			}
+			if cpuRequest < MinPrimaryCPUMillicores {
+				cpuRequest = MinPrimaryCPUMillicores
+			}
+			if cpuRequest > cpuLimit {
+				cpuRequest = cpuLimit
+			}
+		}
+
+		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(cpuRequest, resource.Milli).DeepCopy()
+		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(cpuLimit, resource.Milli).DeepCopy()
 	}
 
 	if gpu := service.Resources.GPU; gpu != nil && gpu.Units.Value() > 0 {
@@ -210,9 +233,25 @@ func (b *Workload) container() corev1.Container {
 
 	// fixme: ram is never expected to be nil
 	if mem := service.Resources.Memory; mem != nil {
-		requestedRAM := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
-		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRAM.Value()), resource.DecimalSI).DeepCopy()            // nolint: gosec
-		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()+requestedMem), resource.DecimalSI).DeepCopy() // nolint: gosec
+		memLimit := int64(mem.Quantity.Value()+requestedMem)         // nolint: gosec
+		memRequest := int64(sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity).Value()) // nolint: gosec
+
+		if sidecarActive {
+			memLimit -= SidecarMemoryLimitBytes
+			memRequest -= SidecarMemoryRequestBytes
+			if memLimit < MinPrimaryMemoryBytes {
+				memLimit = MinPrimaryMemoryBytes
+			}
+			if memRequest < MinPrimaryMemoryBytes {
+				memRequest = MinPrimaryMemoryBytes
+			}
+			if memRequest > memLimit {
+				memRequest = memLimit
+			}
+		}
+
+		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(memRequest, resource.DecimalSI).DeepCopy()
+		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(memLimit, resource.DecimalSI).DeepCopy()
 	}
 
 	if service.Params != nil {

@@ -135,3 +135,161 @@ func TestDeploymentPermissions(t *testing.T) {
 		})
 	}
 }
+
+func TestSidecarResourceSubtraction(t *testing.T) {
+	tests := []struct {
+		name               string
+		runtimeClass       string
+		attestationDisabled bool
+		cpuMillis          uint64 // SDL cpu in millicores
+		memBytes           uint64 // SDL memory in bytes
+		expectSubtraction  bool
+	}{
+		{
+			name:              "CC with attestation — 1Gi memory, 4000m CPU",
+			runtimeClass:      RuntimeClassKataQemuSNP,
+			cpuMillis:         4000,
+			memBytes:          1024 * 1024 * 1024, // 1Gi
+			expectSubtraction: true,
+		},
+		{
+			name:              "CC with attestation — 500m CPU, 128Mi memory",
+			runtimeClass:      RuntimeClassKataQemuSNP,
+			cpuMillis:         500,
+			memBytes:          128 * 1024 * 1024, // 128Mi
+			expectSubtraction: true,
+		},
+		{
+			name:              "CC with attestation — GPU runtime class",
+			runtimeClass:      RuntimeClassKataQemuNvidiaGPUSNP,
+			cpuMillis:         2000,
+			memBytes:          512 * 1024 * 1024, // 512Mi
+			expectSubtraction: true,
+		},
+		{
+			name:              "CC with attestation disabled — no subtraction",
+			runtimeClass:      RuntimeClassKataQemuSNP,
+			attestationDisabled: true,
+			cpuMillis:         500,
+			memBytes:          128 * 1024 * 1024,
+			expectSubtraction: false,
+		},
+		{
+			name:              "non-CC workload — no subtraction",
+			runtimeClass:      "nvidia",
+			cpuMillis:         500,
+			memBytes:          128 * 1024 * 1024,
+			expectSubtraction: false,
+		},
+		{
+			name:              "no runtime class — no subtraction",
+			runtimeClass:      "",
+			cpuMillis:         500,
+			memBytes:          128 * 1024 * 1024,
+			expectSubtraction: false,
+		},
+		{
+			name:              "CC with small resources — floors at minimum",
+			runtimeClass:      RuntimeClassKataQemuSNP,
+			cpuMillis:         110, // barely above sidecar limit (100m)
+			memBytes:          68 * 1024 * 1024, // barely above sidecar limit (64Mi)
+			expectSubtraction: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			lid := testutil.LeaseID(t)
+
+			log := testutil.Logger(t)
+			settings := Settings{
+				CPUCommitLevel:    1, // request = limit (simplifies assertions)
+				MemoryCommitLevel: 1,
+			}
+
+			sdlData, err := sdl.ReadFile("../../../testdata/deployment/deployment.yaml")
+			require.NoError(t, err)
+
+			mani, err := sdlData.Manifest()
+			require.NoError(t, err)
+
+			sp := &crd.SchedulerParams{
+				RuntimeClass:        tt.runtimeClass,
+				AttestationDisabled: tt.attestationDisabled,
+			}
+			sparams := []*crd.SchedulerParams{sp}
+
+			cmani, err := crd.NewManifest("lease", lid, &mani.GetGroups()[0], crd.ClusterSettings{SchedulerParams: sparams})
+			require.NoError(t, err)
+
+			// Override CPU and memory in the CRD before building the workload
+			cmani.Spec.Group.Services[0].Resources.CPU.Units = uint32(tt.cpuMillis) //nolint:gosec
+			cmani.Spec.Group.Services[0].Resources.Memory.Size = fmt.Sprintf("%d", tt.memBytes)
+
+			group, retSparams, err := cmani.Spec.Group.FromCRD()
+			require.NoError(t, err)
+
+			cdep := &ClusterDeployment{
+				Lid:     lid,
+				Group:   &group,
+				Sparams: crd.ClusterSettings{SchedulerParams: retSparams},
+			}
+			// Override scheduler params with our CC config
+			cdep.Sparams.SchedulerParams[0] = sp
+
+			workload, err := NewWorkloadBuilder(log, settings, cdep, cmani, 0)
+			require.NoError(t, err)
+
+			container := workload.container()
+
+			cpuLimit := container.Resources.Limits.Cpu().MilliValue()
+			cpuRequest := container.Resources.Requests.Cpu().MilliValue()
+			memLimit := container.Resources.Limits.Memory().Value()
+			memRequest := container.Resources.Requests.Memory().Value()
+
+			if tt.expectSubtraction {
+				expectedCPULimit := int64(tt.cpuMillis) - SidecarCPULimitMillicores
+				if expectedCPULimit < MinPrimaryCPUMillicores {
+					expectedCPULimit = MinPrimaryCPUMillicores
+				}
+				expectedMemLimit := int64(tt.memBytes) - SidecarMemoryLimitBytes
+				if expectedMemLimit < MinPrimaryMemoryBytes {
+					expectedMemLimit = MinPrimaryMemoryBytes
+				}
+
+				require.Equal(t, expectedCPULimit, cpuLimit,
+					"CPU limit: want %dm, got %dm", expectedCPULimit, cpuLimit)
+				require.Equal(t, expectedMemLimit, memLimit,
+					"Memory limit: want %d, got %d", expectedMemLimit, memLimit)
+
+				// Pod total LIMIT should equal user's original limit
+				// (only when resources are above sidecar footprint)
+				// Pod total equals user limit only when resources are well above sidecar + minimum
+				if int64(tt.cpuMillis)-SidecarCPULimitMillicores >= MinPrimaryCPUMillicores {
+					require.Equal(t, int64(tt.cpuMillis), cpuLimit+SidecarCPULimitMillicores,
+						"Pod CPU limit total should equal user limit")
+				}
+				if int64(tt.memBytes)-SidecarMemoryLimitBytes >= MinPrimaryMemoryBytes {
+					require.Equal(t, int64(tt.memBytes), memLimit+SidecarMemoryLimitBytes,
+						"Pod memory limit total should equal user limit")
+				}
+
+				// K8s constraint: limit >= request
+				require.GreaterOrEqual(t, cpuLimit, cpuRequest,
+					"CPU limit must be >= request")
+				require.GreaterOrEqual(t, memLimit, memRequest,
+					"Memory limit must be >= request")
+			} else {
+				// No subtraction — primary container gets full user resources
+				require.Equal(t, int64(tt.cpuMillis), cpuLimit,
+					"CPU limit should be unmodified")
+				require.Equal(t, int64(tt.memBytes), memLimit,
+					"Memory limit should be unmodified")
+			}
+
+			// Always: limit >= request (K8s invariant)
+			require.GreaterOrEqual(t, cpuLimit, cpuRequest, "K8s: CPU limit >= request")
+			require.GreaterOrEqual(t, memLimit, memRequest, "K8s: memory limit >= request")
+		})
+	}
+}
