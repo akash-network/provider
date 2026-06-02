@@ -867,8 +867,15 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 				NotAfter:     time.Now().Add(365 * 24 * time.Hour),
 				KeyUsage:     x509.KeyUsageDigitalSignature,
 				ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-				DNSNames:     []string{"localhost", "host.docker.internal"},
-				IPAddresses:  []net.IP{net.ParseIP("127.0.0.1")},
+				DNSNames: []string{
+					"localhost",
+					"host.docker.internal",
+					"akash-provider",
+					"akash-provider.akash-services",
+					"akash-provider.akash-services.svc",
+					"akash-provider.akash-services.svc.cluster.local",
+				},
+				IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
 			}
 			certDER, genErr := x509.CreateCertificate(crypto_rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 			if genErr != nil {
