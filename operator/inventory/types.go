@@ -56,6 +56,7 @@ const (
 	dpReqCPU dpReqType = iota
 	dpReqGPU
 	dpReqMem
+	dpReqIB
 )
 
 type dpReadResp struct {

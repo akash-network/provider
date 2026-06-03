@@ -231,6 +231,23 @@ spec:
                                       memory_size:
                                         type: string
                                         format: uint64
+                                  rdma:
+                                    type: object
+                                    nullable: true
+                                    properties:
+                                      enabled:
+                                        type: boolean
+                                      units:
+                                        type: integer
+                                        format: uint64
+                                      resource_name:
+                                        type: string
+                                      fabric:
+                                        type: string
+                                      nccl_hca_prefix:
+                                        type: string
+                          rdma_group:
+                            type: string
                           credentials:
                             type: object
                             nullable: true

@@ -57,6 +57,11 @@ type ManifestService struct {
 	Params          *ManifestServiceParams      `json:"params,omitempty"`
 	SchedulerParams *SchedulerParams            `json:"scheduler_params,omitempty"`
 	Credentials     *ManifestServiceCredentials `json:"credentials,omitempty"`
+	// RDMAGroup is the SDL gpu.attributes.rdma_group peer-group label.
+	// Workload builder reads this to apply per-group pod anti-affinity so
+	// that the K8s scheduler spreads peers of one group across distinct
+	// nodes. Empty string means no rdma_group was declared.
+	RDMAGroup string `json:"rdma_group,omitempty"`
 }
 
 // ManifestGroup stores metadata, name and list of SDL manifest services
@@ -105,8 +110,26 @@ type SchedulerResourceGPU struct {
 	Interface  string `json:"interface"`
 }
 
+// SchedulerResourceRDMA is the per-service RDMA allocation that the
+// reservation Adjust step pins on a successful bid. The K8s workload
+// builder reads it to (a) add the extended resource request/limit named
+// by ResourceName, (b) inject the NCCL env vars that target the fabric.
+//
+// 1:1 invariant: when Enabled is true, Units == res.GPU.Units.Value(). The
+// inventory operator publishes ResourceName and NCCLHCAPrefix from the
+// chosen node's kubelet device-plugin advert and infiniband sysfs scan;
+// Fabric is "infiniband" or "roce".
+type SchedulerResourceRDMA struct {
+	Enabled       bool   `json:"enabled"`
+	Units         uint64 `json:"units"`
+	ResourceName  string `json:"resource_name"`
+	Fabric        string `json:"fabric"`
+	NCCLHCAPrefix string `json:"nccl_hca_prefix"`
+}
+
 type SchedulerResources struct {
-	GPU *SchedulerResourceGPU `json:"gpu"`
+	GPU  *SchedulerResourceGPU  `json:"gpu"`
+	RDMA *SchedulerResourceRDMA `json:"rdma,omitempty"`
 }
 
 type SchedulerParams struct {
@@ -251,6 +274,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 		Resources: res,
 		Count:     ms.Count,
 		Expose:    make([]mani.ServiceExpose, 0, len(ms.Expose)),
+		RDMAGroup: ms.RDMAGroup,
 	}
 
 	if ms.Credentials != nil {
@@ -322,6 +346,7 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 		Count:           ams.Count,
 		Expose:          make([]ManifestServiceExpose, 0, len(ams.Expose)),
 		SchedulerParams: schedulerParams,
+		RDMAGroup:       ams.RDMAGroup,
 	}
 
 	for _, expose := range ams.Expose {

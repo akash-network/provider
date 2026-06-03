@@ -43,7 +43,14 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.SchedulerParams, bool, bool) {
+//
+// requiredFabric is the placement-level RDMA fabric pin extracted by the
+// caller from `Reservation.Resources()` via PlacementRequiredFabric. Empty
+// string means no fabric pin (any RDMA fabric satisfies the bid); a
+// non-empty value must equal node.Capabilities.RDMAFabric for the bid to
+// stick. Pulled at the Adjust level so the type-switch only runs once per
+// bid, not once per (node, replica) attempt.
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric string) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -52,6 +59,10 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.Scheduler
 	}
 
 	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
+		return nil, false, true
+	}
+
+	if !tryAdjustRDMA(&nd.Resources.RDMA, nd.Capabilities, res, sparams, requiredFabric) {
 		return nil, false, true
 	}
 
@@ -202,6 +213,60 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 	return false
 }
 
+// tryAdjustRDMA pins one RDMA HCA per GPU unit (the locked 1:1 invariant)
+// when the per-resource opt-in `gpu.attributes.rdma=true` is set, and
+// stamps the SchedulerParams the workload builder later turns into a
+// kubelet resource request plus NCCL env vars.
+//
+// Returns true on a no-op (resource does not require RDMA), on a
+// successful allocation, and false when the node is unsuitable. False
+// here is node-scoped (`nStatus=false` upstream) so the caller will try
+// the next node, not abort the bid.
+//
+// Suitability gates:
+//   - The placement-level fabric pin (if any) matches the node's fabric.
+//   - The node actually advertises an RDMA fabric and a kubelet extended
+//     resource name (NodeCapabilities from P-1's inventory operator).
+//   - There is RDMA capacity for `gpu.units` HCAs (1:1).
+//
+// GPU presence is guaranteed by ResourceRequiresRDMA — it only returns
+// true when res.GPU is non-nil with the rdma=true attribute. The
+// chain-SDK SDL parser additionally rejects gpu.units==0 with rdma=true.
+func tryAdjustRDMA(
+	rp *inventoryV1.ResourcePair,
+	capabilities inventoryV1.NodeCapabilities,
+	res *rtypes.Resources,
+	sparams *crd.SchedulerParams,
+	requiredFabric string,
+) bool {
+	if !ResourceRequiresRDMA(*res) {
+		return true
+	}
+
+	if capabilities.RDMAFabric == "" || capabilities.RDMAResourceName == "" {
+		return false
+	}
+
+	if requiredFabric != "" && capabilities.RDMAFabric != requiredFabric {
+		return false
+	}
+
+	if !rp.SubNLZ(res.GPU.Units) {
+		return false
+	}
+
+	sParamsEnsureResources(sparams)
+	sparams.Resources.RDMA = &crd.SchedulerResourceRDMA{
+		Enabled:       true,
+		Units:         res.GPU.Units.Value(),
+		ResourceName:  capabilities.RDMAResourceName,
+		Fabric:        capabilities.RDMAFabric,
+		NCCLHCAPrefix: capabilities.NCCLHCAPrefix,
+	}
+
+	return true
+}
+
 func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *rtypes.Storage) bool {
 	return rp.SubNLZ(res.Quantity)
 }
@@ -237,6 +302,11 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 
 	currInventory := inv.dup()
 
+	// Extract the deployment-group's RDMA fabric pin once. tryAdjust
+	// consults it per (node, replica) attempt; computing it here keeps the
+	// ResourceGroup type-switch off the hot path.
+	requiredFabric, _ := PlacementRequiredFabric(reservation.Resources())
+
 	var err error
 
 nodes:
@@ -254,7 +324,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes
