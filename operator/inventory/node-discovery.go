@@ -79,13 +79,16 @@ func newNodeDiscovery(ctx context.Context, name, namespace string, image string,
 	return nd
 }
 
-// hostPathDirectoryOrCreatePtr returns a pointer to the HostPath type used
-// for the /sys/class/infiniband mount. We tolerate the directory not
-// existing on the host (DirectoryOrCreate) so the discovery pod still
-// starts on non-RDMA nodes — the infiniband handler then returns a
-// zero-value IBDiscovery for those.
-func hostPathDirectoryOrCreatePtr() *corev1.HostPathType {
-	t := corev1.HostPathDirectoryOrCreate
+// hostPathDirectoryPtr returns a pointer to HostPathDirectory for the
+// /sys/class mount the IB discovery handler walks. We require the parent
+// to exist (it always does on any Linux host — sysfs is mounted by the
+// kernel) and let the handler tolerate a missing infiniband subdir on
+// non-RDMA nodes. DirectoryOrCreate is not an option here because sysfs
+// is read-only and any mkdir against /sys/* fails — that mode is what
+// caused operator-inventory-hardware-discovery to hang in
+// ContainerCreating in CI on the initial RDMA PR.
+func hostPathDirectoryPtr() *corev1.HostPathType {
+	t := corev1.HostPathDirectory
 	return &t
 }
 
@@ -256,14 +259,19 @@ func (dp *nodeDiscovery) apiConnector() error {
 							Value: "1",
 						},
 					},
-					// P-1: mount the host's /sys/class/infiniband so the
-					// /infiniband endpoint can derive the NCCL HCA prefix
-					// and fabric type for the node. The mount is read-only
-					// and a no-op on hosts without IB devices.
+					// P-1: mount the host's /sys/class so the /infiniband
+					// handler can walk /host/sys/class/infiniband for the
+					// NCCL HCA prefix + fabric type. Mounted at the parent
+					// (always present on any Linux host) rather than at
+					// /sys/class/infiniband directly because sysfs is
+					// read-only, so HostPathDirectoryOrCreate cannot mkdir
+					// the leaf on non-RDMA nodes and the kubelet hangs in
+					// ContainerCreating forever. The handler tolerates a
+					// missing infiniband subdir (ENOENT → empty IBDiscovery).
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:      "infiniband-sysfs",
-							MountPath: InfinibandSysfsPath,
+							Name:      "sys-class",
+							MountPath: "/host/sys/class",
 							ReadOnly:  true,
 						},
 					},
@@ -271,11 +279,11 @@ func (dp *nodeDiscovery) apiConnector() error {
 			},
 			Volumes: []corev1.Volume{
 				{
-					Name: "infiniband-sysfs",
+					Name: "sys-class",
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/sys/class/infiniband",
-							Type: hostPathDirectoryOrCreatePtr(),
+							Path: "/sys/class",
+							Type: hostPathDirectoryPtr(),
 						},
 					},
 				},
