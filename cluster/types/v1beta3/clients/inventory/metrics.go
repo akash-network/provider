@@ -39,6 +39,14 @@ func ParseGPUAttributes(attrs attrtypes.Attributes) (GPUAttributes, error) {
 	amd := make(GPUModels)
 
 	for _, attr := range attrs {
+		// Non-vendor GPU attribute keys (rdma, rdma_group) are
+		// per-service RDMA hints — chain SDK accepts them but they aren't
+		// matchable inventory attributes. Skip rather than error so the
+		// reservation path can still match vendor/model/ram/interface.
+		if attr.Key == "rdma" || attr.Key == "rdma_group" {
+			continue
+		}
+
 		tokens := strings.Split(attr.Key, "/")
 		if len(tokens) < 4 || len(tokens)%2 != 0 {
 			return GPUAttributes{}, fmt.Errorf("invalid GPU attribute") // nolint: err113

@@ -58,11 +58,17 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric 
 		return nil, false, true
 	}
 
-	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
+	// tryAdjustRDMA must run BEFORE tryAdjustGPU because tryAdjustGPU
+	// replaces res.GPU.Attributes with a single synthesized vendor entry
+	// (clobbering the `rdma: true` opt-in). ResourceRequiresRDMA would
+	// then return false and the reservation would succeed as a non-RDMA
+	// bid — wrong: the workload builder would skip the RDMA resource
+	// request and NCCL env injection.
+	if !tryAdjustRDMA(&nd.Resources.RDMA, nd.Capabilities, res, sparams, requiredFabric) {
 		return nil, false, true
 	}
 
-	if !tryAdjustRDMA(&nd.Resources.RDMA, nd.Capabilities, res, sparams, requiredFabric) {
+	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
 		return nil, false, true
 	}
 

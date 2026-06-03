@@ -14,6 +14,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
+	"github.com/jaypipes/ghw/pkg/pci"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -168,6 +169,44 @@ func (dp *nodeDiscovery) queryIB(ctx context.Context) (*IBDiscovery, error) {
 	}
 }
 
+// queryPCI asks the per-node psutil pod for the host's PCI bus enumeration.
+// Used as a fallback when ghw's `/sys/class/drm` walk misses compute GPUs
+// (headless A100/H100 nodes where the NVIDIA driver lives inside the GPU
+// Operator container, not on the host kernel — so no DRM nodes for the
+// compute cards, only the BMC VGA).
+func (dp *nodeDiscovery) queryPCI(ctx context.Context) (*pci.Info, error) {
+	respch := make(chan dpReadResp, 1)
+
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case <-rctx.Done():
+		return nil, rctx.Err()
+	case dp.readch <- dpReadReq{
+		ctx:  rctx,
+		op:   dpReqPCI,
+		resp: respch,
+	}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case resp := <-respch:
+		if resp.data == nil {
+			return nil, resp.err
+		}
+		return resp.data.(*pci.Info), resp.err
+	}
+}
+
 func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 	respch := make(chan dpReadResp, 1)
 
@@ -259,19 +298,20 @@ func (dp *nodeDiscovery) apiConnector() error {
 							Value: "1",
 						},
 					},
-					// P-1: mount the host's /sys/class so the /infiniband
-					// handler can walk /host/sys/class/infiniband for the
-					// NCCL HCA prefix + fabric type. Mounted at the parent
-					// (always present on any Linux host) rather than at
-					// /sys/class/infiniband directly because sysfs is
-					// read-only, so HostPathDirectoryOrCreate cannot mkdir
-					// the leaf on non-RDMA nodes and the kubelet hangs in
-					// ContainerCreating forever. The handler tolerates a
-					// missing infiniband subdir (ENOENT → empty IBDiscovery).
+					// P-1: mount the host's /sys so the /infiniband handler
+					// can walk /host/sys/class/infiniband AND resolve the
+					// sysfs symlinks each device dir points into under
+					// /sys/devices/.../infiniband/<dev>. Mounting only
+					// /sys/class makes the directory listing work (the
+					// names are stored in the parent) but every read of a
+					// device subdir (ports/link_layer, etc) goes through
+					// the symlink target and lands outside the mount.
+					// Sysfs is read-only so a full /sys mount is safe;
+					// HostPathDirectory because /sys always exists.
 					VolumeMounts: []corev1.VolumeMount{
 						{
-							Name:      "sys-class",
-							MountPath: "/host/sys/class",
+							Name:      "host-sys",
+							MountPath: "/host/sys",
 							ReadOnly:  true,
 						},
 					},
@@ -279,10 +319,10 @@ func (dp *nodeDiscovery) apiConnector() error {
 			},
 			Volumes: []corev1.Volume{
 				{
-					Name: "sys-class",
+					Name: "host-sys",
 					VolumeSource: corev1.VolumeSource{
 						HostPath: &corev1.HostPathVolumeSource{
-							Path: "/sys/class",
+							Path: "/sys",
 							Type: hostPathDirectoryPtr(),
 						},
 					},
@@ -382,6 +422,8 @@ initloop:
 				res = "memory"
 			case dpReqIB:
 				res = "infiniband"
+			case dpReqPCI:
+				res = "pci"
 			}
 
 			result := kc.CoreV1().RESTClient().Get().
@@ -413,6 +455,10 @@ initloop:
 						resp.data = &res
 					case dpReqIB:
 						var res IBDiscovery
+						resp.err = json.Unmarshal(data, &res)
+						resp.data = &res
+					case dpReqPCI:
+						var res pci.Info
 						resp.err = json.Unmarshal(data, &res)
 						resp.data = &res
 					}
@@ -1058,6 +1104,52 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 	return res
 }
 
+// gpuInfoFromPCIDevice extracts a GPUInfo from a ghw pci.Device record,
+// returning ok=false for non-compute-GPU devices (BMC VGA, NVSwitch
+// bridges) so the caller can skip them when walking the full PCI bus.
+func gpuInfoFromPCIDevice(dev *pci.Device, registry RegistryGPUVendors) (v1.GPUInfo, bool) {
+	if dev == nil || dev.Vendor == nil || dev.Product == nil {
+		return v1.GPUInfo{}, false
+	}
+
+	classID := ""
+	subclassID := ""
+	if dev.Class != nil {
+		classID = dev.Class.ID
+	}
+	if dev.Subclass != nil {
+		subclassID = dev.Subclass.ID
+	}
+
+	// Compute GPUs are PCI class 03 subclass 02 ("3D controller"). Headless
+	// A100/H100 boxes don't expose them as display controllers (03/00) and
+	// don't have DRM nodes, so this is the only reliable filter. Skipping
+	// 03/00 keeps the BMC VGA out, and skipping anything outside class 03
+	// keeps NVSwitch bridges (06/80) and similar out.
+	if classID != "03" || subclassID != "02" {
+		return v1.GPUInfo{}, false
+	}
+
+	vendor, exists := registry[dev.Vendor.ID]
+	if !exists {
+		return v1.GPUInfo{}, false
+	}
+
+	model, exists := vendor.Devices[dev.Product.ID]
+	if !exists {
+		return v1.GPUInfo{}, false
+	}
+
+	return v1.GPUInfo{
+		Vendor:     vendor.Name,
+		VendorID:   dev.Vendor.ID,
+		Name:       model.Name,
+		ModelID:    dev.Product.ID,
+		Interface:  model.Interface,
+		MemorySize: model.MemorySize,
+	}, true
+}
+
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
@@ -1066,43 +1158,33 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
 		log.Error(err, "unable to query gpu")
-		return res
+	} else if gpus != nil {
+		for _, dev := range gpus.GraphicsCards {
+			if ginfo, ok := gpuInfoFromPCIDevice(dev.DeviceInfo, info); ok {
+				res = append(res, ginfo)
+			}
+		}
 	}
 
-	if gpus == nil {
-		return res
-	}
+	// Headless compute nodes (A100/H100 + NVIDIA GPU Operator) expose only
+	// the BMC VGA under /sys/class/drm because the host kernel has no
+	// nvidia driver — the driver lives in the operator's daemonset
+	// container. Walk the PCI bus directly to find the compute cards.
+	if len(res) == 0 {
+		pciInfo, perr := dp.queryPCI(ctx)
+		if perr != nil {
+			log.Error(perr, "unable to query pci for gpu fallback")
+		} else if pciInfo != nil {
+			for _, dev := range pciInfo.Devices {
+				if ginfo, ok := gpuInfoFromPCIDevice(dev, info); ok {
+					res = append(res, ginfo)
+				}
+			}
 
-	for _, dev := range gpus.GraphicsCards {
-		dinfo := dev.DeviceInfo
-		if dinfo == nil {
-			continue
+			if len(res) > 0 {
+				log.Info("discovered gpus via pci fallback", "count", len(res), "node", dp.name)
+			}
 		}
-
-		vinfo := dinfo.Vendor
-		pinfo := dinfo.Product
-		if vinfo == nil || pinfo == nil {
-			continue
-		}
-
-		vendor, exists := info[vinfo.ID]
-		if !exists {
-			continue
-		}
-
-		model, exists := vendor.Devices[pinfo.ID]
-		if !exists {
-			continue
-		}
-
-		res = append(res, v1.GPUInfo{
-			Vendor:     vendor.Name,
-			VendorID:   dev.DeviceInfo.Vendor.ID,
-			Name:       model.Name,
-			ModelID:    dev.DeviceInfo.Product.ID,
-			Interface:  model.Interface,
-			MemorySize: model.MemorySize,
-		})
 	}
 
 	sort.Sort(res)

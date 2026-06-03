@@ -57,6 +57,7 @@ const (
 	dpReqGPU
 	dpReqMem
 	dpReqIB
+	dpReqPCI
 )
 
 type dpReadResp struct {
