@@ -3886,8 +3886,8 @@ pkg.akt.dev/go/sdl v0.4.0-alpha.aep86.0 h1:pDmRnY4wEe4J9VMYrP4tNq2Tg8do437bk+3tq
 pkg.akt.dev/go/sdl v0.4.0-alpha.aep86.0/go.mod h1:b2uTAP4vQ4AwSICq9mAtAzaCGVVOWyNqlGXN7hpl1aY=
 pkg.akt.dev/node v1.2.2 h1:Xka/9sVaJTyGfyudZUc8A9UW8xC0FYcZoHvD6dm1iy0=
 pkg.akt.dev/node v1.2.2/go.mod h1:luWpw5dNEIMhEITMqOvjiohqIoLd/kkcjeg1aCF4EJA=
-pkg.akt.dev/node/v2 v2.1.0-rc10 h1:QM35n8qAs5rpIooFYsWV6Iq5OBMutsYMMXy78zPY8ds=
-pkg.akt.dev/node/v2 v2.1.0-rc10/go.mod h1:gJ0cjHIDuBk/n4I2Hsc9R/lJLyN+pLTxk3vcIVJW9RQ=
+pkg.akt.dev/node/v2 v2.1.0-alpha.aep86.0 h1:CKJy77V62+eNaqyZ6l3zHQVUpOLNamgrbE1B0NskLDc=
+pkg.akt.dev/node/v2 v2.1.0-alpha.aep86.0/go.mod h1:cp1wwyl0JG5pgmdWrPhr+9PFrjUNtJrvT8G0Pajmjjw=
 pkg.akt.dev/specs v0.0.1 h1:OP0zil3Fr4kcCuybFqQ8LWgSlSP2Yn7306meWpu6/S4=
 pkg.akt.dev/specs v0.0.1/go.mod h1:tiFuJAqzn+lkz662lf9qaEdjdrrDr882r3YMDnWkbp4=
 pkg.akt.dev/testdata v0.0.1 h1:yHfqF0Uxf7Rg7WdwSggnyBWMxACtAg5VpBUVFXU+uvM=
