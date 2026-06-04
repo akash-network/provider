@@ -52,11 +52,11 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.4.0-alpha.aep86.0
-	pkg.akt.dev/go/cli v0.4.0-alpha.aep86.0
-	pkg.akt.dev/go/sdl v0.4.0-alpha.aep86.0
+	pkg.akt.dev/go v0.4.0-alpha.aep86.1
+	pkg.akt.dev/go/cli v0.4.0-alpha.aep86.1
+	pkg.akt.dev/go/sdl v0.4.0-alpha.aep86.1
 	pkg.akt.dev/node v1.2.2
-	pkg.akt.dev/node/v2 v2.1.0-alpha.aep86.0
+	pkg.akt.dev/node/v2 v2.1.0-alpha.aep86.1
 	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
