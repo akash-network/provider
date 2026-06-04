@@ -360,6 +360,22 @@ func (b *Workload) affinity() *corev1.Affinity {
 	// Scoping the LabelSelector to the same deployment namespace is
 	// implicit — pod affinity is namespace-scoped by default — so two
 	// tenants who happen to both pick `rdma_group: pair0` cannot collide.
+	//
+	// KNOWN GAP: the bid engine is rdma_group-blind. The chain SDK
+	// serializes `rdma_group` only on the off-chain manifest's
+	// `Service.RDMAGroup` field, not as an attribute that survives into
+	// the on-chain Order, so `tryAdjust` cannot enforce per-group node
+	// separation when fitting resources to inventory. Two known
+	// misalignment cases:
+	//   (a) count: N replicas of one service in one group on a provider
+	//       with fewer than N distinct GPU-capable nodes — bid succeeds
+	//       greedily, K8s leaves the surplus pods Pending.
+	//   (b) multi-service group with enough total GPU/HCA capacity on a
+	//       single node — bid greedily co-locates peers, K8s leaves the
+	//       second peer Pending.
+	// Tenants must size groups so total peer count ≤ provider's
+	// distinct-node count with adequate per-node capacity. Tracked in
+	// AKT-443 — bid-side group-aware Adjust.
 	if rg := service.RDMAGroup; rg != "" {
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{

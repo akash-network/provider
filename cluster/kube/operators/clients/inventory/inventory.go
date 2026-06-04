@@ -50,7 +50,7 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // non-empty value must equal node.Capabilities.RDMAFabric for the bid to
 // stick. Pulled at the Adjust level so the type-switch only runs once per
 // bid, not once per (node, replica) attempt.
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric string) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric string, requiresRDMA bool) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -58,13 +58,11 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric 
 		return nil, false, true
 	}
 
-	// tryAdjustRDMA must run BEFORE tryAdjustGPU because tryAdjustGPU
-	// replaces res.GPU.Attributes with a single synthesized vendor entry
-	// (clobbering the `rdma: true` opt-in). ResourceRequiresRDMA would
-	// then return false and the reservation would succeed as a non-RDMA
-	// bid — wrong: the workload builder would skip the RDMA resource
-	// request and NCCL env injection.
-	if !tryAdjustRDMA(&nd.Resources.RDMA, nd.Capabilities, res, sparams, requiredFabric) {
+	// tryAdjustRDMA before tryAdjustGPU so the RDMA stamp lands even if
+	// GPU adjust is about to clobber res.GPU.Attributes. We rely on the
+	// caller's `requiresRDMA` flag (pulled from the pristine resource)
+	// rather than re-reading attributes here — see the helper's doc.
+	if !tryAdjustRDMA(&nd.Resources.RDMA, nd.Capabilities, res, sparams, requiredFabric, requiresRDMA) {
 		return nil, false, true
 	}
 
@@ -238,14 +236,25 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 // GPU presence is guaranteed by ResourceRequiresRDMA — it only returns
 // true when res.GPU is non-nil with the rdma=true attribute. The
 // chain-SDK SDL parser additionally rejects gpu.units==0 with rdma=true.
+// tryAdjustRDMA takes `required` as an explicit bool instead of
+// re-reading res.GPU.Attributes because tryAdjustGPU clobbers
+// res.Attributes on the FIRST replica's pass (replaces the attribute
+// slice with a single synthesized vendor entry). On replica 2+, the
+// adjusted dup is taken from the already-clobbered slice, so a
+// ResourceRequiresRDMA check here would falsely report "no RDMA needed"
+// and skip the SchedulerParams.Resources.RDMA stamp — the per-replica
+// DeepEqual in Adjust would then reject the bid with
+// ErrGroupResourceMismatch. The caller pulls `required` from the
+// pristine origResources once before any mutation runs.
 func tryAdjustRDMA(
 	rp *inventoryV1.ResourcePair,
 	capabilities inventoryV1.NodeCapabilities,
 	res *rtypes.Resources,
 	sparams *crd.SchedulerParams,
 	requiredFabric string,
+	required bool,
 ) bool {
-	if !ResourceRequiresRDMA(*res) {
+	if !required {
 		return true
 	}
 
@@ -257,7 +266,7 @@ func tryAdjustRDMA(
 		return false
 	}
 
-	if !rp.SubNLZ(res.GPU.Units) {
+	if res.GPU == nil || !rp.SubNLZ(res.GPU.Units) {
 		return false
 	}
 
@@ -313,6 +322,17 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 	// ResourceGroup type-switch off the hot path.
 	requiredFabric, _ := PlacementRequiredFabric(reservation.Resources())
 
+	// Per-resource RDMA-required flags. Read from origResources because
+	// tryAdjustGPU mutates res.GPU.Attributes on each pass, dropping the
+	// `rdma: true` opt-in. For services with count > 1 the second-and-
+	// later replica's adjusted slice is a Dup of the already-clobbered
+	// state, so re-reading attributes inside tryAdjustRDMA would falsely
+	// report "no RDMA needed." Computed once here, threaded through.
+	requiresRDMA := make([]bool, len(origResources))
+	for i := range origResources {
+		requiresRDMA[i] = ResourceRequiresRDMA(origResources[i].Resources)
+	}
+
 	var err error
 
 nodes:
@@ -330,7 +350,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric, requiresRDMA[i])
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes

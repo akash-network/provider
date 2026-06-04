@@ -33,15 +33,15 @@ func gpuRDMAResource(units uint64) *rtypes.Resources {
 }
 
 func TestTryAdjustRDMA_NoOptIn(t *testing.T) {
-	// No rdma=true attribute → helper is a pure no-op, even on a node
-	// without any RDMA capacity advertised. SchedulerParams must stay
-	// empty so DeepEqual(zero) at the bottom of tryAdjust still triggers.
+	// required=false → pure no-op, even on a node without any RDMA
+	// capacity advertised. SchedulerParams must stay empty so DeepEqual
+	// against a zero value at the bottom of tryAdjust still triggers.
 	rp := rdmaResourcePair(0, 0)
 	caps := inventoryV1.NodeCapabilities{}
 	res := &rtypes.Resources{GPU: &rtypes.GPU{Units: rtypes.NewResourceValue(8)}}
 	sparams := &crd.SchedulerParams{}
 
-	require.True(t, tryAdjustRDMA(&rp, caps, res, sparams, ""))
+	require.True(t, tryAdjustRDMA(&rp, caps, res, sparams, "", false))
 	require.Nil(t, sparams.Resources)
 }
 
@@ -52,7 +52,7 @@ func TestTryAdjustRDMA_NodeWithoutRDMARejected(t *testing.T) {
 	caps := inventoryV1.NodeCapabilities{}
 	sparams := &crd.SchedulerParams{}
 
-	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, ""))
+	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "", true))
 	require.Nil(t, sparams.Resources)
 }
 
@@ -66,7 +66,7 @@ func TestTryAdjustRDMA_FabricPinMismatchRejected(t *testing.T) {
 	}
 	sparams := &crd.SchedulerParams{}
 
-	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "infiniband"))
+	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "infiniband", true))
 	require.Nil(t, sparams.Resources)
 }
 
@@ -79,7 +79,7 @@ func TestTryAdjustRDMA_FabricPinMatchOK(t *testing.T) {
 	}
 	sparams := &crd.SchedulerParams{}
 
-	require.True(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "infiniband"))
+	require.True(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "infiniband", true))
 	require.NotNil(t, sparams.Resources)
 	require.NotNil(t, sparams.Resources.RDMA)
 	require.Equal(t, &crd.SchedulerResourceRDMA{
@@ -104,7 +104,7 @@ func TestTryAdjustRDMA_NoFabricPinAccepts(t *testing.T) {
 	}
 	sparams := &crd.SchedulerParams{}
 
-	require.True(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(4), sparams, ""))
+	require.True(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(4), sparams, "", true))
 	require.Equal(t, "roce", sparams.Resources.RDMA.Fabric)
 }
 
@@ -118,7 +118,7 @@ func TestTryAdjustRDMA_InsufficientCapacity(t *testing.T) {
 	}
 	sparams := &crd.SchedulerParams{}
 
-	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, ""))
+	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "", true))
 	require.Nil(t, sparams.Resources)
 	// Available unchanged — SubNLZ refused to commit.
 	require.Equal(t, int64(4), rp.Available().Value())
@@ -135,5 +135,36 @@ func TestTryAdjustRDMA_NodeAdvertisesFabricButNoResourceName(t *testing.T) {
 	}
 	sparams := &crd.SchedulerParams{}
 
-	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, ""))
+	require.False(t, tryAdjustRDMA(&rp, caps, gpuRDMAResource(8), sparams, "", true))
+}
+
+// TestTryAdjustRDMA_RequiredHonoredWithoutAttributes covers the count > 1
+// case: tryAdjustGPU clobbered res.GPU.Attributes on a prior iteration,
+// so the rdma=true opt-in is gone from the resource we're handed. The
+// caller still passes required=true (pulled from origResources) and we
+// must stamp SchedulerParams.Resources.RDMA exactly as on iteration 1,
+// otherwise Adjust's DeepEqual rejects the bid with
+// ErrGroupResourceMismatch.
+func TestTryAdjustRDMA_RequiredHonoredWithoutAttributes(t *testing.T) {
+	rp := rdmaResourcePair(8, 0)
+	caps := inventoryV1.NodeCapabilities{
+		RDMAResourceName: "rdma/rdma_shared_device_ib",
+		RDMAFabric:       "infiniband",
+		NCCLHCAPrefix:    "mlx5",
+	}
+	clobbered := &rtypes.Resources{
+		GPU: &rtypes.GPU{
+			Units: rtypes.NewResourceValue(8),
+			// Attributes intentionally empty — simulates tryAdjustGPU's
+			// prior mutation, where it replaced the slice with just the
+			// synthesized vendor/model entry and the rdma attribute was
+			// lost. ResourceRequiresRDMA(*res) would now return false.
+		},
+	}
+	sparams := &crd.SchedulerParams{}
+
+	require.True(t, tryAdjustRDMA(&rp, caps, clobbered, sparams, "", true))
+	require.NotNil(t, sparams.Resources)
+	require.NotNil(t, sparams.Resources.RDMA)
+	require.Equal(t, uint64(8), sparams.Resources.RDMA.Units)
 }

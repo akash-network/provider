@@ -1105,28 +1105,20 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 }
 
 // gpuInfoFromPCIDevice extracts a GPUInfo from a ghw pci.Device record,
-// returning ok=false for non-compute-GPU devices (BMC VGA, NVSwitch
-// bridges) so the caller can skip them when walking the full PCI bus.
+// returning ok=false for devices outside the akash GPU registry so the
+// caller can skip them when walking the full PCI bus.
+//
+// We deliberately do NOT filter by PCI class/subclass. Datacenter cards
+// (A100, H100, etc.) enumerate as 03/02 ("3D controller") but consumer
+// cards (RTX 4090/3090, A6000) enumerate as 03/00 ("VGA compatible
+// controller") — the same class as the BMC VGA. The vendor+product
+// registry lookup is what distinguishes them: BMC Matrox (vendor 102b)
+// isn't in akash's GPU vendor registry, while NVIDIA/AMD compute and
+// consumer cards both are. NVSwitch bridges (NVIDIA vendor, class 06)
+// also fail the product lookup since their product IDs are not in the
+// GPU model registry.
 func gpuInfoFromPCIDevice(dev *pci.Device, registry RegistryGPUVendors) (v1.GPUInfo, bool) {
 	if dev == nil || dev.Vendor == nil || dev.Product == nil {
-		return v1.GPUInfo{}, false
-	}
-
-	classID := ""
-	subclassID := ""
-	if dev.Class != nil {
-		classID = dev.Class.ID
-	}
-	if dev.Subclass != nil {
-		subclassID = dev.Subclass.ID
-	}
-
-	// Compute GPUs are PCI class 03 subclass 02 ("3D controller"). Headless
-	// A100/H100 boxes don't expose them as display controllers (03/00) and
-	// don't have DRM nodes, so this is the only reliable filter. Skipping
-	// 03/00 keeps the BMC VGA out, and skipping anything outside class 03
-	// keeps NVSwitch bridges (06/80) and similar out.
-	if classID != "03" || subclassID != "02" {
 		return v1.GPUInfo{}, false
 	}
 
