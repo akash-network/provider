@@ -11,6 +11,7 @@ require (
 	github.com/boz/go-lifecycle v0.1.1
 	github.com/cometbft/cometbft v0.38.21
 	github.com/cosmos/cosmos-sdk v0.53.6
+	github.com/cosmos/gogoproto v1.7.2
 	github.com/desertbit/timer v1.0.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-acme/lego/v4 v4.26.0
@@ -51,9 +52,9 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.2.10
-	pkg.akt.dev/go/cli v0.2.2
-	pkg.akt.dev/go/sdl v0.2.0
+	pkg.akt.dev/go v0.4.0-alpha.aep86.0
+	pkg.akt.dev/go/cli v0.4.0-alpha.aep86.0
+	pkg.akt.dev/go/sdl v0.4.0-alpha.aep86.0
 	pkg.akt.dev/node v1.2.2
 	pkg.akt.dev/node/v2 v2.1.0-rc10
 	sigs.k8s.io/gateway-api v1.4.1
@@ -175,7 +176,6 @@ require (
 	github.com/cosmos/cosmos-proto v1.0.0-beta.5 // indirect
 	github.com/cosmos/go-bip39 v1.0.0 // indirect
 	github.com/cosmos/gogogateway v1.2.0 // indirect
-	github.com/cosmos/gogoproto v1.7.2 // indirect
 	github.com/cosmos/iavl v1.2.6 // indirect
 	github.com/cosmos/ibc-go/v10 v10.5.0 // indirect
 	github.com/cosmos/ics23/go v0.11.0 // indirect
