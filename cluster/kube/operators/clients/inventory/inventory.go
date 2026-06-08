@@ -50,7 +50,25 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // non-empty value must equal node.Capabilities.RDMAFabric for the bid to
 // stick. Pulled at the Adjust level so the type-switch only runs once per
 // bid, not once per (node, replica) attempt.
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric string, requiresRDMA bool) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(
+	node int,
+	res *rtypes.Resources,
+	requiredFabric string,
+	requiresRDMA bool,
+	rdmaGroup string,
+	groupClaims map[string]map[int]bool,
+) (*crd.SchedulerParams, bool, bool) {
+	// AKT-443: enforce per-rdma_group node separation at fit time.
+	// Resources sharing a group label must land on distinct nodes (so the
+	// workload builder's pod anti-affinity is satisfiable). Reject the
+	// node early if this group has already claimed it; the surrounding
+	// Adjust loop will then walk to the next node.
+	if rdmaGroup != "" {
+		if claimed, ok := groupClaims[rdmaGroup]; ok && claimed[node] {
+			return nil, false, true
+		}
+	}
+
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -125,6 +143,18 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, requiredFabric 
 	// commit and move on
 	inv.Nodes[node] = nd
 	inv.Storage = storageClasses
+
+	// AKT-443: register this resource's rdma_group claim on the node so
+	// peers in the same group are forced onto distinct nodes by the early
+	// rejection at the top of this function. We register only after all
+	// the per-node-resource gates have passed, so a partial-fit attempt
+	// never poisons the group→nodes map.
+	if rdmaGroup != "" {
+		if groupClaims[rdmaGroup] == nil {
+			groupClaims[rdmaGroup] = map[int]bool{}
+		}
+		groupClaims[rdmaGroup][node] = true
+	}
 
 	if reflect.DeepEqual(sparams, &crd.SchedulerParams{}) {
 		return nil, true, true
@@ -329,9 +359,20 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 	// state, so re-reading attributes inside tryAdjustRDMA would falsely
 	// report "no RDMA needed." Computed once here, threaded through.
 	requiresRDMA := make([]bool, len(origResources))
+	// AKT-443: per-resource rdma_group label, same pristine-source story
+	// as requiresRDMA. tryAdjustGPU clobbers Attributes; reading the
+	// group label later would race that mutation. Computed once here.
+	rdmaGroup := make([]string, len(origResources))
 	for i := range origResources {
 		requiresRDMA[i] = ResourceRequiresRDMA(origResources[i].Resources)
+		rdmaGroup[i] = ResourceRDMAGroup(origResources[i].Resources)
 	}
+
+	// AKT-443: per-rdma_group set of node indices already claimed in this
+	// bid attempt. Scoped to this Adjust call (one bid) so two unrelated
+	// orders cannot interfere. A successful tryAdjust commits the entry;
+	// a rejection on any subsequent gate never touches it.
+	groupClaims := map[string]map[int]bool{}
 
 	var err error
 
@@ -350,7 +391,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric, requiresRDMA[i])
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric, requiresRDMA[i], rdmaGroup[i], groupClaims)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes

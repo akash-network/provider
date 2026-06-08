@@ -32,6 +32,14 @@ const (
 	// whether to allocate an RDMA HCA for that resource.
 	AttributeGPURDMAKey = "rdma"
 
+	// AttributeGPURDMAGroupKey is the per-resource GPU attribute the chain
+	// SDK emits when an SDL profile sets `gpu.attributes.rdma_group: <name>`.
+	// Carries the peer-group label end-to-end so the bid engine's Adjust
+	// step can enforce per-group node separation (AKT-443). The same value
+	// is also surfaced on the off-chain Service.RDMAGroup so the workload
+	// builder can label pods for anti-affinity.
+	AttributeGPURDMAGroupKey = "rdma_group"
+
 	// attributeTrueValue is the canonical "set" value emitted by the SDL
 	// parser and matched here.
 	attributeTrueValue = "true"
@@ -52,6 +60,24 @@ func ResourceRequiresRDMA(res rtypes.Resources) bool {
 		}
 	}
 	return false
+}
+
+// ResourceRDMAGroup returns the peer-group label declared on this
+// per-service resource, or "" if none. Drives the bid engine's per-group
+// node-separation tracking in Adjust: every resource carrying the same
+// non-empty group must land on a distinct node. The chain SDK serializes
+// this attribute end-to-end (see chain-sdk go/sdl/gpu.go for the emit
+// site and the matching exported key constant `GPUAttributeRDMAGroup`).
+func ResourceRDMAGroup(res rtypes.Resources) string {
+	if res.GPU == nil {
+		return ""
+	}
+	for _, a := range res.GPU.Attributes {
+		if a.Key == AttributeGPURDMAGroupKey {
+			return a.Value
+		}
+	}
+	return ""
 }
 
 // PlacementRequiredFabric reports whether a deployment-group's placement
