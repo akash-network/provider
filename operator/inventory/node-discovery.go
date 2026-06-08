@@ -14,6 +14,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
+	"github.com/jaypipes/ghw/pkg/pci"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -148,6 +149,39 @@ func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 			return nil, resp.err
 		}
 		return resp.data.(*gpu.Info), resp.err
+	}
+}
+
+func (dp *nodeDiscovery) queryPCI(ctx context.Context) (*pci.Info, error) {
+	respch := make(chan dpReadResp, 1)
+
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case <-rctx.Done():
+		return nil, rctx.Err()
+	case dp.readch <- dpReadReq{
+		ctx:  rctx,
+		op:   dpReqPCI,
+		resp: respch,
+	}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case resp := <-respch:
+		if resp.data == nil {
+			return nil, resp.err
+		}
+		return resp.data.(*pci.Info), resp.err
 	}
 }
 
@@ -303,6 +337,8 @@ initloop:
 				res = "gpu"
 			case dpReqMem:
 				res = "memory"
+			case dpReqPCI:
+				res = "pci"
 			}
 
 			result := kc.CoreV1().RESTClient().Get().
@@ -330,6 +366,10 @@ initloop:
 						resp.data = &res
 					case dpReqMem:
 						var res memory.Info
+						resp.err = json.Unmarshal(data, &res)
+						resp.data = &res
+					case dpReqPCI:
+						var res pci.Info
 						resp.err = json.Unmarshal(data, &res)
 						resp.data = &res
 					}
@@ -675,6 +715,8 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
 		case builder.ResourceGPUNvidia:
 			fallthrough
+		case builder.ResourceGPUNvidiaPGPU:
+			fallthrough
 		case builder.ResourceGPUAMD:
 			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
 		}
@@ -689,6 +731,8 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 		case corev1.ResourceEphemeralStorage:
 			node.Resources.EphemeralStorage.Capacity.Set(r.Value())
 		case builder.ResourceGPUNvidia:
+			fallthrough
+		case builder.ResourceGPUNvidiaPGPU:
 			fallthrough
 		case builder.ResourceGPUAMD:
 			node.Resources.GPU.Quantity.Capacity.Set(r.Value())
@@ -716,6 +760,8 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 			case corev1.ResourceEphemeralStorage:
 				node.Resources.EphemeralStorage.Allocated.Add(quantity)
 			case builder.ResourceGPUNvidia:
+				fallthrough
+			case builder.ResourceGPUNvidiaPGPU:
 				fallthrough
 			case builder.ResourceGPUAMD:
 				node.Resources.GPU.Quantity.Allocated.Add(quantity)
@@ -753,6 +799,8 @@ func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 			case corev1.ResourceEphemeralStorage:
 				subAllocatedNLZ(node.Resources.EphemeralStorage.Allocated, quantity)
 			case builder.ResourceGPUNvidia:
+				fallthrough
+			case builder.ResourceGPUNvidiaPGPU:
 				fallthrough
 			case builder.ResourceGPUAMD:
 				subAllocatedNLZ(node.Resources.GPU.Quantity.Allocated, quantity)
@@ -908,51 +956,227 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := fromctx.LogrFromCtx(ctx).WithName("node.gpu-discovery")
+
+	log.Info("starting GPU discovery",
+		"node", dp.name,
+		"registryVendors", len(info),
+	)
+
+	// Track PCI addresses found via ghw so the PCI fallback can skip them
+	knownAddresses := make(map[string]struct{})
 
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
-		log.Error(err, "unable to query gpu")
-		return res
+		log.Error(err, "ghw GPU query failed, will rely on PCI fallback", "node", dp.name)
 	}
 
-	if gpus == nil {
-		return res
+	if gpus != nil {
+		log.Info("ghw GPU query result",
+			"node", dp.name,
+			"graphicsCards", len(gpus.GraphicsCards),
+		)
+
+		for _, dev := range gpus.GraphicsCards {
+			dinfo := dev.DeviceInfo
+			if dinfo == nil {
+				log.Info("ghw: skipping graphics card with nil DeviceInfo",
+					"node", dp.name,
+					"address", dev.Address,
+				)
+				continue
+			}
+
+			knownAddresses[dev.Address] = struct{}{}
+
+			vinfo := dinfo.Vendor
+			pinfo := dinfo.Product
+			if vinfo == nil || pinfo == nil {
+				log.Info("ghw: skipping graphics card with nil vendor or product info",
+					"node", dp.name,
+					"address", dev.Address,
+				)
+				continue
+			}
+
+			vendor, exists := info[vinfo.ID]
+			if !exists {
+				log.Info("ghw: GPU vendor not in registry, skipping",
+					"node", dp.name,
+					"address", dev.Address,
+					"vendorID", vinfo.ID,
+					"vendorName", vinfo.Name,
+				)
+				continue
+			}
+
+			model, exists := vendor.Devices[pinfo.ID]
+			if !exists {
+				log.Info("ghw: GPU product not in registry, skipping",
+					"node", dp.name,
+					"address", dev.Address,
+					"vendorID", vinfo.ID,
+					"vendorName", vendor.Name,
+					"productID", pinfo.ID,
+					"productName", pinfo.Name,
+				)
+				continue
+			}
+
+			log.Info("ghw: matched GPU from DRM",
+				"node", dp.name,
+				"address", dev.Address,
+				"vendor", vendor.Name,
+				"model", model.Name,
+				"vendorID", vinfo.ID,
+				"productID", pinfo.ID,
+				"interface", model.Interface,
+				"memorySize", model.MemorySize,
+			)
+
+			res = append(res, v1.GPUInfo{
+				Vendor:     vendor.Name,
+				VendorID:   dev.DeviceInfo.Vendor.ID,
+				Name:       model.Name,
+				ModelID:    dev.DeviceInfo.Product.ID,
+				Interface:  model.Interface,
+				MemorySize: model.MemorySize,
+			})
+		}
+	} else if err == nil {
+		log.Info("ghw GPU query returned nil (no GPU subsystem)", "node", dp.name)
 	}
 
-	for _, dev := range gpus.GraphicsCards {
-		dinfo := dev.DeviceInfo
-		if dinfo == nil {
-			continue
+	log.Info("ghw GPU discovery phase complete",
+		"node", dp.name,
+		"gpusFoundViaDRM", len(res),
+		"knownPCIAddresses", len(knownAddresses),
+	)
+
+	// PCI fallback: discover GPUs not visible to ghw (e.g. bound to vfio-pci)
+	// by scanning all PCI devices with display controller class (0x03)
+	pciDevices, err := dp.queryPCI(ctx)
+	if err != nil {
+		log.Error(err, "PCI query failed, cannot run GPU fallback", "node", dp.name)
+	}
+
+	if pciDevices != nil {
+		displayControllers := 0
+		for _, dev := range pciDevices.Devices {
+			if dev.Class == nil || !strings.HasPrefix(dev.Class.ID, "03") {
+				continue
+			}
+			displayControllers++
+
+			vendorID := ""
+			vendorName := ""
+			productID := ""
+			productName := ""
+			if dev.Vendor != nil {
+				vendorID = dev.Vendor.ID
+				vendorName = dev.Vendor.Name
+			}
+			if dev.Product != nil {
+				productID = dev.Product.ID
+				productName = dev.Product.Name
+			}
+
+			if _, found := knownAddresses[dev.Address]; found {
+				log.Info("pci-fallback: display controller already discovered via ghw, skipping",
+					"node", dp.name,
+					"address", dev.Address,
+					"vendorID", vendorID,
+					"driver", dev.Driver,
+				)
+				continue
+			}
+
+			if dev.Vendor == nil || dev.Product == nil {
+				log.Info("pci-fallback: display controller with nil vendor or product, skipping",
+					"node", dp.name,
+					"address", dev.Address,
+					"driver", dev.Driver,
+				)
+				continue
+			}
+
+			vendor, exists := info[dev.Vendor.ID]
+			if !exists {
+				log.Info("pci-fallback: display controller vendor not in registry, skipping",
+					"node", dp.name,
+					"address", dev.Address,
+					"vendorID", vendorID,
+					"vendorName", vendorName,
+					"driver", dev.Driver,
+				)
+				continue
+			}
+
+			model, exists := vendor.Devices[dev.Product.ID]
+			if !exists {
+				log.Info("pci-fallback: display controller product not in registry, skipping",
+					"node", dp.name,
+					"address", dev.Address,
+					"vendorID", vendorID,
+					"vendorName", vendor.Name,
+					"productID", productID,
+					"productName", productName,
+					"driver", dev.Driver,
+				)
+				continue
+			}
+
+			log.Info("pci-fallback: discovered GPU via PCI bus scan",
+				"node", dp.name,
+				"address", dev.Address,
+				"vendor", vendor.Name,
+				"model", model.Name,
+				"vendorID", dev.Vendor.ID,
+				"productID", dev.Product.ID,
+				"interface", model.Interface,
+				"memorySize", model.MemorySize,
+				"driver", dev.Driver,
+				"classID", dev.Class.ID,
+			)
+
+			res = append(res, v1.GPUInfo{
+				Vendor:     vendor.Name,
+				VendorID:   dev.Vendor.ID,
+				Name:       model.Name,
+				ModelID:    dev.Product.ID,
+				Interface:  model.Interface,
+				MemorySize: model.MemorySize,
+			})
 		}
 
-		vinfo := dinfo.Vendor
-		pinfo := dinfo.Product
-		if vinfo == nil || pinfo == nil {
-			continue
-		}
-
-		vendor, exists := info[vinfo.ID]
-		if !exists {
-			continue
-		}
-
-		model, exists := vendor.Devices[pinfo.ID]
-		if !exists {
-			continue
-		}
-
-		res = append(res, v1.GPUInfo{
-			Vendor:     vendor.Name,
-			VendorID:   dev.DeviceInfo.Vendor.ID,
-			Name:       model.Name,
-			ModelID:    dev.DeviceInfo.Product.ID,
-			Interface:  model.Interface,
-			MemorySize: model.MemorySize,
-		})
+		log.Info("PCI fallback phase complete",
+			"node", dp.name,
+			"totalPCIDevices", len(pciDevices.Devices),
+			"displayControllers", displayControllers,
+		)
+	} else if err == nil {
+		log.Info("PCI query returned nil", "node", dp.name)
 	}
 
 	sort.Sort(res)
+
+	log.Info("GPU discovery complete",
+		"node", dp.name,
+		"totalGPUsDiscovered", len(res),
+	)
+
+	for i, g := range res {
+		log.Info("GPU inventory entry",
+			"node", dp.name,
+			"index", i,
+			"vendor", g.Vendor,
+			"vendorID", g.VendorID,
+			"model", g.Name,
+			"modelID", g.ModelID,
+			"interface", g.Interface,
+			"memorySize", g.MemorySize,
+		)
+	}
 
 	return res
 }

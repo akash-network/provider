@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -51,8 +52,35 @@ type LeaseEvent struct {
 	Object              LeaseEventObject `json:"object" yaml:"object"`
 }
 
+// TEEType represents a validated TEE technology identifier.
+// Only the constants defined below are valid values.
+type TEEType string
+
+const (
+	TEETypeNone      TEEType = ""
+	TEETypeSEVSNP    TEEType = "sev-snp"
+	TEETypeSEVSNPGPU TEEType = "sev-snp-gpu"
+	TEETypeTDX       TEEType = "tdx"
+	TEETypeTDXGPU    TEEType = "tdx-gpu"
+)
+
+// ParseTEEType validates a raw string and returns the corresponding TEEType.
+// Returns TEETypeNone for empty strings. Returns an error for unknown values.
+func ParseTEEType(s string) (TEEType, error) {
+	switch TEEType(s) {
+	case TEETypeNone, TEETypeSEVSNP, TEETypeSEVSNPGPU, TEETypeTDX, TEETypeTDXGPU:
+		return TEEType(s), nil
+	default:
+		return TEETypeNone, fmt.Errorf("unknown TEE type: %q", s)
+	}
+}
+
+// IsCC returns true if this TEE type represents a confidential compute workload.
+func (t TEEType) IsCC() bool { return t != TEETypeNone }
+
 type InventoryOptions struct {
-	DryRun bool
+	DryRun  bool
+	TEEType TEEType
 }
 
 type InventoryOption func(*InventoryOptions) *InventoryOptions
@@ -60,6 +88,13 @@ type InventoryOption func(*InventoryOptions) *InventoryOptions
 func WithDryRun() InventoryOption {
 	return func(opts *InventoryOptions) *InventoryOptions {
 		opts.DryRun = true
+		return opts
+	}
+}
+
+func WithTEEType(t TEEType) InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.TEEType = t
 		return opts
 	}
 }

@@ -8,8 +8,10 @@ import (
 
 // TEE type name constants.
 const (
-	NameSNP = "snp"
-	NameTDX = "tdx"
+	NameSNP    = "snp"
+	NameTDX    = "tdx"
+	NameSNPGPU = "snp-gpu"
+	NameTDXGPU = "tdx-gpu"
 )
 
 // QuoteResult holds the raw hardware-signed attestation evidence.
@@ -17,6 +19,7 @@ type QuoteResult struct {
 	Report    []byte // Raw attestation report (SNP ~1184 bytes, TDX 1024 bytes)
 	CertChain []byte // Cert chain (may be empty — fetching is tenant-side)
 	AuxBlob   []byte // Empty on NVIDIA-patched kernel
+	GPUReport []byte // NVIDIA GPU attestation report (nil when no GPU CC)
 }
 
 // Provider abstracts TEE-specific attestation report collection.
@@ -54,33 +57,54 @@ func Detect() (Provider, error) {
 		if tee == "" {
 			tee = NameSNP
 		}
-		return &MockProvider{TEE: tee}, nil
+		withGPU := os.Getenv("ATTESTATION_MOCK_GPU") == "true"
+		return &MockProvider{TEE: tee, WithGPU: withGPU}, nil
 	}
+
+	// Inside kata containers, /dev and /sys/kernel/config may not have the
+	// TEE devices pre-populated. Attempt to set them up (requires SYS_ADMIN).
+	ensureConfigfsTSM()
+	ensureSEVGuestDev()
+	ensureNvidiaDevices()
 
 	configfs := &ConfigfsTSM{BasePath: "/sys/kernel/config/tsm/report"}
 	if configfs.Available() {
-		return configfs, nil
+		configfs.detectProvider()
+		return maybeWrapWithGPU(configfs), nil
 	}
 
 	sevGuest := &SEVGuest{DevicePath: "/dev/sev-guest"}
 	if sevGuest.Available() {
-		return sevGuest, nil
+		return maybeWrapWithGPU(sevGuest), nil
 	}
 
 	tdxGuest := &TDX{DevicePath: "/dev/tdx_guest"}
 	if tdxGuest.Available() {
-		return tdxGuest, nil
+		return maybeWrapWithGPU(tdxGuest), nil
 	}
 
 	tdxLegacy := &TDX{DevicePath: "/dev/tdx-attest"}
 	if tdxLegacy.Available() {
-		return tdxLegacy, nil
+		return maybeWrapWithGPU(tdxLegacy), nil
 	}
 
 	return nil, fmt.Errorf("no TEE attestation surface found: "+
 		"tried configfs-tsm (%s), /dev/sev-guest, /dev/tdx_guest, /dev/tdx-attest "+
 		"(set ATTESTATION_MOCK=true for local development)",
 		configfs.BasePath)
+}
+
+// maybeWrapWithGPU probes for NVIDIA GPU CC support and wraps the CPU
+// provider in a GPUCompositeProvider if available.
+func maybeWrapWithGPU(cpu Provider) Provider {
+	gpu := &NvidiaGPUAttestor{}
+	info, err := gpu.Probe()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "gpu attestation not available: %v\n", err)
+		return cpu
+	}
+	fmt.Fprintf(os.Stderr, "gpu attestation available: %s\n", info)
+	return &GPUCompositeProvider{CPU: cpu, GPU: gpu}
 }
 
 // dirExists returns true if the path exists and is a directory.

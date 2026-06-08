@@ -43,19 +43,17 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.TEEType) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
-
 
 	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU) {
 		return nil, false, true
 	}
 
-	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
+	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams, teeType) {
 		return nil, false, true
 	}
-
 
 	if !nd.Resources.Memory.Quantity.SubNLZ(res.Memory.Quantity) {
 		return nil, false, true
@@ -108,6 +106,24 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.Scheduler
 		}
 	}
 
+	// Confidential compute: set runtime class for CPU-only CC (GPU path
+	// sets it in tryAdjustGPU) and reserve sidecar resources.
+	if teeType.IsCC() {
+		if sparams.RuntimeClass == "" {
+			sparams.RuntimeClass = builder.RuntimeClassForTEEType(string(teeType))
+		}
+
+		sidecarCPU := rtypes.NewResourceValue(uint64(builder.SidecarCPULimitMillicores))
+		if !nd.Resources.CPU.Quantity.SubMilliNLZ(sidecarCPU) {
+			return nil, false, true
+		}
+
+		sidecarMem := rtypes.NewResourceValue(uint64(builder.SidecarMemoryLimitBytes))
+		if !nd.Resources.Memory.Quantity.SubNLZ(sidecarMem) {
+			return nil, false, true
+		}
+	}
+
 	// all requirements for current group have been satisfied
 	// commit and move on
 	inv.Nodes[node] = nd
@@ -124,7 +140,7 @@ func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *rtypes.CPU) bool {
 	return rp.SubMilliNLZ(res.Units)
 }
 
-func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams) bool {
+func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams, teeType ctypes.TEEType) bool {
 	reqCnt := res.Units.Value()
 
 	if reqCnt == 0 {
@@ -162,6 +178,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 		}
 
 		reqCnt--
+
 		if reqCnt == 0 {
 			vendor := strings.ToLower(info.Vendor)
 
@@ -173,10 +190,14 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 			sparams.Resources.GPU.Vendor = vendor
 			sparams.Resources.GPU.Model = info.Name
 
-			switch vendor {
-			case builder.GPUVendorNvidia:
-				sparams.RuntimeClass = runtimeClassNvidia
-			default:
+			if teeType.IsCC() {
+				sparams.RuntimeClass = builder.RuntimeClassForTEEType(string(teeType))
+			} else {
+				switch vendor {
+				case builder.GPUVendorNvidia:
+					sparams.RuntimeClass = runtimeClassNvidia
+				default:
+				}
 			}
 
 			key := fmt.Sprintf("vendor/%s/model/%s", vendor, info.Name)
@@ -204,38 +225,6 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 	return false
 }
 
-// tryAdjustConfidentialCompute adjusts cluster inventory for confidential
-// compute workloads. For CPU-only CC workloads (no GPU present), it sets the
-// appropriate runtime class based on the TEE type. It also reserves the
-// attestation sidecar resources that the webhook will inject into CC pods,
-// using limit values so inventory subtracts the full resource limit.
-func tryAdjustConfidentialCompute(nd *inventoryV1.Node, sparams *crd.SchedulerParams, confidentialCompute bool, teeType string) bool {
-	if !confidentialCompute {
-		return true
-	}
-
-	// For CC CPU-only workloads (no GPU), set the runtime class based on TEE type
-	if sparams.RuntimeClass == "" {
-		switch teeType {
-		case builder.TEETypeIntelTDX:
-			sparams.RuntimeClass = builder.RuntimeClassKataQemuTDX
-		default:
-			sparams.RuntimeClass = builder.RuntimeClassKataQemuSNP
-		}
-	}
-
-	sidecarCPU := rtypes.NewResourceValue(uint64(builder.SidecarCPULimitMillicores))
-	if !nd.Resources.CPU.Quantity.SubMilliNLZ(sidecarCPU) {
-		return false
-	}
-
-	sidecarMem := rtypes.NewResourceValue(uint64(builder.SidecarMemoryLimitBytes))
-	if !nd.Resources.Memory.Quantity.SubNLZ(sidecarMem) {
-		return false
-	}
-
-	return true
-}
 
 func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *rtypes.Storage) bool {
 	return rp.SubNLZ(res.Quantity)
@@ -289,7 +278,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, cfg.TEEType)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes

@@ -1,0 +1,46 @@
+---
+version: "2.1"
+
+services:
+  web:
+    image: nginx
+    expose:
+      - port: 80
+        as: 80
+        accept:
+          - hello.localhost
+        to:
+          - global: true
+    params:
+      tee:
+        type: sev-snp-gpu
+
+profiles:
+  compute:
+    web:
+      resources:
+        cpu:
+          units: 0.5
+        memory:
+          size: 256Mi
+        storage:
+          size: 128Mi
+        gpu:
+          units: 1
+          attributes:
+            vendor:
+              nvidia:
+  placement:
+    westcoast:
+      attributes:
+        region: us-west
+      pricing:
+        web:
+          denom: uact
+          amount: 10000
+
+deployment:
+  web:
+    westcoast:
+      profile: web
+      count: 1

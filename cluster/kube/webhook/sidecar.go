@@ -121,7 +121,7 @@ func buildSidecarContainer(image string, isGPU bool, extraEnv []corev1.EnvVar) c
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           image,
-		ImagePullPolicy: corev1.PullIfNotPresent,
+		ImagePullPolicy: corev1.PullAlways,
 		Command:         []string{"/attestation-sidecar"},
 		Ports: []corev1.ContainerPort{{
 			Name:          "attestation",
@@ -129,20 +129,10 @@ func buildSidecarContainer(image string, isGPU bool, extraEnv []corev1.EnvVar) c
 			Protocol:      corev1.ProtocolTCP,
 		}},
 		SecurityContext: &corev1.SecurityContext{
-			Capabilities: &corev1.Capabilities{
-				Add: []corev1.Capability{"SYS_ADMIN"},
-			},
+			Privileged: func() *bool { t := true; return &t }(),
+			RunAsUser:  func() *int64 { uid := int64(0); return &uid }(),
 		},
-		Resources: corev1.ResourceRequirements{
-			Requests: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(builder.SidecarCPURequestMillicores, resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewQuantity(builder.SidecarMemoryRequestBytes, resource.DecimalSI),
-			},
-			Limits: corev1.ResourceList{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(builder.SidecarCPULimitMillicores, resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewQuantity(builder.SidecarMemoryLimitBytes, resource.DecimalSI),
-			},
-		},
+		Resources: sidecarResources(isGPU),
 		Env: append([]corev1.EnvVar{
 			{Name: "ATTESTATION_LISTEN_ADDR", Value: fmt.Sprintf(":%d", sidecarPort)},
 		}, extraEnv...),
@@ -167,7 +157,37 @@ func buildSidecarContainer(image string, isGPU bool, extraEnv []corev1.EnvVar) c
 	// and /sys/kernel/config/tsm/report directly from the guest kernel
 	// filesystem — no volume mounts needed.
 
+	// GPU CC pods: tell the NVIDIA Container Toolkit to inject driver
+	// binaries (nvidia-smi) and libraries (libnvidia-ml.so) into this
+	// container. The "utility" capability provides nvidia-smi + NVML
+	// without consuming a GPU device allocation.
+	if isGPU {
+		c.Env = append(c.Env,
+			corev1.EnvVar{Name: "NVIDIA_VISIBLE_DEVICES", Value: "all"},
+			corev1.EnvVar{Name: "NVIDIA_DRIVER_CAPABILITIES", Value: "utility"},
+		)
+	}
+
 	return c
+}
+
+func sidecarResources(isGPU bool) corev1.ResourceRequirements {
+	memRequest := builder.SidecarMemoryRequestBytes
+	memLimit := builder.SidecarMemoryLimitBytes
+	if isGPU {
+		memRequest = builder.SidecarGPUMemoryRequestBytes
+		memLimit = builder.SidecarGPUMemoryLimitBytes
+	}
+	return corev1.ResourceRequirements{
+		Requests: corev1.ResourceList{
+			corev1.ResourceCPU:    *resource.NewMilliQuantity(builder.SidecarCPURequestMillicores, resource.DecimalSI),
+			corev1.ResourceMemory: *resource.NewQuantity(memRequest, resource.DecimalSI),
+		},
+		Limits: corev1.ResourceList{
+			corev1.ResourceCPU:    *resource.NewMilliQuantity(builder.SidecarCPULimitMillicores, resource.DecimalSI),
+			corev1.ResourceMemory: *resource.NewQuantity(memLimit, resource.DecimalSI),
+		},
+	}
 }
 
 func isMockMode(extraEnv []corev1.EnvVar) bool {
@@ -198,6 +218,7 @@ func buildSidecarVolumes(isGPU bool, mockMode bool) []corev1.Volume {
 	// Production: the sidecar accesses /dev/sev-guest and
 	// /sys/kernel/config/tsm/report directly from the kata guest kernel
 	// filesystem. HostPath volumes cannot be used because kubelet validates
-	// paths on the host node, where these devices do not exist.
+	// paths on the host node, where TEE devices do not exist.
+	// GPU CC: nvidia-smi and libs are bundled in the sidecar image.
 	return nil
 }

@@ -150,11 +150,6 @@ func (b *Workload) container() corev1.Container {
 			Requests: make(corev1.ResourceList),
 		},
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             &falseValue,
-			Privileged:               &falseValue,
-			AllowPrivilegeEscalation: &falseValue,
-		},
 	}
 
 	// Whether the attestation sidecar will be injected into this pod.
@@ -163,6 +158,23 @@ func (b *Workload) container() corev1.Container {
 	sidecarActive := sparams != nil &&
 		IsConfidentialComputeRuntimeClass(sparams.RuntimeClass) &&
 		!sparams.AttestationDisabled
+
+	if sidecarActive {
+		// CC workloads run in a Kata VM — the VM is the security boundary,
+		// not the container. Restrictive container security contexts block
+		// the attestation sidecar from mounting configfs/creating device
+		// nodes because the kata agent applies the most restrictive policy
+		// across all containers in the shared VM.
+		kcontainer.SecurityContext = &corev1.SecurityContext{
+			RunAsNonRoot: &falseValue,
+		}
+	} else {
+		kcontainer.SecurityContext = &corev1.SecurityContext{
+			RunAsNonRoot:             &falseValue,
+			Privileged:               &falseValue,
+			AllowPrivilegeEscalation: &falseValue,
+		}
+	}
 
 	if cpu := service.Resources.CPU; cpu != nil {
 		cpuLimit := int64(cpu.Units.Value())              // nolint: gosec
@@ -237,8 +249,14 @@ func (b *Workload) container() corev1.Container {
 		memRequest := int64(sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity).Value()) // nolint: gosec
 
 		if sidecarActive {
-			memLimit -= SidecarMemoryLimitBytes
-			memRequest -= SidecarMemoryRequestBytes
+			sidecarMemLimit := SidecarMemoryLimitBytes
+			sidecarMemRequest := SidecarMemoryRequestBytes
+			if IsGPURuntimeClass(sparams.RuntimeClass) {
+				sidecarMemLimit = SidecarGPUMemoryLimitBytes
+				sidecarMemRequest = SidecarGPUMemoryRequestBytes
+			}
+			memLimit -= sidecarMemLimit
+			memRequest -= sidecarMemRequest
 			if memLimit < MinPrimaryMemoryBytes {
 				memLimit = MinPrimaryMemoryBytes
 			}

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/akash-network/provider/sidecar/attestation/tee"
+	"github.com/cloud-j-luna/attestation-sidecar/tee"
 )
 
-const protocolVersion = "2"
+const protocolVersion = "3"
 
 // QuoteRequest is the request body for POST /quote.
 // The tenant generates a nonce and sends it; the sidecar writes it into
@@ -34,6 +34,10 @@ type QuoteResponse struct {
 	TEEType   string `json:"tee_type"`   // "snp"
 	AuxBlob   string `json:"auxblob"`    // empty on NVIDIA-patched kernel
 
+	// GPUReport is the base64-encoded NVIDIA GPU attestation report.
+	// Present only when the TEE includes GPU CC (e.g. tee_type "snp-gpu").
+	GPUReport string `json:"gpu_report,omitempty"`
+
 	// TLSBound indicates whether report_data was computed with TLS channel binding.
 	// When true, the tenant must verify: report_data == SHA-512(tls_pubkey || nonce)[:64]
 	TLSBound bool `json:"tls_bound"`
@@ -43,6 +47,9 @@ type QuoteResponse struct {
 type InfoResponse struct {
 	TEEType         string `json:"tee_type"`
 	ProtocolVersion string `json:"protocol_version"`
+
+	// GPUAvailable indicates whether GPU CC attestation is available.
+	GPUAvailable bool `json:"gpu_available,omitempty"`
 
 	// TLSPublicKey is the DER-encoded public key of the sidecar's ephemeral
 	// TLS certificate, base64-encoded. The tenant uses this to verify TLS
@@ -109,6 +116,9 @@ func quoteHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 			AuxBlob:   base64.StdEncoding.EncodeToString(report.AuxBlob),
 			TLSBound:  tlsBound,
 		}
+		if len(report.GPUReport) > 0 {
+			resp.GPUReport = base64.StdEncoding.EncodeToString(report.GPUReport)
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
@@ -117,9 +127,12 @@ func quoteHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 
 func infoHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
+		name := provider.Name()
+		gpuAvailable := name == tee.NameSNPGPU || name == tee.NameTDXGPU
 		resp := InfoResponse{
-			TEEType:         provider.Name(),
+			TEEType:         name,
 			ProtocolVersion: protocolVersion,
+			GPUAvailable:    gpuAvailable,
 			TLSPublicKey:    base64.StdEncoding.EncodeToString(binding.PubKeyDER),
 		}
 		w.Header().Set("Content-Type", "application/json")

@@ -248,11 +248,16 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 			memRequest := container.Resources.Requests.Memory().Value()
 
 			if tt.expectSubtraction {
+				sidecarMemLimit := SidecarMemoryLimitBytes
+				if IsGPURuntimeClass(tt.runtimeClass) {
+					sidecarMemLimit = SidecarGPUMemoryLimitBytes
+				}
+
 				expectedCPULimit := int64(tt.cpuMillis) - SidecarCPULimitMillicores
 				if expectedCPULimit < MinPrimaryCPUMillicores {
 					expectedCPULimit = MinPrimaryCPUMillicores
 				}
-				expectedMemLimit := int64(tt.memBytes) - SidecarMemoryLimitBytes
+				expectedMemLimit := int64(tt.memBytes) - sidecarMemLimit
 				if expectedMemLimit < MinPrimaryMemoryBytes {
 					expectedMemLimit = MinPrimaryMemoryBytes
 				}
@@ -269,8 +274,8 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 					require.Equal(t, int64(tt.cpuMillis), cpuLimit+SidecarCPULimitMillicores,
 						"Pod CPU limit total should equal user limit")
 				}
-				if int64(tt.memBytes)-SidecarMemoryLimitBytes >= MinPrimaryMemoryBytes {
-					require.Equal(t, int64(tt.memBytes), memLimit+SidecarMemoryLimitBytes,
+				if int64(tt.memBytes)-sidecarMemLimit >= MinPrimaryMemoryBytes {
+					require.Equal(t, int64(tt.memBytes), memLimit+sidecarMemLimit,
 						"Pod memory limit total should equal user limit")
 				}
 

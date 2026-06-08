@@ -144,7 +144,7 @@ const (
 	FlagAttestationSidecarImage          = "attestation-sidecar-image"
 	FlagAttestationExpectedMeasurement   = "attestation-expected-measurement"
 	FlagAttestationExpectedImageDigest   = "attestation-expected-image-digest"
-	FlagAttestationMockMode              = "attestation-mock"
+	FlagAttestationMockMode = "attestation-mock"
 )
 
 const (

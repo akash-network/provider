@@ -17,27 +17,41 @@ import (
 //
 // NEVER use in production. The mock report has no cryptographic validity.
 type MockProvider struct {
-	TEE string // "snp" or "tdx" — controls the reported TEE type
+	TEE     string // "snp" or "tdx" — controls the reported TEE type
+	WithGPU bool   // when true, simulates GPU CC attestation
 }
 
 var _ Provider = (*MockProvider)(nil)
 
 func (m *MockProvider) Name() string {
-	if m.TEE != "" {
-		return m.TEE
+	base := m.TEE
+	if base == "" {
+		base = NameSNP
 	}
-	return NameSNP
+	if m.WithGPU {
+		switch base {
+		case NameTDX:
+			return NameTDXGPU
+		default:
+			return NameSNPGPU
+		}
+	}
+	return base
 }
 
 func (m *MockProvider) Available() bool { return true }
 
 func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteResult, error) {
 	report := buildMockReport(reportData, m.Name())
-	return &QuoteResult{
+	result := &QuoteResult{
 		Report:    report,
 		CertChain: nil,
 		AuxBlob:   nil,
-	}, nil
+	}
+	if m.WithGPU {
+		result.GPUReport = buildMockGPUReport(reportData)
+	}
+	return result, nil
 }
 
 // buildMockReport creates a synthetic report that mirrors the structure
@@ -83,6 +97,28 @@ func buildMockReport(reportData [64]byte, teeType string) []byte {
 	// Fake measurement at offset 144
 	h := sha256.Sum256(reportData[:])
 	copy(report[144:176], h[:])
+
+	return report
+}
+
+// buildMockGPUReport creates a synthetic GPU attestation report.
+//   - Bytes 0-3: magic "MGPU"
+//   - Bytes 4-7: report length (little-endian uint32)
+//   - Bytes 8-11: timestamp (unix seconds, little-endian uint32)
+//   - Bytes 12-75: nonce echo (64 bytes)
+//   - Bytes 76-107: SHA-256(nonce) as a fake GPU measurement
+//   - Bytes 108+: zero padding to 512 bytes
+func buildMockGPUReport(nonce [64]byte) []byte {
+	const size = 512
+	report := make([]byte, size)
+
+	copy(report[0:4], []byte("MGPU"))
+	binary.LittleEndian.PutUint32(report[4:8], uint32(size))
+	binary.LittleEndian.PutUint32(report[8:12], uint32(time.Now().Unix())) //nolint:gosec // fits until 2106
+	copy(report[12:76], nonce[:])
+
+	h := sha256.Sum256(nonce[:])
+	copy(report[76:108], h[:])
 
 	return report
 }

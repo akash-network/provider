@@ -73,6 +73,11 @@ const (
 	SidecarCPURequestMillicores int64 = 10
 	SidecarMemoryRequestBytes   int64 = 32 * 1024 * 1024 // 32Mi
 
+	// GPU sidecar needs more memory: CGO-enabled binary (for NVML dlopen)
+	// requires pthread stack space during Go runtime initialization.
+	SidecarGPUMemoryLimitBytes   int64 = 128 * 1024 * 1024 // 128Mi
+	SidecarGPUMemoryRequestBytes int64 = 64 * 1024 * 1024  // 64Mi
+
 	// Minimum resources for the primary container after sidecar subtraction.
 	// If the user's resources minus sidecar overhead falls below these values,
 	// clamp to these minimums. Prevents OOM kills from unusable resource limits.

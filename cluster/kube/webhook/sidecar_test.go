@@ -142,8 +142,21 @@ func TestBuildSidecarPatch_GPU(t *testing.T) {
 	err = json.Unmarshal(patchBytes, &patches)
 	require.NoError(t, err)
 
-	// Production mode: container patch only, no volumes (guest kernel provides devices)
-	require.Len(t, patches, 1) // container only
+	// GPU mode: container patch only, no volumes
+	require.Len(t, patches, 1)
+
+	// Verify NVIDIA Container Toolkit env vars are set on the sidecar
+	containerPatch := patches[0]
+	containerJSON, _ := json.Marshal(containerPatch.Value)
+	var container corev1.Container
+	require.NoError(t, json.Unmarshal(containerJSON, &container))
+
+	envMap := make(map[string]string)
+	for _, e := range container.Env {
+		envMap[e.Name] = e.Value
+	}
+	require.Equal(t, "all", envMap["NVIDIA_VISIBLE_DEVICES"])
+	require.Equal(t, "utility", envMap["NVIDIA_DRIVER_CAPABILITIES"])
 }
 
 func TestBuildSidecarPatch_CPUOnly(t *testing.T) {
