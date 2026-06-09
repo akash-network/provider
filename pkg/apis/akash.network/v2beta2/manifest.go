@@ -146,7 +146,7 @@ type ManifestServiceExposeHTTPOptions struct {
 // NewManifest creates new manifest with provided details. Returns error in case of failure.
 func NewManifest(ns string, lid mtypes.LeaseID, mgroup *mani.Group, settings ClusterSettings) (*Manifest, error) {
 	if len(mgroup.Services) != len(settings.SchedulerParams) {
-		return nil, fmt.Errorf("%w: group services don't not match scheduler services count (%d) != (%d)",
+		return nil, fmt.Errorf("%w: group services count does not match scheduler services count (%d) != (%d)",
 			ErrInvalidArgs,
 			len(mgroup.Services),
 			len(settings.SchedulerParams),

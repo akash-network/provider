@@ -152,19 +152,11 @@ func (b *Workload) container() corev1.Container {
 		ImagePullPolicy: corev1.PullIfNotPresent,
 	}
 
-	// Whether the attestation sidecar will be injected into this pod.
-	// When true, we subtract the sidecar's resource footprint from the
-	// primary container so the pod total matches what the user requested.
 	sidecarActive := sparams != nil &&
 		IsConfidentialComputeRuntimeClass(sparams.RuntimeClass) &&
 		!sparams.AttestationDisabled
 
 	if sidecarActive {
-		// CC workloads run in a Kata VM — the VM is the security boundary,
-		// not the container. Restrictive container security contexts block
-		// the attestation sidecar from mounting configfs/creating device
-		// nodes because the kata agent applies the most restrictive policy
-		// across all containers in the shared VM.
 		kcontainer.SecurityContext = &corev1.SecurityContext{
 			RunAsNonRoot: &falseValue,
 		}
@@ -243,7 +235,6 @@ func (b *Workload) container() corev1.Container {
 		}
 	}
 
-	// fixme: ram is never expected to be nil
 	if mem := service.Resources.Memory; mem != nil {
 		memLimit := int64(mem.Quantity.Value()+requestedMem)         // nolint: gosec
 		memRequest := int64(sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity).Value()) // nolint: gosec
@@ -305,7 +296,6 @@ func (b *Workload) container() corev1.Container {
 	return kcontainer
 }
 
-// Return RAM volumes
 func (b *Workload) volumes() []corev1.Volume {
 	var volumes []corev1.Volume // nolint:prealloc
 
@@ -381,8 +371,6 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	return pvcs
 }
 
-// podAnnotations returns annotations for the pod template, including
-// the attestation-disabled annotation when the tenant has opted out.
 func (b *Workload) podAnnotations() map[string]string {
 	params := b.sparams[b.serviceIdx]
 	if params != nil && params.AttestationDisabled {

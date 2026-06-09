@@ -27,9 +27,6 @@ docker-debug: build-linux
 
 .PHONY: dev-push
 dev-push: docker
-	-@gh api -X DELETE /user/packages/container/attestation-sidecar/versions \
-		--jq '.[] | select(.metadata.container.tags[] == "$(DEV_COMMIT)") | .id' \
-		2>/dev/null | xargs -I{} gh api -X DELETE /user/packages/container/attestation-sidecar/versions/{} 2>/dev/null || true
 	docker push $(DEV_REGISTRY)/attestation-sidecar:$(DEV_COMMIT)
 	@echo ""
 	@echo "Pushed:"
@@ -41,14 +38,6 @@ dev-push-debug: docker-debug
 	@echo ""
 	@echo "Pushed:"
 	@echo "  $(DEV_REGISTRY)/attestation-sidecar:debug"
-
-.PHONY: release
-release:
-	goreleaser release --clean
-
-.PHONY: release-snapshot
-release-snapshot:
-	goreleaser release --snapshot --clean --skip=publish
 
 .PHONY: clean
 clean:

@@ -32,9 +32,9 @@ func (s *SEVGuest) Available() bool {
 // See: linux/include/uapi/linux/sev-guest.h
 const (
 	// ioctl request ID for SNP_GET_REPORT on x86_64
-	snpGetReportIoctl = 0xc0105300
+	// _IOWR('S', 0x00, struct snp_guest_request_ioctl)
+	snpGetReportIoctl = 0xc0185300
 
-	snpReportReqSize  = 96        // sizeof(struct snp_report_req)
 	snpReportRespSize = 4096 + 32 // sizeof(struct snp_report_resp)
 )
 
@@ -44,6 +44,16 @@ type snpReportReq struct {
 	UserData [64]byte
 	VMPL     uint32
 	_        [28]byte // padding to 96 bytes
+}
+
+// snpGuestRequestIoctl matches struct snp_guest_request_ioctl from the kernel.
+// Layout: msg_version u32, pad u32, req_data u64, resp_data u64, fw_err u64
+type snpGuestRequestIoctl struct {
+	MsgVersion uint32
+	_          uint32 // padding
+	ReqData    uint64
+	RespData   uint64
+	FWErr      uint64
 }
 
 // GetQuote collects an SNP attestation report via /dev/sev-guest ioctl.
@@ -63,45 +73,42 @@ func (s *SEVGuest) GetQuote(_ context.Context, reportData [64]byte) (*QuoteResul
 	// Allocate response buffer
 	resp := make([]byte, snpReportRespSize)
 
-	// Build the ioctl message buffer: snp_guest_request_ioctl struct
-	// Layout: msg_version uint32, req_data *byte, resp_data *byte, fw_err uint64
-	msgBuf := make([]byte, 32)
-	binary.LittleEndian.PutUint32(msgBuf[0:4], 1) // msg_version = 1
-
-	reqBytes := (*[snpReportReqSize]byte)(unsafe.Pointer(&req))[:]
-
-	// Perform ioctl with the combined structure
-	// The actual ioctl interface uses a struct snp_guest_request_ioctl
-	// containing pointers to req and resp. For simplicity, we use
-	// the raw ioctl approach with the request/response in a contiguous buffer.
-	ioctlBuf := make([]byte, 0, snpReportReqSize+snpReportRespSize)
-	ioctlBuf = append(ioctlBuf, reqBytes...)
-	ioctlBuf = append(ioctlBuf, resp...)
+	// Build the ioctl envelope: struct snp_guest_request_ioctl
+	// The kernel expects pointers to separate req and resp buffers.
+	envelope := snpGuestRequestIoctl{
+		MsgVersion: 1,
+		ReqData:    uint64(uintptr(unsafe.Pointer(&req))),
+		RespData:   uint64(uintptr(unsafe.Pointer(&resp[0]))),
+	}
 
 	_, _, errno := unix.Syscall(
 		unix.SYS_IOCTL, //nolint:staticcheck // Linux-only, runs inside Kata VM
 		uintptr(fd),
 		uintptr(snpGetReportIoctl),
-		uintptr(unsafe.Pointer(&ioctlBuf[0])),
+		uintptr(unsafe.Pointer(&envelope)),
 	)
 	if errno != 0 {
-		return nil, fmt.Errorf("SNP_GET_REPORT ioctl failed: %w", errno)
+		return nil, fmt.Errorf("SNP_GET_REPORT ioctl failed (fw_err=0x%x): %w", envelope.FWErr, errno)
 	}
 
-	// Extract report from response portion
-	report := ioctlBuf[snpReportReqSize:]
-
-	// Status is first 4 bytes of response
-	status := binary.LittleEndian.Uint32(report[0:4])
+	// Status is first 4 bytes of response header
+	status := binary.LittleEndian.Uint32(resp[0:4])
 	if status != 0 {
 		return nil, fmt.Errorf("SNP_GET_REPORT firmware error: status=%d", status)
 	}
 
 	// Report size is next 4 bytes
-	reportSize := binary.LittleEndian.Uint32(report[4:8])
+	reportSize := binary.LittleEndian.Uint32(resp[4:8])
+	if reportSize == 0 {
+		return nil, fmt.Errorf("SNP_GET_REPORT returned empty report (size=0)")
+	}
+	if 32+reportSize > uint32(len(resp)) {
+		return nil, fmt.Errorf("SNP_GET_REPORT report size %d exceeds response buffer", reportSize)
+	}
 
 	// Actual report starts after the 32-byte response header
-	snpReport := report[32 : 32+reportSize]
+	snpReport := make([]byte, reportSize)
+	copy(snpReport, resp[32:32+reportSize])
 
 	return &QuoteResult{
 		Report:    snpReport,

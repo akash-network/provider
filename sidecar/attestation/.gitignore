@@ -1,2 +1,30 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
 attestation-sidecar
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+
+# Dependency directories
+vendor/
+
+# GoReleaser build dir
 dist/
+
+# IDE
+.idea/
+*.iml
+.vscode
+*.code-workspace
+
+# Go workspace
+go.work
+go.work.sum

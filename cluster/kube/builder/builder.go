@@ -51,12 +51,9 @@ const (
 )
 
 const (
-	// AkashAttestationDisabledAnnotation is set on pods where the tenant opted out
-	// of attestation sidecar injection via the SDL attestation.enabled=false parameter.
 	AkashAttestationDisabledAnnotation = "akash.network/attestation-disabled"
 )
 
-// Confidential compute runtime classes (Kata Containers + TEE)
 const (
 	RuntimeClassKataQemuSNP          = "kata-qemu-snp"
 	RuntimeClassKataQemuNvidiaGPUSNP = "kata-qemu-nvidia-gpu-snp"
@@ -64,28 +61,17 @@ const (
 	RuntimeClassKataQemuNvidiaGPUTDX = "kata-qemu-nvidia-gpu-tdx"
 )
 
-// Attestation sidecar resource limits. Inventory reserves limit values (not
-// requests), matching the pattern used for tenant workloads. These must stay
-// in sync with the limits set in webhook/sidecar.go:buildSidecarContainer.
 const (
-	SidecarCPULimitMillicores   int64 = 100
-	SidecarMemoryLimitBytes     int64 = 64 * 1024 * 1024 // 64Mi
-	SidecarCPURequestMillicores int64 = 10
-	SidecarMemoryRequestBytes   int64 = 32 * 1024 * 1024 // 32Mi
-
-	// GPU sidecar needs more memory: CGO-enabled binary (for NVML dlopen)
-	// requires pthread stack space during Go runtime initialization.
-	SidecarGPUMemoryLimitBytes   int64 = 128 * 1024 * 1024 // 128Mi
-	SidecarGPUMemoryRequestBytes int64 = 64 * 1024 * 1024  // 64Mi
-
-	// Minimum resources for the primary container after sidecar subtraction.
-	// If the user's resources minus sidecar overhead falls below these values,
-	// clamp to these minimums. Prevents OOM kills from unusable resource limits.
-	MinPrimaryCPUMillicores int64 = 10               // 10m
-	MinPrimaryMemoryBytes   int64 = 16 * 1024 * 1024 // 16Mi
+	SidecarCPULimitMillicores    int64 = 100
+	SidecarMemoryLimitBytes      int64 = 64 * 1024 * 1024
+	SidecarCPURequestMillicores  int64 = 10
+	SidecarMemoryRequestBytes    int64 = 32 * 1024 * 1024
+	SidecarGPUMemoryLimitBytes   int64 = 128 * 1024 * 1024
+	SidecarGPUMemoryRequestBytes int64 = 64 * 1024 * 1024
+	MinPrimaryCPUMillicores      int64 = 10
+	MinPrimaryMemoryBytes        int64 = 16 * 1024 * 1024
 )
 
-// TEE type constants used in placement attributes and directory responses.
 const (
 	TEETypeAMDSEVSNP = "amd-sev-snp"
 	TEETypeIntelTDX  = "intel-tdx"

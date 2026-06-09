@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -103,7 +102,7 @@ func quoteHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 			reportData = nonce
 		}
 
-		report, err := provider.GetQuote(context.Background(), reportData)
+		report, err := provider.GetQuote(r.Context(), reportData)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("failed to get attestation quote: %v", err), http.StatusServiceUnavailable)
 			return

@@ -358,7 +358,11 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.
 			return nil, false, true
 		}
 
-		sidecarMem := rtypes.NewResourceValue(uint64(builder.SidecarMemoryLimitBytes))
+		sidecarMemBytes := builder.SidecarMemoryLimitBytes
+		if builder.IsGPURuntimeClass(sparams.RuntimeClass) {
+			sidecarMemBytes = builder.SidecarGPUMemoryLimitBytes
+		}
+		sidecarMem := rtypes.NewResourceValue(uint64(sidecarMemBytes))
 		if !nd.Resources.Memory.Quantity.SubNLZ(sidecarMem) {
 			return nil, false, true
 		}
@@ -425,6 +429,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 				return false
 			}
 
+			sParamsEnsureGPU(sparams)
 			sparams.Resources.GPU.Vendor = vendor
 			sparams.Resources.GPU.Model = info.Name
 
@@ -649,239 +654,16 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 	return ret
 }
 
-// func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, _ ...ctypes.InventoryOption) error {
-// 	resources := make(dtypes.ResourceUnits, len(reservation.Resources().GetResourceUnits()))
-// 	copy(resources, reservation.Resources().GetResourceUnits())
-//
-// 	currInventory := inv.dup()
-//
-// nodes:
-// 	for nodeName, nd := range currInventory.nodes {
-// 		// with persistent storage go through iff there is capacity available
-// 		// there is no point to go through any other node without available storage
-// 		currResources := resources[:0]
-//
-// 		for _, res := range resources {
-// 			for ; res.Count > 0; res.Count-- {
-// 				var adjusted bool
-//
-// 				cpu := nd.cpu.dup()
-// 				if adjusted = cpu.subNLZ(res.Resources.CPU.Units); !adjusted {
-// 					continue nodes
-// 				}
-//
-// 				gpu := nd.gpu.dup()
-// 				if res.Resources.GPU != nil {
-// 					if adjusted = gpu.subNLZ(res.Resources.GPU.Units); !adjusted {
-// 						continue nodes
-// 					}
-// 				}
-//
-// 				memory := nd.memory.dup()
-// 				if adjusted = memory.subNLZ(res.Resources.Memory.Quantity); !adjusted {
-// 					continue nodes
-// 				}
-//
-// 				ephemeralStorage := nd.ephemeralStorage.dup()
-// 				storageClasses := currInventory.storage.dup()
-//
-// 				for idx, storage := range res.Resources.Storage {
-// 					attr := storage.Attributes.Find(sdl.StorageAttributePersistent)
-//
-// 					if persistent, _ := attr.AsBool(); !persistent {
-// 						if adjusted = ephemeralStorage.subNLZ(storage.Quantity); !adjusted {
-// 							continue nodes
-// 						}
-// 						continue
-// 					}
-//
-// 					attr = storage.Attributes.Find(sdl.StorageAttributeClass)
-// 					class, _ := attr.AsString()
-//
-// 					if class == sdl.StorageClassDefault {
-// 						for name, params := range storageClasses {
-// 							if params.isDefault {
-// 								class = name
-//
-// 								for i := range storage.Attributes {
-// 									if storage.Attributes[i].Key == sdl.StorageAttributeClass {
-// 										res.Resources.Storage[idx].Attributes[i].Value = class
-// 										break
-// 									}
-// 								}
-// 								break
-// 							}
-// 						}
-// 					}
-//
-// 					cstorage, activeStorageClass := storageClasses[class]
-// 					if !activeStorageClass {
-// 						continue nodes
-// 					}
-//
-// 					if adjusted = cstorage.subNLZ(storage.Quantity); !adjusted {
-// 						// cluster storage does not have enough space thus break to error
-// 						break nodes
-// 					}
-// 				}
-//
-// 				// all requirements for current group have been satisfied
-// 				// commit and move on
-// 				currInventory.nodes[nodeName] = &node{
-// 					id:               nd.id,
-// 					cpu:              cpu,
-// 					gpu:              gpu,
-// 					memory:           memory,
-// 					ephemeralStorage: ephemeralStorage,
-// 				}
-// 			}
-//
-// 			if res.Count > 0 {
-// 				currResources = append(currResources, res)
-// 			}
-// 		}
-//
-// 		resources = currResources
-// 	}
-//
-// 	if len(resources) == 0 {
-// 		*inv = *currInventory
-//
-// 		return nil
-// 	}
-//
-// 	return ctypes.ErrInsufficientCapacity
-// }
-//
-// func (inv *inventory) Metrics() inventoryV1.Metrics {
-// 	cpuTotal := uint64(0)
-// 	gpuTotal := uint64(0)
-// 	memoryTotal := uint64(0)
-// 	storageEphemeralTotal := uint64(0)
-// 	storageTotal := make(map[string]int64)
-//
-// 	cpuAvailable := uint64(0)
-// 	gpuAvailable := uint64(0)
-// 	memoryAvailable := uint64(0)
-// 	storageEphemeralAvailable := uint64(0)
-// 	storageAvailable := make(map[string]int64)
-//
-// 	ret := inventoryV1.Metrics{
-// 		Nodes: make([]inventoryV1.NodeMetrics, 0, len(inv.nodes)),
-// 	}
-//
-// 	for _, nd := range inv.nodes {
-// 		invNode := inventoryV1.NodeMetrics{
-// 			Name: nd.id,
-// 			Allocatable: inventoryV1.ResourcesMetric{
-// 				CPU:              nd.cpu.allocatable.Uint64(),
-// 				Memory:           nd.memory.allocatable.Uint64(),
-// 				StorageEphemeral: nd.ephemeralStorage.allocatable.Uint64(),
-// 			},
-// 		}
-//
-// 		cpuTotal += nd.cpu.allocatable.Uint64()
-// 		gpuTotal += nd.gpu.allocatable.Uint64()
-//
-// 		memoryTotal += nd.memory.allocatable.Uint64()
-// 		storageEphemeralTotal += nd.ephemeralStorage.allocatable.Uint64()
-//
-// 		tmp := nd.cpu.allocatable.Sub(nd.cpu.allocated)
-// 		invNode.Available.CPU = tmp.Uint64()
-// 		cpuAvailable += invNode.Available.CPU
-//
-// 		tmp = nd.gpu.allocatable.Sub(nd.gpu.allocated)
-// 		invNode.Available.GPU = tmp.Uint64()
-// 		gpuAvailable += invNode.Available.GPU
-//
-// 		tmp = nd.memory.allocatable.Sub(nd.memory.allocated)
-// 		invNode.Available.Memory = tmp.Uint64()
-// 		memoryAvailable += invNode.Available.Memory
-//
-// 		tmp = nd.ephemeralStorage.allocatable.Sub(nd.ephemeralStorage.allocated)
-// 		invNode.Available.StorageEphemeral = tmp.Uint64()
-// 		storageEphemeralAvailable += invNode.Available.StorageEphemeral
-//
-// 		ret.Nodes = append(ret.Nodes, invNode)
-// 	}
-//
-// 	ret.TotalAllocatable = inventoryV1.MetricTotal{
-// 		CPU:              cpuTotal,
-// 		GPU:              gpuTotal,
-// 		Memory:           memoryTotal,
-// 		StorageEphemeral: storageEphemeralTotal,
-// 		Storage:          storageTotal,
-// 	}
-//
-// 	ret.TotalAvailable = inventoryV1.MetricTotal{
-// 		CPU:              cpuAvailable,
-// 		GPU:              gpuAvailable,
-// 		Memory:           memoryAvailable,
-// 		StorageEphemeral: storageEphemeralAvailable,
-// 		Storage:          storageAvailable,
-// 	}
-//
-// 	return ret
-// }
-//
-// func (inv *inventory) Snapshot() inventoryV1.Cluster {
-// 	res := inventoryV1.Cluster{
-// 		Nodes:   make(inventoryV1.Nodes, 0, len(inv.nodes)),
-// 		Storage: make(inventoryV1.ClusterStorage, 0, len(inv.storage)),
-// 	}
-//
-// 	for i := range inv.nodes {
-// 		nd := inv.nodes[i]
-// 		res.Nodes = append(res.Nodes, inventoryV1.Node{
-// 			Name: nd.id,
-// 			Resources: inventoryV1.NodeResources{
-// 				CPU: inventoryV1.CPU{
-// 					Quantity: inventoryV1.NewResourcePair(nd.cpu.allocatable.Int64(), nd.cpu.allocated.Int64(), "m"),
-// 				},
-// 				Memory: inventoryV1.Memory{
-// 					Quantity: inventoryV1.NewResourcePair(nd.memory.allocatable.Int64(), nd.memory.allocated.Int64(), resource.DecimalSI),
-// 				},
-// 				GPU: inventoryV1.GPU{
-// 					Quantity: inventoryV1.NewResourcePair(nd.gpu.allocatable.Int64(), nd.gpu.allocated.Int64(), resource.DecimalSI),
-// 				},
-// 				EphemeralStorage: inventoryV1.NewResourcePair(nd.ephemeralStorage.allocatable.Int64(), nd.ephemeralStorage.allocated.Int64(), resource.DecimalSI),
-// 				VolumesAttached:  inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-// 				VolumesMounted:   inventoryV1.NewResourcePair(0, 0, resource.DecimalSI),
-// 			},
-// 			Capabilities: inventoryV1.NodeCapabilities{},
-// 		})
-// 	}
-//
-// 	for class, storage := range inv.storage {
-// 		res.Storage = append(res.Storage, inventoryV1.Storage{
-// 			Quantity: inventoryV1.NewResourcePair(storage.allocatable.Int64(), storage.allocated.Int64(), resource.DecimalSI),
-// 			Info: inventoryV1.StorageInfo{
-// 				Class: class,
-// 			},
-// 		})
-// 	}
-//
-// 	return res
-// }
-//
-// func (inv *inventory) dup() *inventory {
-// 	res := &inventory{
-// 		nodes: make([]*node, 0, len(inv.nodes)),
-// 	}
-//
-// 	for _, nd := range inv.nodes {
-// 		res.nodes = append(res.nodes, &node{
-// 			id:               nd.id,
-// 			cpu:              nd.cpu.dup(),
-// 			gpu:              nd.gpu.dup(),
-// 			memory:           nd.memory.dup(),
-// 			ephemeralStorage: nd.ephemeralStorage.dup(),
-// 		})
-// 	}
-//
-// 	return res
-// }
-//
-// func (inv *inventory) Dup() ctypes.Inventory {
-// 	return inv.dup()
-// }
+func sParamsEnsureGPU(sparams *crd.SchedulerParams) {
+	sParamsEnsureResources(sparams)
+
+	if sparams.Resources.GPU == nil {
+		sparams.Resources.GPU = &crd.SchedulerResourceGPU{}
+	}
+}
+
+func sParamsEnsureResources(sparams *crd.SchedulerParams) {
+	if sparams.Resources == nil {
+		sparams.Resources = &crd.SchedulerResources{}
+	}
+}

@@ -987,8 +987,6 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 				continue
 			}
 
-			knownAddresses[dev.Address] = struct{}{}
-
 			vinfo := dinfo.Vendor
 			pinfo := dinfo.Product
 			if vinfo == nil || pinfo == nil {
@@ -1034,6 +1032,7 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 				"memorySize", model.MemorySize,
 			)
 
+			knownAddresses[dev.Address] = struct{}{}
 			res = append(res, v1.GPUInfo{
 				Vendor:     vendor.Name,
 				VendorID:   dev.DeviceInfo.Vendor.ID,

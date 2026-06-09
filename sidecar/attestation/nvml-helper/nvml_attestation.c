@@ -1,10 +1,34 @@
+/*
+ * nvml_attestation — Minimal helper for GPU CC attestation via NVML.
+ *
+ * This binary dlopen's libnvidia-ml.so.1 and calls the NVML APIs to:
+ *   probe   — Check if CC mode is enabled on any GPU
+ *   attest  — Collect GPU attestation report with a given nonce
+ *   cert    — Collect GPU attestation certificate chain
+ *
+ * It runs inside a chroot of the Kata guest rootfs so it picks up the
+ * driver-matched libnvidia-ml.so. Output is binary on stdout.
+ *
+ * Usage:
+ *   nvml_attestation probe
+ *   nvml_attestation attest <64-byte-hex-nonce>
+ *   nvml_attestation cert
+ *
+ * Exit codes:
+ *   0 = success
+ *   1 = usage error
+ *   2 = NVML load/init error
+ *   3 = no CC-capable GPU found
+ *   4 = attestation/cert collection error
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <dlfcn.h>
 #include <stdint.h>
 
-/* NVML types, only what we need */
+/* NVML types — only what we need */
 typedef int nvmlReturn_t;
 typedef void* nvmlDevice_t;
 
@@ -26,6 +50,7 @@ typedef struct {
     uint8_t  cecAttestationReport[4096];
 } nvmlConfComputeGpuAttestationReport_t;
 
+/* Function pointer types */
 typedef nvmlReturn_t (*fn_init)(void);
 typedef nvmlReturn_t (*fn_shutdown)(void);
 typedef nvmlReturn_t (*fn_deviceGetCount)(uint32_t*);
@@ -84,6 +109,7 @@ int main(int argc, char **argv) {
         return 3;
     }
 
+    /* Find first device with CC cert support */
     nvmlDevice_t device = NULL;
     uint32_t devIdx = 0;
     for (uint32_t i = 0; i < count; i++) {
@@ -98,10 +124,17 @@ int main(int argc, char **argv) {
                 break;
             }
         }
+        /* If cert API isn't available, use first device */
         if (!device) {
             device = d;
             devIdx = i;
         }
+    }
+
+    if (!device) {
+        fprintf(stderr, "no usable GPU device handle (%u devices enumerated)\n", count);
+        nvmlShutdown();
+        return 3;
     }
 
     if (strcmp(cmd, "probe") == 0) {
@@ -148,6 +181,13 @@ int main(int argc, char **argv) {
             return 4;
         }
 
+        /* Clamp driver-reported sizes to buffer bounds */
+        if (report.attestationReportSize > sizeof(report.attestationReport))
+            report.attestationReportSize = sizeof(report.attestationReport);
+        if (report.cecAttestationReportSize > sizeof(report.cecAttestationReport))
+            report.cecAttestationReportSize = sizeof(report.cecAttestationReport);
+
+        /* Write: 4-byte LE report size, then report bytes */
         uint8_t header[4];
         header[0] = report.attestationReportSize & 0xFF;
         header[1] = (report.attestationReportSize >> 8) & 0xFF;
@@ -156,6 +196,7 @@ int main(int argc, char **argv) {
         fwrite(header, 1, 4, stdout);
         fwrite(report.attestationReport, 1, report.attestationReportSize, stdout);
 
+        /* If CEC report present, append it */
         if (report.isCecAttestationReportPresent && report.cecAttestationReportSize > 0) {
             header[0] = report.cecAttestationReportSize & 0xFF;
             header[1] = (report.cecAttestationReportSize >> 8) & 0xFF;
@@ -184,6 +225,9 @@ int main(int argc, char **argv) {
             return 4;
         }
 
+        /* Clamp to buffer bound and write attestation cert chain */
+        if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain))
+            cert.attestationCertChainSize = sizeof(cert.attestationCertChain);
         fwrite(cert.attestationCertChain, 1, cert.attestationCertChainSize, stdout);
         nvmlShutdown();
         return 0;
