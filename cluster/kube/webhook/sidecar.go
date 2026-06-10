@@ -121,7 +121,7 @@ func buildSidecarContainer(image string, isGPU bool, extraEnv []corev1.EnvVar) c
 	c := corev1.Container{
 		Name:            sidecarContainerName,
 		Image:           image,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: corev1.PullIfNotPresent,
 		Command:         []string{"/attestation-sidecar"},
 		Ports: []corev1.ContainerPort{{
 			Name:          "attestation",
