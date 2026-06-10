@@ -7,7 +7,12 @@
 # the driver-matched NVML library.
 FROM ubuntu:22.04 AS nvml-build
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
-COPY nvml-helper/nvml_attestation.c /src/nvml_attestation.c
+# nvml-helper/ is at different paths depending on build context:
+#   - Direct build (make docker): nvml-helper/nvml_attestation.c
+#   - GoReleaser (from repo root): sidecar/attestation/nvml-helper/nvml_attestation.c
+# ARG lets the caller override the path.
+ARG NVML_SRC=nvml-helper/nvml_attestation.c
+COPY ${NVML_SRC} /src/nvml_attestation.c
 RUN gcc -O2 -o /nvml_attestation /src/nvml_attestation.c -ldl
 
 # Stage 2: final image.

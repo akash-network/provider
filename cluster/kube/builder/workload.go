@@ -169,7 +169,7 @@ func (b *Workload) container() corev1.Container {
 	}
 
 	if cpu := service.Resources.CPU; cpu != nil {
-		cpuLimit := int64(cpu.Units.Value())              // nolint: gosec
+		cpuLimit := int64(cpu.Units.Value())                                                                 // nolint: gosec
 		cpuRequest := int64(sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units).Value()) // nolint: gosec
 
 		if sidecarActive {
@@ -236,7 +236,7 @@ func (b *Workload) container() corev1.Container {
 	}
 
 	if mem := service.Resources.Memory; mem != nil {
-		memLimit := int64(mem.Quantity.Value()+requestedMem)         // nolint: gosec
+		memLimit := int64(mem.Quantity.Value() + requestedMem)                                                     // nolint: gosec
 		memRequest := int64(sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity).Value()) // nolint: gosec
 
 		if sidecarActive {

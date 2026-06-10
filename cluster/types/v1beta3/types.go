@@ -99,7 +99,6 @@ func WithTEEType(t TEEType) InventoryOption {
 	}
 }
 
-
 type Inventory interface {
 	Adjust(ReservationGroup, ...InventoryOption) error
 	Metrics() inventoryV1.Metrics

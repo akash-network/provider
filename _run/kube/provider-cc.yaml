@@ -4,7 +4,7 @@ attributes:
   - key: region
     value: us-west
   - key: tee/type
-    value: tdx-gpu
+    value: tdx
   - key: capabilities/storage/1/persistent
     value: true
   - key: capabilities/storage/1/class

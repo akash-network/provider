@@ -138,12 +138,12 @@ func TestDeploymentPermissions(t *testing.T) {
 
 func TestSidecarResourceSubtraction(t *testing.T) {
 	tests := []struct {
-		name               string
-		runtimeClass       string
+		name                string
+		runtimeClass        string
 		attestationDisabled bool
-		cpuMillis          uint64 // SDL cpu in millicores
-		memBytes           uint64 // SDL memory in bytes
-		expectSubtraction  bool
+		cpuMillis           uint64 // SDL cpu in millicores
+		memBytes            uint64 // SDL memory in bytes
+		expectSubtraction   bool
 	}{
 		{
 			name:              "CC with attestation — 1Gi memory, 4000m CPU",
@@ -167,12 +167,12 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 			expectSubtraction: true,
 		},
 		{
-			name:              "CC with attestation disabled — no subtraction",
-			runtimeClass:      RuntimeClassKataQemuSNP,
+			name:                "CC with attestation disabled — no subtraction",
+			runtimeClass:        RuntimeClassKataQemuSNP,
 			attestationDisabled: true,
-			cpuMillis:         500,
-			memBytes:          128 * 1024 * 1024,
-			expectSubtraction: false,
+			cpuMillis:           500,
+			memBytes:            128 * 1024 * 1024,
+			expectSubtraction:   false,
 		},
 		{
 			name:              "non-CC workload — no subtraction",
@@ -191,7 +191,7 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 		{
 			name:              "CC with small resources — floors at minimum",
 			runtimeClass:      RuntimeClassKataQemuSNP,
-			cpuMillis:         110, // barely above sidecar limit (100m)
+			cpuMillis:         110,              // barely above sidecar limit (100m)
 			memBytes:          68 * 1024 * 1024, // barely above sidecar limit (64Mi)
 			expectSubtraction: true,
 		},
@@ -253,11 +253,11 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 					sidecarMemLimit = SidecarGPUMemoryLimitBytes
 				}
 
-				expectedCPULimit := int64(tt.cpuMillis) - SidecarCPULimitMillicores
+				expectedCPULimit := int64(tt.cpuMillis) - SidecarCPULimitMillicores //nolint:gosec // test values are small constants
 				if expectedCPULimit < MinPrimaryCPUMillicores {
 					expectedCPULimit = MinPrimaryCPUMillicores
 				}
-				expectedMemLimit := int64(tt.memBytes) - sidecarMemLimit
+				expectedMemLimit := int64(tt.memBytes) - sidecarMemLimit //nolint:gosec // test values are small constants
 				if expectedMemLimit < MinPrimaryMemoryBytes {
 					expectedMemLimit = MinPrimaryMemoryBytes
 				}
@@ -270,12 +270,12 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 				// Pod total LIMIT should equal user's original limit
 				// (only when resources are above sidecar footprint)
 				// Pod total equals user limit only when resources are well above sidecar + minimum
-				if int64(tt.cpuMillis)-SidecarCPULimitMillicores >= MinPrimaryCPUMillicores {
-					require.Equal(t, int64(tt.cpuMillis), cpuLimit+SidecarCPULimitMillicores,
+				if int64(tt.cpuMillis)-SidecarCPULimitMillicores >= MinPrimaryCPUMillicores { //nolint:gosec // test values are small constants
+					require.Equal(t, int64(tt.cpuMillis), cpuLimit+SidecarCPULimitMillicores, //nolint:gosec // test values are small constants
 						"Pod CPU limit total should equal user limit")
 				}
-				if int64(tt.memBytes)-sidecarMemLimit >= MinPrimaryMemoryBytes {
-					require.Equal(t, int64(tt.memBytes), memLimit+sidecarMemLimit,
+				if int64(tt.memBytes)-sidecarMemLimit >= MinPrimaryMemoryBytes { //nolint:gosec // test values are small constants
+					require.Equal(t, int64(tt.memBytes), memLimit+sidecarMemLimit, //nolint:gosec // test values are small constants
 						"Pod memory limit total should equal user limit")
 				}
 
@@ -286,9 +286,9 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 					"Memory limit must be >= request")
 			} else {
 				// No subtraction — primary container gets full user resources
-				require.Equal(t, int64(tt.cpuMillis), cpuLimit,
+				require.Equal(t, int64(tt.cpuMillis), cpuLimit, //nolint:gosec
 					"CPU limit should be unmodified")
-				require.Equal(t, int64(tt.memBytes), memLimit,
+				require.Equal(t, int64(tt.memBytes), memLimit, //nolint:gosec
 					"Memory limit should be unmodified")
 			}
 

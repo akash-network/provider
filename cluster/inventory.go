@@ -859,4 +859,3 @@ func reservationCountEndpoints(reservation *reservation) uint {
 
 	return externalPortCount
 }
-

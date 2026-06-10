@@ -252,7 +252,7 @@ func MakeRandomRangePricing() (BidPricingStrategy, error) {
 
 func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
 	minPrice, maxPrice := calculatePriceRange(req.GSpec)
-	if minPrice.IsEqual(maxPrice) {
+	if minPrice.Equal(maxPrice) {
 		return maxPrice, nil
 	}
 

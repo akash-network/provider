@@ -13,7 +13,7 @@ services:
           - global: true
     params:
       tee:
-        type: sev-snp
+        type: tdx
 
 profiles:
   compute:

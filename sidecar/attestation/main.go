@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cloud-j-luna/attestation-sidecar/tee"
+	"github.com/akash-network/attestation-sidecar/tee"
 )
 
 func main() {

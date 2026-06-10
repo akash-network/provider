@@ -90,11 +90,7 @@ kube-setup-cc:
 			--overwrite; \
 	done
 	@echo "Building and loading attestation sidecar image into Kind..."
-	@mkdir -p /tmp/akash-sidecar-build
-	GOWORK=off CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-		go build -mod=vendor -ldflags="-s -w" -o /tmp/akash-sidecar-build/attestation-sidecar $(AP_ROOT)/sidecar/attestation
-	cp $(AP_ROOT)/sidecar/attestation/Dockerfile /tmp/akash-sidecar-build/Dockerfile
-	docker build -q -t "$(ATTESTATION_SIDECAR_IMAGE)" /tmp/akash-sidecar-build/
+	$(MAKE) -C $(AP_ROOT)/sidecar/attestation docker DEV_REGISTRY=$(DEV_REGISTRY) DEV_COMMIT=$(DEV_COMMIT)
 	$(KIND) load docker-image "$(ATTESTATION_SIDECAR_IMAGE)" --name "$(KIND_NAME)"
 	@echo "CC setup complete. RuntimeClasses, node labels, and sidecar image loaded."
 

@@ -1,4 +1,4 @@
-module github.com/cloud-j-luna/attestation-sidecar
+module github.com/akash-network/attestation-sidecar
 
 go 1.26.2
 

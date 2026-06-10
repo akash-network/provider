@@ -225,7 +225,6 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 	return false
 }
 
-
 func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *rtypes.Storage) bool {
 	return rp.SubNLZ(res.Quantity)
 }
@@ -431,4 +430,3 @@ func sParamsEnsureResources(sparams *crd.SchedulerParams) {
 		sparams.Resources = &crd.SchedulerResources{}
 	}
 }
-

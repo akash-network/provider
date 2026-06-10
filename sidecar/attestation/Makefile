@@ -1,5 +1,5 @@
 DEV_REGISTRY   ?= ghcr.io/cloud-j-luna
-DEV_COMMIT     := $(shell git diff --quiet HEAD 2>/dev/null && git rev-parse --short HEAD || echo "$(shell git rev-parse --short HEAD)-$(shell date +%s)")
+DEV_COMMIT     ?= $(shell git diff --quiet HEAD 2>/dev/null && git rev-parse --short HEAD || echo "$(shell git rev-parse --short HEAD)-$(shell date +%s)")
 
 .PHONY: build
 build:

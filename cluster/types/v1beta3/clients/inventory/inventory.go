@@ -362,7 +362,7 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.
 		if builder.IsGPURuntimeClass(sparams.RuntimeClass) {
 			sidecarMemBytes = builder.SidecarGPUMemoryLimitBytes
 		}
-		sidecarMem := rtypes.NewResourceValue(uint64(sidecarMemBytes))
+		sidecarMem := rtypes.NewResourceValue(uint64(sidecarMemBytes)) //nolint:gosec // sidecarMemBytes is a positive constant
 		if !nd.Resources.Memory.Quantity.SubNLZ(sidecarMem) {
 			return nil, false, true
 		}
