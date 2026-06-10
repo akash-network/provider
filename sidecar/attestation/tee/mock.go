@@ -13,7 +13,7 @@ import (
 //
 // The mock report is deterministic given the same report_data: it embeds
 // the nonce in a recognizable structure so tests can verify the nonce echo
-// (invariant #5) without real hardware.
+// without real hardware.
 //
 // NEVER use in production. The mock report has no cryptographic validity.
 type MockProvider struct {
@@ -56,12 +56,12 @@ func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteR
 
 // buildMockReport creates a synthetic report that mirrors the structure
 // of real attestation reports enough to test the control plane:
-//   - Bytes 0-3: magic "MOCK"
+//   - Bytes 0-3: "MOCK"
 //   - Bytes 4-7: report length (little-endian uint32)
 //   - Bytes 8-11: TEE type tag ("SNP\0" or "TDX\0")
 //   - Bytes 12-15: timestamp (unix seconds, little-endian uint32)
 //   - Bytes 16-79: zero padding
-//   - Bytes 80-143: report_data echo (the tenant's nonce — invariant #5)
+//   - Bytes 80-143: report_data echo (the tenant's nonce)
 //   - Bytes 144-175: SHA-256(report_data) as a fake "measurement"
 //   - Bytes 176+: zero padding to total size
 //
@@ -74,13 +74,9 @@ func buildMockReport(reportData [64]byte, teeType string) []byte {
 
 	report := make([]byte, size)
 
-	// Magic
 	copy(report[0:4], []byte("MOCK"))
+	binary.LittleEndian.PutUint32(report[4:8], uint32(size)) //nolint:gosec
 
-	// Length
-	binary.LittleEndian.PutUint32(report[4:8], uint32(size)) //nolint:gosec // size is 1024 or 1184
-
-	// TEE tag
 	switch teeType {
 	case NameTDX:
 		copy(report[8:12], []byte("TDX\x00"))
@@ -88,13 +84,9 @@ func buildMockReport(reportData [64]byte, teeType string) []byte {
 		copy(report[8:12], []byte("SNP\x00"))
 	}
 
-	// Timestamp
-	binary.LittleEndian.PutUint32(report[12:16], uint32(time.Now().Unix())) //nolint:gosec // fits until 2106
-
-	// report_data echo at offset 80 (matches SNP REPORT_DATA offset 0x50)
+	binary.LittleEndian.PutUint32(report[12:16], uint32(time.Now().Unix())) //nolint:gosec
 	copy(report[80:144], reportData[:])
 
-	// Fake measurement at offset 144
 	h := sha256.Sum256(reportData[:])
 	copy(report[144:176], h[:])
 
@@ -102,7 +94,7 @@ func buildMockReport(reportData [64]byte, teeType string) []byte {
 }
 
 // buildMockGPUReport creates a synthetic GPU attestation report.
-//   - Bytes 0-3: magic "MGPU"
+//   - Bytes 0-3: "MGPU"
 //   - Bytes 4-7: report length (little-endian uint32)
 //   - Bytes 8-11: timestamp (unix seconds, little-endian uint32)
 //   - Bytes 12-75: nonce echo (64 bytes)
@@ -114,7 +106,7 @@ func buildMockGPUReport(nonce [64]byte) []byte {
 
 	copy(report[0:4], []byte("MGPU"))
 	binary.LittleEndian.PutUint32(report[4:8], uint32(size))
-	binary.LittleEndian.PutUint32(report[8:12], uint32(time.Now().Unix())) //nolint:gosec // fits until 2106
+	binary.LittleEndian.PutUint32(report[8:12], uint32(time.Now().Unix())) //nolint:gosec
 	copy(report[12:76], nonce[:])
 
 	h := sha256.Sum256(nonce[:])

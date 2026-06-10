@@ -374,12 +374,12 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().String(FlagAttestationExpectedMeasurement, "", "Expected SEV-SNP launch measurement (hex) for the attestation directory. Advisory hint only (invariant #4)")
+	cmd.Flags().String(FlagAttestationExpectedMeasurement, "", "Expected SEV-SNP launch measurement (hex) for the attestation directory. Advisory hint only")
 	if err := viper.BindPFlag(FlagAttestationExpectedMeasurement, cmd.Flags().Lookup(FlagAttestationExpectedMeasurement)); err != nil {
 		return err
 	}
 
-	cmd.Flags().String(FlagAttestationExpectedImageDigest, "", "Expected Kata VM image digest for the attestation directory. Advisory hint only (invariant #4)")
+	cmd.Flags().String(FlagAttestationExpectedImageDigest, "", "Expected Kata VM image digest for the attestation directory. Advisory hint only")
 	if err := viper.BindPFlag(FlagAttestationExpectedImageDigest, cmd.Flags().Lookup(FlagAttestationExpectedImageDigest)); err != nil {
 		return err
 	}

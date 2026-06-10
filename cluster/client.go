@@ -99,7 +99,7 @@ type Client interface {
 	// running inside a confidential compute pod. The requestBody (containing the
 	// tenant's nonce) is sent verbatim to the sidecar; the response (hardware-signed
 	// evidence) is returned verbatim. The provider never inspects or modifies
-	// either payload (invariants #1 and #5).
+	// either payload.
 	AttestationQuote(ctx context.Context, lID mtypes.LeaseID, requestBody []byte) ([]byte, int, error)
 }
 

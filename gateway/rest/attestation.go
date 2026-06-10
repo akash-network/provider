@@ -21,14 +21,14 @@ const attestationProtocolVersion = "2"
 
 // AttestationConfig holds provider-configured attestation parameters
 // that are returned as advisory hints in the directory response.
-// All values are explicitly untrusted (invariant #4).
+// All values are explicitly untrusted.
 type AttestationConfig struct {
 	ExpectedLaunchMeasurement string
 	ExpectedImageDigest       string
 }
 
 // AttestationDirectoryResponse is the response from the directory endpoint.
-// This endpoint is explicitly UNTRUSTED (architectural invariant #3).
+// This endpoint is explicitly UNTRUSTED.
 // All fields are advisory routing hints only. The tenant must verify
 // all claims against hardware-signed attestation evidence.
 type AttestationDirectoryResponse struct {
@@ -38,11 +38,11 @@ type AttestationDirectoryResponse struct {
 
 	// ExpectedLaunchMeasurement is an advisory hint the tenant can compare
 	// against the MEASUREMENT field in the hardware-signed SNP report.
-	// NOT a standalone trust signal (invariant #4).
+	// NOT a standalone trust signal.
 	ExpectedLaunchMeasurement string `json:"expected_launch_measurement,omitempty"`
 
 	// ExpectedImageDigest is an advisory hint for the Kata VM image digest.
-	// NOT a standalone trust signal (invariant #4).
+	// NOT a standalone trust signal.
 	ExpectedImageDigest string `json:"expected_image_digest,omitempty"`
 
 	ProtocolVersion string `json:"protocol_version"`
@@ -92,7 +92,7 @@ func createAttestationDirectoryHandler(log log.Logger, cclient cluster.ReadClien
 		// For the directory endpoint, we construct a partial lease ID. The provider
 		// can look up by dseq since it has the CRD manifest labeled with dseq.
 		// The GetManifestGroup uses LidNS which requires a full LeaseID.
-		// Since this endpoint is unauthenticated and untrusted (invariant #3),
+		// Since this endpoint is unauthenticated and untrusted,
 		// we accept that the owner field is empty — the lookup will work only
 		// if the caller also provides it as a query parameter.
 		owner := r.URL.Query().Get("owner")
@@ -142,7 +142,7 @@ func createAttestationDirectoryHandler(log log.Logger, cclient cluster.ReadClien
 			TEEType:                   teeType,
 		}
 
-		// Explicitly untrusted — staleness is HTTP-native (invariant #3)
+		// Explicitly untrusted — staleness is HTTP-native
 		w.Header().Set("Cache-Control", "max-age=60, must-revalidate")
 		w.Header().Set("Content-Type", contentTypeJSON)
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck
@@ -155,7 +155,7 @@ func createAttestationDirectoryHandler(log log.Logger, cclient cluster.ReadClien
 //
 // The provider forwards the tenant's nonce verbatim to the sidecar and returns
 // the hardware-signed evidence verbatim. The provider never inspects or modifies
-// either payload (invariants #1 and #5).
+// either payload.
 func createAttestationQuoteHandler(log log.Logger, cclient cluster.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		leaseID := requestLeaseID(r)

@@ -292,7 +292,7 @@ func TestSidecarResourceSubtraction(t *testing.T) {
 					"Memory limit should be unmodified")
 			}
 
-			// Always: limit >= request (K8s invariant)
+			// Always: limit >= request
 			require.GreaterOrEqual(t, cpuLimit, cpuRequest, "K8s: CPU limit >= request")
 			require.GreaterOrEqual(t, memLimit, memRequest, "K8s: memory limit >= request")
 		})

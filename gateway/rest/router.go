@@ -124,9 +124,9 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		Methods("GET")
 
 	// GET /attestation/directory/{dseq}/{gseq}/{oseq}
-	// Attestation directory — explicitly UNTRUSTED (invariant #3).
+	// Attestation directory, explicitly UNTRUSTED.
 	// Returns advisory routing hints for the attestation sidecar.
-	// Unauthenticated: tenant needs this before establishing a trusted channel.
+	// Unauthenticated: tenant can use this before establishing a trusted channel.
 	router.HandleFunc("/attestation/directory/{dseq}/{gseq}/{oseq}",
 		createAttestationDirectoryHandler(log, pclient.Cluster(), attestCfg)).
 		Methods(http.MethodGet)
@@ -165,7 +165,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 
 	// POST /lease/<lease-id>/attestation/quote
 	// Calls the attestation sidecar inside the CC pod via direct K8s pod IP access.
-	// Provider forwards nonce/response verbatim (invariants #1, #5).
+	// Provider forwards nonce/response verbatim.
 	lrouter.HandleFunc("/attestation/quote",
 		createAttestationQuoteHandler(log, pclient.Cluster())).
 		Methods(http.MethodPost)
