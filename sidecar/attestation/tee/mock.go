@@ -17,8 +17,9 @@ import (
 //
 // NEVER use in production. The mock report has no cryptographic validity.
 type MockProvider struct {
-	TEE     string // "snp" or "tdx" — controls the reported TEE type
-	WithGPU bool   // when true, simulates GPU CC attestation
+	TEE      string // "snp" or "tdx" — controls the reported TEE type
+	WithGPU  bool   // when true, simulates GPU CC attestation
+	GPUCount int    // number of mock GPUs (defaults to 1 if 0)
 }
 
 var _ Provider = (*MockProvider)(nil)
@@ -49,7 +50,17 @@ func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteR
 		AuxBlob:   nil,
 	}
 	if m.WithGPU {
-		result.GPUReport = buildMockGPUReport(reportData)
+		gpuCount := m.GPUCount
+		if gpuCount == 0 {
+			gpuCount = 1
+		}
+		result.GPUReports = make([]GPUDeviceReport, gpuCount)
+		for i := 0; i < gpuCount; i++ {
+			result.GPUReports[i] = GPUDeviceReport{
+				DeviceIndex: uint32(i), //nolint:gosec // mock device index
+				Report:      buildMockGPUReport(reportData, i),
+			}
+		}
 	}
 	return result, nil
 }
@@ -96,17 +107,17 @@ func buildMockReport(reportData [64]byte, teeType string) []byte {
 // buildMockGPUReport creates a synthetic GPU attestation report.
 //   - Bytes 0-3: "MGPU"
 //   - Bytes 4-7: report length (little-endian uint32)
-//   - Bytes 8-11: timestamp (unix seconds, little-endian uint32)
+//   - Bytes 8-11: device index (little-endian uint32)
 //   - Bytes 12-75: nonce echo (64 bytes)
 //   - Bytes 76-107: SHA-256(nonce) as a fake GPU measurement
 //   - Bytes 108+: zero padding to 512 bytes
-func buildMockGPUReport(nonce [64]byte) []byte {
+func buildMockGPUReport(nonce [64]byte, deviceIndex int) []byte {
 	const size = 512
 	report := make([]byte, size)
 
 	copy(report[0:4], []byte("MGPU"))
 	binary.LittleEndian.PutUint32(report[4:8], uint32(size))
-	binary.LittleEndian.PutUint32(report[8:12], uint32(time.Now().Unix())) //nolint:gosec
+	binary.LittleEndian.PutUint32(report[8:12], uint32(deviceIndex)) //nolint:gosec
 	copy(report[12:76], nonce[:])
 
 	h := sha256.Sum256(nonce[:])

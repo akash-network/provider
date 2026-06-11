@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // TEE type name constants.
@@ -14,12 +15,18 @@ const (
 	NameTDXGPU = "tdx-gpu"
 )
 
+// GPUDeviceReport holds attestation evidence for a single GPU.
+type GPUDeviceReport struct {
+	DeviceIndex uint32 `json:"device_index"`
+	Report      []byte `json:"report"`
+}
+
 // QuoteResult holds the raw hardware-signed attestation evidence.
 type QuoteResult struct {
-	Report    []byte // Raw attestation report (SNP ~1184 bytes, TDX 1024 bytes)
-	CertChain []byte // Cert chain (may be empty — fetching is tenant-side)
-	AuxBlob   []byte // Empty on NVIDIA-patched kernel
-	GPUReport []byte // NVIDIA GPU attestation report (nil when no GPU CC)
+	Report     []byte            // Raw attestation report (SNP ~1184 bytes, TDX 1024 bytes)
+	CertChain  []byte            // Cert chain (may be empty — fetching is tenant-side)
+	AuxBlob    []byte            // Empty on NVIDIA-patched kernel
+	GPUReports []GPUDeviceReport // Per-GPU attestation reports (nil when no GPU CC)
 }
 
 // Provider abstracts TEE-specific attestation report collection.
@@ -58,7 +65,13 @@ func Detect() (Provider, error) {
 			tee = NameSNP
 		}
 		withGPU := os.Getenv("ATTESTATION_MOCK_GPU") == "true"
-		return &MockProvider{TEE: tee, WithGPU: withGPU}, nil
+		gpuCount := 1
+		if v := os.Getenv("ATTESTATION_MOCK_GPU_COUNT"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				gpuCount = n
+			}
+		}
+		return &MockProvider{TEE: tee, WithGPU: withGPU, GPUCount: gpuCount}, nil
 	}
 
 	// Inside kata containers, /dev and /sys/kernel/config may not have the

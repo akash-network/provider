@@ -10,7 +10,7 @@ import (
 	"github.com/akash-network/attestation-sidecar/tee"
 )
 
-const protocolVersion = "3"
+const protocolVersion = "4"
 
 // QuoteRequest is the request body for POST /quote.
 // The tenant generates a nonce and sends it; the sidecar writes it into
@@ -24,18 +24,24 @@ type QuoteRequest struct {
 	BindTLS bool `json:"bind_tls,omitempty"`
 }
 
+// GPUReportEntry holds attestation evidence for a single GPU in the response.
+type GPUReportEntry struct {
+	DeviceIndex uint32 `json:"device_index"`
+	Report      string `json:"report"` // base64
+}
+
 // QuoteResponse is the response body for POST /quote.
 // Contains raw, hardware-signed attestation evidence.
 // The provider never produces or signs this — it comes from the PSP.
 type QuoteResponse struct {
-	Report    string `json:"report"`     // base64 raw SNP attestation report
+	Report    string `json:"report"`     // base64 raw SNP/TDX attestation report
 	CertChain string `json:"cert_chain"` // base64 VCEK cert chain (may be empty)
-	TEEType   string `json:"tee_type"`   // "snp"
+	TEEType   string `json:"tee_type"`   // "snp", "tdx", "snp-gpu", "tdx-gpu"
 	AuxBlob   string `json:"auxblob"`    // empty on NVIDIA-patched kernel
 
-	// GPUReport is the base64-encoded NVIDIA GPU attestation report.
-	// Present only when the TEE includes GPU CC (e.g. tee_type "snp-gpu").
-	GPUReport string `json:"gpu_report,omitempty"`
+	// GPUReports contains per-device attestation evidence for ALL CC-capable GPUs.
+	// Each entry includes the device index and its hardware-signed report.
+	GPUReports []GPUReportEntry `json:"gpu_reports,omitempty"`
 
 	// TLSBound indicates whether report_data was computed with TLS channel binding.
 	// When true, the tenant must verify: report_data == SHA-512(tls_pubkey || nonce)[:64]
@@ -115,8 +121,15 @@ func quoteHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 			AuxBlob:   base64.StdEncoding.EncodeToString(report.AuxBlob),
 			TLSBound:  tlsBound,
 		}
-		if len(report.GPUReport) > 0 {
-			resp.GPUReport = base64.StdEncoding.EncodeToString(report.GPUReport)
+
+		if len(report.GPUReports) > 0 {
+			resp.GPUReports = make([]GPUReportEntry, len(report.GPUReports))
+			for i, gr := range report.GPUReports {
+				resp.GPUReports[i] = GPUReportEntry{
+					DeviceIndex: gr.DeviceIndex,
+					Report:      base64.StdEncoding.EncodeToString(gr.Report),
+				}
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

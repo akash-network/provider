@@ -38,13 +38,20 @@ type attestationQuoteRequest struct {
 	BindTLS bool   `json:"bind_tls,omitempty"`
 }
 
+// attestationGPUReportEntry matches the sidecar's GPUReportEntry type.
+type attestationGPUReportEntry struct {
+	DeviceIndex uint32 `json:"device_index"`
+	Report      string `json:"report"`
+}
+
 // attestationQuoteResponse matches the sidecar's QuoteResponse type.
 type attestationQuoteResponse struct {
-	Report    string `json:"report"`
-	CertChain string `json:"cert_chain"`
-	TEEType   string `json:"tee_type"`
-	AuxBlob   string `json:"auxblob"`
-	TLSBound  bool   `json:"tls_bound"`
+	Report     string                      `json:"report"`
+	CertChain  string                      `json:"cert_chain"`
+	TEEType    string                      `json:"tee_type"`
+	AuxBlob    string                      `json:"auxblob"`
+	GPUReports []attestationGPUReportEntry `json:"gpu_reports,omitempty"`
+	TLSBound   bool                        `json:"tls_bound"`
 }
 
 // attestationResult is the CLI output format.
@@ -118,25 +125,23 @@ func doLeaseAttestation(cmd *cobra.Command) error {
 	// Check if this is a mock report (starts with "MOCK")
 	isMock := len(reportBytes) >= 4 && string(reportBytes[0:4]) == "MOCK"
 
-	// Verify nonce echo in report_data
+	// Verify nonce echo in report_data.
+	// The offset depends on the report type:
+	//   Mock:       offset 80 (0x50)
+	//   SNP:        offset 80 (0x50) — REPORT_DATA in attestation_report
+	//   TDX Quote:  offset 568 (0x238) — header(48) + body offset 520
 	nonceVerified := false
 	if isMock && len(reportBytes) >= 144 {
-		// Mock report: nonce at offset 80
-		nonceVerified = true
-		for i := 0; i < 64; i++ {
-			if reportBytes[80+i] != nonce[i] {
-				nonceVerified = false
-				break
-			}
+		nonceVerified = bytesEqual(reportBytes[80:144], nonce[:])
+	} else if !isMock {
+		// Try TDX Quote v4 first (report_data at header + body offset 520)
+		const tdxReportDataOffset = 48 + 520
+		if len(reportBytes) >= tdxReportDataOffset+64 {
+			nonceVerified = bytesEqual(reportBytes[tdxReportDataOffset:tdxReportDataOffset+64], nonce[:])
 		}
-	} else if !isMock && len(reportBytes) >= 0x90 {
-		// Real SNP report: REPORT_DATA at offset 0x50 (80 decimal)
-		nonceVerified = true
-		for i := 0; i < 64; i++ {
-			if reportBytes[0x50+i] != nonce[i] {
-				nonceVerified = false
-				break
-			}
+		// Fall back to SNP report_data offset
+		if !nonceVerified && len(reportBytes) >= 0x90 {
+			nonceVerified = bytesEqual(reportBytes[0x50:0x50+64], nonce[:])
 		}
 	}
 
@@ -149,4 +154,16 @@ func doLeaseAttestation(cmd *cobra.Command) error {
 	}
 
 	return cli.PrintJSON(cctx, result)
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

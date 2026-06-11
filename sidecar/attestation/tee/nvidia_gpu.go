@@ -3,6 +3,7 @@ package tee
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -22,9 +23,9 @@ const (
 // In Kata VMs, the GPU driver is in the guest rootfs but the NVIDIA
 // Container Toolkit only bind-mounts driver files into containers that
 // request GPU resources. The sidecar doesn't request GPUs, so it:
-//   1. Mounts the guest rootfs block device (/dev/dm-0) at /mnt/guest
-//   2. Bind-mounts /dev and /proc into the mount point
-//   3. Runs nvidia-smi and nvml_attestation chrooted into /mnt/guest
+//  1. Mounts the guest rootfs block device (/dev/dm-0) at /mnt/guest
+//  2. Bind-mounts /dev and /proc into the mount point
+//  3. Runs nvidia-smi and nvml_attestation chrooted into /mnt/guest
 //
 // This ensures nvidia-smi, libnvidia-ml.so, glibc, and the kernel driver
 // are all from the same guest image — no version mismatches.
@@ -60,7 +61,7 @@ func (n *NvidiaGPUAttestor) probe() (string, error) {
 		return "", fmt.Errorf("GPU CC mode not enabled (output: %s)", strings.TrimSpace(stdout))
 	}
 
-	// Verify the NVML attestation helper can find a CC-capable GPU.
+	// Verify the NVML attestation helper can find CC-capable GPUs.
 	if fileExists(guestMountDir + "/tmp/nvml_attestation") {
 		stdout2, stderr2, err2 := n.chrootExecHelper(context.Background(), "probe")
 		if err2 != nil {
@@ -72,24 +73,93 @@ func (n *NvidiaGPUAttestor) probe() (string, error) {
 	return fmt.Sprintf("GPU CC enabled: %s", strings.TrimSpace(stdout)), nil
 }
 
-// GetGPUAttestation collects GPU attestation report and certificate chain.
-func (n *NvidiaGPUAttestor) GetGPUAttestation(ctx context.Context, nonce [64]byte) ([]byte, error) {
+// GetAllGPUAttestations collects attestation reports from ALL CC-capable GPUs.
+// The binary output format from `attest-all` is:
+//
+//	4 bytes LE: device count
+//	Per device:
+//	  4 bytes LE: device index
+//	  4 bytes LE: attestation report size
+//	  N bytes:    attestation report
+//	  4 bytes LE: CEC report size (0 if not present)
+//	  N bytes:    CEC report (omitted if size is 0)
+func (n *NvidiaGPUAttestor) GetAllGPUAttestations(ctx context.Context, nonce [64]byte) ([]GPUDeviceReport, error) {
 	if err := n.ensureMount(); err != nil {
 		return nil, fmt.Errorf("guest rootfs: %w", err)
 	}
 
 	nonceHex := hex.EncodeToString(nonce[:32])
-	stdout, stderr, err := n.chrootExecHelper(ctx, "attest", nonceHex)
+	stdout, stderr, err := n.chrootExecHelper(ctx, "attest-all", nonceHex)
 	if err != nil {
-		return nil, fmt.Errorf("nvml_attestation attest failed: %w (stderr: %s)", err, stderr)
+		return nil, fmt.Errorf("nvml_attestation attest-all failed: %w (stderr: %s)", err, stderr)
 	}
 
-	report := []byte(stdout)
-	if len(report) == 0 {
-		return nil, fmt.Errorf("empty attestation report")
+	data := []byte(stdout)
+	if len(data) < 4 {
+		return nil, fmt.Errorf("attest-all output too short: %d bytes", len(data))
 	}
 
-	return report, nil
+	return parseMultiGPUOutput(data)
+}
+
+// parseMultiGPUOutput parses the binary output from `nvml_attestation attest-all`.
+func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
+	if len(data) < 4 {
+		return nil, fmt.Errorf("output too short for device count header")
+	}
+
+	deviceCount := binary.LittleEndian.Uint32(data[0:4])
+	off := 4
+
+	reports := make([]GPUDeviceReport, 0, deviceCount)
+
+	for i := uint32(0); i < deviceCount; i++ {
+		if off+4 > len(data) {
+			return nil, fmt.Errorf("truncated output at device %d index", i)
+		}
+		devIdx := binary.LittleEndian.Uint32(data[off : off+4])
+		off += 4
+
+		if off+4 > len(data) {
+			return nil, fmt.Errorf("truncated output at device %d report size", i)
+		}
+		reportSize := binary.LittleEndian.Uint32(data[off : off+4])
+		off += 4
+
+		if off+int(reportSize) > len(data) {
+			return nil, fmt.Errorf("truncated output at device %d report data (need %d, have %d)", i, reportSize, len(data)-off)
+		}
+		report := make([]byte, reportSize)
+		copy(report, data[off:off+int(reportSize)])
+		off += int(reportSize)
+
+		// CEC report
+		if off+4 > len(data) {
+			return nil, fmt.Errorf("truncated output at device %d CEC size", i)
+		}
+		cecSize := binary.LittleEndian.Uint32(data[off : off+4])
+		off += 4
+
+		if cecSize > 0 {
+			if off+int(cecSize) > len(data) {
+				return nil, fmt.Errorf("truncated output at device %d CEC data", i)
+			}
+			// Append CEC report to the main report
+			report = append(report, data[off:off+int(cecSize)]...)
+			off += int(cecSize)
+		}
+
+		reports = append(reports, GPUDeviceReport{
+			DeviceIndex: devIdx,
+			Report:      report,
+		})
+	}
+
+	if len(reports) == 0 {
+		return nil, fmt.Errorf("attest-all returned 0 device reports")
+	}
+
+	return reports, nil
 }
 
 // ensureMount prepares the chroot environment. Platform-specific setup

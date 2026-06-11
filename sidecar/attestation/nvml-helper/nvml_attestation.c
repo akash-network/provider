@@ -2,17 +2,28 @@
  * nvml_attestation — Minimal helper for GPU CC attestation via NVML.
  *
  * This binary dlopen's libnvidia-ml.so.1 and calls the NVML APIs to:
- *   probe   — Check if CC mode is enabled on any GPU
- *   attest  — Collect GPU attestation report with a given nonce
- *   cert    — Collect GPU attestation certificate chain
+ *   probe      — Check if CC mode is enabled on any GPU
+ *   attest     — Collect GPU attestation report from a single device (GPU 0)
+ *   attest-all — Collect GPU attestation reports from ALL CC-capable devices
+ *   cert       — Collect GPU attestation certificate chain from GPU 0
  *
  * It runs inside a chroot of the Kata guest rootfs so it picks up the
  * driver-matched libnvidia-ml.so. Output is binary on stdout.
  *
  * Usage:
  *   nvml_attestation probe
- *   nvml_attestation attest <64-byte-hex-nonce>
+ *   nvml_attestation attest <hex-nonce>
+ *   nvml_attestation attest-all <hex-nonce>
  *   nvml_attestation cert
+ *
+ * Binary output format for attest / attest-all:
+ *   For each device:
+ *     4 bytes LE: device index
+ *     4 bytes LE: attestation report size
+ *     N bytes:    attestation report
+ *     4 bytes LE: CEC report size (0 if not present)
+ *     N bytes:    CEC report (omitted if size is 0)
+ *   attest outputs exactly one device; attest-all outputs all CC-capable devices.
  *
  * Exit codes:
  *   0 = success
@@ -69,9 +80,61 @@ static int hex2bytes(const char *hex, uint8_t *out, int maxlen) {
     return len/2;
 }
 
+static void write_le32(uint32_t val) {
+    uint8_t buf[4];
+    buf[0] = val & 0xFF;
+    buf[1] = (val >> 8) & 0xFF;
+    buf[2] = (val >> 16) & 0xFF;
+    buf[3] = (val >> 24) & 0xFF;
+    fwrite(buf, 1, 4, stdout);
+}
+
+/* Attest a single device and write its report to stdout.
+ * Returns 0 on success, non-zero on failure. */
+static int attest_device(
+    fn_deviceGetAttReport nvmlDeviceGetAttReport,
+    nvmlDevice_t device,
+    uint32_t devIdx,
+    const uint8_t *nonce,
+    int nonceLen
+) {
+    nvmlConfComputeGpuAttestationReport_t report;
+    memset(&report, 0, sizeof(report));
+    memcpy(report.nonce, nonce, nonceLen < 32 ? nonceLen : 32);
+
+    nvmlReturn_t ret = nvmlDeviceGetAttReport(device, &report);
+    if (ret != NVML_SUCCESS) {
+        fprintf(stderr, "GPU %u: nvmlDeviceGetConfComputeGpuAttestationReport: %d\n", devIdx, ret);
+        return ret;
+    }
+
+    /* Clamp driver-reported sizes to buffer bounds */
+    if (report.attestationReportSize > sizeof(report.attestationReport))
+        report.attestationReportSize = sizeof(report.attestationReport);
+    if (report.cecAttestationReportSize > sizeof(report.cecAttestationReport))
+        report.cecAttestationReportSize = sizeof(report.cecAttestationReport);
+
+    /* Write device index */
+    write_le32(devIdx);
+
+    /* Write attestation report */
+    write_le32(report.attestationReportSize);
+    fwrite(report.attestationReport, 1, report.attestationReportSize, stdout);
+
+    /* Write CEC report (size=0 if not present) */
+    if (report.isCecAttestationReportPresent && report.cecAttestationReportSize > 0) {
+        write_le32(report.cecAttestationReportSize);
+        fwrite(report.cecAttestationReport, 1, report.cecAttestationReportSize, stdout);
+    } else {
+        write_le32(0);
+    }
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        fprintf(stderr, "usage: nvml_attestation <probe|attest|cert> [args]\n");
+        fprintf(stderr, "usage: nvml_attestation <probe|attest|attest-all|cert> [args]\n");
         return 1;
     }
 
@@ -109,43 +172,47 @@ int main(int argc, char **argv) {
         return 3;
     }
 
-    /* Find first device with CC cert support */
-    nvmlDevice_t device = NULL;
-    uint32_t devIdx = 0;
-    for (uint32_t i = 0; i < count; i++) {
+    /* Build list of CC-capable devices */
+    nvmlDevice_t devices[64];
+    uint32_t     deviceIdxs[64];
+    uint32_t     ccCount = 0;
+
+    for (uint32_t i = 0; i < count && ccCount < 64; i++) {
         nvmlDevice_t d;
         if (nvmlDeviceGetHandle(i, &d) != NVML_SUCCESS) continue;
         if (nvmlDeviceGetCert) {
             nvmlConfComputeGpuCertificate_t cert;
             memset(&cert, 0, sizeof(cert));
             if (nvmlDeviceGetCert(d, &cert) == NVML_SUCCESS && cert.attestationCertChainSize > 0) {
-                device = d;
-                devIdx = i;
+                devices[ccCount] = d;
+                deviceIdxs[ccCount] = i;
+                ccCount++;
+            }
+        }
+    }
+
+    /* If no CC-capable devices found, fall back to first device for non-CC commands */
+    nvmlDevice_t firstDevice = NULL;
+    uint32_t firstIdx = 0;
+    if (ccCount == 0) {
+        for (uint32_t i = 0; i < count; i++) {
+            nvmlDevice_t d;
+            if (nvmlDeviceGetHandle(i, &d) == NVML_SUCCESS) {
+                firstDevice = d;
+                firstIdx = i;
                 break;
             }
         }
-        /* If cert API isn't available, use first device */
-        if (!device) {
-            device = d;
-            devIdx = i;
-        }
-    }
-
-    if (!device) {
-        fprintf(stderr, "no usable GPU device handle (%u devices enumerated)\n", count);
-        nvmlShutdown();
-        return 3;
     }
 
     if (strcmp(cmd, "probe") == 0) {
-        if (device && nvmlDeviceGetCert) {
-            nvmlConfComputeGpuCertificate_t cert;
-            memset(&cert, 0, sizeof(cert));
-            if (nvmlDeviceGetCert(device, &cert) == NVML_SUCCESS && cert.attestationCertChainSize > 0) {
-                fprintf(stdout, "GPU %u: CC enabled, cert chain %u bytes\n", devIdx, cert.attestationCertChainSize);
-                nvmlShutdown();
-                return 0;
+        if (ccCount > 0) {
+            fprintf(stdout, "%u CC-capable GPU(s) found\n", ccCount);
+            for (uint32_t i = 0; i < ccCount; i++) {
+                fprintf(stdout, "  GPU %u: CC enabled\n", deviceIdxs[i]);
             }
+            nvmlShutdown();
+            return 0;
         }
         fprintf(stderr, "no CC-capable GPU found (%u devices checked)\n", count);
         nvmlShutdown();
@@ -153,6 +220,7 @@ int main(int argc, char **argv) {
     }
 
     if (strcmp(cmd, "attest") == 0) {
+        /* Single-device attest (backwards compatible): attest first CC device */
         if (!nvmlDeviceGetAttReport) {
             fprintf(stderr, "nvmlDeviceGetConfComputeGpuAttestationReport not available\n");
             nvmlShutdown();
@@ -164,50 +232,65 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        nvmlConfComputeGpuAttestationReport_t report;
-        memset(&report, 0, sizeof(report));
-
-        int nonceLen = hex2bytes(argv[2], report.nonce, 32);
+        uint8_t nonce[32];
+        int nonceLen = hex2bytes(argv[2], nonce, 32);
         if (nonceLen < 0) {
             fprintf(stderr, "invalid nonce hex\n");
             nvmlShutdown();
             return 1;
         }
 
-        ret = nvmlDeviceGetAttReport(device, &report);
-        if (ret != NVML_SUCCESS) {
-            fprintf(stderr, "nvmlDeviceGetConfComputeGpuAttestationReport: %d\n", ret);
+        nvmlDevice_t dev = ccCount > 0 ? devices[0] : firstDevice;
+        uint32_t idx = ccCount > 0 ? deviceIdxs[0] : firstIdx;
+        if (!dev) {
+            fprintf(stderr, "no usable GPU device handle\n");
+            nvmlShutdown();
+            return 3;
+        }
+
+        int rc = attest_device(nvmlDeviceGetAttReport, dev, idx, nonce, nonceLen);
+        nvmlShutdown();
+        return rc ? 4 : 0;
+    }
+
+    if (strcmp(cmd, "attest-all") == 0) {
+        /* Multi-device attest: attest ALL CC-capable devices */
+        if (!nvmlDeviceGetAttReport) {
+            fprintf(stderr, "nvmlDeviceGetConfComputeGpuAttestationReport not available\n");
             nvmlShutdown();
             return 4;
         }
+        if (argc < 3) {
+            fprintf(stderr, "usage: nvml_attestation attest-all <hex-nonce>\n");
+            nvmlShutdown();
+            return 1;
+        }
+        if (ccCount == 0) {
+            fprintf(stderr, "no CC-capable GPUs to attest\n");
+            nvmlShutdown();
+            return 3;
+        }
 
-        /* Clamp driver-reported sizes to buffer bounds */
-        if (report.attestationReportSize > sizeof(report.attestationReport))
-            report.attestationReportSize = sizeof(report.attestationReport);
-        if (report.cecAttestationReportSize > sizeof(report.cecAttestationReport))
-            report.cecAttestationReportSize = sizeof(report.cecAttestationReport);
+        uint8_t nonce[32];
+        int nonceLen = hex2bytes(argv[2], nonce, 32);
+        if (nonceLen < 0) {
+            fprintf(stderr, "invalid nonce hex\n");
+            nvmlShutdown();
+            return 1;
+        }
 
-        /* Write: 4-byte LE report size, then report bytes */
-        uint8_t header[4];
-        header[0] = report.attestationReportSize & 0xFF;
-        header[1] = (report.attestationReportSize >> 8) & 0xFF;
-        header[2] = (report.attestationReportSize >> 16) & 0xFF;
-        header[3] = (report.attestationReportSize >> 24) & 0xFF;
-        fwrite(header, 1, 4, stdout);
-        fwrite(report.attestationReport, 1, report.attestationReportSize, stdout);
+        /* Write device count header */
+        write_le32(ccCount);
 
-        /* If CEC report present, append it */
-        if (report.isCecAttestationReportPresent && report.cecAttestationReportSize > 0) {
-            header[0] = report.cecAttestationReportSize & 0xFF;
-            header[1] = (report.cecAttestationReportSize >> 8) & 0xFF;
-            header[2] = (report.cecAttestationReportSize >> 16) & 0xFF;
-            header[3] = (report.cecAttestationReportSize >> 24) & 0xFF;
-            fwrite(header, 1, 4, stdout);
-            fwrite(report.cecAttestationReport, 1, report.cecAttestationReportSize, stdout);
+        int failures = 0;
+        for (uint32_t i = 0; i < ccCount; i++) {
+            if (attest_device(nvmlDeviceGetAttReport, devices[i], deviceIdxs[i], nonce, nonceLen) != 0) {
+                failures++;
+            }
         }
 
         nvmlShutdown();
-        return 0;
+        return failures > 0 ? 4 : 0;
     }
 
     if (strcmp(cmd, "cert") == 0) {
@@ -216,9 +299,17 @@ int main(int argc, char **argv) {
             nvmlShutdown();
             return 4;
         }
+
+        nvmlDevice_t dev = ccCount > 0 ? devices[0] : firstDevice;
+        if (!dev) {
+            fprintf(stderr, "no usable GPU device handle\n");
+            nvmlShutdown();
+            return 3;
+        }
+
         nvmlConfComputeGpuCertificate_t cert;
         memset(&cert, 0, sizeof(cert));
-        ret = nvmlDeviceGetCert(device, &cert);
+        ret = nvmlDeviceGetCert(dev, &cert);
         if (ret != NVML_SUCCESS) {
             fprintf(stderr, "nvmlDeviceGetConfComputeGpuCertificate: %d\n", ret);
             nvmlShutdown();
