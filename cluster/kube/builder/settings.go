@@ -7,7 +7,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 
-	vutil "pkg.akt.dev/node/v2/util/validation"
+	vutil "pkg.akt.dev/node/v3/util/validation"
 )
 
 // IngressMode represents the ingress mode for the cluster.

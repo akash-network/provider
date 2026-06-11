@@ -26,7 +26,7 @@ import (
 
 	"pkg.akt.dev/go/cli"
 	ajwt "pkg.akt.dev/go/util/jwt"
-	cutils "pkg.akt.dev/node/v2/x/cert/utils"
+	cutils "pkg.akt.dev/node/v3/x/cert/utils"
 )
 
 const (

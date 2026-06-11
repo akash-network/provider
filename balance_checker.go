@@ -20,9 +20,9 @@ import (
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"pkg.akt.dev/go/util/pubsub"
-	netutil "pkg.akt.dev/node/v2/util/network"
-	"pkg.akt.dev/node/v2/util/runner"
-	"pkg.akt.dev/node/v2/x/escrow/client/util"
+	netutil "pkg.akt.dev/node/v3/util/network"
+	"pkg.akt.dev/node/v3/util/runner"
+	"pkg.akt.dev/node/v3/x/escrow/client/util"
 
 	"github.com/akash-network/provider/event"
 	"github.com/akash-network/provider/session"

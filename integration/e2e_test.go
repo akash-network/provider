@@ -35,7 +35,7 @@ import (
 	"pkg.akt.dev/go/sdkutil"
 	"pkg.akt.dev/go/util/events"
 	"pkg.akt.dev/go/util/pubsub"
-	"pkg.akt.dev/node/v2/app"
+	"pkg.akt.dev/node/v3/app"
 
 	"github.com/cosmos/cosmos-sdk/crypto/hd"
 	"github.com/cosmos/cosmos-sdk/crypto/keyring"
@@ -51,8 +51,8 @@ import (
 	otypes "pkg.akt.dev/go/node/oracle/v2"
 	ptypes "pkg.akt.dev/go/node/provider/v1beta4"
 	"pkg.akt.dev/go/testutil"
-	nodetestutil "pkg.akt.dev/node/v2/testutil"
-	testnet "pkg.akt.dev/node/v2/testutil/network"
+	nodetestutil "pkg.akt.dev/node/v3/testutil"
+	testnet "pkg.akt.dev/node/v3/testutil/network"
 
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	pcmd "github.com/akash-network/provider/cmd/provider-services/cmd"

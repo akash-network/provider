@@ -15,7 +15,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
-	mquery "pkg.akt.dev/node/v2/x/market/query"
+	mquery "pkg.akt.dev/node/v3/x/market/query"
 )
 
 type contextKey int
