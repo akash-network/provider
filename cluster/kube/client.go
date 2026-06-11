@@ -31,7 +31,7 @@ import (
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
 	"pkg.akt.dev/go/sdl"
-	metricsutils "pkg.akt.dev/node/v2/util/metrics"
+	metricsutils "pkg.akt.dev/node/v3/util/metrics"
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
