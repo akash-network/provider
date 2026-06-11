@@ -142,8 +142,6 @@ const (
 	FlagAttestationWebhookEnabled        = "attestation-webhook-enabled"
 	FlagAttestationWebhookPort           = "attestation-webhook-port"
 	FlagAttestationSidecarImage          = "attestation-sidecar-image"
-	FlagAttestationExpectedMeasurement   = "attestation-expected-measurement"
-	FlagAttestationExpectedImageDigest   = "attestation-expected-image-digest"
 	FlagAttestationMockMode              = "attestation-mock"
 )
 
@@ -797,10 +795,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		gwaddr,
 		cctx.FromAddress,
 		clusterSettings,
-		gwrest.AttestationConfig{
-			ExpectedLaunchMeasurement: viper.GetString(FlagAttestationExpectedMeasurement),
-			ExpectedImageDigest:       viper.GetString(FlagAttestationExpectedImageDigest),
-		},
 	)
 	if err != nil {
 		return err

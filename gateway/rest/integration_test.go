@@ -521,7 +521,7 @@ func withServer(
 ) {
 	addr := sdk.AccAddress(keys[0].PubKey().Address())
 
-	router := newRouter(testutil.Logger(t), addr, pclient, map[interface{}]interface{}{}, AttestationConfig{})
+	router := newRouter(testutil.Logger(t), addr, pclient, map[interface{}]interface{}{})
 
 	pstorage, err := memory.NewMemory()
 	require.NoError(t, err)

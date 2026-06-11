@@ -89,7 +89,7 @@ type wsStreamConfig struct {
 	client    cluster.ReadClient
 }
 
-func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, attestCfg AttestationConfig, middlewares ...mux.MiddlewareFunc) *mux.Router {
+func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxConfig map[interface{}]interface{}, middlewares ...mux.MiddlewareFunc) *mux.Router {
 	router := mux.NewRouter()
 
 	// store provider address in context as a lease's endpoints below need it
@@ -122,14 +122,6 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 	router.HandleFunc("/status",
 		createStatusHandler(log, pclient, addr)).
 		Methods("GET")
-
-	// GET /attestation/directory/{dseq}/{gseq}/{oseq}
-	// Attestation directory, explicitly UNTRUSTED.
-	// Returns advisory routing hints for the attestation sidecar.
-	// Unauthenticated: tenant can use this before establishing a trusted channel.
-	router.HandleFunc("/attestation/directory/{dseq}/{gseq}/{oseq}",
-		createAttestationDirectoryHandler(log, pclient.Cluster(), attestCfg)).
-		Methods(http.MethodGet)
 
 	authedRouter := router.NewRoute().Subrouter()
 	authedRouter.Use(
