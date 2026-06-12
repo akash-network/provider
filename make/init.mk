@@ -80,7 +80,7 @@ endif
 
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 
-AKASHD_MODULE                := pkg.akt.dev/node/v2
+AKASHD_MODULE                := pkg.akt.dev/node/v3
 REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
 AKASHD_SRC_IS_LOCAL          ?= $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
 AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")
