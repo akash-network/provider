@@ -202,6 +202,7 @@ func (s *service) Status(ctx context.Context) (*apclient.ProviderStatus, error) 
 		Bidengine:             bidengineSt,
 		Manifest:              manifestSt,
 		ClusterPublicHostname: s.config.ClusterPublicHostname,
+		ReclamationWindow:     s.config.ReclamationWindow,
 	}, nil
 }
 
@@ -219,9 +220,10 @@ func (s *service) StatusV1(ctx context.Context) (*provider.Status, error) {
 		return nil, err
 	}
 	return &provider.Status{
-		Cluster:   clusterSt,
-		BidEngine: bidengineSt,
-		Manifest:  manifestSt,
+		Cluster:           clusterSt,
+		BidEngine:         bidengineSt,
+		Manifest:          manifestSt,
+		ReclamationWindow: s.config.ReclamationWindow,
 		PublicHostnames: []string{
 			s.config.ClusterPublicHostname,
 		},
@@ -284,6 +286,7 @@ func (s *service) statusRun() {
 	defer bus.Unsub(events)
 
 	status := provider.Status{
+		ReclamationWindow: s.config.ReclamationWindow,
 		PublicHostnames: []string{
 			s.config.ClusterPublicHostname,
 		},
