@@ -261,18 +261,20 @@ func TestStatusPayloadSourcePayloadReturnsCollectorError(t *testing.T) {
 }
 
 func TestResourceSummaryFromClusterSaturatesUint32(t *testing.T) {
+	const maxUint32 = 1<<32 - 1
+
 	cluster := inventoryv1.Cluster{
 		Nodes: inventoryv1.Nodes{
 			{
 				Resources: inventoryv1.NodeResources{
 					CPU: inventoryv1.CPU{
 						Quantity: inventoryv1.ResourcePair{
-							Allocatable: resource.NewMilliQuantity(int64(mathMaxUint32()+1)*1000, resource.DecimalSI),
+							Allocatable: resource.NewMilliQuantity((maxUint32+1)*1000, resource.DecimalSI),
 						},
 					},
 					GPU: inventoryv1.GPU{
 						Quantity: inventoryv1.ResourcePair{
-							Allocatable: resource.NewQuantity(int64(mathMaxUint32()+1), resource.DecimalSI),
+							Allocatable: resource.NewQuantity(maxUint32+1, resource.DecimalSI),
 						},
 					},
 				},
@@ -281,8 +283,8 @@ func TestResourceSummaryFromClusterSaturatesUint32(t *testing.T) {
 	}
 
 	summary := ResourceSummaryFromCluster(cluster, 0, "", nil, nil)
-	require.Equal(t, uint32(mathMaxUint32()), summary.TotalVCPUs)
-	require.Equal(t, uint32(mathMaxUint32()), summary.TotalGPUs)
+	require.Equal(t, uint32(maxUint32), summary.TotalVCPUs)
+	require.Equal(t, uint32(maxUint32), summary.TotalGPUs)
 }
 
 func testSoftwareIdentity() *inventoryv1.SoftwareIdentity {
@@ -340,8 +342,4 @@ func testCluster() inventoryv1.Cluster {
 			},
 		},
 	}
-}
-
-func mathMaxUint32() uint64 {
-	return uint64(^uint32(0))
 }

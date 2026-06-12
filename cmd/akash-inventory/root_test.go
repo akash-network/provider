@@ -58,5 +58,5 @@ func writeFile(t *testing.T, root string, path string, data string) {
 
 	fullPath := filepath.Join(root, path)
 	require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
-	require.NoError(t, os.WriteFile(fullPath, []byte(data), 0o644))
+	require.NoError(t, os.WriteFile(fullPath, []byte(data), 0o600))
 }
