@@ -76,5 +76,5 @@ func runRoot(cmd *cobra.Command, opts rootOptions) error {
 		return err
 	}
 
-	return os.WriteFile(opts.output, payload, 0o644)
+	return os.WriteFile(opts.output, payload, 0o600)
 }

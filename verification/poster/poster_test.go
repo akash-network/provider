@@ -17,6 +17,8 @@ import (
 	aepinventory "github.com/akash-network/provider/verification/inventory"
 )
 
+const testProviderAddress = "akash1provider"
+
 type testPayloadSource struct {
 	payload []byte
 	err     error
@@ -147,12 +149,12 @@ func (s *testStateStore) Get(context.Context) (State, error) {
 	return s.state, s.err
 }
 
-func validSnapshot(t *testing.T, provider string, hash []byte, timestamp time.Time) *aepinventory.Snapshot {
+func validSnapshot(t *testing.T, hash []byte, timestamp time.Time) *aepinventory.Snapshot {
 	t.Helper()
 
 	payload := inventoryv1.SnapshotPayload{
 		SchemaVersion: aepinventory.SnapshotPayloadSchemaVersion,
-		Provider:      provider,
+		Provider:      testProviderAddress,
 		ChainID:       "akashnet-2",
 		Timestamp:     timestamp,
 		ResourceSummary: inventoryv1.SnapshotResourceSummary{
@@ -173,7 +175,7 @@ func validSnapshot(t *testing.T, provider string, hash []byte, timestamp time.Ti
 
 	return &aepinventory.Snapshot{
 		Payload:  payloadBytes,
-		Provider: provider,
+		Provider: testProviderAddress,
 		Hash:     append([]byte(nil), hash...),
 	}
 }
@@ -183,7 +185,7 @@ func TestBuildMsgFromSignedInventorySnapshot(t *testing.T) {
 	softwareIdentity := testInventorySoftwareIdentity()
 	payload := inventoryv1.SnapshotPayload{
 		SchemaVersion: aepinventory.SnapshotPayloadSchemaVersion,
-		Provider:      "akash1provider",
+		Provider:      testProviderAddress,
 		ChainID:       "akashnet-2",
 		Timestamp:     now,
 		ResourceSummary: inventoryv1.SnapshotResourceSummary{
@@ -271,7 +273,7 @@ func TestBuildMsgValidatesSnapshotterAndSnapshot(t *testing.T) {
 		{
 			name: "missing payload",
 			snapshotter: &testSnapshotter{snapshot: &aepinventory.Snapshot{
-				Provider: "akash1provider",
+				Provider: testProviderAddress,
 				Hash:     bytes.Repeat([]byte{1}, 32),
 			}},
 			wantErr: errMissingSnapshotPayload,
@@ -288,7 +290,7 @@ func TestBuildMsgValidatesSnapshotterAndSnapshot(t *testing.T) {
 			name: "missing hash",
 			snapshotter: &testSnapshotter{snapshot: &aepinventory.Snapshot{
 				Payload:  []byte("payload"),
-				Provider: "akash1provider",
+				Provider: testProviderAddress,
 			}},
 			wantErr: errMissingSnapshotHash,
 		},
@@ -306,7 +308,7 @@ func TestBuildMsgValidatesSnapshotterAndSnapshot(t *testing.T) {
 func TestBuildMsgRejectsInvalidSnapshotPayload(t *testing.T) {
 	prepared, err := BuildMsg(context.Background(), &testSnapshotter{snapshot: &aepinventory.Snapshot{
 		Payload:  []byte("not proto"),
-		Provider: "akash1provider",
+		Provider: testProviderAddress,
 		Hash:     bytes.Repeat([]byte{1}, 32),
 	}})
 	require.Error(t, err)
@@ -316,7 +318,7 @@ func TestBuildMsgRejectsInvalidSnapshotPayload(t *testing.T) {
 func TestBuildMsgRejectsMissingSnapshotTimestamp(t *testing.T) {
 	payload := inventoryv1.SnapshotPayload{
 		SchemaVersion: aepinventory.SnapshotPayloadSchemaVersion,
-		Provider:      "akash1provider",
+		Provider:      testProviderAddress,
 		ChainID:       "akashnet-2",
 	}
 	payloadBytes, err := aepinventory.MarshalDeterministic(&payload)
@@ -324,7 +326,7 @@ func TestBuildMsgRejectsMissingSnapshotTimestamp(t *testing.T) {
 
 	prepared, err := BuildMsg(context.Background(), &testSnapshotter{snapshot: &aepinventory.Snapshot{
 		Payload:  payloadBytes,
-		Provider: "akash1provider",
+		Provider: testProviderAddress,
 		Hash:     aepinventory.HashPayload(payloadBytes),
 	}})
 	require.ErrorIs(t, err, errMissingSnapshotTimestamp)
@@ -334,7 +336,7 @@ func TestBuildMsgRejectsMissingSnapshotTimestamp(t *testing.T) {
 func TestBuildMsgRejectsSnapshotNonce(t *testing.T) {
 	payload := inventoryv1.SnapshotPayload{
 		SchemaVersion: aepinventory.SnapshotPayloadSchemaVersion,
-		Provider:      "akash1provider",
+		Provider:      testProviderAddress,
 		ChainID:       "akashnet-2",
 		Nonce:         bytes.Repeat([]byte{1}, aepinventory.NonceSize),
 		Timestamp:     time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC),
@@ -344,7 +346,7 @@ func TestBuildMsgRejectsSnapshotNonce(t *testing.T) {
 
 	prepared, err := BuildMsg(context.Background(), &testSnapshotter{snapshot: &aepinventory.Snapshot{
 		Payload:  payloadBytes,
-		Provider: "akash1provider",
+		Provider: testProviderAddress,
 		Hash:     aepinventory.HashPayload(payloadBytes),
 	}})
 	require.ErrorIs(t, err, errUnexpectedSnapshotNonce)
@@ -373,7 +375,7 @@ func TestShouldPost(t *testing.T) {
 			input: DecisionInput{
 				SnapshotHash: hash,
 				Record: &verificationv1.ProviderSnapshotRecord{
-					Provider:           "akash1provider",
+					Provider:           testProviderAddress,
 					SnapshotHash:       hash,
 					ComplianceDeadline: now.Add(time.Hour),
 					Suspended:          true,
@@ -387,7 +389,7 @@ func TestShouldPost(t *testing.T) {
 			input: DecisionInput{
 				SnapshotHash: hash,
 				Record: &verificationv1.ProviderSnapshotRecord{
-					Provider:           "akash1provider",
+					Provider:           testProviderAddress,
 					SnapshotHash:       bytes.Repeat([]byte{2}, 32),
 					ComplianceDeadline: now.Add(time.Hour),
 				},
@@ -400,7 +402,7 @@ func TestShouldPost(t *testing.T) {
 			input: DecisionInput{
 				SnapshotHash: hash,
 				Record: &verificationv1.ProviderSnapshotRecord{
-					Provider:     "akash1provider",
+					Provider:     testProviderAddress,
 					SnapshotHash: hash,
 				},
 				Now: now,
@@ -412,7 +414,7 @@ func TestShouldPost(t *testing.T) {
 			input: DecisionInput{
 				SnapshotHash: hash,
 				Record: &verificationv1.ProviderSnapshotRecord{
-					Provider:           "akash1provider",
+					Provider:           testProviderAddress,
 					SnapshotHash:       hash,
 					ComplianceDeadline: now.Add(10 * time.Minute),
 				},
@@ -426,7 +428,7 @@ func TestShouldPost(t *testing.T) {
 			input: DecisionInput{
 				SnapshotHash: hash,
 				Record: &verificationv1.ProviderSnapshotRecord{
-					Provider:           "akash1provider",
+					Provider:           testProviderAddress,
 					SnapshotHash:       hash,
 					ComplianceDeadline: now.Add(time.Hour),
 				},
@@ -446,7 +448,7 @@ func TestShouldPost(t *testing.T) {
 
 func TestRunnerRunOncePostsWhenProviderSnapshotMissing(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
-	provider := "akash1provider"
+	provider := testProviderAddress
 	hash := bytes.Repeat([]byte{1}, 32)
 
 	query := &testQueryClient{
@@ -459,7 +461,7 @@ func TestRunnerRunOncePostsWhenProviderSnapshotMissing(t *testing.T) {
 	broadcaster := &testBroadcaster{}
 	state := &testStateStore{}
 	runner, err := NewRunner(RunnerConfig{
-		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, provider, hash, now)},
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, hash, now)},
 		Query:       query,
 		Broadcaster: broadcaster,
 		State:       state,
@@ -498,7 +500,7 @@ func TestRunnerRunOncePostsWhenProviderSnapshotMissing(t *testing.T) {
 
 func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
-	provider := "akash1provider"
+	provider := testProviderAddress
 	hash := bytes.Repeat([]byte{1}, 32)
 
 	query := &testQueryClient{
@@ -515,7 +517,7 @@ func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
 	broadcaster := &testBroadcaster{}
 	state := &testStateStore{}
 	runner, err := NewRunner(RunnerConfig{
-		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, provider, hash, now)},
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, hash, now)},
 		Query:       query,
 		Broadcaster: broadcaster,
 		State:       state,
@@ -539,7 +541,7 @@ func TestRunnerRunOnceSkipsWhenSnapshotHashAndDeadlineUnchanged(t *testing.T) {
 
 func TestRunnerRunOncePostsBeforeDeadlineUsingParamsInterval(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
-	provider := "akash1provider"
+	provider := testProviderAddress
 	hash := bytes.Repeat([]byte{1}, 32)
 
 	query := &testQueryClient{
@@ -555,7 +557,7 @@ func TestRunnerRunOncePostsBeforeDeadlineUsingParamsInterval(t *testing.T) {
 	}
 	broadcaster := &testBroadcaster{}
 	runner, err := NewRunner(RunnerConfig{
-		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, provider, hash, now)},
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, hash, now)},
 		Query:       query,
 		Broadcaster: broadcaster,
 		Now: func() time.Time {
@@ -575,7 +577,7 @@ func TestRunnerRunOnceReturnsBroadcastError(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
 	broadcastErr := errors.New("broadcast failed")
 	runner, err := NewRunner(RunnerConfig{
-		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)},
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, bytes.Repeat([]byte{1}, 32), now)},
 		Query: &testQueryClient{
 			params: verificationv1.Params{VerificationModuleActive: true},
 		},
@@ -629,7 +631,7 @@ func TestNewRunnerValidatesDependencies(t *testing.T) {
 
 func TestRunnerRunOncePostsWhenVerificationModuleInactive(t *testing.T) {
 	now := time.Date(2026, 5, 20, 13, 30, 0, 0, time.UTC)
-	snapshotter := &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)}
+	snapshotter := &testSnapshotter{snapshot: validSnapshot(t, bytes.Repeat([]byte{1}, 32), now)}
 	query := &testQueryClient{
 		params: verificationv1.Params{
 			SnapshotHashInterval:     time.Hour,
@@ -704,7 +706,7 @@ func TestRunnerRunRetriesBoundedFailures(t *testing.T) {
 	}
 
 	runner, err := NewRunner(RunnerConfig{
-		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)},
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, bytes.Repeat([]byte{1}, 32), now)},
 		Query: &testQueryClient{
 			params: verificationv1.Params{VerificationModuleActive: true},
 		},
@@ -738,7 +740,7 @@ func TestRunnerRunContinuesAfterBoundedFailures(t *testing.T) {
 	}
 
 	runner, err := NewRunner(RunnerConfig{
-		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, "akash1provider", bytes.Repeat([]byte{1}, 32), now)},
+		Snapshotter: &testSnapshotter{snapshot: validSnapshot(t, bytes.Repeat([]byte{1}, 32), now)},
 		Query: &testQueryClient{
 			params: verificationv1.Params{VerificationModuleActive: true},
 		},

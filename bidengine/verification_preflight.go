@@ -112,7 +112,7 @@ func verificationAuditorsSatisfied(req *vtypes.VerificationRequirement, attestat
 		}
 	}
 
-	if uint32(len(validAuditors)) < req.GetMinAuditorCount() {
+	if uint64(len(validAuditors)) < uint64(req.GetMinAuditorCount()) {
 		return false
 	}
 
