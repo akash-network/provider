@@ -155,10 +155,13 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 		requireLeaseID,
 	)
 
+	mrouter = lrouter.NewRoute().Subrouter()
+	mrouter.Use(requireEndpointScopeForLeaseID(ajwt.PermissionScopeAttestation))
+
 	// POST /lease/<lease-id>/attestation/quote
 	// Calls the attestation sidecar inside the CC pod via direct K8s pod IP access.
 	// Provider forwards nonce/response verbatim.
-	lrouter.HandleFunc("/attestation/quote",
+	mrouter.HandleFunc("/attestation/quote",
 		createAttestationQuoteHandler(log, pclient.Cluster())).
 		Methods(http.MethodPost)
 
