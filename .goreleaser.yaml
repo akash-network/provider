@@ -338,9 +338,12 @@ dockers:
     use: buildx
     goarch: amd64
     goos: linux
+    extra_files:
+      - sidecar/attestation/nvml-helper/nvml_attestation.c
     build_flag_templates:
       - --pull
       - --platform=linux/amd64
+      - --build-arg=NVML_SRC=sidecar/attestation/nvml-helper/nvml_attestation.c
       - --label=org.opencontainers.image.title=attestation-sidecar
       - --label=org.opencontainers.image.description=TEE attestation sidecar for Akash confidential compute
       - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
