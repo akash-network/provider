@@ -67,7 +67,7 @@ func TestDiscoverInfiniband_NoDevices(t *testing.T) {
 
 func TestDiscoverInfiniband_MissingPath(t *testing.T) {
 	// Pointing at a path that doesn't exist (the common case on
-	// non-RDMA providers) returns zero values without error.
+	// non-interconnect providers) returns zero values without error.
 	got := discoverInfinibandAt("/nonexistent/path/that/does/not/exist")
 	require.Empty(t, got.NCCLIBHCAPrefix)
 	require.Empty(t, got.Fabric)

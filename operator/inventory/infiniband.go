@@ -25,7 +25,7 @@ type IBDiscovery struct {
 
 	// Fabric is "infiniband" or "roce", read from the link_layer of port 1
 	// on the first detected device. Empty when no devices are present.
-	// Surfaced into the provider as NodeCapabilities.RDMAFabric and used
+	// Surfaced into the provider as NodeCapabilities.InterconnectFabric and used
 	// by the inventory client to gate fabric-pinned bids.
 	Fabric string `json:"fabric"`
 }
@@ -33,8 +33,8 @@ type IBDiscovery struct {
 // DiscoverInfinibandFromSysfs walks `/sys/class/infiniband` on the host
 // (via the InfinibandSysfsPath mount) and produces the IBDiscovery payload.
 // Returns a zero-value IBDiscovery when sysfs is absent or unreadable; that
-// is the natural state for non-RDMA nodes and the caller treats it as
-// "this node has no RDMA capability." Errors are reserved for unexpected
+// is the natural state for non-interconnect nodes and the caller treats it as
+// "this node has no interconnect capability." Errors are reserved for unexpected
 // I/O conditions.
 func DiscoverInfinibandFromSysfs() IBDiscovery {
 	return discoverInfinibandAt(InfinibandSysfsPath)

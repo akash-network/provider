@@ -128,17 +128,17 @@ func (b *Workload) container() corev1.Container {
 		kcontainer.Resources.Limits[resourceName] = resource.NewQuantity(int64(gpu.Units.Value()), resource.DecimalSI).DeepCopy()      // nolint: gosec
 	}
 
-	// RDMA HCA extended resource. The reservation Adjust step stamped
-	// `sparams.Resources.RDMA` when the per-service `gpu.attributes.rdma`
-	// opt-in was set and the chosen node advertised RDMA capacity. The
+	// interconnect HCA extended resource. The reservation Adjust step stamped
+	// `sparams.Resources.Interconnect` when the per-service `gpu.attributes.interconnect`
+	// opt-in was set and the chosen node advertised GPU interconnect capacity. The
 	// resource name was harvested by the inventory operator from kubelet
 	// allocatable (e.g. `rdma/rdma_shared_device_ib`); the count is the
 	// 1:1 GPU.Units value pinned at Adjust time. Requests==Limits because
-	// RDMA, like GPU, is an integer kubelet device-plugin resource and
+	// interconnect, like GPU, is an integer kubelet device-plugin resource and
 	// the kubelet rejects mismatched req/limit for those.
-	if rdma := sparamsRDMA(sparams); rdma != nil && rdma.Enabled && rdma.ResourceName != "" {
-		resourceName := corev1.ResourceName(rdma.ResourceName)
-		q := resource.NewQuantity(int64(rdma.Units), resource.DecimalSI).DeepCopy() // nolint: gosec
+	if ic := sparamsInterconnect(sparams); ic != nil && ic.Enabled && ic.ResourceName != "" {
+		resourceName := corev1.ResourceName(ic.ResourceName)
+		q := resource.NewQuantity(int64(ic.Units), resource.DecimalSI).DeepCopy() // nolint: gosec
 		kcontainer.Resources.Requests[resourceName] = q
 		kcontainer.Resources.Limits[resourceName] = q
 	}
@@ -350,32 +350,32 @@ func (b *Workload) affinity() *corev1.Affinity {
 		},
 	}
 
-	// Per-rdma_group anti-affinity. A service that declares
-	// `gpu.attributes.rdma_group` must have its replicas (and any other
+	// Per-interconnect_group anti-affinity. A service that declares
+	// `gpu.attributes.interconnect_group` must have its replicas (and any other
 	// services that share the same group label) land on distinct nodes,
-	// because we allocate one RDMA HCA per GPU per node and peers in a
+	// because we allocate one interconnect HCA per GPU per node and peers in a
 	// group expect a 1:1 GPU:HCA fanout. Requirement (not preference) so
 	// the kube scheduler hard-rejects co-location.
 	//
 	// Scoping the LabelSelector to the same deployment namespace is
 	// implicit — pod affinity is namespace-scoped by default — so two
-	// tenants who happen to both pick `rdma_group: pair0` cannot collide.
+	// tenants who happen to both pick `interconnect_group: pair0` cannot collide.
 	//
-	// AKT-443: the bid engine is also rdma_group-aware now. The chain
-	// SDK serializes `rdma_group` into the on-chain
+	// AKT-443: the bid engine is also interconnect_group-aware now. The chain
+	// SDK serializes `interconnect_group` into the on-chain
 	// Resources.GPU.Attributes (in addition to the off-chain
-	// Service.RDMAGroup field used here), and the provider's reservation
+	// Service.InterconnectGroup field used here), and the provider's reservation
 	// Adjust step tracks per-group node claims and refuses to fit two
 	// peers from the same group on the same node. So the bid declines a
 	// group it can't actually schedule — pods no longer end up Pending
 	// because the bid step accepted what the kube scheduler couldn't.
-	if rg := service.RDMAGroup; rg != "" {
+	if rg := service.InterconnectGroup; rg != "" {
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
 				{
 					LabelSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
-							AkashRDMAGroupLabelName: rg,
+							AkashInterconnectGroupLabelName: rg,
 						},
 					},
 					TopologyKey: "kubernetes.io/hostname",
@@ -434,12 +434,12 @@ func (b *Workload) labels() map[string]string {
 	svc := b.deployment.ManifestGroup().Services[b.serviceIdx]
 	obj[AkashManifestServiceLabelName] = svc.Name
 
-	// Stamp the rdma-group label only for services that opted in to a
+	// Stamp the interconnect-group label only for services that opted in to a
 	// peer group. The pod anti-affinity rule built in affinity() keys
-	// off this label; omitting it on non-RDMA services keeps the label
+	// off this label; omitting it on non-interconnect services keeps the label
 	// space tight and prevents accidental cross-deployment matches.
-	if svc.RDMAGroup != "" {
-		obj[AkashRDMAGroupLabelName] = svc.RDMAGroup
+	if svc.InterconnectGroup != "" {
+		obj[AkashInterconnectGroupLabelName] = svc.InterconnectGroup
 	}
 
 	return obj
@@ -478,30 +478,30 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashProvider, lid.Provider)
 	env = addIfNotPresent(envVarsAlreadyAdded, env, envVarAkashClusterPublicHostname, b.settings.ClusterPublicHostname)
 
-	// NCCL knobs for RDMA workloads. Injected only when the reservation
-	// Adjust step pinned an RDMA HCA for this service. addIfNotPresent
+	// NCCL knobs for interconnect workloads. Injected only when the reservation
+	// Adjust step pinned an interconnect HCA for this service. addIfNotPresent
 	// respects an SDL-supplied override — e.g. a tenant that needs
 	// `NCCL_IB_HCA=mlx5_0,mlx5_1` to pin specific HCAs will set it in
 	// `service.env` and we won't clobber it. NCCL_IB_DISABLE=0 is the
 	// safe default that opts NCCL into IB even when the container image
 	// or base CUDA distro defaulted it off.
-	if rdma := sparamsRDMA(b.sparams[b.serviceIdx]); rdma != nil && rdma.Enabled {
+	if ic := sparamsInterconnect(b.sparams[b.serviceIdx]); ic != nil && ic.Enabled {
 		env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBDisable, "0")
-		if rdma.NCCLHCAPrefix != "" {
-			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBHCA, rdma.NCCLHCAPrefix)
+		if ic.NCCLHCAPrefix != "" {
+			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBHCA, ic.NCCLHCAPrefix)
 		}
 	}
 
 	return env
 }
 
-// sparamsRDMA pulls the per-service RDMA scheduler params off a nullable
-// SchedulerParams chain. Returns nil when the service has no RDMA pin.
-func sparamsRDMA(sparams *crd.SchedulerParams) *crd.SchedulerResourceRDMA {
+// sparamsInterconnect pulls the per-service interconnect scheduler params off a nullable
+// SchedulerParams chain. Returns nil when the service has no interconnect pin.
+func sparamsInterconnect(sparams *crd.SchedulerParams) *crd.SchedulerResourceInterconnect {
 	if sparams == nil || sparams.Resources == nil {
 		return nil
 	}
-	return sparams.Resources.RDMA
+	return sparams.Resources.Interconnect
 }
 
 // getWorkloadPermissions extracts all permission types from the service params

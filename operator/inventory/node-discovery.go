@@ -84,10 +84,10 @@ func newNodeDiscovery(ctx context.Context, name, namespace string, image string,
 // /sys/class mount the IB discovery handler walks. We require the parent
 // to exist (it always does on any Linux host — sysfs is mounted by the
 // kernel) and let the handler tolerate a missing infiniband subdir on
-// non-RDMA nodes. DirectoryOrCreate is not an option here because sysfs
+// non-interconnect nodes. DirectoryOrCreate is not an option here because sysfs
 // is read-only and any mkdir against /sys/* fails — that mode is what
 // caused operator-inventory-hardware-discovery to hang in
-// ContainerCreating in CI on the initial RDMA PR.
+// ContainerCreating in CI on the initial interconnect PR.
 func hostPathDirectoryPtr() *corev1.HostPathType {
 	t := corev1.HostPathDirectory
 	return &t
@@ -134,8 +134,8 @@ func (dp *nodeDiscovery) queryCPU(ctx context.Context) (*cpu.Info, error) {
 
 // queryIB asks the per-node psutil pod to walk /sys/class/infiniband and
 // return the host's HCA prefix + fabric. A zero-valued result means the
-// node has no RDMA hardware (or the DaemonSet pod is missing the sysfs
-// mount); callers treat it as "this node has no RDMA capability."
+// node has no interconnect hardware (or the DaemonSet pod is missing the sysfs
+// mount); callers treat it as "this node has no interconnect capability."
 func (dp *nodeDiscovery) queryIB(ctx context.Context) (*IBDiscovery, error) {
 	respch := make(chan dpReadResp, 1)
 
@@ -786,15 +786,15 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 			EphemeralStorage: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			VolumesAttached:  v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			VolumesMounted:   v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
-			// RDMA capacity is filled in by updateNodeInfo when the kubelet
+			// GPU interconnect capacity is filled in by updateNodeInfo when the kubelet
 			// publishes an rdma/rdma_shared_device_* extended resource.
-			RDMA: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+			GPUInterconnect: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 		},
 		Capabilities: v1.NodeCapabilities{
 			// HCA prefix + fabric come from the per-node sysfs probe via
-			// the psutil pod. Empty strings on non-RDMA nodes.
+			// the psutil pod. Empty strings on non-interconnect nodes.
 			NCCLHCAPrefix: ibInfo.NCCLIBHCAPrefix,
-			RDMAFabric:    ibInfo.Fabric,
+			InterconnectFabric:    ibInfo.Fabric,
 		},
 	}
 
@@ -806,39 +806,39 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 // parseIBInfo asks the per-node psutil pod for the host's InfiniBand /
 // RoCE inventory. A failure is logged but never fatal — the result is a
 // zero-value IBDiscovery, which propagates through the rest of the
-// inventory as "this node has no RDMA capability."
+// inventory as "this node has no interconnect capability."
 func (dp *nodeDiscovery) parseIBInfo(ctx context.Context) IBDiscovery {
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
 	ib, err := dp.queryIB(ctx)
 	if err != nil || ib == nil {
 		if err != nil {
-			log.V(4).Info("unable to query infiniband; treating node as non-RDMA", "err", err.Error())
+			log.V(4).Info("unable to query infiniband; treating node as non-interconnect", "err", err.Error())
 		}
 		return IBDiscovery{}
 	}
 	return *ib
 }
 
-// RDMAResourceNamePrefix is the prefix used by the Mellanox / NVIDIA RDMA
+// InterconnectResourceNamePrefix is the prefix used by the Mellanox / NVIDIA interconnect
 // shared-device plugin when it publishes an extended resource on each
-// RDMA-capable Kubernetes node. The exact name (e.g.
+// interconnect-capable Kubernetes node. The exact name (e.g.
 // `rdma/rdma_shared_device_ib` for InfiniBand-pinned plugins or
 // `rdma/rdma_shared_device_eth` for RoCE-pinned ones) is operator-controlled,
 // so the inventory operator discovers it by prefix-matching rather than
 // hard-coding any particular suffix. The discovered name flows through the
-// inventory snapshot as NodeCapabilities.RDMAResourceName and is the
+// inventory snapshot as NodeCapabilities.InterconnectResourceName and is the
 // resource string the provider's workload builder will inject into
 // container requests/limits.
-const RDMAResourceNamePrefix = "rdma/rdma_shared_device_"
+const InterconnectResourceNamePrefix = "rdma/rdma_shared_device_"
 
-// matchRDMAResourceName returns the resource key from a kubelet
-// allocatable/capacity map that names the RDMA shared device, or empty if
+// matchInterconnectResourceName returns the resource key from a kubelet
+// allocatable/capacity map that names the interconnect shared device, or empty if
 // no such resource is present on the node. The first match wins; mixed
 // fabrics on a single node are explicitly outside spec scope (§7.1).
-func matchRDMAResourceName(quantities corev1.ResourceList) corev1.ResourceName {
+func matchInterconnectResourceName(quantities corev1.ResourceList) corev1.ResourceName {
 	for name := range quantities {
-		if strings.HasPrefix(string(name), RDMAResourceNamePrefix) {
+		if strings.HasPrefix(string(name), InterconnectResourceNamePrefix) {
 			return name
 		}
 	}
@@ -848,14 +848,14 @@ func matchRDMAResourceName(quantities corev1.ResourceList) corev1.ResourceName {
 func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 	// Resolve whichever rdma/rdma_shared_device_* resource the cluster's
 	// device plugin advertises. If the node has no such resource the name
-	// stays empty, RDMA.{Capacity,Allocatable} both stay zero, and the
-	// inventory client treats the node as having no RDMA capability.
-	rdmaResource := matchRDMAResourceName(knode.Status.Allocatable)
-	if rdmaResource == "" {
-		rdmaResource = matchRDMAResourceName(knode.Status.Capacity)
+	// stays empty, interconnect.{Capacity,Allocatable} both stay zero, and the
+	// inventory client treats the node as having no interconnect capability.
+	interconnectResource := matchInterconnectResourceName(knode.Status.Allocatable)
+	if interconnectResource == "" {
+		interconnectResource = matchInterconnectResourceName(knode.Status.Capacity)
 	}
-	if rdmaResource != "" {
-		node.Capabilities.RDMAResourceName = string(rdmaResource)
+	if interconnectResource != "" {
+		node.Capabilities.InterconnectResourceName = string(interconnectResource)
 	}
 
 	for name, r := range knode.Status.Allocatable {
@@ -868,8 +868,8 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
 		case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
-		case rdmaResource != "" && name == rdmaResource:
-			node.Resources.RDMA.Allocatable.Set(r.Value())
+		case interconnectResource != "" && name == interconnectResource:
+			node.Resources.GPUInterconnect.Allocatable.Set(r.Value())
 		}
 	}
 
@@ -883,8 +883,8 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
 			node.Resources.EphemeralStorage.Capacity.Set(r.Value())
 		case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 			node.Resources.GPU.Quantity.Capacity.Set(r.Value())
-		case rdmaResource != "" && name == rdmaResource:
-			node.Resources.RDMA.Capacity.Set(r.Value())
+		case interconnectResource != "" && name == interconnectResource:
+			node.Resources.GPUInterconnect.Capacity.Set(r.Value())
 		}
 	}
 }
@@ -896,11 +896,11 @@ func nodeResetAllocated(node *v1.Node) {
 	node.Resources.EphemeralStorage.Allocated = resource.NewQuantity(0, resource.DecimalSI)
 	node.Resources.VolumesAttached.Allocated = resource.NewQuantity(0, resource.DecimalSI)
 	node.Resources.VolumesMounted.Allocated = resource.NewQuantity(0, resource.DecimalSI)
-	node.Resources.RDMA.Allocated = resource.NewQuantity(0, resource.DecimalSI)
+	node.Resources.GPUInterconnect.Allocated = resource.NewQuantity(0, resource.DecimalSI)
 }
 
 func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
-	rdmaResource := corev1.ResourceName(node.Capabilities.RDMAResourceName)
+	interconnectResource := corev1.ResourceName(node.Capabilities.InterconnectResourceName)
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
 			switch {
@@ -913,11 +913,11 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 			case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 				node.Resources.GPU.Quantity.Allocated.Add(quantity)
 				// GPU overcommit is not allowed, if that happens something is terribly wrong with the inventory
-			case rdmaResource != "" && name == rdmaResource:
-				// RDMA is 1:1 with GPU per the spec; the device plugin
+			case interconnectResource != "" && name == interconnectResource:
+				// interconnect is 1:1 with GPU per the spec; the device plugin
 				// won't admit a pod that asks for more than is allocatable,
 				// so straight accumulation matches the GPU pattern.
-				node.Resources.RDMA.Allocated.Add(quantity)
+				node.Resources.GPUInterconnect.Allocated.Add(quantity)
 			}
 		}
 
@@ -941,7 +941,7 @@ func subAllocatedNLZ(allocated *resource.Quantity, val resource.Quantity) {
 }
 
 func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
-	rdmaResource := corev1.ResourceName(node.Capabilities.RDMAResourceName)
+	interconnectResource := corev1.ResourceName(node.Capabilities.InterconnectResourceName)
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
 			switch {
@@ -953,8 +953,8 @@ func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 				subAllocatedNLZ(node.Resources.EphemeralStorage.Allocated, quantity)
 			case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 				subAllocatedNLZ(node.Resources.GPU.Quantity.Allocated, quantity)
-			case rdmaResource != "" && name == rdmaResource:
-				subAllocatedNLZ(node.Resources.RDMA.Allocated, quantity)
+			case interconnectResource != "" && name == interconnectResource:
+				subAllocatedNLZ(node.Resources.GPUInterconnect.Allocated, quantity)
 			}
 		}
 

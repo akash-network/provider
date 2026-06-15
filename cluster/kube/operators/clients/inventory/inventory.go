@@ -44,27 +44,27 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
 //
-// requiredFabric is the placement-level RDMA fabric pin extracted by the
+// requiredFabric is the placement-level interconnect fabric pin extracted by the
 // caller from `Reservation.Resources()` via PlacementRequiredFabric. Empty
-// string means no fabric pin (any RDMA fabric satisfies the bid); a
-// non-empty value must equal node.Capabilities.RDMAFabric for the bid to
+// string means no fabric pin (any interconnect fabric satisfies the bid); a
+// non-empty value must equal node.Capabilities.InterconnectFabric for the bid to
 // stick. Pulled at the Adjust level so the type-switch only runs once per
 // bid, not once per (node, replica) attempt.
 func (inv *inventory) tryAdjust(
 	node int,
 	res *rtypes.Resources,
 	requiredFabric string,
-	requiresRDMA bool,
-	rdmaGroup string,
+	requiresInterconnect bool,
+	interconnectGroup string,
 	groupClaims map[string]map[int]bool,
 ) (*crd.SchedulerParams, bool, bool) {
-	// AKT-443: enforce per-rdma_group node separation at fit time.
+	// AKT-443: enforce per-interconnect_group node separation at fit time.
 	// Resources sharing a group label must land on distinct nodes (so the
 	// workload builder's pod anti-affinity is satisfiable). Reject the
 	// node early if this group has already claimed it; the surrounding
 	// Adjust loop will then walk to the next node.
-	if rdmaGroup != "" {
-		if claimed, ok := groupClaims[rdmaGroup]; ok && claimed[node] {
+	if interconnectGroup != "" {
+		if claimed, ok := groupClaims[interconnectGroup]; ok && claimed[node] {
 			return nil, false, true
 		}
 	}
@@ -76,11 +76,11 @@ func (inv *inventory) tryAdjust(
 		return nil, false, true
 	}
 
-	// tryAdjustRDMA before tryAdjustGPU so the RDMA stamp lands even if
+	// tryAdjustInterconnect before tryAdjustGPU so the interconnect stamp lands even if
 	// GPU adjust is about to clobber res.GPU.Attributes. We rely on the
-	// caller's `requiresRDMA` flag (pulled from the pristine resource)
+	// caller's `requiresInterconnect` flag (pulled from the pristine resource)
 	// rather than re-reading attributes here — see the helper's doc.
-	if !tryAdjustRDMA(&nd.Resources.RDMA, nd.Capabilities, res, sparams, requiredFabric, requiresRDMA) {
+	if !tryAdjustInterconnect(&nd.Resources.GPUInterconnect, nd.Capabilities, res, sparams, requiredFabric, requiresInterconnect) {
 		return nil, false, true
 	}
 
@@ -144,16 +144,16 @@ func (inv *inventory) tryAdjust(
 	inv.Nodes[node] = nd
 	inv.Storage = storageClasses
 
-	// AKT-443: register this resource's rdma_group claim on the node so
+	// AKT-443: register this resource's interconnect_group claim on the node so
 	// peers in the same group are forced onto distinct nodes by the early
 	// rejection at the top of this function. We register only after all
 	// the per-node-resource gates have passed, so a partial-fit attempt
 	// never poisons the group→nodes map.
-	if rdmaGroup != "" {
-		if groupClaims[rdmaGroup] == nil {
-			groupClaims[rdmaGroup] = map[int]bool{}
+	if interconnectGroup != "" {
+		if groupClaims[interconnectGroup] == nil {
+			groupClaims[interconnectGroup] = map[int]bool{}
 		}
-		groupClaims[rdmaGroup][node] = true
+		groupClaims[interconnectGroup][node] = true
 	}
 
 	if reflect.DeepEqual(sparams, &crd.SchedulerParams{}) {
@@ -247,36 +247,36 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 	return false
 }
 
-// tryAdjustRDMA pins one RDMA HCA per GPU unit (the locked 1:1 invariant)
-// when the per-resource opt-in `gpu.attributes.rdma=true` is set, and
+// tryAdjustInterconnect pins one interconnect HCA per GPU unit (the locked 1:1 invariant)
+// when the per-resource opt-in `gpu.attributes.interconnect=true` is set, and
 // stamps the SchedulerParams the workload builder later turns into a
 // kubelet resource request plus NCCL env vars.
 //
-// Returns true on a no-op (resource does not require RDMA), on a
+// Returns true on a no-op (resource does not require interconnect), on a
 // successful allocation, and false when the node is unsuitable. False
 // here is node-scoped (`nStatus=false` upstream) so the caller will try
 // the next node, not abort the bid.
 //
 // Suitability gates:
 //   - The placement-level fabric pin (if any) matches the node's fabric.
-//   - The node actually advertises an RDMA fabric and a kubelet extended
+//   - The node actually advertises an interconnect fabric and a kubelet extended
 //     resource name (NodeCapabilities from P-1's inventory operator).
-//   - There is RDMA capacity for `gpu.units` HCAs (1:1).
+//   - There is GPU interconnect capacity for `gpu.units` HCAs (1:1).
 //
-// GPU presence is guaranteed by ResourceRequiresRDMA — it only returns
-// true when res.GPU is non-nil with the rdma=true attribute. The
-// chain-SDK SDL parser additionally rejects gpu.units==0 with rdma=true.
-// tryAdjustRDMA takes `required` as an explicit bool instead of
+// GPU presence is guaranteed by ResourceRequiresInterconnect — it only returns
+// true when res.GPU is non-nil with the interconnect=true attribute. The
+// chain-SDK SDL parser additionally rejects gpu.units==0 with interconnect=true.
+// tryAdjustInterconnect takes `required` as an explicit bool instead of
 // re-reading res.GPU.Attributes because tryAdjustGPU clobbers
 // res.Attributes on the FIRST replica's pass (replaces the attribute
 // slice with a single synthesized vendor entry). On replica 2+, the
 // adjusted dup is taken from the already-clobbered slice, so a
-// ResourceRequiresRDMA check here would falsely report "no RDMA needed"
-// and skip the SchedulerParams.Resources.RDMA stamp — the per-replica
+// ResourceRequiresInterconnect check here would falsely report "no interconnect needed"
+// and skip the SchedulerParams.Resources.Interconnect stamp — the per-replica
 // DeepEqual in Adjust would then reject the bid with
 // ErrGroupResourceMismatch. The caller pulls `required` from the
 // pristine origResources once before any mutation runs.
-func tryAdjustRDMA(
+func tryAdjustInterconnect(
 	rp *inventoryV1.ResourcePair,
 	capabilities inventoryV1.NodeCapabilities,
 	res *rtypes.Resources,
@@ -288,11 +288,11 @@ func tryAdjustRDMA(
 		return true
 	}
 
-	if capabilities.RDMAFabric == "" || capabilities.RDMAResourceName == "" {
+	if capabilities.InterconnectFabric == "" || capabilities.InterconnectResourceName == "" {
 		return false
 	}
 
-	if requiredFabric != "" && capabilities.RDMAFabric != requiredFabric {
+	if requiredFabric != "" && capabilities.InterconnectFabric != requiredFabric {
 		return false
 	}
 
@@ -301,11 +301,11 @@ func tryAdjustRDMA(
 	}
 
 	sParamsEnsureResources(sparams)
-	sparams.Resources.RDMA = &crd.SchedulerResourceRDMA{
+	sparams.Resources.Interconnect = &crd.SchedulerResourceInterconnect{
 		Enabled:       true,
 		Units:         res.GPU.Units.Value(),
-		ResourceName:  capabilities.RDMAResourceName,
-		Fabric:        capabilities.RDMAFabric,
+		ResourceName:  capabilities.InterconnectResourceName,
+		Fabric:        capabilities.InterconnectFabric,
 		NCCLHCAPrefix: capabilities.NCCLHCAPrefix,
 	}
 
@@ -347,28 +347,28 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 
 	currInventory := inv.dup()
 
-	// Extract the deployment-group's RDMA fabric pin once. tryAdjust
+	// Extract the deployment-group's interconnect fabric pin once. tryAdjust
 	// consults it per (node, replica) attempt; computing it here keeps the
 	// ResourceGroup type-switch off the hot path.
 	requiredFabric, _ := PlacementRequiredFabric(reservation.Resources())
 
-	// Per-resource RDMA-required flags. Read from origResources because
+	// Per-resource interconnect-required flags. Read from origResources because
 	// tryAdjustGPU mutates res.GPU.Attributes on each pass, dropping the
-	// `rdma: true` opt-in. For services with count > 1 the second-and-
+	// `interconnect: true` opt-in. For services with count > 1 the second-and-
 	// later replica's adjusted slice is a Dup of the already-clobbered
-	// state, so re-reading attributes inside tryAdjustRDMA would falsely
-	// report "no RDMA needed." Computed once here, threaded through.
-	requiresRDMA := make([]bool, len(origResources))
-	// AKT-443: per-resource rdma_group label, same pristine-source story
-	// as requiresRDMA. tryAdjustGPU clobbers Attributes; reading the
+	// state, so re-reading attributes inside tryAdjustInterconnect would falsely
+	// report "no interconnect needed." Computed once here, threaded through.
+	requiresInterconnect := make([]bool, len(origResources))
+	// AKT-443: per-resource interconnect_group label, same pristine-source story
+	// as requiresInterconnect. tryAdjustGPU clobbers Attributes; reading the
 	// group label later would race that mutation. Computed once here.
-	rdmaGroup := make([]string, len(origResources))
+	interconnectGroup := make([]string, len(origResources))
 	for i := range origResources {
-		requiresRDMA[i] = ResourceRequiresRDMA(origResources[i].Resources)
-		rdmaGroup[i] = ResourceRDMAGroup(origResources[i].Resources)
+		requiresInterconnect[i] = ResourceRequiresInterconnect(origResources[i].Resources)
+		interconnectGroup[i] = ResourceInterconnectGroup(origResources[i].Resources)
 	}
 
-	// AKT-443: per-rdma_group set of node indices already claimed in this
+	// AKT-443: per-interconnect_group set of node indices already claimed in this
 	// bid attempt. Scoped to this Adjust call (one bid) so two unrelated
 	// orders cannot interfere. A successful tryAdjust commits the entry;
 	// a rejection on any subsequent gate never touches it.
@@ -391,7 +391,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric, requiresRDMA[i], rdmaGroup[i], groupClaims)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric, requiresInterconnect[i], interconnectGroup[i], groupClaims)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes

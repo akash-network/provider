@@ -11,10 +11,10 @@ import (
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
-// stampRDMA mutates the workload's per-service state to simulate the
-// post-reservation pin: the SchedulerParams that tryAdjustRDMA stamps and
-// the RDMAGroup label that the SDL parser preserves on
-// `mani.Service.RDMAGroup`. We poke directly instead of going through SDL
+// stampinterconnect mutates the workload's per-service state to simulate the
+// post-reservation pin: the SchedulerParams that tryAdjustInterconnect stamps and
+// the InterconnectGroup label that the SDL parser preserves on
+// `mani.Service.InterconnectGroup`. We poke directly instead of going through SDL
 // fixtures so we can drive every (with/without group, with/without env
 // override) permutation without proliferating yaml files.
 //
@@ -23,16 +23,16 @@ import (
 // container()/affinity() read b.group; labels() reads
 // b.deployment.ManifestGroup(). Mutate both so the test exercises the
 // real call paths.
-func stampRDMA(b *Workload, group string, sparams *crd.SchedulerParams) {
+func stampinterconnect(b *Workload, group string, sparams *crd.SchedulerParams) {
 	b.sparams[b.serviceIdx] = sparams
-	b.group.Services[b.serviceIdx].RDMAGroup = group
-	b.deployment.ManifestGroup().Services[b.serviceIdx].RDMAGroup = group
+	b.group.Services[b.serviceIdx].InterconnectGroup = group
+	b.deployment.ManifestGroup().Services[b.serviceIdx].InterconnectGroup = group
 }
 
-func rdmaParams() *crd.SchedulerParams {
+func interconnectParams() *crd.SchedulerParams {
 	return &crd.SchedulerParams{
 		Resources: &crd.SchedulerResources{
-			RDMA: &crd.SchedulerResourceRDMA{
+			Interconnect: &crd.SchedulerResourceInterconnect{
 				Enabled:       true,
 				Units:         1,
 				ResourceName:  "rdma/rdma_shared_device_ib",
@@ -43,11 +43,11 @@ func rdmaParams() *crd.SchedulerParams {
 	}
 }
 
-func TestWorkloadInjectsRDMAResourceAndNCCLEnv(t *testing.T) {
+func TestWorkloadInjectsinterconnectResourceAndNCCLEnv(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
-	stampRDMA(workload, "", rdmaParams())
+	stampinterconnect(workload, "", interconnectParams())
 
 	container := workload.container()
 
@@ -72,7 +72,7 @@ func TestWorkloadRespectsSDLNCCLOverride(t *testing.T) {
 	workload.group.Services[workload.serviceIdx].Env = []string{
 		"NCCL_IB_HCA=mlx5_0,mlx5_1",
 	}
-	stampRDMA(workload, "", rdmaParams())
+	stampinterconnect(workload, "", interconnectParams())
 
 	container := workload.container()
 	env := envMap(container.Env)
@@ -80,7 +80,7 @@ func TestWorkloadRespectsSDLNCCLOverride(t *testing.T) {
 	require.Equal(t, "0", env[envVarNCCLIBDisable])
 }
 
-func TestWorkloadNoRDMANoEnvNoResource(t *testing.T) {
+func TestWorkloadNointerconnectNoEnvNoResource(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
@@ -89,38 +89,38 @@ func TestWorkloadNoRDMANoEnvNoResource(t *testing.T) {
 
 	_, hasDisable := env[envVarNCCLIBDisable]
 	_, hasHCA := env[envVarNCCLIBHCA]
-	require.False(t, hasDisable, "no NCCL_IB_DISABLE without RDMA pin")
-	require.False(t, hasHCA, "no NCCL_IB_HCA without RDMA pin")
-	_, hasRDMA := container.Resources.Limits[corev1.ResourceName("rdma/rdma_shared_device_ib")]
-	require.False(t, hasRDMA, "no rdma resource without RDMA pin")
+	require.False(t, hasDisable, "no NCCL_IB_DISABLE without interconnect pin")
+	require.False(t, hasHCA, "no NCCL_IB_HCA without interconnect pin")
+	_, hasInterconnect := container.Resources.Limits[corev1.ResourceName("rdma/rdma_shared_device_ib")]
+	require.False(t, hasInterconnect, "no interconnect resource without interconnect pin")
 }
 
-func TestWorkloadRDMAGroupAddsLabelAndAntiAffinity(t *testing.T) {
+func TestWorkloadInterconnectGroupAddsLabelAndAntiAffinity(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
-	stampRDMA(workload, "pair0", rdmaParams())
+	stampinterconnect(workload, "pair0", interconnectParams())
 
 	labels := workload.labels()
-	require.Equal(t, "pair0", labels[AkashRDMAGroupLabelName])
+	require.Equal(t, "pair0", labels[AkashInterconnectGroupLabelName])
 
 	aff := workload.affinity()
 	require.NotNil(t, aff.PodAntiAffinity)
 	require.Len(t, aff.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution, 1)
 	term := aff.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution[0]
 	require.Equal(t, "kubernetes.io/hostname", term.TopologyKey)
-	require.Equal(t, "pair0", term.LabelSelector.MatchLabels[AkashRDMAGroupLabelName])
+	require.Equal(t, "pair0", term.LabelSelector.MatchLabels[AkashInterconnectGroupLabelName])
 }
 
-func TestWorkloadNoRDMAGroupNoAntiAffinity(t *testing.T) {
+func TestWorkloadNoInterconnectGroupNoAntiAffinity(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
-	// Has RDMA pin but no group label — single-node RDMA workload.
-	stampRDMA(workload, "", rdmaParams())
+	// Has interconnect pin but no group label — single-node interconnect workload.
+	stampinterconnect(workload, "", interconnectParams())
 
 	labels := workload.labels()
-	_, hasLabel := labels[AkashRDMAGroupLabelName]
+	_, hasLabel := labels[AkashInterconnectGroupLabelName]
 	require.False(t, hasLabel)
 
 	aff := workload.affinity()

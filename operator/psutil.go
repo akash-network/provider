@@ -222,9 +222,9 @@ func pciHandler(w http.ResponseWriter, _ *http.Request) {
 
 // infinibandHandler returns the host's InfiniBand / RoCE inventory by
 // walking /sys/class/infiniband mounted under invoperator.InfinibandSysfsPath.
-// Hosts without RDMA hardware (or DaemonSet pods missing the sysfs mount)
-// return a zero-valued IBDiscovery — the natural "no RDMA" signal. The
-// nodeDiscovery client interprets that as "this node has no RDMA capability"
+// Hosts without interconnect hardware (or DaemonSet pods missing the sysfs mount)
+// return a zero-valued IBDiscovery — the natural "no interconnect" signal. The
+// nodeDiscovery client interprets that as "this node has no interconnect capability"
 // and never panics, so it is safe to always expose this endpoint.
 func infinibandHandler(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, invoperator.DiscoverInfinibandFromSysfs())

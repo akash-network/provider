@@ -10,19 +10,19 @@ import (
 	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 )
 
-func TestResourceRequiresRDMA(t *testing.T) {
+func TestResourceRequiresInterconnect(t *testing.T) {
 	tests := []struct {
 		name string
 		res  rtypes.Resources
 		want bool
 	}{
 		{
-			name: "nil GPU never requires RDMA",
+			name: "nil GPU never requires interconnect",
 			res:  rtypes.Resources{},
 			want: false,
 		},
 		{
-			name: "GPU without rdma=true attribute does not require",
+			name: "GPU without interconnect=true attribute does not require",
 			res: rtypes.Resources{
 				GPU: &rtypes.GPU{
 					Units: rtypes.NewResourceValue(8),
@@ -34,25 +34,25 @@ func TestResourceRequiresRDMA(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "GPU with rdma=true requires RDMA",
+			name: "GPU with interconnect=true requires interconnect",
 			res: rtypes.Resources{
 				GPU: &rtypes.GPU{
 					Units: rtypes.NewResourceValue(8),
 					Attributes: attrtypes.Attributes{
 						{Key: "vendor/nvidia/model/a100", Value: "true"},
-						{Key: AttributeGPURDMAKey, Value: "true"},
+						{Key: AttributeGPUInterconnectKey, Value: "true"},
 					},
 				},
 			},
 			want: true,
 		},
 		{
-			name: "GPU with rdma=false does not require",
+			name: "GPU with interconnect=false does not require",
 			res: rtypes.Resources{
 				GPU: &rtypes.GPU{
 					Units: rtypes.NewResourceValue(8),
 					Attributes: attrtypes.Attributes{
-						{Key: AttributeGPURDMAKey, Value: "false"},
+						{Key: AttributeGPUInterconnectKey, Value: "false"},
 					},
 				},
 			},
@@ -61,16 +61,16 @@ func TestResourceRequiresRDMA(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, ResourceRequiresRDMA(tc.res))
+			require.Equal(t, tc.want, ResourceRequiresInterconnect(tc.res))
 		})
 	}
 }
 
-// rdmaGroupSpec returns a representative GroupSpec carrying the placement
+// interconnectGroupSpec returns a representative GroupSpec carrying the placement
 // attributes the test rows want.
-func rdmaGroupSpec(attrs attrtypes.Attributes) dvbeta.GroupSpec {
+func interconnectGroupSpec(attrs attrtypes.Attributes) dvbeta.GroupSpec {
 	return dvbeta.GroupSpec{
-		Name: "rdma",
+		Name: "interconnect",
 		Requirements: attrtypes.PlacementRequirements{
 			Attributes: attrs,
 		},
@@ -81,16 +81,16 @@ func rdmaGroupSpec(attrs attrtypes.Attributes) dvbeta.GroupSpec {
 // concrete ResourceGroup the provider's bid path may produce. We pin all
 // four explicitly here so a future refactor that drops a case fails loud.
 func TestPlacementRequiredFabric_AllConcreteTypes(t *testing.T) {
-	ibSpec := rdmaGroupSpec(attrtypes.Attributes{
-		{Key: AttributeRDMAPlacement, Value: "true"},
-		{Key: AttributeRDMAFabricInfiniBand, Value: "true"},
+	ibSpec := interconnectGroupSpec(attrtypes.Attributes{
+		{Key: AttributeInterconnectPlacement, Value: "true"},
+		{Key: AttributeInterconnectFabricInfiniBand, Value: "true"},
 	})
-	roceSpec := rdmaGroupSpec(attrtypes.Attributes{
-		{Key: AttributeRDMAPlacement, Value: "true"},
-		{Key: AttributeRDMAFabricRoCE, Value: "true"},
+	roceSpec := interconnectGroupSpec(attrtypes.Attributes{
+		{Key: AttributeInterconnectPlacement, Value: "true"},
+		{Key: AttributeInterconnectFabricRoCE, Value: "true"},
 	})
-	noPinSpec := rdmaGroupSpec(attrtypes.Attributes{
-		{Key: AttributeRDMAPlacement, Value: "true"},
+	noPinSpec := interconnectGroupSpec(attrtypes.Attributes{
+		{Key: AttributeInterconnectPlacement, Value: "true"},
 	})
 
 	type tc struct {
@@ -110,7 +110,7 @@ func TestPlacementRequiredFabric_AllConcreteTypes(t *testing.T) {
 		{"Group roce", dvbeta.Group{GroupSpec: roceSpec}, "roce", true},
 		{"*GroupSpec roce", &roceSpec, "roce", true},
 		{"GroupSpec roce", roceSpec, "roce", true},
-		// No fabric pin (just capabilities/rdma=true) reports no fabric.
+		// No fabric pin (just capabilities/gpu-interconnect=true) reports no fabric.
 		{"*Group no-pin", &dvbeta.Group{GroupSpec: noPinSpec}, "", false},
 		{"GroupSpec no-pin", noPinSpec, "", false},
 	}
@@ -123,22 +123,22 @@ func TestPlacementRequiredFabric_AllConcreteTypes(t *testing.T) {
 	}
 }
 
-func TestPlacementRequiresRDMA(t *testing.T) {
-	withRDMA := rdmaGroupSpec(attrtypes.Attributes{
-		{Key: AttributeRDMAPlacement, Value: "true"},
+func TestPlacementRequiresInterconnect(t *testing.T) {
+	withInterconnect := interconnectGroupSpec(attrtypes.Attributes{
+		{Key: AttributeInterconnectPlacement, Value: "true"},
 	})
-	withoutRDMA := rdmaGroupSpec(attrtypes.Attributes{
+	withoutinterconnect := interconnectGroupSpec(attrtypes.Attributes{
 		{Key: "capabilities/gpu/vendor/nvidia", Value: "true"},
 	})
-	rdmaFalse := rdmaGroupSpec(attrtypes.Attributes{
-		{Key: AttributeRDMAPlacement, Value: "false"},
+	interconnectFalse := interconnectGroupSpec(attrtypes.Attributes{
+		{Key: AttributeInterconnectPlacement, Value: "false"},
 	})
 
-	require.True(t, PlacementRequiresRDMA(&dvbeta.Group{GroupSpec: withRDMA}))
-	require.True(t, PlacementRequiresRDMA(withRDMA))
-	require.True(t, PlacementRequiresRDMA(&withRDMA))
+	require.True(t, PlacementRequiresInterconnect(&dvbeta.Group{GroupSpec: withInterconnect}))
+	require.True(t, PlacementRequiresInterconnect(withInterconnect))
+	require.True(t, PlacementRequiresInterconnect(&withInterconnect))
 
-	require.False(t, PlacementRequiresRDMA(&dvbeta.Group{GroupSpec: withoutRDMA}))
-	require.False(t, PlacementRequiresRDMA(withoutRDMA))
-	require.False(t, PlacementRequiresRDMA(rdmaFalse))
+	require.False(t, PlacementRequiresInterconnect(&dvbeta.Group{GroupSpec: withoutinterconnect}))
+	require.False(t, PlacementRequiresInterconnect(withoutinterconnect))
+	require.False(t, PlacementRequiresInterconnect(interconnectFalse))
 }

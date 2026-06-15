@@ -231,7 +231,7 @@ spec:
                                       memory_size:
                                         type: string
                                         format: uint64
-                                  rdma:
+                                  interconnect:
                                     type: object
                                     nullable: true
                                     properties:
@@ -246,7 +246,7 @@ spec:
                                         type: string
                                       nccl_hca_prefix:
                                         type: string
-                          rdma_group:
+                          interconnect_group:
                             type: string
                           credentials:
                             type: object

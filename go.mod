@@ -51,11 +51,11 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.2.13-rc3
-	pkg.akt.dev/go/cli v0.2.2
-	pkg.akt.dev/go/sdl v0.2.2-rc3
+	pkg.akt.dev/go v0.2.14
+	pkg.akt.dev/go/cli v0.2.4
+	pkg.akt.dev/go/sdl v0.2.2
 	pkg.akt.dev/node v1.2.2
-	pkg.akt.dev/node/v2 v2.1.0-rc10
+	pkg.akt.dev/node/v2 v2.1.0
 	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
@@ -105,6 +105,16 @@ replace (
 	github.com/googleapis/gnostic => github.com/googleapis/gnostic v0.4.1
 	github.com/kubernetes-incubator/external-storage => github.com/libopenstorage/external-storage v0.20.4-openstorage-rc3
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v0.20.4-openstorage-rc3
+)
+
+// Pin pkg.akt.dev/go + sdl to the rc4 pre-release that carries the
+// RDMA → GPU interconnect rename. Without these `replace` directives,
+// MVS picks pkg.akt.dev/node/v2's transitive v0.2.14 / v0.2.2 stable
+// dependencies (which predate the rename) and the provider fails to
+// compile against the renamed identifiers.
+replace (
+	pkg.akt.dev/go => pkg.akt.dev/go v0.2.13-rc4
+	pkg.akt.dev/go/sdl => pkg.akt.dev/go/sdl v0.2.2-rc4
 )
 
 require (
