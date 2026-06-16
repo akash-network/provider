@@ -39,7 +39,7 @@ func TestDiscoverInfiniband_InfiniBand8Port(t *testing.T) {
 	})
 
 	got := discoverInfinibandAt(root)
-	require.Equal(t, "mlx5", got.NCCLIBHCAPrefix)
+	require.Equal(t, []string{"mlx5"}, got.NCCLIBHCAPrefixes)
 	require.Equal(t, "infiniband", got.Fabric)
 }
 
@@ -51,8 +51,24 @@ func TestDiscoverInfiniband_RoCE(t *testing.T) {
 	})
 
 	got := discoverInfinibandAt(root)
-	require.Equal(t, "mlx5", got.NCCLIBHCAPrefix)
+	require.Equal(t, []string{"mlx5"}, got.NCCLIBHCAPrefixes)
 	require.Equal(t, "roce", got.Fabric)
+}
+
+// AKT-492: mixed-vendor hosts publish every distinct HCA family rather than
+// reducing to a shared character prefix. NCCL accepts a comma-separated
+// list directly, so the workload builder can plumb both families through.
+func TestDiscoverInfiniband_MixedVendor(t *testing.T) {
+	root := fakeIBNode(t, map[string]string{
+		"mlx5_0":   "InfiniBand",
+		"mlx5_1":   "InfiniBand",
+		"bnxt_re0": "InfiniBand",
+		"bnxt_re1": "InfiniBand",
+	})
+
+	got := discoverInfinibandAt(root)
+	require.ElementsMatch(t, []string{"mlx5", "bnxt_re"}, got.NCCLIBHCAPrefixes)
+	require.Equal(t, "infiniband", got.Fabric)
 }
 
 func TestDiscoverInfiniband_NoDevices(t *testing.T) {
@@ -61,7 +77,7 @@ func TestDiscoverInfiniband_NoDevices(t *testing.T) {
 	root := t.TempDir()
 
 	got := discoverInfinibandAt(root)
-	require.Empty(t, got.NCCLIBHCAPrefix)
+	require.Empty(t, got.NCCLIBHCAPrefixes)
 	require.Empty(t, got.Fabric)
 }
 
@@ -69,7 +85,7 @@ func TestDiscoverInfiniband_MissingPath(t *testing.T) {
 	// Pointing at a path that doesn't exist (the common case on
 	// non-interconnect providers) returns zero values without error.
 	got := discoverInfinibandAt("/nonexistent/path/that/does/not/exist")
-	require.Empty(t, got.NCCLIBHCAPrefix)
+	require.Empty(t, got.NCCLIBHCAPrefixes)
 	require.Empty(t, got.Fabric)
 }
 
@@ -82,7 +98,7 @@ func TestDiscoverInfiniband_UnknownLinkLayer(t *testing.T) {
 	})
 
 	got := discoverInfinibandAt(root)
-	require.Equal(t, "mlx5", got.NCCLIBHCAPrefix, "prefix is still derivable")
+	require.Equal(t, []string{"mlx5"}, got.NCCLIBHCAPrefixes, "prefix is still derivable")
 	require.Empty(t, got.Fabric, "unknown link_layer reports empty fabric")
 }
 
@@ -93,25 +109,28 @@ func TestDiscoverInfiniband_MissingLinkLayerFile(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "mlx5_0", "ports", "1"), 0o755))
 
 	got := discoverInfinibandAt(root)
-	require.Equal(t, "mlx5", got.NCCLIBHCAPrefix)
+	require.Equal(t, []string{"mlx5"}, got.NCCLIBHCAPrefixes)
 	require.Empty(t, got.Fabric)
 }
 
-func TestNCCLHCAPrefixOf(t *testing.T) {
+func TestNCCLHCAPrefixesOf(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    []string
-		expected string
+		expected []string
 	}{
-		{"single mlx5_0", []string{"mlx5_0"}, "mlx5"},
-		{"all mlx5", []string{"mlx5_0", "mlx5_1", "mlx5_7"}, "mlx5"},
-		{"mixed mlx4 + mlx5 share mlx", []string{"mlx4_0", "mlx5_0"}, "mlx"},
-		{"no shared prefix", []string{"mlx5_0", "ib0"}, ""},
-		{"empty input", []string{}, ""},
+		// Real /sys/class/infiniband entries always carry an instance
+		// index (`mlx5_0`, `bnxt_re0`, etc.) — bare family-name entries
+		// don't exist in production, so we don't test that shape.
+		{"single mlx5_0", []string{"mlx5_0"}, []string{"mlx5"}},
+		{"all mlx5", []string{"mlx5_0", "mlx5_1", "mlx5_7"}, []string{"mlx5"}},
+		{"two distinct families with separator-style indexes", []string{"mlx5_0", "bnxt_re0"}, []string{"mlx5", "bnxt_re"}},
+		{"legacy ib<n> naming strips trailing digit", []string{"ib0", "ib1"}, []string{"ib"}},
+		{"empty input", []string{}, nil},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, nccLHCAPrefixOf(tc.input))
+			require.Equal(t, tc.expected, nccLHCAPrefixesOf(tc.input))
 		})
 	}
 }

@@ -16,12 +16,14 @@ const InfinibandSysfsPath = "/host/sys/class/infiniband"
 // `/infiniband`. Both fields are empty when the host has no IB devices or
 // when the DaemonSet pod was started without the sysfs mount.
 type IBDiscovery struct {
-	// NCCLIBHCAPrefix is the common device-name prefix under
-	// /sys/class/infiniband — `mlx5` for ConnectX-6/7. Empty when no
-	// devices are present or when device names do not share a prefix.
-	// Surfaced into the provider as NodeCapabilities.NCCLHCAPrefix and
-	// injected by the workload builder as NCCL_IB_HCA.
-	NCCLIBHCAPrefix string `json:"nccl_ib_hca_prefix"`
+	// NCCLIBHCAPrefixes is every distinct HCA device-name family present
+	// under /sys/class/infiniband — e.g. ["mlx5"] on a uniform Mellanox
+	// host or ["mlx5","bnxt_re"] on a mixed-vendor node. Empty when no
+	// devices are present. Surfaced into the provider as
+	// NodeCapabilities.NCCLHCAPrefixes and joined with `,` by the
+	// workload builder as NCCL_IB_HCA (NCCL accepts comma-separated
+	// device prefixes natively).
+	NCCLIBHCAPrefixes []string `json:"nccl_ib_hca_prefixes"`
 
 	// Fabric is "infiniband" or "roce", read from the link_layer of port 1
 	// on the first detected device. Empty when no devices are present.
@@ -55,48 +57,69 @@ func discoverInfinibandAt(root string) IBDiscovery {
 	}
 
 	return IBDiscovery{
-		NCCLIBHCAPrefix: nccLHCAPrefixOf(names),
-		Fabric:          fabricOfFirstHCA(root, names),
+		NCCLIBHCAPrefixes: nccLHCAPrefixesOf(names),
+		Fabric:            fabricOfFirstHCA(root, names),
 	}
 }
 
-// nccLHCAPrefixOf returns the HCA family prefix shared by every device
-// name. For ConnectX-6/7 devices named `mlx5_0, mlx5_1, mlx5_2` this is
-// `mlx5` (5 is the HCA family, the `_<n>` suffix is the instance index).
-// We stop at the family/instance separator (`_` or `.`) so NCCL receives
-// the family prefix it matches `NCCL_IB_HCA` against. Returns the empty
-// string when the inputs do not share a family prefix.
-func nccLHCAPrefixOf(names []string) string {
+// nccLHCAPrefixesOf returns every distinct HCA family prefix among the
+// device names. For ConnectX-6/7 devices named `mlx5_0, mlx5_1, mlx5_2`
+// this is ["mlx5"]; on a mixed-vendor host with `mlx5_0, bnxt_re0` it
+// returns ["mlx5","bnxt_re"]. We stop at the family/instance separator
+// (`_` or `.`) so NCCL receives the family prefix it matches
+// `NCCL_IB_HCA` against. Returns nil when the input is empty.
+// Output order is deterministic (first-seen order in the input slice).
+func nccLHCAPrefixesOf(names []string) []string {
 	if len(names) == 0 {
-		return ""
+		return nil
 	}
 
-	prefix := familyPrefix(names[0])
-	for _, n := range names[1:] {
-		other := familyPrefix(n)
-		i := 0
-		for i < len(prefix) && i < len(other) && prefix[i] == other[i] {
-			i++
+	seen := make(map[string]struct{}, len(names))
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		p := familyPrefix(n)
+		if p == "" {
+			continue
 		}
-		prefix = prefix[:i]
-		if prefix == "" {
-			return ""
+		if _, ok := seen[p]; ok {
+			continue
 		}
+		seen[p] = struct{}{}
+		out = append(out, p)
 	}
-	return prefix
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
-// familyPrefix returns the HCA family portion of a device name — everything
-// up to (but not including) the first family/instance separator. Real-world
-// Mellanox HCAs use `_` (`mlx5_0`); we also treat `.` defensively in case
-// some future vendor uses a different separator.
+// familyPrefix returns the HCA family portion of a device name by
+// stripping the trailing instance index (and the optional `_` separator
+// preceding it). Examples:
+//
+//   - `mlx5_0`    → `mlx5`     (Mellanox ConnectX, `_<n>` instance)
+//   - `bnxt_re0`  → `bnxt_re`  (Broadcom RoCE, no separator before index)
+//   - `ib0`       → `ib`       (legacy generic IB interface)
+//   - `mlx5`      → `mlx5`     (no instance suffix; unchanged)
+//
+// Vendors don't share a universal naming convention beyond
+// `<family><instance-digits>` — splitting on `_` would incorrectly
+// chop `bnxt_re` down to `bnxt` and conflate it with `bnxt_en`. So we
+// trim from the right: drop the digit run, then optionally drop a
+// single `_` separator if one sits between the digits and the family.
 func familyPrefix(s string) string {
-	for i := 0; i < len(s); i++ {
-		if s[i] == '_' || s[i] == '.' {
-			return s[:i]
-		}
+	end := len(s)
+	for end > 0 && s[end-1] >= '0' && s[end-1] <= '9' {
+		end--
 	}
-	return s
+	if end == len(s) {
+		// No trailing digits — name is already the family (or has no instance index).
+		return s
+	}
+	if end > 0 && s[end-1] == '_' {
+		end--
+	}
+	return s[:end]
 }
 
 // fabricOfFirstHCA reads `<root>/<first device>/ports/1/link_layer` and

@@ -244,8 +244,10 @@ spec:
                                         type: string
                                       fabric:
                                         type: string
-                                      nccl_hca_prefix:
-                                        type: string
+                                      nccl_hca_prefixes:
+                                        type: array
+                                        items:
+                                          type: string
                           interconnect_group:
                             type: string
                           credentials:

@@ -26,36 +26,34 @@ const (
 	AttributeInterconnectFabricInfiniBand = "capabilities/gpu-interconnect/fabric/infiniband"
 	AttributeInterconnectFabricRoCE       = "capabilities/gpu-interconnect/fabric/roce"
 
-	// AttributeGPUInterconnectKey is the per-resource GPU attribute the chain SDK
-	// emits when an SDL profile sets `gpu.attributes.interconnect: true`. The
-	// inventory client reads it off `Resources.GPU.Attributes` to decide
-	// whether to allocate an interconnect HCA for that resource.
-	AttributeGPUInterconnectKey = "interconnect"
-
-	// AttributeGPUInterconnectGroupKey is the per-resource GPU attribute the chain
-	// SDK emits when an SDL profile sets `gpu.attributes.interconnect_group: <name>`.
-	// Carries the peer-group label end-to-end so the bid engine's Adjust
-	// step can enforce per-group node separation (AKT-443). The same value
-	// is also surfaced on the off-chain Service.InterconnectGroup so the workload
-	// builder can label pods for anti-affinity.
-	AttributeGPUInterconnectGroupKey = "interconnect_group"
+	// AttributeGPUInterconnectGroupKey is the per-resource GPU attribute
+	// the chain SDK emits for every interconnect-enabled resource (rc5
+	// SDL form). Its presence — regardless of value — signals "this
+	// resource wants GPU interconnect"; the value is the peer-group
+	// label the bid engine's Adjust step uses to enforce per-group node
+	// separation (AKT-443). The same value is surfaced on the off-chain
+	// Service.InterconnectGroup so the workload builder can label pods
+	// for anti-affinity. The slash-path key matches the existing
+	// `capabilities/gpu-interconnect/fabric/...` convention. See
+	// chain-sdk docs/sdl-interconnect-spec.md.
+	AttributeGPUInterconnectGroupKey = "interconnect/group"
 
 	// attributeTrueValue is the canonical "set" value emitted by the SDL
-	// parser and matched here.
+	// parser and matched here for placement attributes.
 	attributeTrueValue = "true"
 )
 
-// ResourceRequiresInterconnect reports whether a per-service resource has opted
-// into interconnect via `gpu.attributes.interconnect: true`. This is the per-service signal
-// the provider's reservation logic gates `tryAdjustInterconnect` on; it is
-// independent of (and complementary to) the deployment-group placement
-// attribute, which steers bid acceptance.
+// ResourceRequiresInterconnect reports whether a per-service resource has
+// opted into GPU interconnect. The rc5 chain SDK emits a single
+// `interconnect/group` attribute as the opt-in signal — its presence
+// (regardless of value) is the gate the provider's reservation logic
+// uses to decide whether to allocate an interconnect HCA.
 func ResourceRequiresInterconnect(res rtypes.Resources) bool {
 	if res.GPU == nil {
 		return false
 	}
 	for _, a := range res.GPU.Attributes {
-		if a.Key == AttributeGPUInterconnectKey && a.Value == attributeTrueValue {
+		if a.Key == AttributeGPUInterconnectGroupKey {
 			return true
 		}
 	}
@@ -68,6 +66,9 @@ func ResourceRequiresInterconnect(res rtypes.Resources) bool {
 // non-empty group must land on a distinct node. The chain SDK serializes
 // this attribute end-to-end (see chain-sdk go/sdl/gpu.go for the emit
 // site and the matching exported key constant `GPUAttributeInterconnectGroup`).
+// For the implicit SDL form `interconnect: []` the value is the reserved
+// literal `auto`; for the explicit `{ group: <name> }` form it is the
+// tenant-chosen name.
 func ResourceInterconnectGroup(res rtypes.Resources) string {
 	if res.GPU == nil {
 		return ""

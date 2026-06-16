@@ -350,25 +350,28 @@ func (b *Workload) affinity() *corev1.Affinity {
 		},
 	}
 
-	// Per-interconnect_group anti-affinity. A service that declares
-	// `gpu.attributes.interconnect_group` must have its replicas (and any other
-	// services that share the same group label) land on distinct nodes,
-	// because we allocate one interconnect HCA per GPU per node and peers in a
-	// group expect a 1:1 GPU:HCA fanout. Requirement (not preference) so
-	// the kube scheduler hard-rejects co-location.
+	// Per-group anti-affinity. A service that opts into interconnect
+	// (implicit `interconnect: []` resolves to the `auto` group, explicit
+	// `interconnect: { group: <name> }` carries the chosen name) must
+	// have its replicas — and any other services that share the same
+	// group label — land on distinct nodes. We allocate one interconnect
+	// HCA per GPU per node and peers in a group expect a 1:1 GPU:HCA
+	// fanout. Requirement (not preference) so the kube scheduler
+	// hard-rejects co-location.
 	//
 	// Scoping the LabelSelector to the same deployment namespace is
 	// implicit — pod affinity is namespace-scoped by default — so two
-	// tenants who happen to both pick `interconnect_group: pair0` cannot collide.
+	// tenants who happen to pick `group: pair0` cannot collide.
 	//
-	// AKT-443: the bid engine is also interconnect_group-aware now. The chain
-	// SDK serializes `interconnect_group` into the on-chain
+	// AKT-443: the bid engine is also group-aware. The chain SDK
+	// serializes `interconnect/group` into the on-chain
 	// Resources.GPU.Attributes (in addition to the off-chain
-	// Service.InterconnectGroup field used here), and the provider's reservation
-	// Adjust step tracks per-group node claims and refuses to fit two
-	// peers from the same group on the same node. So the bid declines a
-	// group it can't actually schedule — pods no longer end up Pending
-	// because the bid step accepted what the kube scheduler couldn't.
+	// Service.InterconnectGroup field used here), and the provider's
+	// reservation Adjust step tracks per-group node claims and refuses
+	// to fit two peers from the same group on the same node. So the
+	// bid declines a group it can't actually schedule — pods no longer
+	// end up Pending because the bid step accepted what the kube
+	// scheduler couldn't.
 	if rg := service.InterconnectGroup; rg != "" {
 		affinity.PodAntiAffinity = &corev1.PodAntiAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: []corev1.PodAffinityTerm{
@@ -485,10 +488,23 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	// `service.env` and we won't clobber it. NCCL_IB_DISABLE=0 is the
 	// safe default that opts NCCL into IB even when the container image
 	// or base CUDA distro defaulted it off.
+	//
+	// NCCL_IB_HCA is joined from the array NCCLHCAPrefixes — NCCL accepts a
+	// comma-separated list natively, so mixed-vendor hosts like
+	// ["mlx5","bnxt_re"] just emit `NCCL_IB_HCA=mlx5,bnxt_re`.
+	//
+	// AKT-494: NCCL on RoCE requires NCCL_IB_GID_INDEX=3 to select the
+	// RoCEv2 + VLAN GID — the common production GID. Without it NCCL
+	// falls back to auto-detect, which works on uniform single-GID hosts
+	// but picks the wrong GID on multi-GID nodes. IB stays untouched
+	// (NCCL's default behaviour is correct there).
 	if ic := sparamsInterconnect(b.sparams[b.serviceIdx]); ic != nil && ic.Enabled {
 		env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBDisable, "0")
-		if ic.NCCLHCAPrefix != "" {
-			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBHCA, ic.NCCLHCAPrefix)
+		if hca := strings.Join(ic.NCCLHCAPrefixes, ","); hca != "" {
+			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBHCA, hca)
+		}
+		if ic.Fabric == "roce" {
+			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBGIDIndex, nccLIBGIDIndexRoCEValue)
 		}
 	}
 

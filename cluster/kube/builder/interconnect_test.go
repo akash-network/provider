@@ -30,14 +30,25 @@ func stampinterconnect(b *Workload, group string, sparams *crd.SchedulerParams) 
 }
 
 func interconnectParams() *crd.SchedulerParams {
+	return interconnectParamsWith("infiniband", []string{"mlx5"})
+}
+
+// interconnectParamsWith constructs scheduler params for a given fabric +
+// HCA prefix list, so individual tests (e.g. RoCE GID injection) can
+// override the defaults without forking the whole helper.
+func interconnectParamsWith(fabric string, prefixes []string) *crd.SchedulerParams {
+	resourceName := "rdma/rdma_shared_device_ib"
+	if fabric == "roce" {
+		resourceName = "rdma/rdma_shared_device_eth"
+	}
 	return &crd.SchedulerParams{
 		Resources: &crd.SchedulerResources{
 			Interconnect: &crd.SchedulerResourceInterconnect{
-				Enabled:       true,
-				Units:         1,
-				ResourceName:  "rdma/rdma_shared_device_ib",
-				Fabric:        "infiniband",
-				NCCLHCAPrefix: "mlx5",
+				Enabled:         true,
+				Units:           1,
+				ResourceName:    resourceName,
+				Fabric:          fabric,
+				NCCLHCAPrefixes: prefixes,
 			},
 		},
 	}
@@ -78,6 +89,65 @@ func TestWorkloadRespectsSDLNCCLOverride(t *testing.T) {
 	env := envMap(container.Env)
 	require.Equal(t, "mlx5_0,mlx5_1", env[envVarNCCLIBHCA])
 	require.Equal(t, "0", env[envVarNCCLIBDisable])
+}
+
+// AKT-492: mixed-vendor hosts publish every distinct HCA family. The
+// workload builder joins them with commas — NCCL accepts that natively
+// for NCCL_IB_HCA.
+func TestWorkloadJoinsMultipleHCAPrefixes(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	stampinterconnect(workload, "", interconnectParamsWith("infiniband", []string{"mlx5", "bnxt_re"}))
+
+	container := workload.container()
+	env := envMap(container.Env)
+	require.Equal(t, "mlx5,bnxt_re", env[envVarNCCLIBHCA])
+}
+
+// AKT-494: NCCL on RoCE needs NCCL_IB_GID_INDEX=3 to pick the RoCEv2 +
+// VLAN GID. The builder auto-injects it for RoCE-pinned reservations.
+func TestWorkloadInjectsGIDIndexOnRoCE(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	stampinterconnect(workload, "", interconnectParamsWith("roce", []string{"mlx5"}))
+
+	container := workload.container()
+	env := envMap(container.Env)
+	require.Equal(t, "3", env[envVarNCCLIBGIDIndex])
+}
+
+// AKT-494: IB fabrics do NOT get NCCL_IB_GID_INDEX injected — NCCL's
+// default GID selection is correct on IB, and overriding it can pick the
+// wrong index on multi-port hosts.
+func TestWorkloadOmitsGIDIndexOnInfiniBand(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	stampinterconnect(workload, "", interconnectParamsWith("infiniband", []string{"mlx5"}))
+
+	container := workload.container()
+	env := envMap(container.Env)
+	_, hasGID := env[envVarNCCLIBGIDIndex]
+	require.False(t, hasGID, "InfiniBand reservations must not carry an explicit NCCL_IB_GID_INDEX")
+}
+
+// AKT-494: a tenant who already set NCCL_IB_GID_INDEX in SDL env wins —
+// addIfNotPresent honors the override on RoCE just like every other
+// auto-injected NCCL knob.
+func TestWorkloadRespectsSDLGIDIndexOverrideOnRoCE(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	workload.group.Services[workload.serviceIdx].Env = []string{
+		"NCCL_IB_GID_INDEX=5",
+	}
+	stampinterconnect(workload, "", interconnectParamsWith("roce", []string{"mlx5"}))
+
+	container := workload.container()
+	env := envMap(container.Env)
+	require.Equal(t, "5", env[envVarNCCLIBGIDIndex])
 }
 
 func TestWorkloadNointerconnectNoEnvNoResource(t *testing.T) {

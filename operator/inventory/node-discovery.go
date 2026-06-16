@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -544,7 +545,7 @@ func (dp *nodeDiscovery) monitor() error {
 		currLabels = copyManagedLabels(knode.Labels)
 	}
 
-	node := dp.initNodeInfo(gpusIDs, knode)
+	node := dp.initNodeInfo(gpusIDs, knode, cfg.Interconnect.ResourcePatterns)
 
 	restartPodsWatcher := func() error {
 		if podsWatch != nil {
@@ -651,7 +652,7 @@ func (dp *nodeDiscovery) monitor() error {
 					switch evt.Type {
 					case watch.Modified:
 						if nodeAllocatableChanged(knode, obj) {
-							updateNodeInfo(obj, &node)
+							updateNodeInfo(obj, &node, cfg.Interconnect.ResourcePatterns)
 							if err = restartPodsWatcher(); err != nil {
 								return err
 							}
@@ -763,7 +764,7 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	return changed
 }
 
-func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node) v1.Node {
+func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node, interconnectPatterns []string) v1.Node {
 	cpuInfo := dp.parseCPUInfo(dp.ctx)
 	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIDs)
 	ibInfo := dp.parseIBInfo(dp.ctx)
@@ -791,14 +792,14 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 			GPUInterconnect: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 		},
 		Capabilities: v1.NodeCapabilities{
-			// HCA prefix + fabric come from the per-node sysfs probe via
-			// the psutil pod. Empty strings on non-interconnect nodes.
-			NCCLHCAPrefix: ibInfo.NCCLIBHCAPrefix,
-			InterconnectFabric:    ibInfo.Fabric,
+			// HCA prefixes + fabric come from the per-node sysfs probe via
+			// the psutil pod. Empty on non-interconnect nodes.
+			NCCLHCAPrefixes:    append([]string(nil), ibInfo.NCCLIBHCAPrefixes...),
+			InterconnectFabric: ibInfo.Fabric,
 		},
 	}
 
-	updateNodeInfo(knode, &res)
+	updateNodeInfo(knode, &res, interconnectPatterns)
 
 	return res
 }
@@ -820,39 +821,71 @@ func (dp *nodeDiscovery) parseIBInfo(ctx context.Context) IBDiscovery {
 	return *ib
 }
 
-// InterconnectResourceNamePrefix is the prefix used by the Mellanox / NVIDIA interconnect
-// shared-device plugin when it publishes an extended resource on each
-// interconnect-capable Kubernetes node. The exact name (e.g.
-// `rdma/rdma_shared_device_ib` for InfiniBand-pinned plugins or
-// `rdma/rdma_shared_device_eth` for RoCE-pinned ones) is operator-controlled,
-// so the inventory operator discovers it by prefix-matching rather than
-// hard-coding any particular suffix. The discovered name flows through the
-// inventory snapshot as NodeCapabilities.InterconnectResourceName and is the
-// resource string the provider's workload builder will inject into
-// container requests/limits.
-const InterconnectResourceNamePrefix = "rdma/rdma_shared_device_"
+// DefaultInterconnectResourcePattern matches the
+// `rdma/rdma_shared_device_*` extended resources the Mellanox / NVIDIA
+// k8s-rdma-shared-device-plugin publishes (e.g.
+// `rdma/rdma_shared_device_ib` for InfiniBand-pinned plugins,
+// `rdma/rdma_shared_device_eth` for RoCE). Used when the operator's
+// `interconnect.resource_patterns` config list is empty so the rc4
+// hardcoded behavior keeps working out of the box.
+//
+// AKT-493: an operator running a non-Mellanox plugin (Broadcom bnxt
+// RDMA, Intel E810 iwarp, etc.) can override this with one or more
+// patterns under `interconnect.resource_patterns` in provider.yaml.
+const DefaultInterconnectResourcePattern = "rdma/rdma_shared_device_*"
 
-// matchInterconnectResourceName returns the resource key from a kubelet
-// allocatable/capacity map that names the interconnect shared device, or empty if
-// no such resource is present on the node. The first match wins; mixed
-// fabrics on a single node are explicitly outside spec scope (§7.1).
-func matchInterconnectResourceName(quantities corev1.ResourceList) corev1.ResourceName {
+// matchInterconnectResourceName returns the first extended-resource name
+// from `quantities` that matches any of `patterns`, or empty if no
+// pattern matches. Patterns use filepath.Match's shell-style globbing
+// (`*`, `?`, character classes); a bare string with no glob metacharacter
+// matches as a literal prefix (preserves the rc4 contract — empty
+// `patterns` falls back to the Mellanox/NVIDIA default). The first hit
+// wins; mixed fabrics on a single node are explicitly outside spec scope
+// (§7.1).
+func matchInterconnectResourceName(quantities corev1.ResourceList, patterns []string) corev1.ResourceName {
+	effective := patterns
+	if len(effective) == 0 {
+		effective = []string{DefaultInterconnectResourcePattern}
+	}
 	for name := range quantities {
-		if strings.HasPrefix(string(name), InterconnectResourceNamePrefix) {
-			return name
+		key := string(name)
+		for _, p := range effective {
+			if resourcePatternMatches(p, key) {
+				return name
+			}
 		}
 	}
 	return ""
 }
 
-func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
-	// Resolve whichever rdma/rdma_shared_device_* resource the cluster's
-	// device plugin advertises. If the node has no such resource the name
-	// stays empty, interconnect.{Capacity,Allocatable} both stay zero, and the
-	// inventory client treats the node as having no interconnect capability.
-	interconnectResource := matchInterconnectResourceName(knode.Status.Allocatable)
+// resourcePatternMatches applies one pattern to one kubelet resource
+// name. Bare strings (no `*`, `?`, or `[`) match as a literal prefix —
+// the rc4 contract. Patterns containing glob metacharacters use
+// filepath.Match. A malformed pattern is treated as a non-match (the
+// inventory operator surfaces config-load errors elsewhere; here we
+// fail-closed rather than swallow the whole node).
+func resourcePatternMatches(pattern, name string) bool {
+	if !strings.ContainsAny(pattern, "*?[") {
+		return strings.HasPrefix(name, pattern)
+	}
+	ok, err := filepath.Match(pattern, name)
+	if err != nil {
+		return false
+	}
+	return ok
+}
+
+func updateNodeInfo(knode *corev1.Node, node *v1.Node, interconnectPatterns []string) {
+	// Resolve whichever interconnect extended resource the cluster's
+	// device plugin advertises. Empty `interconnectPatterns` falls back
+	// to the rc4 hardcoded Mellanox/NVIDIA prefix; operators on other
+	// plugins point at `broadcom.com/rdma`, `intel.com/iwarp_shared`,
+	// etc. via the `interconnect.resource_patterns` config. If no
+	// pattern matches, the name stays empty and the inventory client
+	// treats the node as having no interconnect capability.
+	interconnectResource := matchInterconnectResourceName(knode.Status.Allocatable, interconnectPatterns)
 	if interconnectResource == "" {
-		interconnectResource = matchInterconnectResourceName(knode.Status.Capacity)
+		interconnectResource = matchInterconnectResourceName(knode.Status.Capacity, interconnectPatterns)
 	}
 	if interconnectResource != "" {
 		node.Capabilities.InterconnectResourceName = string(interconnectResource)

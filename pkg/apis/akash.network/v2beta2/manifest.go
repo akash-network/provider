@@ -116,15 +116,18 @@ type SchedulerResourceGPU struct {
 // by ResourceName, (b) inject the NCCL env vars that target the fabric.
 //
 // 1:1 invariant: when Enabled is true, Units == res.GPU.Units.Value(). The
-// inventory operator publishes ResourceName and NCCLHCAPrefix from the
+// inventory operator publishes ResourceName and NCCLHCAPrefixes from the
 // chosen node's kubelet device-plugin advert and infiniband sysfs scan;
-// Fabric is "infiniband" or "roce".
+// Fabric is "infiniband" or "roce". NCCLHCAPrefixes carries every HCA
+// device-name family present on the node (e.g. ["mlx5"] on a uniform
+// Mellanox host, ["mlx5","bnxt_re"] on mixed-vendor); the workload builder
+// joins with commas for NCCL_IB_HCA, which NCCL accepts natively.
 type SchedulerResourceInterconnect struct {
-	Enabled       bool   `json:"enabled"`
-	Units         uint64 `json:"units"`
-	ResourceName  string `json:"resource_name"`
-	Fabric        string `json:"fabric"`
-	NCCLHCAPrefix string `json:"nccl_hca_prefix"`
+	Enabled         bool     `json:"enabled"`
+	Units           uint64   `json:"units"`
+	ResourceName    string   `json:"resource_name"`
+	Fabric          string   `json:"fabric"`
+	NCCLHCAPrefixes []string `json:"nccl_hca_prefixes"`
 }
 
 type SchedulerResources struct {

@@ -16,7 +16,7 @@ import (
 )
 
 // AKT-443 — bid-engine group-aware Adjust. tryAdjust now refuses to place
-// two resources from the same `interconnect_group` on the same node so the
+// two resources from the same interconnect group on the same node so the
 // workload builder's hard pod anti-affinity remains satisfiable at deploy
 // time. These tests exercise the rejection AND the success cases plus
 // regressions (no-group, distinct-group, count > 1).
@@ -52,7 +52,7 @@ func interconnectGroupNode(name string) inventoryV1.Node {
 		Capabilities: inventoryV1.NodeCapabilities{
 			InterconnectResourceName: "rdma/rdma_shared_device_ib",
 			InterconnectFabric:       "infiniband",
-			NCCLHCAPrefix:    "mlx5",
+			NCCLHCAPrefixes:          []string{"mlx5"},
 		},
 	}
 }
@@ -66,14 +66,15 @@ func interconnectGroupCluster(n int) inventoryV1.Cluster {
 }
 
 // interconnectGroupResource builds one ResourceUnit for an interconnect service. group is
-// the SDL gpu.attributes.interconnect_group value ("" for no group).
+// the on-chain `interconnect/group` attribute value (parser-resolved: "auto"
+// for the implicit SDL form, tenant-chosen name for the explicit form,
+// "" for non-interconnect resources).
 func interconnectGroupResource(id uint32, count uint32, group string) dvbeta.ResourceUnit {
 	attrs := attrtypes.Attributes{
-		{Key: "interconnect", Value: "true"},
 		{Key: "vendor/nvidia/model/a100/ram/80Gi/interface/sxm", Value: "true"},
 	}
 	if group != "" {
-		attrs = append(attrs, attrtypes.Attribute{Key: "interconnect_group", Value: group})
+		attrs = append(attrs, attrtypes.Attribute{Key: "interconnect/group", Value: group})
 	}
 	return dvbeta.ResourceUnit{
 		Resources: rtypes.Resources{

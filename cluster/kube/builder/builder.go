@@ -40,10 +40,10 @@ const (
 	AkashManifestResourceVersion  = "akash.network/manifest.resource.version"
 
 	// AkashInterconnectGroupLabelName labels every pod that participates in an
-	// SDL `gpu.attributes.interconnect_group`. The workload builder uses it as
-	// the matchExpression for a per-group pod anti-affinity rule that
-	// spreads peers across distinct nodes — the placement constraint
-	// the chain SDK declined to express on-chain (decision #7).
+	// SDL interconnect opt-in (implicit `auto` group from `interconnect: []`
+	// or an explicit name from `interconnect: { group: <name> }`). The
+	// workload builder uses it as the matchExpression for a per-group pod
+	// anti-affinity rule that spreads peers across distinct nodes.
 	AkashInterconnectGroupLabelName = "akash.network/interconnect-group"
 )
 
@@ -68,10 +68,12 @@ const (
 	envVarKubernetesServicePort      = "KUBERNETES_SERVICE_PORT"
 
 	// NCCL tuning vars, injected only for services whose reservation
-	// pinned an interconnect HCA. Tenants may override either by setting the
-	// same key in service.env (addIfNotPresent honors that).
-	envVarNCCLIBDisable = "NCCL_IB_DISABLE"
-	envVarNCCLIBHCA     = "NCCL_IB_HCA"
+	// pinned an interconnect HCA. Tenants may override any of these by
+	// setting the same key in service.env (addIfNotPresent honors that).
+	envVarNCCLIBDisable     = "NCCL_IB_DISABLE"
+	envVarNCCLIBHCA         = "NCCL_IB_HCA"
+	envVarNCCLIBGIDIndex    = "NCCL_IB_GID_INDEX"
+	nccLIBGIDIndexRoCEValue = "3"
 )
 
 var (

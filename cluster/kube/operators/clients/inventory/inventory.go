@@ -302,11 +302,11 @@ func tryAdjustInterconnect(
 
 	sParamsEnsureResources(sparams)
 	sparams.Resources.Interconnect = &crd.SchedulerResourceInterconnect{
-		Enabled:       true,
-		Units:         res.GPU.Units.Value(),
-		ResourceName:  capabilities.InterconnectResourceName,
-		Fabric:        capabilities.InterconnectFabric,
-		NCCLHCAPrefix: capabilities.NCCLHCAPrefix,
+		Enabled:         true,
+		Units:           res.GPU.Units.Value(),
+		ResourceName:    capabilities.InterconnectResourceName,
+		Fabric:          capabilities.InterconnectFabric,
+		NCCLHCAPrefixes: append([]string(nil), capabilities.NCCLHCAPrefixes...),
 	}
 
 	return true

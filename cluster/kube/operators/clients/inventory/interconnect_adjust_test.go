@@ -20,13 +20,15 @@ func interconnectResourcePair(capacity, allocated int64) inventoryV1.ResourcePai
 }
 
 // gpuInterconnectResource builds the per-resource shape that ResourceRequiresInterconnect
-// inspects — units=N with the interconnect=true attribute.
+// inspects — units=N with an `interconnect/group` attribute. The implicit
+// SDL form `interconnect: []` resolves to the literal `auto` group; tests
+// that don't care about the specific group name use that value.
 func gpuInterconnectResource(units uint64) *rtypes.Resources {
 	return &rtypes.Resources{
 		GPU: &rtypes.GPU{
 			Units: rtypes.NewResourceValue(units),
 			Attributes: attrtypes.Attributes{
-				{Key: AttributeGPUInterconnectKey, Value: "true"},
+				{Key: AttributeGPUInterconnectGroupKey, Value: "auto"},
 			},
 		},
 	}
@@ -62,7 +64,7 @@ func TestTryAdjustInterconnect_FabricPinMismatchRejected(t *testing.T) {
 	caps := inventoryV1.NodeCapabilities{
 		InterconnectResourceName: "rdma/rdma_shared_device_eth",
 		InterconnectFabric:       "roce",
-		NCCLHCAPrefix:    "mlx5",
+		NCCLHCAPrefixes:          []string{"mlx5"},
 	}
 	sparams := &crd.SchedulerParams{}
 
@@ -75,7 +77,7 @@ func TestTryAdjustInterconnect_FabricPinMatchOK(t *testing.T) {
 	caps := inventoryV1.NodeCapabilities{
 		InterconnectResourceName: "rdma/rdma_shared_device_ib",
 		InterconnectFabric:       "infiniband",
-		NCCLHCAPrefix:    "mlx5",
+		NCCLHCAPrefixes:          []string{"mlx5"},
 	}
 	sparams := &crd.SchedulerParams{}
 
@@ -83,11 +85,11 @@ func TestTryAdjustInterconnect_FabricPinMatchOK(t *testing.T) {
 	require.NotNil(t, sparams.Resources)
 	require.NotNil(t, sparams.Resources.Interconnect)
 	require.Equal(t, &crd.SchedulerResourceInterconnect{
-		Enabled:       true,
-		Units:         8,
-		ResourceName:  "rdma/rdma_shared_device_ib",
-		Fabric:        "infiniband",
-		NCCLHCAPrefix: "mlx5",
+		Enabled:         true,
+		Units:           8,
+		ResourceName:    "rdma/rdma_shared_device_ib",
+		Fabric:          "infiniband",
+		NCCLHCAPrefixes: []string{"mlx5"},
 	}, sparams.Resources.Interconnect)
 
 	// Allocation was actually charged (1:1 with GPU units).
@@ -100,7 +102,7 @@ func TestTryAdjustInterconnect_NoFabricPinAccepts(t *testing.T) {
 	caps := inventoryV1.NodeCapabilities{
 		InterconnectResourceName: "rdma/rdma_shared_device_eth",
 		InterconnectFabric:       "roce",
-		NCCLHCAPrefix:    "mlx5",
+		NCCLHCAPrefixes:          []string{"mlx5"},
 	}
 	sparams := &crd.SchedulerParams{}
 
@@ -114,7 +116,7 @@ func TestTryAdjustInterconnect_InsufficientCapacity(t *testing.T) {
 	caps := inventoryV1.NodeCapabilities{
 		InterconnectResourceName: "rdma/rdma_shared_device_ib",
 		InterconnectFabric:       "infiniband",
-		NCCLHCAPrefix:    "mlx5",
+		NCCLHCAPrefixes:          []string{"mlx5"},
 	}
 	sparams := &crd.SchedulerParams{}
 
@@ -131,7 +133,7 @@ func TestTryAdjustInterconnect_NodeAdvertisesFabricButNoResourceName(t *testing.
 	rp := interconnectResourcePair(8, 0)
 	caps := inventoryV1.NodeCapabilities{
 		InterconnectFabric:    "infiniband",
-		NCCLHCAPrefix: "mlx5",
+		NCCLHCAPrefixes: []string{"mlx5"},
 	}
 	sparams := &crd.SchedulerParams{}
 
@@ -150,7 +152,7 @@ func TestTryAdjustInterconnect_RequiredHonoredWithoutAttributes(t *testing.T) {
 	caps := inventoryV1.NodeCapabilities{
 		InterconnectResourceName: "rdma/rdma_shared_device_ib",
 		InterconnectFabric:       "infiniband",
-		NCCLHCAPrefix:    "mlx5",
+		NCCLHCAPrefixes:          []string{"mlx5"},
 	}
 	clobbered := &rtypes.Resources{
 		GPU: &rtypes.GPU{

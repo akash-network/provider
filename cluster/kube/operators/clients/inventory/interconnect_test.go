@@ -22,7 +22,7 @@ func TestResourceRequiresInterconnect(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "GPU without interconnect=true attribute does not require",
+			name: "GPU without interconnect/group attribute does not require",
 			res: rtypes.Resources{
 				GPU: &rtypes.GPU{
 					Units: rtypes.NewResourceValue(8),
@@ -34,29 +34,29 @@ func TestResourceRequiresInterconnect(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "GPU with interconnect=true requires interconnect",
+			name: "GPU with implicit interconnect/group=auto requires interconnect",
 			res: rtypes.Resources{
 				GPU: &rtypes.GPU{
 					Units: rtypes.NewResourceValue(8),
 					Attributes: attrtypes.Attributes{
 						{Key: "vendor/nvidia/model/a100", Value: "true"},
-						{Key: AttributeGPUInterconnectKey, Value: "true"},
+						{Key: AttributeGPUInterconnectGroupKey, Value: "auto"},
 					},
 				},
 			},
 			want: true,
 		},
 		{
-			name: "GPU with interconnect=false does not require",
+			name: "GPU with explicit interconnect/group=pair0 requires interconnect",
 			res: rtypes.Resources{
 				GPU: &rtypes.GPU{
 					Units: rtypes.NewResourceValue(8),
 					Attributes: attrtypes.Attributes{
-						{Key: AttributeGPUInterconnectKey, Value: "false"},
+						{Key: AttributeGPUInterconnectGroupKey, Value: "pair0"},
 					},
 				},
 			},
-			want: false,
+			want: true,
 		},
 	}
 	for _, tc := range tests {
