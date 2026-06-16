@@ -65,16 +65,25 @@ func interconnectGroupCluster(n int) inventoryV1.Cluster {
 	return inventoryV1.Cluster{Nodes: nodes}
 }
 
-// interconnectGroupResource builds one ResourceUnit for an interconnect service. group is
-// the on-chain `interconnect/group` attribute value (parser-resolved: "auto"
-// for the implicit SDL form, tenant-chosen name for the explicit form,
-// "" for non-interconnect resources).
+// interconnectGroupResource builds a full-node ResourceUnit (8 GPUs) for an
+// interconnect service. group is the on-chain `interconnect/group`
+// attribute value (parser-resolved: "auto" for the implicit SDL form,
+// tenant-chosen name for the explicit form, "" for non-interconnect
+// resources).
 func interconnectGroupResource(id uint32, count uint32, group string) dvbeta.ResourceUnit {
+	return interconnectGroupResourceN(id, count, 8, group)
+}
+
+// interconnectGroupResourceN is like interconnectGroupResource but lets a
+// test request fewer than a node's worth of GPUs. Tests that prove
+// cross-group co-location uses this to size resources so multiple groups
+// must share a node.
+func interconnectGroupResourceN(id uint32, count uint32, gpuUnits uint64, group string) dvbeta.ResourceUnit {
 	attrs := attrtypes.Attributes{
 		{Key: "vendor/nvidia/model/a100/ram/80Gi/interface/sxm", Value: "true"},
 	}
 	if group != "" {
-		attrs = append(attrs, attrtypes.Attribute{Key: "interconnect/group", Value: group})
+		attrs = append(attrs, attrtypes.Attribute{Key: AttributeGPUInterconnectGroupKey, Value: group})
 	}
 	return dvbeta.ResourceUnit{
 		Resources: rtypes.Resources{
@@ -83,7 +92,7 @@ func interconnectGroupResource(id uint32, count uint32, group string) dvbeta.Res
 				Units: rtypes.NewResourceValue(32000),
 			},
 			GPU: &rtypes.GPU{
-				Units:      rtypes.NewResourceValue(8),
+				Units:      rtypes.NewResourceValue(gpuUnits),
 				Attributes: attrs,
 			},
 			Memory: &rtypes.Memory{
@@ -168,14 +177,25 @@ func TestAdjust_InterconnectGroup_SingleServiceCount4_ThreeNodes_Rejected(t *tes
 
 // Two services in DIFFERENT groups. Groups are independent — peers from
 // pair0 must not collide, peers from pair1 must not collide, but pair0
-// and pair1 can share nodes. With 2 nodes and one service per group at
-// count=1, both groups fit (each occupies one node, the other group can
-// double-up). This proves groups don't bleed into each other.
+// and pair1 can share nodes.
+//
+// CodeRabbit follow-up (PR #400 review 2026-06-15): an earlier version
+// of this test used 2 full-node services on a 2-node cluster, where the
+// only fitment placed each group on its own node — exactly the
+// arrangement the *broken* (groups treated as same-group) code would
+// also pick. The test passed regardless of whether group independence
+// held.
+//
+// Fix: a single-node cluster sized for two half-resources from
+// different groups. If groups are accidentally collapsed, the second
+// service is rejected because the first has already claimed the
+// (single) node for its group. If groups are properly independent,
+// both fit on the one node.
 func TestAdjust_InterconnectGroup_DistinctGroupsIndependent(t *testing.T) {
-	inv := newInventory(interconnectGroupCluster(2))
+	inv := newInventory(interconnectGroupCluster(1))
 	res := interconnectGroupReservation(
-		interconnectGroupResource(1, 1, "pair0"),
-		interconnectGroupResource(2, 1, "pair1"),
+		interconnectGroupResourceN(1, 1, 4, "pair0"),
+		interconnectGroupResourceN(2, 1, 4, "pair1"),
 	)
 
 	require.NoError(t, inv.Adjust(res))

@@ -847,10 +847,15 @@ func matchInterconnectResourceName(quantities corev1.ResourceList, patterns []st
 	if len(effective) == 0 {
 		effective = []string{DefaultInterconnectResourcePattern}
 	}
-	for name := range quantities {
-		key := string(name)
-		for _, p := range effective {
-			if resourcePatternMatches(p, key) {
+	// Iterate patterns first (preserves operator's config order — the
+	// first pattern in `interconnect.resource_patterns` wins) and
+	// resources second (kubelet ResourceList is a map with
+	// non-deterministic iteration order). Without this ordering, the
+	// "first match wins" guarantee would silently depend on Go's hash
+	// seed.
+	for _, p := range effective {
+		for name := range quantities {
+			if resourcePatternMatches(p, string(name)) {
 				return name
 			}
 		}
@@ -883,6 +888,18 @@ func updateNodeInfo(knode *corev1.Node, node *v1.Node, interconnectPatterns []st
 	// etc. via the `interconnect.resource_patterns` config. If no
 	// pattern matches, the name stays empty and the inventory client
 	// treats the node as having no interconnect capability.
+	//
+	// Clear the interconnect fields up-front so a node whose
+	// device-plugin resource was removed (or whose pattern config no
+	// longer matches the previously-published name) properly drops to
+	// non-interconnect rather than retaining the stale name + zeroed
+	// capacity. The subsequent kubelet loops only set capacity/
+	// allocatable when a match is found, so without this reset a
+	// previously-set value would persist forever.
+	node.Capabilities.InterconnectResourceName = ""
+	node.Resources.GPUInterconnect.Capacity.Set(0)
+	node.Resources.GPUInterconnect.Allocatable.Set(0)
+
 	interconnectResource := matchInterconnectResourceName(knode.Status.Allocatable, interconnectPatterns)
 	if interconnectResource == "" {
 		interconnectResource = matchInterconnectResourceName(knode.Status.Capacity, interconnectPatterns)
