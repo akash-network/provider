@@ -200,7 +200,7 @@ func resourcesFromAkash(aru rtypes.Resources) (Resources, error) {
 			return Resources{}, errors.New("k8s api: gpu units value overflows uint32")
 		}
 		res.GPU.Units = uint32(aru.GPU.Units.Value()) // nolint: gosec
-		res.GPU.Attributes = aru.GPU.Attributes
+		res.GPU.Attributes = aru.GPU.Attributes.Dup()
 	}
 
 	res.Storage = make(ResourceStorage, 0, len(aru.Storage))
