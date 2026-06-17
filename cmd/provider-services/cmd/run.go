@@ -845,29 +845,50 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return time.Now().UTC()
 	}
 
-	snapshotPayload, err := aepinventory.NewStatusPayloadSource(aepinventory.StatusPayloadSourceConfig{
+	snapshotMaterial, err := aepinventory.NewOperatorMaterialSource(ctx, aepinventory.OperatorMaterialSourceConfig{
+		Inventory:       inventory,
 		Status:          service,
-		Provider:        config.ProviderSigner.Address().String(),
-		ChainID:         cctx.ChainID,
 		SoftwareVersion: version.Version,
-		Now:             snapshotPayloadClock,
 	})
 	if err != nil {
 		return err
 	}
 
-	snapshotter, err := aepinventory.NewBuilder(snapshotPayload, config.ProviderSigner)
+	snapshotPayload, err := aepinventory.NewMaterialPayloadSource(aepinventory.MaterialPayloadSourceConfig{
+		Source:   snapshotMaterial,
+		Provider: config.ProviderSigner.Address().String(),
+		ChainID:  cctx.ChainID,
+		Now:      snapshotPayloadClock,
+	})
 	if err != nil {
 		return err
 	}
 
+	snapshotBuilder, err := aepinventory.NewBuilder(snapshotPayload, config.ProviderSigner)
+	if err != nil {
+		return err
+	}
+
+	persistentConfig, err := fromctx.PersistentConfigFromCtx(ctx)
+	if err != nil {
+		return err
+	}
+
+	snapshotStore, err := aepinventory.NewPersistentSnapshotStore(persistentConfig.Verification())
+	if err != nil {
+		return err
+	}
+
+	snapshotter, err := aepinventory.NewRecordingSnapshotter(snapshotBuilder, snapshotStore, snapshotPayloadClock)
+	if err != nil {
+		return err
+	}
+
+	gwrest.SetVerificationInventoryStatusSource(clusterSettings, snapshotStore)
+
 	if snapshotPosterInterval > 0 {
 		posterSession := sessionMgr.ForModule("verification-snapshot-poster")
 		posterQuery, err := aepposter.NewQueryAdapter(posterSession.Client().Query().Verification())
-		if err != nil {
-			return err
-		}
-		persistentConfig, err := fromctx.PersistentConfigFromCtx(ctx)
 		if err != nil {
 			return err
 		}

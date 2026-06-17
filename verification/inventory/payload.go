@@ -20,6 +20,7 @@ const (
 
 var (
 	errMissingStatusClient    = errors.New("missing provider status client")
+	errMissingMaterialSource  = errors.New("missing inventory snapshot material source")
 	errMissingProviderAddress = errors.New("missing provider address")
 	errMissingChainID         = errors.New("missing chain ID")
 	errMissingProviderStatus  = errors.New("missing provider status")
@@ -29,6 +30,33 @@ var (
 
 type StatusClient interface {
 	StatusV1(context.Context) (*providerv1.Status, error)
+}
+
+type SnapshotMaterialSource interface {
+	SnapshotMaterial(context.Context) (SnapshotMaterial, error)
+}
+
+type SnapshotMaterial struct {
+	Cluster           inventoryv1.Cluster
+	ActiveLeases      uint32
+	EvidenceSections  []inventoryv1.SnapshotEvidenceSection
+	SoftwareVersion   string
+	SoftwareSignature []byte
+	SoftwareIdentity  *inventoryv1.SoftwareIdentity
+}
+
+type MaterialPayloadSourceConfig struct {
+	Source   SnapshotMaterialSource
+	Provider string
+	ChainID  string
+	Now      func() time.Time
+}
+
+type MaterialPayloadSource struct {
+	source   SnapshotMaterialSource
+	provider string
+	chainID  string
+	now      func() time.Time
 }
 
 type StatusPayloadSourceConfig struct {
@@ -51,6 +79,40 @@ type StatusPayloadSource struct {
 	softwareIdentity  *inventoryv1.SoftwareIdentity
 	now               func() time.Time
 	collectors        []Collector
+}
+
+func NewMaterialPayloadSource(cfg MaterialPayloadSourceConfig) (*MaterialPayloadSource, error) {
+	if cfg.Source == nil {
+		return nil, errMissingMaterialSource
+	}
+
+	if cfg.Provider == "" {
+		return nil, errMissingProviderAddress
+	}
+
+	if cfg.ChainID == "" {
+		return nil, errMissingChainID
+	}
+
+	if cfg.Now == nil {
+		return nil, errMissingSnapshotClock
+	}
+
+	return &MaterialPayloadSource{
+		source:   cfg.Source,
+		provider: cfg.Provider,
+		chainID:  cfg.ChainID,
+		now:      cfg.Now,
+	}, nil
+}
+
+func (s *MaterialPayloadSource) Payload(ctx context.Context, req SnapshotRequest) ([]byte, error) {
+	material, err := s.source.SnapshotMaterial(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return payloadFromMaterial(req, s.provider, s.chainID, s.now().UTC(), material)
 }
 
 func NewStatusPayloadSource(cfg StatusPayloadSourceConfig) (*StatusPayloadSource, error) {
@@ -83,47 +145,73 @@ func NewStatusPayloadSource(cfg StatusPayloadSourceConfig) (*StatusPayloadSource
 }
 
 func (s *StatusPayloadSource) Payload(ctx context.Context, req SnapshotRequest) ([]byte, error) {
-	status, err := s.status.StatusV1(ctx)
+	material, err := s.SnapshotMaterial(ctx)
 	if err != nil {
 		return nil, err
 	}
+
+	return payloadFromMaterial(req, s.provider, s.chainID, s.now().UTC(), material)
+}
+
+func (s *StatusPayloadSource) SnapshotMaterial(ctx context.Context) (SnapshotMaterial, error) {
+	status, err := s.status.StatusV1(ctx)
+	if err != nil {
+		return SnapshotMaterial{}, err
+	}
 	if status == nil {
-		return nil, errMissingProviderStatus
+		return SnapshotMaterial{}, errMissingProviderStatus
 	}
 
 	clusterStatus := status.GetCluster()
 	if clusterStatus == nil {
-		return nil, errMissingProviderCluster
+		return SnapshotMaterial{}, errMissingProviderCluster
 	}
 
 	statusInventory := clusterStatus.GetInventory()
 	cluster := statusInventory.GetCluster()
 	evidence, err := s.collect(ctx)
 	if err != nil {
-		return nil, err
+		return SnapshotMaterial{}, err
 	}
 	statusEvidence, err := statusEvidenceSection(status)
 	if err != nil {
-		return nil, err
+		return SnapshotMaterial{}, err
 	}
 	evidence = append([]inventoryv1.SnapshotEvidenceSection{statusEvidence}, evidence...)
 	leases := clusterStatus.GetLeases()
 
+	return SnapshotMaterial{
+		Cluster:           cluster,
+		ActiveLeases:      leases.GetActive(),
+		EvidenceSections:  evidence,
+		SoftwareVersion:   s.softwareVersion,
+		SoftwareSignature: append([]byte(nil), s.softwareSignature...),
+		SoftwareIdentity:  cloneSoftwareIdentity(s.softwareIdentity),
+	}, nil
+}
+
+func payloadFromMaterial(
+	req SnapshotRequest,
+	provider string,
+	chainID string,
+	timestamp time.Time,
+	material SnapshotMaterial,
+) ([]byte, error) {
 	payload := &inventoryv1.SnapshotPayload{
 		SchemaVersion: SnapshotPayloadSchemaVersion,
-		Provider:      s.provider,
-		ChainID:       s.chainID,
+		Provider:      provider,
+		ChainID:       chainID,
 		Nonce:         append([]byte(nil), req.Nonce...),
-		Timestamp:     s.now().UTC(),
-		Cluster:       cluster,
+		Timestamp:     timestamp,
+		Cluster:       material.Cluster,
 		ResourceSummary: ResourceSummaryFromCluster(
-			cluster,
-			leases.GetActive(),
-			s.softwareVersion,
-			s.softwareSignature,
-			s.softwareIdentity,
+			material.Cluster,
+			material.ActiveLeases,
+			material.SoftwareVersion,
+			material.SoftwareSignature,
+			material.SoftwareIdentity,
 		),
-		EvidenceSections: evidence,
+		EvidenceSections: cloneEvidenceSections(material.EvidenceSections),
 	}
 
 	return MarshalDeterministic(payload)
@@ -232,6 +320,22 @@ func cloneSoftwareIdentity(identity *inventoryv1.SoftwareIdentity) *inventoryv1.
 		SignatureRef:    identity.GetSignatureRef(),
 		PublicKeyRef:    identity.GetPublicKeyRef(),
 	}
+}
+
+func cloneEvidenceSections(sections []inventoryv1.SnapshotEvidenceSection) []inventoryv1.SnapshotEvidenceSection {
+	if len(sections) == 0 {
+		return nil
+	}
+
+	res := make([]inventoryv1.SnapshotEvidenceSection, 0, len(sections))
+	for _, section := range sections {
+		res = append(res, inventoryv1.SnapshotEvidenceSection{
+			Name:    section.Name,
+			Payload: append([]byte(nil), section.Payload...),
+		})
+	}
+
+	return res
 }
 
 func quantityValue(quantity *resource.Quantity) uint64 {

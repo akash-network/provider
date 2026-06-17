@@ -43,6 +43,9 @@ type BidEngine interface {
 type Verification interface {
 	SetSnapshotPosterState(context.Context, []byte) error
 	GetSnapshotPosterState(context.Context) ([]byte, error)
+	SetInventorySnapshot(context.Context, string, []byte, []byte) error
+	GetInventorySnapshot(context.Context, string, []byte) ([]byte, error)
+	GetLatestInventorySnapshot(context.Context, string) ([]byte, error)
 }
 
 type Storage interface {

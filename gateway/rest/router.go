@@ -120,7 +120,7 @@ func newRouter(log log.Logger, addr sdk.Address, pclient provider.Client, ctxCon
 	// GET /status
 	// provider status endpoint does not require authentication
 	router.HandleFunc("/status",
-		createStatusHandler(log, pclient, addr)).
+		createStatusHandler(log, pclient, addr, verificationInventoryStatusSourceFromConfig(ctxConfig))).
 		Methods("GET")
 
 	authedRouter := router.NewRoute().Subrouter()
@@ -442,20 +442,26 @@ func createVersionHandler(log log.Logger, pclient provider.Client) http.HandlerF
 	}
 }
 
-func createStatusHandler(log log.Logger, sclient provider.StatusClient, providerAddr sdk.Address) http.HandlerFunc {
+func createStatusHandler(log log.Logger, sclient provider.StatusClient, providerAddr sdk.Address, verificationInventory verificationInventoryStatusSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
 		status, err := sclient.Status(req.Context())
 		if err != nil {
 			http.Error(w, err.Error(), httperror.StatusCodeFrom(err))
 			return
 		}
+		verificationStatus, err := latestVerificationInventoryStatus(req.Context(), verificationInventory, providerAddr.String())
+		if err != nil {
+			log.Error("getting verification inventory status", "err", err)
+		}
 		data := struct {
 			// provider.Status
 			apclient.ProviderStatus
-			Address string `json:"address"`
+			Address               string                       `json:"address"`
+			VerificationInventory *verificationInventoryStatus `json:"verification_inventory,omitempty"`
 		}{
-			ProviderStatus: *status,
-			Address:        providerAddr.String(),
+			ProviderStatus:        *status,
+			Address:               providerAddr.String(),
+			VerificationInventory: verificationStatus,
 		}
 		writeJSON(log, w, data)
 	}

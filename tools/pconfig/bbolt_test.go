@@ -307,3 +307,64 @@ func TestBBolt_VerificationSnapshotPosterStatePersists(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, state, stored)
 }
+
+func TestStorage_VerificationInventorySnapshots(t *testing.T) {
+	dbs := initTestBackends(t)
+	require.Len(t, dbs, 2)
+
+	defer func() {
+		for _, db := range dbs {
+			db.cleanup()
+		}
+	}()
+
+	for _, db := range dbs {
+		t.Run(db.name, func(t *testing.T) {
+			ctx := context.Background()
+			provider := "akash1provider"
+			hash := []byte("hash")
+			record := []byte(`{"snapshot":"record"}`)
+
+			_, err := db.Verification().GetLatestInventorySnapshot(ctx, provider)
+			require.ErrorIs(t, err, pconfig.ErrNotExists)
+
+			err = db.Verification().SetInventorySnapshot(ctx, provider, hash, record)
+			require.NoError(t, err)
+
+			stored, err := db.Verification().GetInventorySnapshot(ctx, provider, hash)
+			require.NoError(t, err)
+			require.Equal(t, record, stored)
+
+			latest, err := db.Verification().GetLatestInventorySnapshot(ctx, provider)
+			require.NoError(t, err)
+			require.Equal(t, record, latest)
+
+			record[0] = '['
+			require.Equal(t, []byte(`{"snapshot":"record"}`), stored)
+		})
+	}
+}
+
+func TestBBolt_VerificationInventorySnapshotsPersist(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	provider := "akash1provider"
+	hash := []byte("hash")
+	record := []byte(`{"snapshot":"record"}`)
+
+	db, err := bbolt.NewBBolt(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, db.Verification().SetInventorySnapshot(ctx, provider, hash, record))
+	require.NoError(t, db.Close())
+
+	db, err = bbolt.NewBBolt(dbPath)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, db.Close())
+	}()
+
+	stored, err := db.Verification().GetLatestInventorySnapshot(ctx, provider)
+	require.NoError(t, err)
+	require.Equal(t, record, stored)
+}

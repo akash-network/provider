@@ -37,6 +37,144 @@ func (c testCollector) Collect(context.Context) (EvidenceSection, error) {
 	return c.section, c.err
 }
 
+type testMaterialSource struct {
+	material SnapshotMaterial
+	err      error
+}
+
+func (s testMaterialSource) SnapshotMaterial(context.Context) (SnapshotMaterial, error) {
+	return s.material, s.err
+}
+
+func TestNewMaterialPayloadSourceValidatesConfig(t *testing.T) {
+	source := testMaterialSource{}
+	now := func() time.Time { return time.Unix(1, 0) }
+
+	tests := []struct {
+		name    string
+		cfg     MaterialPayloadSourceConfig
+		wantErr error
+	}{
+		{
+			name: "success",
+			cfg: MaterialPayloadSourceConfig{
+				Source:   source,
+				Provider: "akash1provider",
+				ChainID:  "akashnet-2",
+				Now:      now,
+			},
+		},
+		{
+			name: "missing source",
+			cfg: MaterialPayloadSourceConfig{
+				Provider: "akash1provider",
+				ChainID:  "akashnet-2",
+				Now:      now,
+			},
+			wantErr: errMissingMaterialSource,
+		},
+		{
+			name: "missing provider",
+			cfg: MaterialPayloadSourceConfig{
+				Source:  source,
+				ChainID: "akashnet-2",
+				Now:     now,
+			},
+			wantErr: errMissingProviderAddress,
+		},
+		{
+			name: "missing chain ID",
+			cfg: MaterialPayloadSourceConfig{
+				Source:   source,
+				Provider: "akash1provider",
+				Now:      now,
+			},
+			wantErr: errMissingChainID,
+		},
+		{
+			name: "missing clock",
+			cfg: MaterialPayloadSourceConfig{
+				Source:   source,
+				Provider: "akash1provider",
+				ChainID:  "akashnet-2",
+			},
+			wantErr: errMissingSnapshotClock,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			payload, err := NewMaterialPayloadSource(test.cfg)
+			if test.wantErr != nil {
+				require.ErrorIs(t, err, test.wantErr)
+				require.Nil(t, payload)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, payload)
+		})
+	}
+}
+
+func TestMaterialPayloadSourcePayload(t *testing.T) {
+	nonce := bytes.Repeat([]byte{1}, NonceSize)
+	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	material := SnapshotMaterial{
+		Cluster:           testCluster(),
+		ActiveLeases:      3,
+		SoftwareVersion:   "v1.2.3",
+		SoftwareSignature: []byte("release-signature"),
+		SoftwareIdentity:  testSoftwareIdentity(),
+		EvidenceSections: []inventoryv1.SnapshotEvidenceSection{
+			{
+				Name:    "operator-inventory",
+				Payload: []byte("operator-material"),
+			},
+		},
+	}
+	source, err := NewMaterialPayloadSource(MaterialPayloadSourceConfig{
+		Source:   testMaterialSource{material: material},
+		Provider: "akash1provider",
+		ChainID:  "akashnet-2",
+		Now:      func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	payload, err := source.Payload(context.Background(), SnapshotRequest{Nonce: nonce})
+	require.NoError(t, err)
+
+	var decoded inventoryv1.SnapshotPayload
+	require.NoError(t, decoded.Unmarshal(payload))
+	require.Equal(t, SnapshotPayloadSchemaVersion, decoded.SchemaVersion)
+	require.Equal(t, "akash1provider", decoded.Provider)
+	require.Equal(t, "akashnet-2", decoded.ChainID)
+	require.Equal(t, nonce, decoded.Nonce)
+	require.Equal(t, now, decoded.Timestamp)
+	require.Equal(t, uint32(3), decoded.ResourceSummary.ActiveLeases)
+	require.Equal(t, []inventoryv1.SnapshotEvidenceSection{
+		{
+			Name:    "operator-inventory",
+			Payload: []byte("operator-material"),
+		},
+	}, decoded.EvidenceSections)
+}
+
+func TestMaterialPayloadSourcePayloadReturnsSourceError(t *testing.T) {
+	expected := errors.New("source failed")
+	source, err := NewMaterialPayloadSource(MaterialPayloadSourceConfig{
+		Source:   testMaterialSource{err: expected},
+		Provider: "akash1provider",
+		ChainID:  "akashnet-2",
+		Now:      func() time.Time { return time.Unix(1, 0) },
+	})
+	require.NoError(t, err)
+
+	payload, err := source.Payload(context.Background(), SnapshotRequest{})
+	require.ErrorIs(t, err, expected)
+	require.Nil(t, payload)
+}
+
 func TestNewStatusPayloadSourceValidatesConfig(t *testing.T) {
 	status := testStatusClient{}
 	now := func() time.Time { return time.Unix(1, 0) }

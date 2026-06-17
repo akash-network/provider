@@ -39,6 +39,8 @@ var (
 	keyCertificate     = []byte("certificate")
 	keyNextKey         = []byte("nextkey")
 	keySnapshotPoster  = []byte("snapshot-poster")
+	keyInventoryLatest = []byte("inventory-latest")
+	keyInventoryRecord = []byte("inventory-records")
 )
 
 type impl struct {
@@ -497,4 +499,146 @@ func (b *impl) GetSnapshotPosterState(_ context.Context) ([]byte, error) {
 	}
 
 	return res, nil
+}
+
+func (b *impl) SetInventorySnapshot(_ context.Context, provider string, hash []byte, record []byte) error {
+	select {
+	case <-b.closed:
+		return ErrDBClosed
+	default:
+	}
+
+	if provider == "" || len(hash) == 0 || len(record) == 0 {
+		return pconfig.ErrInvalidArgs
+	}
+
+	return b.db.Update(func(tx *bbolt.Tx) error {
+		verification := tx.Bucket(bucketVerification)
+		if verification == nil {
+			return ErrUninitialized
+		}
+
+		latest, err := verification.CreateBucketIfNotExists(keyInventoryLatest)
+		if err != nil {
+			return err
+		}
+
+		records, err := verification.CreateBucketIfNotExists(keyInventoryRecord)
+		if err != nil {
+			return err
+		}
+
+		providerRecords, err := records.CreateBucketIfNotExists([]byte(provider))
+		if err != nil {
+			return err
+		}
+
+		if err := providerRecords.Put(hash, record); err != nil {
+			return err
+		}
+
+		return latest.Put([]byte(provider), hash)
+	})
+}
+
+func (b *impl) GetInventorySnapshot(_ context.Context, provider string, hash []byte) ([]byte, error) {
+	select {
+	case <-b.closed:
+		return nil, ErrDBClosed
+	default:
+	}
+
+	if provider == "" || len(hash) == 0 {
+		return nil, pconfig.ErrInvalidArgs
+	}
+
+	var res []byte
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		records, err := inventorySnapshotRecords(tx, provider)
+		if err != nil {
+			return err
+		}
+
+		val := records.Get(hash)
+		if len(val) == 0 {
+			return pconfig.ErrNotExists
+		}
+
+		res = append([]byte(nil), val...)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func (b *impl) GetLatestInventorySnapshot(_ context.Context, provider string) ([]byte, error) {
+	select {
+	case <-b.closed:
+		return nil, ErrDBClosed
+	default:
+	}
+
+	if provider == "" {
+		return nil, pconfig.ErrInvalidArgs
+	}
+
+	var res []byte
+	err := b.db.View(func(tx *bbolt.Tx) error {
+		verification := tx.Bucket(bucketVerification)
+		if verification == nil {
+			return ErrUninitialized
+		}
+
+		latest := verification.Bucket(keyInventoryLatest)
+		if latest == nil {
+			return pconfig.ErrNotExists
+		}
+
+		hash := latest.Get([]byte(provider))
+		if len(hash) == 0 {
+			return pconfig.ErrNotExists
+		}
+
+		records, err := inventorySnapshotRecords(tx, provider)
+		if err != nil {
+			return err
+		}
+
+		val := records.Get(hash)
+		if len(val) == 0 {
+			return pconfig.ErrNotExists
+		}
+
+		res = append([]byte(nil), val...)
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
+
+func inventorySnapshotRecords(tx *bbolt.Tx, provider string) (*bbolt.Bucket, error) {
+	verification := tx.Bucket(bucketVerification)
+	if verification == nil {
+		return nil, ErrUninitialized
+	}
+
+	records := verification.Bucket(keyInventoryRecord)
+	if records == nil {
+		return nil, pconfig.ErrNotExists
+	}
+
+	providerRecords := records.Bucket([]byte(provider))
+	if providerRecords == nil {
+		return nil, pconfig.ErrNotExists
+	}
+
+	return providerRecords, nil
 }

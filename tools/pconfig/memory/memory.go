@@ -29,6 +29,8 @@ type bidengine struct {
 
 type verification struct {
 	snapshotPosterState []byte
+	inventoryLatest     map[string]string
+	inventorySnapshots  map[string]map[string][]byte
 }
 
 type impl struct {
@@ -46,6 +48,10 @@ func NewMemory() (pconfig.Storage, error) {
 	b := &impl{
 		closed:   make(chan struct{}),
 		accounts: make(map[string]account),
+		verification: verification{
+			inventoryLatest:    make(map[string]string),
+			inventorySnapshots: make(map[string]map[string][]byte),
+		},
 	}
 
 	return b, nil
@@ -247,4 +253,79 @@ func (i *impl) GetSnapshotPosterState(_ context.Context) ([]byte, error) {
 	copy(res, i.verification.snapshotPosterState)
 
 	return res, nil
+}
+
+func (i *impl) SetInventorySnapshot(_ context.Context, provider string, hash []byte, record []byte) error {
+	if provider == "" || len(hash) == 0 || len(record) == 0 {
+		return pconfig.ErrInvalidArgs
+	}
+
+	defer i.lock.Unlock()
+	i.lock.Lock()
+
+	if i.verification.inventoryLatest == nil {
+		i.verification.inventoryLatest = make(map[string]string)
+	}
+	if i.verification.inventorySnapshots == nil {
+		i.verification.inventorySnapshots = make(map[string]map[string][]byte)
+	}
+
+	hashKey := string(hash)
+	providerRecords := i.verification.inventorySnapshots[provider]
+	if providerRecords == nil {
+		providerRecords = make(map[string][]byte)
+		i.verification.inventorySnapshots[provider] = providerRecords
+	}
+
+	providerRecords[hashKey] = append([]byte(nil), record...)
+	i.verification.inventoryLatest[provider] = hashKey
+
+	return nil
+}
+
+func (i *impl) GetInventorySnapshot(_ context.Context, provider string, hash []byte) ([]byte, error) {
+	if provider == "" || len(hash) == 0 {
+		return nil, pconfig.ErrInvalidArgs
+	}
+
+	defer i.lock.RUnlock()
+	i.lock.RLock()
+
+	providerRecords := i.verification.inventorySnapshots[provider]
+	if providerRecords == nil {
+		return nil, pconfig.ErrNotExists
+	}
+
+	record := providerRecords[string(hash)]
+	if len(record) == 0 {
+		return nil, pconfig.ErrNotExists
+	}
+
+	return append([]byte(nil), record...), nil
+}
+
+func (i *impl) GetLatestInventorySnapshot(_ context.Context, provider string) ([]byte, error) {
+	if provider == "" {
+		return nil, pconfig.ErrInvalidArgs
+	}
+
+	defer i.lock.RUnlock()
+	i.lock.RLock()
+
+	hash := i.verification.inventoryLatest[provider]
+	if hash == "" {
+		return nil, pconfig.ErrNotExists
+	}
+
+	providerRecords := i.verification.inventorySnapshots[provider]
+	if providerRecords == nil {
+		return nil, pconfig.ErrNotExists
+	}
+
+	record := providerRecords[hash]
+	if len(record) == 0 {
+		return nil, pconfig.ErrNotExists
+	}
+
+	return append([]byte(nil), record...), nil
 }
