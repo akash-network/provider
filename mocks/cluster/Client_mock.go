@@ -1703,3 +1703,22 @@ func (_c *Client_TeardownLease_Call) RunAndReturn(run func(context1 context.Cont
 	_c.Call.Return(run)
 	return _c
 }
+
+// AttestationQuote provides a mock function for the type Client
+func (_m *Client) DetectTEEPlatform(_ context.Context) v1beta3.TEEPlatform {
+	return v1beta3.TEEPlatformNone
+}
+
+func (_m *Client) AttestationQuote(ctx context.Context, lID v1.LeaseID, requestBody []byte) ([]byte, int, error) {
+	ret := _m.Called(ctx, lID, requestBody)
+
+	var r0 []byte
+	if val, ok := ret.Get(0).([]byte); ok {
+		r0 = val
+	}
+
+	r1 := ret.Get(1).(int)
+	r2 := ret.Error(2)
+
+	return r0, r1, r2
+}

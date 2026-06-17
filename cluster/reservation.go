@@ -24,6 +24,7 @@ type reservation struct {
 	endpointQuantity  uint
 	allocated         bool
 	ipsConfirmed      bool
+	teeType           ctypes.TEEType
 }
 
 var _ ctypes.Reservation = (*reservation)(nil)

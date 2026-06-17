@@ -2,9 +2,17 @@ package cmd
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	crypto_rand "crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -45,6 +53,7 @@ import (
 	kubehostname "github.com/akash-network/provider/cluster/kube/operators/clients/hostname"
 	kubeinventory "github.com/akash-network/provider/cluster/kube/operators/clients/inventory"
 	kubeip "github.com/akash-network/provider/cluster/kube/operators/clients/ip"
+	attestwebhook "github.com/akash-network/provider/cluster/kube/webhook"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
 	clfromctx "github.com/akash-network/provider/cluster/types/v1beta3/fromctx"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -130,6 +139,10 @@ const (
 	FlagGatewayName                      = "gateway-name"
 	FlagGatewayNamespace                 = "gateway-namespace"
 	FlagGatewayProvider                  = "gateway-provider"
+	FlagAttestationWebhookEnabled        = "attestation-webhook-enabled"
+	FlagAttestationWebhookPort           = "attestation-webhook-port"
+	FlagAttestationSidecarImage          = "attestation-sidecar-image"
+	FlagAttestationMockMode              = "attestation-mock"
 )
 
 const (
@@ -812,6 +825,128 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		evtSvc.Shutdown()
 		return gwRest.Close()
 	})
+
+	// Start attestation webhook server if enabled
+	if viper.GetBool(FlagAttestationWebhookEnabled) {
+		sidecarImage := viper.GetString(FlagAttestationSidecarImage)
+		if sidecarImage == "" {
+			return fmt.Errorf("%w: %s is required when %s is enabled",
+				errInvalidConfig, FlagAttestationSidecarImage, FlagAttestationWebhookEnabled)
+		}
+		webhookPort := viper.GetInt(FlagAttestationWebhookPort)
+		webhookAddr := fmt.Sprintf(":%d", webhookPort)
+
+		// Load TLS cert: use gateway cert files if provided, otherwise
+		// generate a self-signed cert (sufficient for local dev / mock mode).
+		var tlsCert tls.Certificate
+		certFile := viper.GetString(FlagGatewayTLSCert)
+		keyFile := viper.GetString(FlagGatewayTLSKey)
+		if certFile != "" && keyFile != "" {
+			tlsCert, err = tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				return fmt.Errorf("attestation webhook: load TLS cert: %w", err)
+			}
+		} else {
+			// Generate a self-signed cert for the webhook.
+			// In production, use --gateway-tls-cert/--gateway-tls-key with a cert
+			// matching the webhook's K8s service DNS name.
+			key, genErr := ecdsa.GenerateKey(elliptic.P256(), crypto_rand.Reader)
+			if genErr != nil {
+				return fmt.Errorf("attestation webhook: generate key: %w", genErr)
+			}
+			tmpl := &x509.Certificate{
+				SerialNumber: big.NewInt(1),
+				Subject:      pkix.Name{CommonName: "akash-attestation-webhook"},
+				NotBefore:    time.Now(),
+				NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+				KeyUsage:     x509.KeyUsageDigitalSignature,
+				ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+				DNSNames: []string{
+					"localhost",
+					"host.docker.internal",
+					"akash-provider",
+					"akash-provider.akash-services",
+					"akash-provider.akash-services.svc",
+					"akash-provider.akash-services.svc.cluster.local",
+				},
+				IPAddresses: []net.IP{net.ParseIP("127.0.0.1")},
+			}
+			certDER, genErr := x509.CreateCertificate(crypto_rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+			if genErr != nil {
+				return fmt.Errorf("attestation webhook: create cert: %w", genErr)
+			}
+			tlsCert = tls.Certificate{
+				Certificate: [][]byte{certDER},
+				PrivateKey:  key,
+			}
+			logger.Info("generated self-signed TLS cert for attestation webhook")
+		}
+
+		webhookLog := logger.With("module", "attestation-webhook")
+
+		var sidecarEnv []corev1.EnvVar
+		if viper.GetBool(FlagAttestationMockMode) {
+			webhookLog.Info("attestation mock mode enabled — sidecar will produce synthetic reports")
+			sidecarEnv = append(sidecarEnv, corev1.EnvVar{
+				Name: "ATTESTATION_MOCK", Value: "true",
+			})
+		}
+
+		webhookSrv := attestwebhook.NewServer(attestwebhook.Config{
+			SidecarImage: sidecarImage,
+			SidecarEnv:   sidecarEnv,
+			ListenAddr:   webhookAddr,
+			TLSCert:      tlsCert,
+			Log:          webhookLog,
+		})
+
+		// Register the MutatingWebhookConfiguration so the K8s API server
+		// sends pod CREATE requests to our webhook for sidecar injection.
+		// The CA bundle must be PEM-encoded. For self-signed certs, it's the leaf cert itself.
+		caBundle := pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: tlsCert.Certificate[0],
+		})
+		if webhookKC, kcErr := fromctx.KubeClientFromCtx(ctx); kcErr == nil {
+			webhookServiceNS := "akash-services"
+
+			// When running locally (mock mode), use a URL endpoint so the Kind
+			// cluster can reach the webhook on the host machine.
+			var webhookURL string
+			if viper.GetBool(FlagAttestationMockMode) {
+				webhookURL = fmt.Sprintf("https://host.docker.internal:%d", webhookPort)
+			}
+
+			regErr := attestwebhook.RegisterWebhookConfiguration(
+				ctx, webhookKC, webhookLog,
+				"akash-provider", webhookServiceNS, caBundle, int32(webhookPort), webhookURL, //nolint:gosec // port is bounded by flag default
+			)
+			if regErr != nil {
+				return fmt.Errorf("register attestation webhook: %w", regErr)
+			}
+		} else {
+			webhookLog.Error("kube client unavailable, skipping webhook registration", "err", kcErr)
+		}
+
+		group.Go(func() error {
+			logger.Info("starting attestation webhook", "addr", webhookAddr)
+			return webhookSrv.ListenAndServeTLS()
+		})
+
+		group.Go(func() error {
+			<-ctx.Done()
+			// Deregister webhook on shutdown to avoid dangling fail-closed
+			// webhooks blocking pod creation when the provider is down.
+			if webhookKC, kcErr := fromctx.KubeClientFromCtx(ctx); kcErr == nil {
+				attestwebhook.DeregisterWebhookConfiguration(
+					context.Background(), webhookKC, webhookLog,
+				)
+			}
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return webhookSrv.Shutdown(shutdownCtx)
+		})
+	}
 
 	if metricsRouter != nil {
 		group.Go(func() error {

@@ -1,0 +1,14 @@
+FROM --platform=linux/amd64 ubuntu:22.04 AS nvml-build
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+COPY nvml-helper/nvml_attestation.c /src/nvml_attestation.c
+RUN gcc -O2 -o /nvml_attestation /src/nvml_attestation.c -ldl
+
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash coreutils findutils procps strace lsof iproute2 \
+    curl file less vim-tiny mount \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=nvml-build /nvml_attestation /usr/bin/nvml_attestation
+COPY attestation-sidecar /attestation-sidecar
+ENTRYPOINT ["/attestation-sidecar"]

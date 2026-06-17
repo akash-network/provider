@@ -252,7 +252,7 @@ func MakeRandomRangePricing() (BidPricingStrategy, error) {
 
 func (randomRangePricing) CalculatePrice(_ context.Context, req Request) (sdk.DecCoin, error) {
 	minPrice, maxPrice := calculatePriceRange(req.GSpec)
-	if minPrice.IsEqual(maxPrice) {
+	if minPrice.Equal(maxPrice) {
 		return maxPrice, nil
 	}
 
@@ -356,7 +356,8 @@ type dataForScriptElement struct {
 }
 
 type dataForScript struct {
-	Resources      []dataForScriptElement `json:"resources"`
-	Price          sdk.DecCoin            `json:"price"`
-	PricePrecision *int                   `json:"price_precision,omitempty"`
+	Resources                  []dataForScriptElement `json:"resources"`
+	Price                      sdk.DecCoin            `json:"price"`
+	PricePrecision             *int                   `json:"price_precision,omitempty"`
+	ConfidentialComputeSidecar bool                   `json:"confidential_compute_sidecar"`
 }

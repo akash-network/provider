@@ -1,4 +1,5 @@
-GATEWAY_API ?= false
+GATEWAY_API          ?= false
+CONFIDENTIAL_COMPUTE ?= false
 
 KUBE_SETUP_PREREQUISITES   ?= \
 
@@ -23,7 +24,22 @@ kube-setup-ingress-default: kube-setup-ingress-gateway
 	@echo "Gateway API ingress setup complete"
 endif
 
-SDL_PATH ?= grafana.yaml
+# CC mode: use Kind config with containerd runtime patches (no restart needed)
+ifeq ($(CONFIDENTIAL_COMPUTE),true)
+KIND_CONFIG_FILE := $(CURDIR)/kind-config-cc.yaml
+endif
+
+# Confidential compute mode overrides
+DEV_REGISTRY             ?= ghcr.io/cloud-j-luna
+DEV_COMMIT               := $(shell git rev-parse --short HEAD)
+
+ifeq ($(CONFIDENTIAL_COMPUTE),true)
+SDL_PATH                   := deployment-cc.yaml
+PROVIDER_CONFIG_PATH       := provider-cc.yaml
+ATTESTATION_SIDECAR_IMAGE  ?= $(DEV_REGISTRY)/attestation-sidecar:$(DEV_COMMIT)
+else
+SDL_PATH                   ?= grafana.yaml
+endif
 
 GATEWAY_HOSTNAME ?= localhost
 GATEWAY_HOST     ?= $(GATEWAY_HOSTNAME):8443
@@ -42,7 +58,12 @@ provider-run:
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none" \
 		--ip-operator=true \
-		$(if $(filter true,$(GATEWAY_API)),--ingress-mode=gateway-api)
+		$(if $(filter true,$(GATEWAY_API)),--ingress-mode=gateway-api) \
+		$(if $(filter true,$(CONFIDENTIAL_COMPUTE)),\
+			--attestation-webhook-enabled=true \
+			--attestation-sidecar-image="$(ATTESTATION_SIDECAR_IMAGE)" \
+			--attestation-mock=true \
+		)
 
 .PHONY: provider-lease-ping
 provider-lease-ping:
@@ -51,6 +72,40 @@ provider-lease-ping:
 .PHONY: hostname-operator
 hostname-operator:
 	$(PROVIDER_SERVICES) hostname-operator
+
+# Confidential compute cluster setup: creates RuntimeClass objects and labels
+# the Kind node with TEE capability labels so the provider can schedule CC
+# workloads. The pods won't actually run with Kata (Kind doesn't have it),
+# but the webhook, annotations, and sidecar injection can be verified.
+.PHONY: kube-setup-cc
+kube-setup-cc:
+	kubectl apply -f cc-setup.yaml
+	@echo "Labeling kind node for CC..."
+	@for node in $$(kubectl get nodes -o name); do \
+		kubectl label $$node \
+			katacontainers.io/kata-runtime=true \
+			amd.feature.node.kubernetes.io/snp=true \
+			intel.feature.node.kubernetes.io/tdx=true \
+			nvidia.com/cc.ready.state=true \
+			--overwrite; \
+	done
+	@echo "Building and loading attestation sidecar image into Kind..."
+	$(MAKE) -C $(AP_ROOT)/sidecar/attestation docker DEV_REGISTRY=$(DEV_REGISTRY) DEV_COMMIT=$(DEV_COMMIT)
+	$(KIND) load docker-image "$(ATTESTATION_SIDECAR_IMAGE)" --name "$(KIND_NAME)"
+	@echo "CC setup complete. RuntimeClasses, node labels, and sidecar image loaded."
+
+.PHONY: kube-teardown-cc
+kube-teardown-cc:
+	-kubectl delete -f cc-setup.yaml 2>/dev/null
+	@for node in $$(kubectl get nodes -o name); do \
+		kubectl label $$node \
+			katacontainers.io/kata-runtime- \
+			amd.feature.node.kubernetes.io/snp- \
+			intel.feature.node.kubernetes.io/tdx- \
+			nvidia.com/cc.ready.state- \
+			2>/dev/null; \
+	done
+	@echo "CC teardown complete."
 
 .PHONY: clean-kube
 clean-kube:
@@ -61,6 +116,8 @@ kube-deployments-rollout: #$(patsubst %, kube-deployment-rollout-%,$(KUSTOMIZE_I
 .PHONY: kube-setup-kube
 ifeq ($(GATEWAY_API),true)
 kube-setup-kube: kube-setup-hostname-operator-gateway
+else ifeq ($(CONFIDENTIAL_COMPUTE),true)
+kube-setup-kube: kube-setup-cc
 else
 kube-setup-kube:
 endif
