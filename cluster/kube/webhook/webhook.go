@@ -95,6 +95,11 @@ func (s *Server) handleMutate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if admissionReview.Request == nil {
+		http.Error(w, "missing request in admission review", http.StatusBadRequest)
+		return
+	}
+
 	response := s.mutate(admissionReview.Request)
 
 	admissionReview.Response = response

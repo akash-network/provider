@@ -481,12 +481,20 @@ func teeTypeFromResourceGroup(rg dtypes.ResourceGroup) ctypes.TEEType {
 // teeTypeFromClusterParams extracts the TEE type from stored cluster params
 // (used for existing reservations loaded at startup).
 func teeTypeFromClusterParams(cp interface{}) ctypes.TEEType {
-	cs, ok := cp.(*crd.ClusterSettings)
-	if !ok || cs == nil {
+	var sparams []*crd.SchedulerParams
+	switch v := cp.(type) {
+	case *crd.ClusterSettings:
+		if v == nil {
+			return ctypes.TEETypeNone
+		}
+		sparams = v.SchedulerParams
+	case crd.ClusterSettings:
+		sparams = v.SchedulerParams
+	default:
 		return ctypes.TEETypeNone
 	}
-	for _, sp := range cs.SchedulerParams {
-		if sp != nil && sp.TEEType != "" {
+	for _, sp := range sparams {
+		if sp != nil && sp.TEEType != "" && !sp.AttestationDisabled {
 			t, err := ctypes.ParseTEEType(sp.TEEType)
 			if err == nil {
 				return t

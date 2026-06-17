@@ -51,7 +51,7 @@ func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteR
 	}
 	if m.WithGPU {
 		gpuCount := m.GPUCount
-		if gpuCount == 0 {
+		if gpuCount <= 0 {
 			gpuCount = 1
 		}
 		result.GPUReports = make([]GPUDeviceReport, gpuCount)
@@ -79,7 +79,7 @@ func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteR
 // For SNP the total is 1184 bytes; for TDX it's 1024 bytes.
 func buildMockReport(reportData [64]byte, teeType string) []byte {
 	size := 1184 // SNP report size
-	if teeType == NameTDX {
+	if teeType == NameTDX || teeType == NameTDXGPU {
 		size = 1024
 	}
 
@@ -89,7 +89,7 @@ func buildMockReport(reportData [64]byte, teeType string) []byte {
 	binary.LittleEndian.PutUint32(report[4:8], uint32(size)) //nolint:gosec
 
 	switch teeType {
-	case NameTDX:
+	case NameTDX, NameTDXGPU:
 		copy(report[8:12], []byte("TDX\x00"))
 	default:
 		copy(report[8:12], []byte("SNP\x00"))

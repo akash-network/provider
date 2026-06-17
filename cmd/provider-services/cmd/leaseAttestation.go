@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"time"
 
@@ -166,7 +167,7 @@ func grpcAddrFromProviderURL(u *url.URL) (string, error) {
 	if hostname == "" {
 		return "", fmt.Errorf("empty hostname in provider URL %q", u.String())
 	}
-	return hostname + ":" + grpcPort, nil
+	return net.JoinHostPort(hostname, grpcPort), nil
 }
 
 // generateJWT creates a signed JWT token for gRPC auth, replicating the chain-sdk client's newJWT().

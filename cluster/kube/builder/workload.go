@@ -147,16 +147,10 @@ func (b *Workload) container() corev1.Container {
 		IsConfidentialComputeRuntimeClass(sparams.RuntimeClass) &&
 		!sparams.AttestationDisabled
 
-	if sidecarActive {
-		kcontainer.SecurityContext = &corev1.SecurityContext{
-			RunAsNonRoot: &falseValue,
-		}
-	} else {
-		kcontainer.SecurityContext = &corev1.SecurityContext{
-			RunAsNonRoot:             &falseValue,
-			Privileged:               &falseValue,
-			AllowPrivilegeEscalation: &falseValue,
-		}
+	kcontainer.SecurityContext = &corev1.SecurityContext{
+		RunAsNonRoot:             &falseValue,
+		Privileged:               &falseValue,
+		AllowPrivilegeEscalation: &falseValue,
 	}
 
 	if cpu := service.Resources.CPU; cpu != nil {

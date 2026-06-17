@@ -2,10 +2,12 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/net"
 
@@ -54,7 +56,11 @@ func (c *client) AttestationQuote(ctx context.Context, leaseID mtypes.LeaseID, r
 		DoRaw(ctx)
 
 	if err != nil {
-		return nil, http.StatusBadGateway, fmt.Errorf("proxy to attestation sidecar: %w", err)
+		code := http.StatusBadGateway
+		if se := new(apierrors.StatusError); errors.As(err, &se) {
+			code = int(se.ErrStatus.Code)
+		}
+		return nil, code, fmt.Errorf("proxy to attestation sidecar: %w", err)
 	}
 
 	return body, http.StatusOK, nil

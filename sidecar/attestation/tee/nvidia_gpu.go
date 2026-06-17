@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -30,8 +31,9 @@ const (
 // This ensures nvidia-smi, libnvidia-ml.so, glibc, and the kernel driver
 // are all from the same guest image — no version mismatches.
 type NvidiaGPUAttestor struct {
-	SMIPath    string
-	mountReady bool
+	SMIPath   string
+	mountOnce sync.Once
+	mountErr  error
 }
 
 // Available returns true if the guest rootfs is accessible and at least
@@ -164,37 +166,36 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 
 // ensureMount prepares the chroot environment. Platform-specific setup
 // (mknod, mount) is in setupGuestRootfs() defined per-platform.
+// Uses sync.Once to guarantee the mount is performed exactly once,
+// even under concurrent quote requests.
 func (n *NvidiaGPUAttestor) ensureMount() error {
-	if n.mountReady {
-		return nil
-	}
-
-	// Check if already mounted from a previous run.
-	if fileExists(guestMountDir + "/bin/nvidia-smi") {
-		n.mountReady = true
-		return nil
-	}
-
-	if err := setupGuestRootfs(); err != nil {
-		return err
-	}
-
-	if !fileExists(guestMountDir + "/bin/nvidia-smi") {
-		return fmt.Errorf("nvidia-smi not found in guest rootfs at %s/bin/nvidia-smi", guestMountDir)
-	}
-
-	// Place the NVML helper into a writable tmpfs directory within the
-	// chroot. The guest rootfs is mounted read-only, so we create a tmpfs
-	// at /mnt/guest/tmp and copy the helper there.
-	if fileExists(nvmlHelperPath) {
-		tmpDir := guestMountDir + "/tmp"
-		if err := mountTmpfsAndCopyHelper(tmpDir, nvmlHelperPath); err != nil {
-			fmt.Fprintf(os.Stderr, "nvidia-gpu: setup helper: %v\n", err)
+	n.mountOnce.Do(func() {
+		// Check if already mounted from a previous run.
+		if fileExists(guestMountDir + "/bin/nvidia-smi") {
+			return
 		}
-	}
 
-	n.mountReady = true
-	return nil
+		if err := setupGuestRootfs(); err != nil {
+			n.mountErr = err
+			return
+		}
+
+		if !fileExists(guestMountDir + "/bin/nvidia-smi") {
+			n.mountErr = fmt.Errorf("nvidia-smi not found in guest rootfs at %s/bin/nvidia-smi", guestMountDir)
+			return
+		}
+
+		// Place the NVML helper into a writable tmpfs directory within the
+		// chroot. The guest rootfs is mounted read-only, so we create a tmpfs
+		// at /mnt/guest/tmp and copy the helper there.
+		if fileExists(nvmlHelperPath) {
+			tmpDir := guestMountDir + "/tmp"
+			if err := mountTmpfsAndCopyHelper(tmpDir, nvmlHelperPath); err != nil {
+				fmt.Fprintf(os.Stderr, "nvidia-gpu: setup helper: %v\n", err)
+			}
+		}
+	})
+	return n.mountErr
 }
 
 // chrootExec runs a binary inside the guest rootfs using SysProcAttr.Chroot.
