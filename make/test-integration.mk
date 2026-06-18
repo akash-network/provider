@@ -27,6 +27,14 @@ test-e2e-integration:
 	# ```
 	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 3000s
 
+.PHONY: test-e2e-integration-batch1
+test-e2e-integration-batch1:
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -tags "e2e" -v ./integration/... -run TestIntegrationBatch1 -timeout 1500s
+
+.PHONY: test-e2e-integration-batch2
+test-e2e-integration-batch2:
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -tags "e2e" -v ./integration/... -run TestIntegrationBatch2 -timeout 1500s
+
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:
 	$(INTEGRATION_VARS) \

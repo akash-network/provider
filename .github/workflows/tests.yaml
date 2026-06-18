@@ -104,8 +104,15 @@ jobs:
         uses: ./.github/actions/setup-ubuntu
       - run: make shellcheck
 
-  integration-tests:
+  integration-tests-batch1:
     uses: ./.github/workflows/integration-tests.yaml
+    with:
+      e2e_target: test-e2e-integration-batch1
+
+  integration-tests-batch2:
+    uses: ./.github/workflows/integration-tests.yaml
+    with:
+      e2e_target: test-e2e-integration-batch2
 
   dispatch-release:
     runs-on: ubuntu-latest
@@ -118,7 +125,8 @@ jobs:
       - coverage
       - yamlcheck
       - shellcheck
-      - integration-tests
+      - integration-tests-batch1
+      - integration-tests-batch2
     steps:
       - uses: actions/checkout@v4
         with:
