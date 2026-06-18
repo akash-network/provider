@@ -38,7 +38,7 @@ func (c *ConfigfsTSM) detectProvider() {
 	if err := os.Mkdir(dir, 0700); err != nil {
 		return
 	}
-	defer os.Remove(dir) //nolint:errcheck
+	defer os.RemoveAll(dir) //nolint:errcheck
 
 	data, err := os.ReadFile(filepath.Join(dir, "provider"))
 	if err != nil {
@@ -77,7 +77,7 @@ func (c *ConfigfsTSM) GetQuote(_ context.Context, reportData [64]byte) (*QuoteRe
 	if err := os.Mkdir(dir, 0700); err != nil {
 		return nil, fmt.Errorf("configfs mkdir %s: %w", dir, err)
 	}
-	defer os.Remove(dir) //nolint:errcheck
+	defer os.RemoveAll(dir) //nolint:errcheck
 
 	// Log available attributes for debugging
 	entries, _ := os.ReadDir(dir)

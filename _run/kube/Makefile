@@ -30,7 +30,7 @@ KIND_CONFIG_FILE := $(CURDIR)/kind-config-cc.yaml
 endif
 
 # Confidential compute mode overrides
-DEV_REGISTRY             ?= ghcr.io/cloud-j-luna
+DEV_REGISTRY             ?= ghcr.io/akash-network
 DEV_COMMIT               := $(shell git rev-parse --short HEAD)
 
 ifeq ($(CONFIDENTIAL_COMPUTE),true)

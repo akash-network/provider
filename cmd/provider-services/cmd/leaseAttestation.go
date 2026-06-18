@@ -97,7 +97,8 @@ func doLeaseAttestation(cmd *cobra.Command) error {
 
 	// Dial the gRPC server with TLS (provider uses self-signed certs).
 	tlsCfg := &tls.Config{
-		InsecureSkipVerify: true, // nolint: gosec
+		InsecureSkipVerify: true,       // nolint: gosec
+		MinVersion:         tls.VersionTLS12,
 	}
 	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	if err != nil {
