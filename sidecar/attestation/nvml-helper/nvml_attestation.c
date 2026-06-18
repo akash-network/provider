@@ -93,6 +93,7 @@ static void write_le32(uint32_t val) {
  * Returns 0 on success, non-zero on failure. */
 static int attest_device(
     fn_deviceGetAttReport nvmlDeviceGetAttReport,
+    fn_deviceGetCert nvmlDeviceGetCert,
     nvmlDevice_t device,
     uint32_t devIdx,
     const uint8_t *nonce,
@@ -125,6 +126,27 @@ static int attest_device(
     if (report.isCecAttestationReportPresent && report.cecAttestationReportSize > 0) {
         write_le32(report.cecAttestationReportSize);
         fwrite(report.cecAttestationReport, 1, report.cecAttestationReportSize, stdout);
+    } else {
+        write_le32(0);
+    }
+
+    /* Append attestation cert chain if available.
+     * The cert chain is PEM-encoded and starts with "-----BEGIN CERTIFICATE-----".
+     * Tenants can split the report blob on this marker to extract it.
+     * If cert collection fails, we skip silently — the attestation report
+     * is still valid, just without an embedded cert chain. */
+    if (nvmlDeviceGetCert) {
+        nvmlConfComputeGpuCertificate_t cert;
+        memset(&cert, 0, sizeof(cert));
+        if (nvmlDeviceGetCert(device, &cert) == NVML_SUCCESS &&
+            cert.attestationCertChainSize > 0) {
+            if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain))
+                cert.attestationCertChainSize = sizeof(cert.attestationCertChain);
+            write_le32(cert.attestationCertChainSize);
+            fwrite(cert.attestationCertChain, 1, cert.attestationCertChainSize, stdout);
+        } else {
+            write_le32(0);
+        }
     } else {
         write_le32(0);
     }
@@ -248,7 +270,7 @@ int main(int argc, char **argv) {
             return 3;
         }
 
-        int rc = attest_device(nvmlDeviceGetAttReport, dev, idx, nonce, nonceLen);
+        int rc = attest_device(nvmlDeviceGetAttReport, nvmlDeviceGetCert, dev, idx, nonce, nonceLen);
         nvmlShutdown();
         return rc ? 4 : 0;
     }
@@ -284,7 +306,7 @@ int main(int argc, char **argv) {
 
         int failures = 0;
         for (uint32_t i = 0; i < ccCount; i++) {
-            if (attest_device(nvmlDeviceGetAttReport, devices[i], deviceIdxs[i], nonce, nonceLen) != 0) {
+            if (attest_device(nvmlDeviceGetAttReport, nvmlDeviceGetCert, devices[i], deviceIdxs[i], nonce, nonceLen) != 0) {
                 failures++;
             }
         }

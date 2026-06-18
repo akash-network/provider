@@ -85,6 +85,8 @@ func (n *NvidiaGPUAttestor) probe() (string, error) {
 //	  N bytes:    attestation report
 //	  4 bytes LE: CEC report size (0 if not present)
 //	  N bytes:    CEC report (omitted if size is 0)
+//	  4 bytes LE: cert chain size (0 if not present)
+//	  M bytes:    PEM-encoded attestation cert chain (omitted if size is 0)
 func (n *NvidiaGPUAttestor) GetAllGPUAttestations(ctx context.Context, nonce [64]byte) ([]GPUDeviceReport, error) {
 	if err := n.ensureMount(); err != nil {
 		return nil, fmt.Errorf("guest rootfs: %w", err)
@@ -149,6 +151,17 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 			// Append CEC report to the main report
 			report = append(report, data[off:off+int(cecSize)]...)
 			off += int(cecSize)
+		}
+
+		// Cert chain (optional absent in older helper builds)
+		if off+4 <= len(data) {
+			certSize := binary.LittleEndian.Uint32(data[off : off+4])
+			off += 4
+			if certSize > 0 && off+int(certSize) <= len(data) {
+				// Append cert chain to report tenants split on PEM marker
+				report = append(report, data[off:off+int(certSize)]...)
+				off += int(certSize)
+			}
 		}
 
 		reports = append(reports, GPUDeviceReport{
