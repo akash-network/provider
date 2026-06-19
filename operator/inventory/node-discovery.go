@@ -801,6 +801,22 @@ func removeManagedLabels(in map[string]string) map[string]string {
 	return out
 }
 
+// nodeHasBlockingTaint reports whether any taint would prevent Akash workloads
+// from being scheduled onto the node. Akash pods carry no custom tolerations,
+// so a NoSchedule or NoExecute taint means the node cannot accept workloads and
+// its capacity must be kept out of the inventory; otherwise the provider bids
+// on capacity it can never use and the deployment fails to schedule.
+// PreferNoSchedule is a soft preference and does not block scheduling.
+func nodeHasBlockingTaint(taints []corev1.Taint) bool {
+	for _, taint := range taints {
+		if taint.Effect == corev1.TaintEffectNoSchedule || taint.Effect == corev1.TaintEffectNoExecute {
+			return true
+		}
+	}
+
+	return false
+}
+
 func isNodeReady(conditions []corev1.NodeCondition) bool {
 	for _, c := range conditions {
 		if c.Type == corev1.NodeReady {
@@ -824,7 +840,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 	sort.Strings(presentSc)
 	adjConfig.FilterOutStorageClasses(presentSc)
 
-	isExcluded := !isNodeReady(knode.Status.Conditions) || knode.Spec.Unschedulable || adjConfig.Exclude.IsNodeExcluded(knode.Name)
+	isExcluded := !isNodeReady(knode.Status.Conditions) || knode.Spec.Unschedulable || nodeHasBlockingTaint(knode.Spec.Taints) || adjConfig.Exclude.IsNodeExcluded(knode.Name)
 
 	if isExcluded {
 		node.Capabilities.StorageClasses = []string{}
