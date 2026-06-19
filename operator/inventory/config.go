@@ -40,10 +40,32 @@ type Exclude struct {
 	NodeStorage ExcludeNodesStorage `json:"node_storage" yaml:"node_storage"`
 }
 
+// ConfigInterconnect holds tunables for GPU-interconnect discovery on the
+// inventory operator. The defaults match the Mellanox/NVIDIA
+// k8s-rdma-shared-device-plugin (the only one supported pre-rc5), so an
+// operator who doesn't set anything continues to work unchanged.
+//
+// AKT-493: providers running a non-Mellanox device plugin (e.g. Broadcom's
+// bnxt RDMA plugin, Intel E810 iwarp plugin) publish their HCAs under
+// vendor-specific extended-resource names like `broadcom.com/rdma` or
+// `intel.com/iwarp_shared`. The hardcoded `rdma/rdma_shared_device_`
+// prefix used to miss those entirely. ResourcePatterns accepts an
+// arbitrary list of glob patterns (or bare strings, which match as a
+// prefix or exact name); the first kubelet resource that matches any
+// pattern wins.
+type ConfigInterconnect struct {
+	// ResourcePatterns is the list of glob patterns the inventory
+	// operator matches kubelet's extended-resource names against to find
+	// the interconnect HCA pool. A bare string with no glob metacharacter
+	// is treated as a literal prefix match (preserves rc4 behavior).
+	ResourcePatterns []string `json:"resource_patterns" yaml:"resource_patterns"`
+}
+
 type Config struct {
-	Version        semver.Version `json:"version" yaml:"version"`
-	ClusterStorage []string       `json:"cluster_storage" yaml:"cluster_storage"`
-	Exclude        Exclude        `json:"exclude" yaml:"exclude"`
+	Version        semver.Version     `json:"version" yaml:"version"`
+	ClusterStorage []string           `json:"cluster_storage" yaml:"cluster_storage"`
+	Exclude        Exclude            `json:"exclude" yaml:"exclude"`
+	Interconnect   ConfigInterconnect `json:"interconnect" yaml:"interconnect"`
 
 	dirty bool
 }
@@ -54,6 +76,8 @@ cluster_storage: []
 exclude:
   nodes: []
   node_storage: []
+interconnect:
+  resource_patterns: []
 `)
 
 func loadConfig(cfg string, defaultOnErr bool) (res Config, err error) {
@@ -130,11 +154,20 @@ func (cfg *Config) Copy() Config {
 	res := Config{
 		ClusterStorage: make([]string, len(cfg.ClusterStorage)),
 		Exclude:        cfg.Exclude.Copy(),
+		Interconnect:   cfg.Interconnect.Copy(),
 		dirty:          false,
 	}
 
 	copy(res.ClusterStorage, cfg.ClusterStorage)
 
+	return res
+}
+
+func (ic *ConfigInterconnect) Copy() ConfigInterconnect {
+	res := ConfigInterconnect{
+		ResourcePatterns: make([]string, len(ic.ResourcePatterns)),
+	}
+	copy(res.ResourcePatterns, ic.ResourcePatterns)
 	return res
 }
 
@@ -194,6 +227,8 @@ loop:
 			val = &res.ClusterStorage
 		case "exclude":
 			val = &res.Exclude
+		case "interconnect":
+			val = &res.Interconnect
 		default:
 			return fmt.Errorf("config: unexpected field %s", node.Content[i].Value) // nolint: err113
 		}

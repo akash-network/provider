@@ -107,6 +107,16 @@ replace (
 	github.com/portworx/sched-ops => github.com/portworx/sched-ops v0.20.4-openstorage-rc3
 )
 
+// Pin pkg.akt.dev/go + sdl to the rc5 pre-release that carries the
+// nested `interconnect:` SDL form and the nccl_hca_prefixes array.
+// Without these `replace` directives, MVS picks pkg.akt.dev/node/v2's
+// transitive v0.2.14 / v0.2.2 stable dependencies (which predate the
+// changes) and the provider fails to compile against the new shape.
+replace (
+	pkg.akt.dev/go => pkg.akt.dev/go v0.2.13-rc5
+	pkg.akt.dev/go/sdl => pkg.akt.dev/go/sdl v0.2.2-rc5
+)
+
 require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect
 	cel.dev/expr v0.24.0 // indirect

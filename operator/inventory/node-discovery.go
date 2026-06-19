@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
+	"github.com/jaypipes/ghw/pkg/pci"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -79,6 +81,19 @@ func newNodeDiscovery(ctx context.Context, name, namespace string, image string,
 	return nd
 }
 
+// hostPathDirectoryPtr returns a pointer to HostPathDirectory for the
+// /sys/class mount the IB discovery handler walks. We require the parent
+// to exist (it always does on any Linux host — sysfs is mounted by the
+// kernel) and let the handler tolerate a missing infiniband subdir on
+// non-interconnect nodes. DirectoryOrCreate is not an option here because sysfs
+// is read-only and any mkdir against /sys/* fails — that mode is what
+// caused operator-inventory-hardware-discovery to hang in
+// ContainerCreating in CI on the initial interconnect PR.
+func hostPathDirectoryPtr() *corev1.HostPathType {
+	t := corev1.HostPathDirectory
+	return &t
+}
+
 func (dp *nodeDiscovery) shutdown() error {
 	dp.cancel()
 
@@ -115,6 +130,81 @@ func (dp *nodeDiscovery) queryCPU(ctx context.Context) (*cpu.Info, error) {
 			return nil, resp.err
 		}
 		return resp.data.(*cpu.Info), resp.err
+	}
+}
+
+// queryIB asks the per-node psutil pod to walk /sys/class/infiniband and
+// return the host's HCA prefix + fabric. A zero-valued result means the
+// node has no interconnect hardware (or the DaemonSet pod is missing the sysfs
+// mount); callers treat it as "this node has no interconnect capability."
+func (dp *nodeDiscovery) queryIB(ctx context.Context) (*IBDiscovery, error) {
+	respch := make(chan dpReadResp, 1)
+
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case <-rctx.Done():
+		return nil, rctx.Err()
+	case dp.readch <- dpReadReq{
+		ctx:  rctx,
+		op:   dpReqIB,
+		resp: respch,
+	}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case resp := <-respch:
+		if resp.data == nil {
+			return nil, resp.err
+		}
+		return resp.data.(*IBDiscovery), resp.err
+	}
+}
+
+// queryPCI asks the per-node psutil pod for the host's PCI bus enumeration.
+// Used as a fallback when ghw's `/sys/class/drm` walk misses compute GPUs
+// (headless A100/H100 nodes where the NVIDIA driver lives inside the GPU
+// Operator container, not on the host kernel — so no DRM nodes for the
+// compute cards, only the BMC VGA).
+func (dp *nodeDiscovery) queryPCI(ctx context.Context) (*pci.Info, error) {
+	respch := make(chan dpReadResp, 1)
+
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case <-rctx.Done():
+		return nil, rctx.Err()
+	case dp.readch <- dpReadReq{
+		ctx:  rctx,
+		op:   dpReqPCI,
+		resp: respch,
+	}:
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-dp.ctx.Done():
+		return nil, dp.ctx.Err()
+	case resp := <-respch:
+		if resp.data == nil {
+			return nil, resp.err
+		}
+		return resp.data.(*pci.Info), resp.err
 	}
 }
 
@@ -207,6 +297,34 @@ func (dp *nodeDiscovery) apiConnector() error {
 						{
 							Name:  "PCIDB_ENABLE_NETWORK_FETCH",
 							Value: "1",
+						},
+					},
+					// P-1: mount the host's /sys so the /infiniband handler
+					// can walk /host/sys/class/infiniband AND resolve the
+					// sysfs symlinks each device dir points into under
+					// /sys/devices/.../infiniband/<dev>. Mounting only
+					// /sys/class makes the directory listing work (the
+					// names are stored in the parent) but every read of a
+					// device subdir (ports/link_layer, etc) goes through
+					// the symlink target and lands outside the mount.
+					// Sysfs is read-only so a full /sys mount is safe;
+					// HostPathDirectory because /sys always exists.
+					VolumeMounts: []corev1.VolumeMount{
+						{
+							Name:      "host-sys",
+							MountPath: "/host/sys",
+							ReadOnly:  true,
+						},
+					},
+				},
+			},
+			Volumes: []corev1.Volume{
+				{
+					Name: "host-sys",
+					VolumeSource: corev1.VolumeSource{
+						HostPath: &corev1.HostPathVolumeSource{
+							Path: "/sys",
+							Type: hostPathDirectoryPtr(),
 						},
 					},
 				},
@@ -303,6 +421,10 @@ initloop:
 				res = "gpu"
 			case dpReqMem:
 				res = "memory"
+			case dpReqIB:
+				res = "infiniband"
+			case dpReqPCI:
+				res = "pci"
 			}
 
 			result := kc.CoreV1().RESTClient().Get().
@@ -330,6 +452,14 @@ initloop:
 						resp.data = &res
 					case dpReqMem:
 						var res memory.Info
+						resp.err = json.Unmarshal(data, &res)
+						resp.data = &res
+					case dpReqIB:
+						var res IBDiscovery
+						resp.err = json.Unmarshal(data, &res)
+						resp.data = &res
+					case dpReqPCI:
+						var res pci.Info
 						resp.err = json.Unmarshal(data, &res)
 						resp.data = &res
 					}
@@ -415,7 +545,7 @@ func (dp *nodeDiscovery) monitor() error {
 		currLabels = copyManagedLabels(knode.Labels)
 	}
 
-	node := dp.initNodeInfo(gpusIDs, knode)
+	node := dp.initNodeInfo(gpusIDs, knode, cfg.Interconnect.ResourcePatterns)
 
 	restartPodsWatcher := func() error {
 		if podsWatch != nil {
@@ -522,7 +652,7 @@ func (dp *nodeDiscovery) monitor() error {
 					switch evt.Type {
 					case watch.Modified:
 						if nodeAllocatableChanged(knode, obj) {
-							updateNodeInfo(obj, &node)
+							updateNodeInfo(obj, &node, cfg.Interconnect.ResourcePatterns)
 							if err = restartPodsWatcher(); err != nil {
 								return err
 							}
@@ -634,9 +764,10 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	return changed
 }
 
-func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node) v1.Node {
+func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node, interconnectPatterns []string) v1.Node {
 	cpuInfo := dp.parseCPUInfo(dp.ctx)
 	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIDs)
+	ibInfo := dp.parseIBInfo(dp.ctx)
 
 	res := v1.Node{
 		Name: knode.Name,
@@ -656,42 +787,154 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 			EphemeralStorage: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			VolumesAttached:  v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 			VolumesMounted:   v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+			// GPU interconnect capacity is filled in by updateNodeInfo when the kubelet
+			// publishes an rdma/rdma_shared_device_* extended resource.
+			GPUInterconnect: v1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+		},
+		Capabilities: v1.NodeCapabilities{
+			// HCA prefixes + fabric come from the per-node sysfs probe via
+			// the psutil pod. Empty on non-interconnect nodes.
+			NCCLHCAPrefixes:    append([]string(nil), ibInfo.NCCLIBHCAPrefixes...),
+			InterconnectFabric: ibInfo.Fabric,
 		},
 	}
 
-	updateNodeInfo(knode, &res)
+	updateNodeInfo(knode, &res, interconnectPatterns)
 
 	return res
 }
 
-func updateNodeInfo(knode *corev1.Node, node *v1.Node) {
+// parseIBInfo asks the per-node psutil pod for the host's InfiniBand /
+// RoCE inventory. A failure is logged but never fatal — the result is a
+// zero-value IBDiscovery, which propagates through the rest of the
+// inventory as "this node has no interconnect capability."
+func (dp *nodeDiscovery) parseIBInfo(ctx context.Context) IBDiscovery {
+	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+
+	ib, err := dp.queryIB(ctx)
+	if err != nil || ib == nil {
+		if err != nil {
+			log.V(4).Info("unable to query infiniband; treating node as non-interconnect", "err", err.Error())
+		}
+		return IBDiscovery{}
+	}
+	return *ib
+}
+
+// DefaultInterconnectResourcePattern matches the
+// `rdma/rdma_shared_device_*` extended resources the Mellanox / NVIDIA
+// k8s-rdma-shared-device-plugin publishes (e.g.
+// `rdma/rdma_shared_device_ib` for InfiniBand-pinned plugins,
+// `rdma/rdma_shared_device_eth` for RoCE). Used when the operator's
+// `interconnect.resource_patterns` config list is empty so the rc4
+// hardcoded behavior keeps working out of the box.
+//
+// AKT-493: an operator running a non-Mellanox plugin (Broadcom bnxt
+// RDMA, Intel E810 iwarp, etc.) can override this with one or more
+// patterns under `interconnect.resource_patterns` in provider.yaml.
+const DefaultInterconnectResourcePattern = "rdma/rdma_shared_device_*"
+
+// matchInterconnectResourceName returns the first extended-resource name
+// from `quantities` that matches any of `patterns`, or empty if no
+// pattern matches. Patterns use filepath.Match's shell-style globbing
+// (`*`, `?`, character classes); a bare string with no glob metacharacter
+// matches as a literal prefix (preserves the rc4 contract — empty
+// `patterns` falls back to the Mellanox/NVIDIA default). The first hit
+// wins; mixed fabrics on a single node are explicitly outside spec scope
+// (§7.1).
+func matchInterconnectResourceName(quantities corev1.ResourceList, patterns []string) corev1.ResourceName {
+	effective := patterns
+	if len(effective) == 0 {
+		effective = []string{DefaultInterconnectResourcePattern}
+	}
+	// Iterate patterns first (preserves operator's config order — the
+	// first pattern in `interconnect.resource_patterns` wins) and
+	// resources second (kubelet ResourceList is a map with
+	// non-deterministic iteration order). Without this ordering, the
+	// "first match wins" guarantee would silently depend on Go's hash
+	// seed.
+	for _, p := range effective {
+		for name := range quantities {
+			if resourcePatternMatches(p, string(name)) {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+// resourcePatternMatches applies one pattern to one kubelet resource
+// name. Bare strings (no `*`, `?`, or `[`) match as a literal prefix —
+// the rc4 contract. Patterns containing glob metacharacters use
+// filepath.Match. A malformed pattern is treated as a non-match (the
+// inventory operator surfaces config-load errors elsewhere; here we
+// fail-closed rather than swallow the whole node).
+func resourcePatternMatches(pattern, name string) bool {
+	if !strings.ContainsAny(pattern, "*?[") {
+		return strings.HasPrefix(name, pattern)
+	}
+	ok, err := filepath.Match(pattern, name)
+	if err != nil {
+		return false
+	}
+	return ok
+}
+
+func updateNodeInfo(knode *corev1.Node, node *v1.Node, interconnectPatterns []string) {
+	// Resolve whichever interconnect extended resource the cluster's
+	// device plugin advertises. Empty `interconnectPatterns` falls back
+	// to the rc4 hardcoded Mellanox/NVIDIA prefix; operators on other
+	// plugins point at `broadcom.com/rdma`, `intel.com/iwarp_shared`,
+	// etc. via the `interconnect.resource_patterns` config. If no
+	// pattern matches, the name stays empty and the inventory client
+	// treats the node as having no interconnect capability.
+	//
+	// Clear the interconnect fields up-front so a node whose
+	// device-plugin resource was removed (or whose pattern config no
+	// longer matches the previously-published name) properly drops to
+	// non-interconnect rather than retaining the stale name + zeroed
+	// capacity. The subsequent kubelet loops only set capacity/
+	// allocatable when a match is found, so without this reset a
+	// previously-set value would persist forever.
+	node.Capabilities.InterconnectResourceName = ""
+	node.Resources.GPUInterconnect.Capacity.Set(0)
+	node.Resources.GPUInterconnect.Allocatable.Set(0)
+
+	interconnectResource := matchInterconnectResourceName(knode.Status.Allocatable, interconnectPatterns)
+	if interconnectResource == "" {
+		interconnectResource = matchInterconnectResourceName(knode.Status.Capacity, interconnectPatterns)
+	}
+	if interconnectResource != "" {
+		node.Capabilities.InterconnectResourceName = string(interconnectResource)
+	}
+
 	for name, r := range knode.Status.Allocatable {
-		switch name {
-		case corev1.ResourceCPU:
+		switch {
+		case name == corev1.ResourceCPU:
 			node.Resources.CPU.Quantity.Allocatable.SetMilli(r.MilliValue())
-		case corev1.ResourceMemory:
+		case name == corev1.ResourceMemory:
 			node.Resources.Memory.Quantity.Allocatable.Set(r.Value())
-		case corev1.ResourceEphemeralStorage:
+		case name == corev1.ResourceEphemeralStorage:
 			node.Resources.EphemeralStorage.Allocatable.Set(r.Value())
-		case builder.ResourceGPUNvidia:
-			fallthrough
-		case builder.ResourceGPUAMD:
+		case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 			node.Resources.GPU.Quantity.Allocatable.Set(r.Value())
+		case interconnectResource != "" && name == interconnectResource:
+			node.Resources.GPUInterconnect.Allocatable.Set(r.Value())
 		}
 	}
 
 	for name, r := range knode.Status.Capacity {
-		switch name {
-		case corev1.ResourceCPU:
+		switch {
+		case name == corev1.ResourceCPU:
 			node.Resources.CPU.Quantity.Capacity.SetMilli(r.MilliValue())
-		case corev1.ResourceMemory:
+		case name == corev1.ResourceMemory:
 			node.Resources.Memory.Quantity.Capacity.Set(r.Value())
-		case corev1.ResourceEphemeralStorage:
+		case name == corev1.ResourceEphemeralStorage:
 			node.Resources.EphemeralStorage.Capacity.Set(r.Value())
-		case builder.ResourceGPUNvidia:
-			fallthrough
-		case builder.ResourceGPUAMD:
+		case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 			node.Resources.GPU.Quantity.Capacity.Set(r.Value())
+		case interconnectResource != "" && name == interconnectResource:
+			node.Resources.GPUInterconnect.Capacity.Set(r.Value())
 		}
 	}
 }
@@ -703,23 +946,28 @@ func nodeResetAllocated(node *v1.Node) {
 	node.Resources.EphemeralStorage.Allocated = resource.NewQuantity(0, resource.DecimalSI)
 	node.Resources.VolumesAttached.Allocated = resource.NewQuantity(0, resource.DecimalSI)
 	node.Resources.VolumesMounted.Allocated = resource.NewQuantity(0, resource.DecimalSI)
+	node.Resources.GPUInterconnect.Allocated = resource.NewQuantity(0, resource.DecimalSI)
 }
 
 func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
+	interconnectResource := corev1.ResourceName(node.Capabilities.InterconnectResourceName)
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
-			switch name {
-			case corev1.ResourceCPU:
+			switch {
+			case name == corev1.ResourceCPU:
 				node.Resources.CPU.Quantity.Allocated.Add(quantity)
-			case corev1.ResourceMemory:
+			case name == corev1.ResourceMemory:
 				node.Resources.Memory.Quantity.Allocated.Add(quantity)
-			case corev1.ResourceEphemeralStorage:
+			case name == corev1.ResourceEphemeralStorage:
 				node.Resources.EphemeralStorage.Allocated.Add(quantity)
-			case builder.ResourceGPUNvidia:
-				fallthrough
-			case builder.ResourceGPUAMD:
+			case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 				node.Resources.GPU.Quantity.Allocated.Add(quantity)
 				// GPU overcommit is not allowed, if that happens something is terribly wrong with the inventory
+			case interconnectResource != "" && name == interconnectResource:
+				// interconnect is 1:1 with GPU per the spec; the device plugin
+				// won't admit a pod that asks for more than is allocatable,
+				// so straight accumulation matches the GPU pattern.
+				node.Resources.GPUInterconnect.Allocated.Add(quantity)
 			}
 		}
 
@@ -743,19 +991,20 @@ func subAllocatedNLZ(allocated *resource.Quantity, val resource.Quantity) {
 }
 
 func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
+	interconnectResource := corev1.ResourceName(node.Capabilities.InterconnectResourceName)
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
-			switch name {
-			case corev1.ResourceCPU:
+			switch {
+			case name == corev1.ResourceCPU:
 				subAllocatedNLZ(node.Resources.CPU.Quantity.Allocated, quantity)
-			case corev1.ResourceMemory:
+			case name == corev1.ResourceMemory:
 				subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, quantity)
-			case corev1.ResourceEphemeralStorage:
+			case name == corev1.ResourceEphemeralStorage:
 				subAllocatedNLZ(node.Resources.EphemeralStorage.Allocated, quantity)
-			case builder.ResourceGPUNvidia:
-				fallthrough
-			case builder.ResourceGPUAMD:
+			case name == builder.ResourceGPUNvidia || name == builder.ResourceGPUAMD:
 				subAllocatedNLZ(node.Resources.GPU.Quantity.Allocated, quantity)
+			case interconnectResource != "" && name == interconnectResource:
+				subAllocatedNLZ(node.Resources.GPUInterconnect.Allocated, quantity)
 			}
 		}
 
@@ -905,6 +1154,44 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 	return res
 }
 
+// gpuInfoFromPCIDevice extracts a GPUInfo from a ghw pci.Device record,
+// returning ok=false for devices outside the akash GPU registry so the
+// caller can skip them when walking the full PCI bus.
+//
+// We deliberately do NOT filter by PCI class/subclass. Datacenter cards
+// (A100, H100, etc.) enumerate as 03/02 ("3D controller") but consumer
+// cards (RTX 4090/3090, A6000) enumerate as 03/00 ("VGA compatible
+// controller") — the same class as the BMC VGA. The vendor+product
+// registry lookup is what distinguishes them: BMC Matrox (vendor 102b)
+// isn't in akash's GPU vendor registry, while NVIDIA/AMD compute and
+// consumer cards both are. NVSwitch bridges (NVIDIA vendor, class 06)
+// also fail the product lookup since their product IDs are not in the
+// GPU model registry.
+func gpuInfoFromPCIDevice(dev *pci.Device, registry RegistryGPUVendors) (v1.GPUInfo, bool) {
+	if dev == nil || dev.Vendor == nil || dev.Product == nil {
+		return v1.GPUInfo{}, false
+	}
+
+	vendor, exists := registry[dev.Vendor.ID]
+	if !exists {
+		return v1.GPUInfo{}, false
+	}
+
+	model, exists := vendor.Devices[dev.Product.ID]
+	if !exists {
+		return v1.GPUInfo{}, false
+	}
+
+	return v1.GPUInfo{
+		Vendor:     vendor.Name,
+		VendorID:   dev.Vendor.ID,
+		Name:       model.Name,
+		ModelID:    dev.Product.ID,
+		Interface:  model.Interface,
+		MemorySize: model.MemorySize,
+	}, true
+}
+
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
@@ -913,43 +1200,33 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
 		log.Error(err, "unable to query gpu")
-		return res
+	} else if gpus != nil {
+		for _, dev := range gpus.GraphicsCards {
+			if ginfo, ok := gpuInfoFromPCIDevice(dev.DeviceInfo, info); ok {
+				res = append(res, ginfo)
+			}
+		}
 	}
 
-	if gpus == nil {
-		return res
-	}
+	// Headless compute nodes (A100/H100 + NVIDIA GPU Operator) expose only
+	// the BMC VGA under /sys/class/drm because the host kernel has no
+	// nvidia driver — the driver lives in the operator's daemonset
+	// container. Walk the PCI bus directly to find the compute cards.
+	if len(res) == 0 {
+		pciInfo, perr := dp.queryPCI(ctx)
+		if perr != nil {
+			log.Error(perr, "unable to query pci for gpu fallback")
+		} else if pciInfo != nil {
+			for _, dev := range pciInfo.Devices {
+				if ginfo, ok := gpuInfoFromPCIDevice(dev, info); ok {
+					res = append(res, ginfo)
+				}
+			}
 
-	for _, dev := range gpus.GraphicsCards {
-		dinfo := dev.DeviceInfo
-		if dinfo == nil {
-			continue
+			if len(res) > 0 {
+				log.Info("discovered gpus via pci fallback", "count", len(res), "node", dp.name)
+			}
 		}
-
-		vinfo := dinfo.Vendor
-		pinfo := dinfo.Product
-		if vinfo == nil || pinfo == nil {
-			continue
-		}
-
-		vendor, exists := info[vinfo.ID]
-		if !exists {
-			continue
-		}
-
-		model, exists := vendor.Devices[pinfo.ID]
-		if !exists {
-			continue
-		}
-
-		res = append(res, v1.GPUInfo{
-			Vendor:     vendor.Name,
-			VendorID:   dev.DeviceInfo.Vendor.ID,
-			Name:       model.Name,
-			ModelID:    dev.DeviceInfo.Product.ID,
-			Interface:  model.Interface,
-			MemorySize: model.MemorySize,
-		})
 	}
 
 	sort.Sort(res)

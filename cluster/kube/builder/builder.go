@@ -38,6 +38,13 @@ const (
 	AkashLeaseManifestVersion     = "akash.network/manifest.version"
 	AkashLeaseUpdatedAt           = "akash.network/lease.updated_at"
 	AkashManifestResourceVersion  = "akash.network/manifest.resource.version"
+
+	// AkashInterconnectGroupLabelName labels every pod that participates in an
+	// SDL interconnect opt-in (implicit `auto` group from `interconnect: []`
+	// or an explicit name from `interconnect: { group: <name> }`). The
+	// workload builder uses it as the matchExpression for a per-group pod
+	// anti-affinity rule that spreads peers across distinct nodes.
+	AkashInterconnectGroupLabelName = "akash.network/interconnect-group"
 )
 
 const (
@@ -59,6 +66,14 @@ const (
 	envVarAkashClusterPublicHostname = "AKASH_CLUSTER_PUBLIC_HOSTNAME"
 	envVarKubernetesServiceHost      = "KUBERNETES_SERVICE_HOST"
 	envVarKubernetesServicePort      = "KUBERNETES_SERVICE_PORT"
+
+	// NCCL tuning vars, injected only for services whose reservation
+	// pinned an interconnect HCA. Tenants may override any of these by
+	// setting the same key in service.env (addIfNotPresent honors that).
+	envVarNCCLIBDisable     = "NCCL_IB_DISABLE"
+	envVarNCCLIBHCA         = "NCCL_IB_HCA"
+	envVarNCCLIBGIDIndex    = "NCCL_IB_GID_INDEX"
+	nccLIBGIDIndexRoCEValue = "3"
 )
 
 var (

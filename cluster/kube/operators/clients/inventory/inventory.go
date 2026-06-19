@@ -43,11 +43,44 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.SchedulerParams, bool, bool) {
+//
+// requiredFabric is the placement-level interconnect fabric pin extracted by the
+// caller from `Reservation.Resources()` via PlacementRequiredFabric. Empty
+// string means no fabric pin (any interconnect fabric satisfies the bid); a
+// non-empty value must equal node.Capabilities.InterconnectFabric for the bid to
+// stick. Pulled at the Adjust level so the type-switch only runs once per
+// bid, not once per (node, replica) attempt.
+func (inv *inventory) tryAdjust(
+	node int,
+	res *rtypes.Resources,
+	requiredFabric string,
+	requiresInterconnect bool,
+	interconnectGroup string,
+	groupClaims map[string]map[int]bool,
+) (*crd.SchedulerParams, bool, bool) {
+	// AKT-443: enforce per-interconnect_group node separation at fit time.
+	// Resources sharing a group label must land on distinct nodes (so the
+	// workload builder's pod anti-affinity is satisfiable). Reject the
+	// node early if this group has already claimed it; the surrounding
+	// Adjust loop will then walk to the next node.
+	if interconnectGroup != "" {
+		if claimed, ok := groupClaims[interconnectGroup]; ok && claimed[node] {
+			return nil, false, true
+		}
+	}
+
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
 	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU) {
+		return nil, false, true
+	}
+
+	// tryAdjustInterconnect before tryAdjustGPU so the interconnect stamp lands even if
+	// GPU adjust is about to clobber res.GPU.Attributes. We rely on the
+	// caller's `requiresInterconnect` flag (pulled from the pristine resource)
+	// rather than re-reading attributes here — see the helper's doc.
+	if !tryAdjustInterconnect(&nd.Resources.GPUInterconnect, nd.Capabilities, res, sparams, requiredFabric, requiresInterconnect) {
 		return nil, false, true
 	}
 
@@ -110,6 +143,18 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.Scheduler
 	// commit and move on
 	inv.Nodes[node] = nd
 	inv.Storage = storageClasses
+
+	// AKT-443: register this resource's interconnect_group claim on the node so
+	// peers in the same group are forced onto distinct nodes by the early
+	// rejection at the top of this function. We register only after all
+	// the per-node-resource gates have passed, so a partial-fit attempt
+	// never poisons the group→nodes map.
+	if interconnectGroup != "" {
+		if groupClaims[interconnectGroup] == nil {
+			groupClaims[interconnectGroup] = map[int]bool{}
+		}
+		groupClaims[interconnectGroup][node] = true
+	}
 
 	if reflect.DeepEqual(sparams, &crd.SchedulerParams{}) {
 		return nil, true, true
@@ -202,6 +247,71 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 	return false
 }
 
+// tryAdjustInterconnect pins one interconnect HCA per GPU unit (the locked 1:1 invariant)
+// when the per-resource opt-in `gpu.attributes.interconnect=true` is set, and
+// stamps the SchedulerParams the workload builder later turns into a
+// kubelet resource request plus NCCL env vars.
+//
+// Returns true on a no-op (resource does not require interconnect), on a
+// successful allocation, and false when the node is unsuitable. False
+// here is node-scoped (`nStatus=false` upstream) so the caller will try
+// the next node, not abort the bid.
+//
+// Suitability gates:
+//   - The placement-level fabric pin (if any) matches the node's fabric.
+//   - The node actually advertises an interconnect fabric and a kubelet extended
+//     resource name (NodeCapabilities from P-1's inventory operator).
+//   - There is GPU interconnect capacity for `gpu.units` HCAs (1:1).
+//
+// GPU presence is guaranteed by ResourceRequiresInterconnect — it only returns
+// true when res.GPU is non-nil with the interconnect=true attribute. The
+// chain-SDK SDL parser additionally rejects gpu.units==0 with interconnect=true.
+// tryAdjustInterconnect takes `required` as an explicit bool instead of
+// re-reading res.GPU.Attributes because tryAdjustGPU clobbers
+// res.Attributes on the FIRST replica's pass (replaces the attribute
+// slice with a single synthesized vendor entry). On replica 2+, the
+// adjusted dup is taken from the already-clobbered slice, so a
+// ResourceRequiresInterconnect check here would falsely report "no interconnect needed"
+// and skip the SchedulerParams.Resources.Interconnect stamp — the per-replica
+// DeepEqual in Adjust would then reject the bid with
+// ErrGroupResourceMismatch. The caller pulls `required` from the
+// pristine origResources once before any mutation runs.
+func tryAdjustInterconnect(
+	rp *inventoryV1.ResourcePair,
+	capabilities inventoryV1.NodeCapabilities,
+	res *rtypes.Resources,
+	sparams *crd.SchedulerParams,
+	requiredFabric string,
+	required bool,
+) bool {
+	if !required {
+		return true
+	}
+
+	if capabilities.InterconnectFabric == "" || capabilities.InterconnectResourceName == "" {
+		return false
+	}
+
+	if requiredFabric != "" && capabilities.InterconnectFabric != requiredFabric {
+		return false
+	}
+
+	if res.GPU == nil || !rp.SubNLZ(res.GPU.Units) {
+		return false
+	}
+
+	sParamsEnsureResources(sparams)
+	sparams.Resources.Interconnect = &crd.SchedulerResourceInterconnect{
+		Enabled:         true,
+		Units:           res.GPU.Units.Value(),
+		ResourceName:    capabilities.InterconnectResourceName,
+		Fabric:          capabilities.InterconnectFabric,
+		NCCLHCAPrefixes: append([]string(nil), capabilities.NCCLHCAPrefixes...),
+	}
+
+	return true
+}
+
 func tryAdjustEphemeralStorage(rp *inventoryV1.ResourcePair, res *rtypes.Storage) bool {
 	return rp.SubNLZ(res.Quantity)
 }
@@ -237,6 +347,33 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 
 	currInventory := inv.dup()
 
+	// Extract the deployment-group's interconnect fabric pin once. tryAdjust
+	// consults it per (node, replica) attempt; computing it here keeps the
+	// ResourceGroup type-switch off the hot path.
+	requiredFabric, _ := PlacementRequiredFabric(reservation.Resources())
+
+	// Per-resource interconnect-required flags. Read from origResources because
+	// tryAdjustGPU mutates res.GPU.Attributes on each pass, dropping the
+	// `interconnect: true` opt-in. For services with count > 1 the second-and-
+	// later replica's adjusted slice is a Dup of the already-clobbered
+	// state, so re-reading attributes inside tryAdjustInterconnect would falsely
+	// report "no interconnect needed." Computed once here, threaded through.
+	requiresInterconnect := make([]bool, len(origResources))
+	// AKT-443: per-resource interconnect_group label, same pristine-source story
+	// as requiresInterconnect. tryAdjustGPU clobbers Attributes; reading the
+	// group label later would race that mutation. Computed once here.
+	interconnectGroup := make([]string, len(origResources))
+	for i := range origResources {
+		requiresInterconnect[i] = ResourceRequiresInterconnect(origResources[i].Resources)
+		interconnectGroup[i] = ResourceInterconnectGroup(origResources[i].Resources)
+	}
+
+	// AKT-443: per-interconnect_group set of node indices already claimed in this
+	// bid attempt. Scoped to this Adjust call (one bid) so two unrelated
+	// orders cannot interfere. A successful tryAdjust commits the entry;
+	// a rejection on any subsequent gate never touches it.
+	groupClaims := map[string]map[int]bool{}
+
 	var err error
 
 nodes:
@@ -254,7 +391,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, requiredFabric, requiresInterconnect[i], interconnectGroup[i], groupClaims)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes
