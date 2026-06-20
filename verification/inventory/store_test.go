@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -154,6 +155,31 @@ func TestRecordingSnapshotter(t *testing.T) {
 	require.Equal(t, SnapshotValidationStatusValid, record.Validation.Status)
 }
 
+func TestRecordingSnapshotterDoesNotStoreNonceSnapshots(t *testing.T) {
+	ctx := context.Background()
+	payload := testSnapshotPayload(t, "payload")
+	snapshot := &Snapshot{
+		Payload:   payload,
+		Hash:      HashPayload(payload),
+		Signature: []byte("signature"),
+		Provider:  "akash1provider",
+	}
+	builder := &testSnapshotBuilder{snapshot: snapshot}
+	store := NewMemorySnapshotStore()
+	snapshotter, err := NewRecordingSnapshotter(builder, store, time.Now)
+	require.NoError(t, err)
+
+	result, err := snapshotter.Build(ctx, SnapshotRequest{
+		Nonce: bytes.Repeat([]byte{1}, NonceSize),
+	})
+	require.NoError(t, err)
+	require.Equal(t, snapshot, result)
+
+	_, ok, err := store.Latest(ctx, snapshot.Provider)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
 func TestRecordingSnapshotterReturnsStoreError(t *testing.T) {
 	expected := errors.New("store failed")
 	payload := testSnapshotPayload(t, "payload")
@@ -222,6 +248,9 @@ func testSnapshotPayload(t *testing.T, value string) []byte {
 		SchemaVersion: SnapshotPayloadSchemaVersion,
 		Provider:      "akash1provider",
 		ChainID:       "akashnet-2",
+		ResourceSummary: inventoryv1.SnapshotResourceSummary{
+			SoftwareVersion: value,
+		},
 		EvidenceSections: []inventoryv1.SnapshotEvidenceSection{
 			{
 				Name:    "test",

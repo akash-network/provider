@@ -92,6 +92,10 @@ func (s *RecordingSnapshotter) Build(ctx context.Context, req SnapshotRequest) (
 		return nil, err
 	}
 
+	if len(req.Nonce) != 0 {
+		return snapshot, nil
+	}
+
 	record, err := NewSnapshotRecord(snapshot, SnapshotPayloadSchemaVersion, s.now())
 	if err != nil {
 		return nil, err
