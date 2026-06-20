@@ -35,6 +35,9 @@ func (gm *grpcInventoryV1) GetInventorySnapshot(ctx context.Context, req *invent
 	if err := inventory.ValidateNonce(req.GetNonce()); err != nil {
 		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
+	if len(req.GetNonce()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "missing inventory snapshot nonce")
+	}
 
 	snapshot, err := gm.snapshotter.Build(ctx, inventory.SnapshotRequest{
 		Nonce: req.GetNonce(),

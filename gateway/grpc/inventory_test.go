@@ -73,10 +73,23 @@ func TestGetInventorySnapshotRejectsInvalidNonce(t *testing.T) {
 	require.False(t, snapshotter.called)
 }
 
+func TestGetInventorySnapshotRejectsMissingNonce(t *testing.T) {
+	snapshotter := &testInventorySnapshotter{}
+	server := &grpcInventoryV1{snapshotter: snapshotter}
+
+	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{})
+	require.Nil(t, resp)
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	require.Contains(t, err.Error(), "missing inventory snapshot nonce")
+	require.False(t, snapshotter.called)
+}
+
 func TestGetInventorySnapshotReturnsUnavailableWithoutSnapshotter(t *testing.T) {
 	server := &grpcInventoryV1{}
 
-	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{})
+	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{
+		Nonce: bytes.Repeat([]byte{1}, inventory.NonceSize),
+	})
 	require.Nil(t, resp)
 	require.Equal(t, codes.Unavailable, status.Code(err))
 }
@@ -87,7 +100,9 @@ func TestGetInventorySnapshotReturnsSnapshotterError(t *testing.T) {
 		snapshotter: &testInventorySnapshotter{err: expected},
 	}
 
-	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{})
+	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{
+		Nonce: bytes.Repeat([]byte{1}, inventory.NonceSize),
+	})
 	require.Nil(t, resp)
 	require.ErrorIs(t, err, expected)
 }
@@ -97,7 +112,9 @@ func TestGetInventorySnapshotRejectsNilSnapshot(t *testing.T) {
 		snapshotter: &testInventorySnapshotter{},
 	}
 
-	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{})
+	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{
+		Nonce: bytes.Repeat([]byte{1}, inventory.NonceSize),
+	})
 	require.Nil(t, resp)
 	require.Equal(t, codes.Internal, status.Code(err))
 }
@@ -111,7 +128,9 @@ func TestGetInventorySnapshotRejectsInvalidSnapshot(t *testing.T) {
 		}},
 	}
 
-	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{})
+	resp, err := server.GetInventorySnapshot(context.Background(), &inventoryv1.GetInventorySnapshotRequest{
+		Nonce: bytes.Repeat([]byte{1}, inventory.NonceSize),
+	})
 	require.Nil(t, resp)
 	require.Equal(t, codes.Internal, status.Code(err))
 	require.Contains(t, err.Error(), "missing inventory snapshot payload")
