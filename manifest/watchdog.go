@@ -29,6 +29,10 @@ type watchdog struct {
 }
 
 func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID mtypes.LeaseID, timeout, broadcastTimeout time.Duration) *watchdog {
+	if broadcastTimeout <= 0 {
+		broadcastTimeout = DefaultBroadcastTimeout
+	}
+
 	result := &watchdog{
 		leaseID:          leaseID,
 		timeout:          timeout,

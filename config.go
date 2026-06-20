@@ -11,6 +11,7 @@ import (
 
 	"github.com/akash-network/provider/bidengine"
 	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/manifest"
 )
 
 type Config struct {
@@ -35,7 +36,7 @@ func NewDefaultConfig() Config {
 	return Config{
 		ClusterWaitReadyDuration: time.Second * 10,
 		BidDeposit:               mtypes.DefaultBidMinDeposit,
-		BroadcastTimeout:         12 * time.Second,
+		BroadcastTimeout:         manifest.DefaultBroadcastTimeout,
 		BalanceCheckerCfg: BalanceCheckerConfig{
 			LeaseFundsCheckInterval: 1 * time.Minute,
 			WithdrawalPeriod:        24 * time.Hour,

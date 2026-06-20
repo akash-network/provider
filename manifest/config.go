@@ -2,6 +2,8 @@ package manifest
 
 import "time"
 
+const DefaultBroadcastTimeout = 12 * time.Second
+
 type ServiceConfig struct {
 	HTTPServicesRequireAtLeastOneHost bool
 	ManifestTimeout                   time.Duration

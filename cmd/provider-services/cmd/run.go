@@ -664,10 +664,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.BidTimeout = bidTimeout
 	config.ManifestTimeout = manifestTimeout
 	if broadcastTimeout <= 0 {
-		logger.Warn("tx-broadcast-timeout must be positive, using default", "invalid", broadcastTimeout, "default", 12*time.Second)
-		broadcastTimeout = 12 * time.Second
+		logger.Warn("tx-broadcast-timeout must be positive, using default", "invalid", broadcastTimeout, "default", config.BroadcastTimeout)
+	} else {
+		config.BroadcastTimeout = broadcastTimeout
 	}
-	config.BroadcastTimeout = broadcastTimeout
 
 	if reclamationWindow > 0 {
 		config.ReclamationWindow = &reclamationWindow

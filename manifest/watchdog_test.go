@@ -22,20 +22,21 @@ import (
 )
 
 type watchdogTestScaffold struct {
-	client     *clientmocks.Client
-	parentCh   chan struct{}
-	doneCh     chan dtypes.DeploymentID
-	broadcasts chan []sdk.Msg
-	leaseID    mtypes.LeaseID
-	provider   ptypes.Provider
+	client           *clientmocks.Client
+	parentCh         chan struct{}
+	doneCh           chan dtypes.DeploymentID
+	broadcasts       chan []sdk.Msg
+	broadcastStarted chan struct{}
+	leaseID          mtypes.LeaseID
+	provider         ptypes.Provider
 }
 
 func makeWatchdogTestScaffold(t *testing.T, timeout time.Duration) (*watchdog, *watchdogTestScaffold) {
-	return makeWatchdogTestScaffoldFull(t, timeout, 30*time.Second, nil)
+	return makeWatchdogTestScaffoldFull(t, timeout, DefaultBroadcastTimeout, nil)
 }
 
 func makeWatchdogTestScaffoldWithBlocking(t *testing.T, timeout time.Duration, blockUntilRelease <-chan struct{}) (*watchdog, *watchdogTestScaffold) {
-	return makeWatchdogTestScaffoldFull(t, timeout, 30*time.Second, blockUntilRelease)
+	return makeWatchdogTestScaffoldFull(t, timeout, DefaultBroadcastTimeout, blockUntilRelease)
 }
 
 func makeWatchdogTestScaffoldFull(t *testing.T, timeout, broadcastTimeout time.Duration, blockUntilRelease <-chan struct{}) (*watchdog, *watchdogTestScaffold) {
@@ -46,11 +47,16 @@ func makeWatchdogTestScaffoldFull(t *testing.T, timeout, broadcastTimeout time.D
 	scaffold.leaseID = testutil.LeaseID(t)
 	scaffold.leaseID.Provider = scaffold.provider.Owner
 	scaffold.broadcasts = make(chan []sdk.Msg, 1)
+	scaffold.broadcastStarted = make(chan struct{}, 1)
 
 	txClientMock := &clientmocks.TxClient{}
 	txClientMock.EXPECT().
 		BroadcastMsgs(mock.Anything, mock.Anything, mock.Anything).
 		RunAndReturn(func(ctx context.Context, msgs []sdk.Msg, _ ...aclient.BroadcastOption) (any, error) {
+			select {
+			case scaffold.broadcastStarted <- struct{}{}:
+			default:
+			}
 			if blockUntilRelease != nil {
 				select {
 				case <-blockUntilRelease:
@@ -144,7 +150,7 @@ func TestWatchdogStopsOnParent(t *testing.T) {
 }
 
 func TestWatchdogBroadcastTimeout(t *testing.T) {
-	// Mock blocks forever; broadcast context expires after 10ms → watchdog exits cleanly.
+	// Mock blocks forever; broadcast context expires after 10ms and watchdog exits cleanly.
 	neverRelease := make(chan struct{})
 	wd, scaffold := makeWatchdogTestScaffoldFull(t, 100*time.Millisecond, 10*time.Millisecond, neverRelease)
 
@@ -164,11 +170,38 @@ func TestWatchdogBroadcastTimeout(t *testing.T) {
 	require.Equal(t, deploymentID, scaffold.leaseID.DeploymentID())
 }
 
+func TestWatchdogUsesDefaultBroadcastTimeout(t *testing.T) {
+	releaseCh := make(chan struct{})
+	wd, scaffold := makeWatchdogTestScaffoldFull(t, 100*time.Millisecond, 0, releaseCh)
+
+	select {
+	case <-scaffold.broadcastStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for broadcast to start")
+	}
+
+	close(releaseCh)
+
+	select {
+	case <-wd.lc.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("watchdog hung after broadcast completed")
+	}
+
+	broadcasts := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	msgs := broadcasts.([]sdk.Msg)
+	require.Len(t, msgs, 1)
+}
+
 func TestWatchdogStopWhileWaitingForBroadcast(t *testing.T) {
 	releaseCh := make(chan struct{})
 	wd, scaffold := makeWatchdogTestScaffoldWithBlocking(t, 100*time.Millisecond, releaseCh)
 
-	<-time.After(200 * time.Millisecond)
+	select {
+	case <-scaffold.broadcastStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for broadcast to start")
+	}
 	wd.stop()
 
 	close(releaseCh)
