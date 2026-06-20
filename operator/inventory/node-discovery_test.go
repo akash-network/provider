@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 )
 
@@ -27,4 +28,23 @@ func TestSubAllocatedNLZ_underflow_clamped(t *testing.T) {
 	subAllocatedNLZ(log, "node1", "nvidia.com/gpu", allocated, *val)
 
 	require.Equal(t, int64(0), allocated.Value(), "allocated underflow must be clamped to 0")
+}
+
+func TestNodeAllocatableChanged_detectsMilliCPUChange(t *testing.T) {
+	prev := &corev1.Node{
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("500m"),
+			},
+		},
+	}
+	curr := &corev1.Node{
+		Status: corev1.NodeStatus{
+			Allocatable: corev1.ResourceList{
+				corev1.ResourceCPU: resource.MustParse("750m"),
+			},
+		},
+	}
+
+	require.True(t, nodeAllocatableChanged(prev, curr))
 }

@@ -541,8 +541,8 @@ func (dp *nodeDiscovery) monitor() error {
 				case watch.Added:
 					fallthrough
 				case watch.Modified:
+					updateNodeInfo(ctx, obj, &node)
 					if evt.Type == watch.Added || (knode != nil && nodeAllocatableChanged(knode, obj)) {
-						updateNodeInfo(ctx, obj, &node)
 						if err = restartPodsWatcher(); err != nil {
 							return err
 						}
@@ -642,7 +642,7 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	if !changed {
 		for pres, pval := range prev.Status.Allocatable {
 			cval, exists := curr.Status.Allocatable[pres]
-			if !exists || (pval.Value() != cval.Value()) {
+			if !exists || pval.Cmp(cval) != 0 {
 				changed = true
 				break
 			}
