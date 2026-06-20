@@ -291,9 +291,10 @@ func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResu
 			return manifestManagerFetchDataResult{}, fmt.Errorf("%w: could not locate group %v ", errNoGroupForLease, leaseID)
 		}
 		ev := event.LeaseWon{
-			LeaseID: leaseID,
-			Group:   &groupForLease,
-			Price:   lease.GetPrice(),
+			LeaseID:   leaseID,
+			Group:     &groupForLease,
+			Price:     lease.GetPrice(),
+			CreatedAt: lease.GetCreatedAt(),
 		}
 
 		leases[i] = ev

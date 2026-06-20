@@ -8,11 +8,12 @@ import (
 	mtypes "pkg.akt.dev/go/node/market/v1"
 )
 
-// LeaseWon is the data structure that includes leaseID, group and price
+// LeaseWon is the data structure that includes leaseID, group, price and created height.
 type LeaseWon struct {
-	LeaseID mtypes.LeaseID
-	Group   *dtypes.Group
-	Price   sdk.DecCoin
+	LeaseID   mtypes.LeaseID
+	Group     *dtypes.Group
+	Price     sdk.DecCoin
+	CreatedAt int64
 }
 
 // ManifestReceived stores leaseID, manifest received, deployment and group details

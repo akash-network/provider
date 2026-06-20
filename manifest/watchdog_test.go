@@ -79,6 +79,16 @@ func makeWatchdogTestScaffoldFull(t *testing.T, timeout, broadcastTimeout time.D
 	return wd, scaffold
 }
 
+func TestManifestTimeoutForLease(t *testing.T) {
+	const leaseCreatedAt int64 = 100
+	timeout := time.Minute
+
+	require.Equal(t, timeout, manifestTimeoutForLease(timeout, 0, 200))
+	require.Equal(t, timeout, manifestTimeoutForLease(timeout, leaseCreatedAt, leaseCreatedAt))
+	require.Equal(t, 30*time.Second, manifestTimeoutForLease(timeout, leaseCreatedAt, 106))
+	require.Equal(t, time.Duration(0), manifestTimeoutForLease(timeout, leaseCreatedAt, 112))
+}
+
 func TestWatchdogTimeout(t *testing.T) {
 	wd, scaffold := makeWatchdogTestScaffold(t, 3*time.Second)
 

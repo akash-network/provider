@@ -32,6 +32,7 @@ import (
 	"pkg.akt.dev/go/testutil"
 	"pkg.akt.dev/go/util/pubsub"
 
+	"github.com/akash-network/provider/event"
 	cmocks "github.com/akash-network/provider/mocks/cluster"
 	clmocks "github.com/akash-network/provider/mocks/cluster/types"
 	"github.com/akash-network/provider/operator/waiter"
@@ -55,6 +56,7 @@ type orderTestScaffold struct {
 	cluster           *cmocks.Cluster
 	broadcasts        chan []sdk.Msg
 	reserveCallNotify chan int
+	eventSub          pubsub.Subscriber
 }
 
 type testBidPricingStrategy int64
@@ -171,6 +173,7 @@ func makeOrderForTest(
 	pricing BidPricingStrategy,
 	callerConfig *Config,
 	sessionHeight int64,
+	existingLeaseCreatedAt ...int64,
 ) (*order, orderTestScaffold, <-chan int) {
 	if pricing == nil {
 		pricing = testBidPricingStrategy(1)
@@ -196,6 +199,11 @@ func makeOrderForTest(
 	mySession := session.New(myLog, scaffold.client, myProvider, sessionHeight)
 
 	scaffold.testBus = pubsub.NewBus()
+	eventSub, err := scaffold.testBus.Subscribe()
+	require.NoError(t, err)
+	scaffold.eventSub = eventSub
+	t.Cleanup(scaffold.eventSub.Close)
+
 	var cfg Config
 	if callerConfig != nil {
 		cfg = *callerConfig // Copy values from caller
@@ -228,6 +236,25 @@ func makeOrderForTest(
 			},
 		}
 		scaffold.marketMocks.On("Bid", mock.Anything, queryBidRequest).Return(response, nil)
+
+		if bidState == mvbeta.BidOpen {
+			leaseID := mtypes.MakeLeaseID(bidID)
+			queryLeaseRequest := &mvbeta.QueryLeaseRequest{
+				ID: leaseID,
+			}
+			if len(existingLeaseCreatedAt) > 0 {
+				scaffold.marketMocks.On("Lease", mock.Anything, queryLeaseRequest).Return(&mvbeta.QueryLeaseResponse{
+					Lease: mtypes.Lease{
+						ID:        leaseID,
+						State:     mtypes.LeaseActive,
+						Price:     testutil.AkashDecCoin(t, 1),
+						CreatedAt: existingLeaseCreatedAt[0],
+					},
+				}, nil)
+			} else {
+				scaffold.marketMocks.On("Lease", mock.Anything, queryLeaseRequest).Return(nil, errors.New("lease not found"))
+			}
+		}
 	}
 
 	reservationFulfilledNotify := make(chan int, 1)
@@ -530,6 +557,32 @@ func Test_ShouldNotBidWhenAlreadySet(t *testing.T) {
 	require.Equal(t, closeBid.ID, *scaffold.bidID)
 }
 
+func Test_ShouldPublishRecoveredLeaseCreatedAtWhenBiddingIsSkipped(t *testing.T) {
+	const leaseCreatedAt int64 = 42
+
+	cfg := &Config{
+		BidTimeout: time.Second,
+	}
+	order, scaffold, reservationFulfilledNotify := makeOrderForTest(t, true, mvbeta.BidOpen, nil, cfg, testBidCreatedAt+1, leaseCreatedAt)
+
+	ev := testutil.ChannelWaitForValue(t, scaffold.eventSub.Events())
+	leaseWon, ok := ev.(event.LeaseWon)
+	require.True(t, ok)
+	require.Equal(t, mtypes.MakeLeaseID(*scaffold.bidID), leaseWon.LeaseID)
+	require.Equal(t, leaseCreatedAt, leaseWon.CreatedAt)
+
+	testutil.ChannelWaitForValue(t, reservationFulfilledNotify)
+	order.lc.Shutdown(nil)
+	testutil.ChannelWaitForClose(t, order.lc.Done())
+
+	scaffold.cluster.AssertNotCalled(t, "Unreserve", mock.Anything, mock.Anything)
+	scaffold.txClient.AssertNotCalled(t, "BroadcastMsgs", mock.Anything, []sdk.Msg{
+		&mvbeta.MsgCloseBid{
+			ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
+		},
+	}, mock.Anything)
+}
+
 func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 	pricing, err := MakeRandomRangePricing()
 	require.NoError(t, err)
@@ -540,7 +593,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 		Attributes:      nil,
 	}
 
-	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, &cfg, 1)
+	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, &cfg, testBidCreatedAt+1)
 
 	testutil.ChannelWaitForClose(t, order.lc.Done())
 

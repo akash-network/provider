@@ -351,7 +351,8 @@ func (s *service) handleLease(ev event.LeaseWon, isNew bool) {
 	if isNew && s.config.ManifestTimeout > time.Duration(0) {
 		// Create watchdog if it does not exist AND a manifest has not been received yet
 		if watchdog := s.watchdogs[ev.LeaseID.DeploymentID()]; watchdog == nil {
-			watchdog = newWatchdog(s.session, s.lc.ShuttingDown(), s.watchdogch, ev.LeaseID, s.config.ManifestTimeout, s.config.BroadcastTimeout)
+			timeout := manifestTimeoutForLease(s.config.ManifestTimeout, ev.CreatedAt, s.session.CreatedAtBlockHeight())
+			watchdog = newWatchdog(s.session, s.lc.ShuttingDown(), s.watchdogch, ev.LeaseID, timeout, s.config.BroadcastTimeout)
 			s.watchdogs[ev.LeaseID.DeploymentID()] = watchdog
 		}
 	}
@@ -359,6 +360,20 @@ func (s *service) handleLease(ev event.LeaseWon, isNew bool) {
 	manager := s.ensureManager(ev.LeaseID.DeploymentID())
 
 	manager.handleLease(ev)
+}
+
+func manifestTimeoutForLease(timeout time.Duration, leaseCreatedAt, currentBlockHeight int64) time.Duration {
+	if timeout <= 0 || leaseCreatedAt <= 0 || currentBlockHeight <= leaseCreatedAt {
+		return timeout
+	}
+
+	const minTimePerBlock = 5 * time.Second
+	elapsed := time.Duration(currentBlockHeight-leaseCreatedAt) * minTimePerBlock
+	if elapsed >= timeout {
+		return 0
+	}
+
+	return timeout - elapsed
 }
 
 func (s *service) ensureManager(did dtypes.DeploymentID) (manager *manager) {

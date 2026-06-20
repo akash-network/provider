@@ -142,7 +142,17 @@ func newOrderInternal(svc *service, oid mtypes.OrderID, cfg Config, pass Provide
 	return order, nil
 }
 
-var matchBidNotFound = regexp.MustCompile("^.+bid not found.+$")
+type existingBidQueryResult struct {
+	bidFound   bool
+	bid        mvbeta.Bid
+	leaseFound bool
+	lease      mtypes.Lease
+}
+
+var (
+	matchBidNotFound   = regexp.MustCompile("^.+bid not found.+$")
+	matchLeaseNotFound = regexp.MustCompile("^.+lease not found.+$")
+)
 
 func (o *order) bidTimeoutEnabled() bool {
 	return o.cfg.BidTimeout > time.Duration(0)
@@ -165,10 +175,61 @@ func (o *order) isStaleBid(bid mvbeta.Bid) bool {
 	// do not try anything clever here like asking the RPC node for the current height
 	// just use the height from when the session is created
 	createdAtBlock := bid.GetCreatedAt()
-	blockAge := createdAtBlock - o.session.CreatedAtBlockHeight()
+	blockAge := o.session.CreatedAtBlockHeight() - createdAtBlock
 	const minTimePerBlock = 5 * time.Second
 	atLeastThisOld := time.Duration(blockAge) * minTimePerBlock
 	return atLeastThisOld > o.cfg.BidTimeout
+}
+
+func (o *order) queryExistingBidAndLease(ctx context.Context) (existingBidQueryResult, error) {
+	result := existingBidQueryResult{}
+	bidResponse, err := o.session.Client().Query().Market().Bid(
+		ctx,
+		&mvbeta.QueryBidRequest{
+			ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+		},
+	)
+	if err != nil {
+		// Use super-advanced technique for detecting if bid is not on blockchain
+		if matchBidNotFound.MatchString(err.Error()) {
+			return result, nil
+		}
+
+		return result, err
+	}
+
+	bid := bidResponse.GetBid()
+	result.bidFound = true
+	result.bid = bid
+
+	if bid.GetState() != mvbeta.BidOpen {
+		return result, nil
+	}
+
+	leaseResponse, err := o.session.Client().Query().Market().Lease(
+		ctx,
+		&mvbeta.QueryLeaseRequest{
+			ID: mtypes.MakeLeaseID(bid.ID),
+		},
+	)
+	if err != nil {
+		if matchLeaseNotFound.MatchString(err.Error()) {
+			return result, nil
+		}
+
+		o.session.Log().Error("could not get existing lease", "err", err, "errtype", fmt.Sprintf("%T", err))
+		return result, nil
+	}
+
+	if leaseResponse != nil {
+		lease := leaseResponse.GetLease()
+		if lease.GetState() == mtypes.LeaseActive {
+			result.leaseFound = true
+			result.lease = lease
+		}
+	}
+
+	return result, nil
 }
 
 func (o *order) run(checkForExistingBid bool) {
@@ -193,8 +254,10 @@ func (o *order) run(checkForExistingBid bool) {
 		// Channel that triggers when bid timeout is reached.
 		bidTimeout <-chan time.Time
 
-		group       *dtypes.Group
-		reservation ctypes.Reservation
+		group              *dtypes.Group
+		reservation        ctypes.Reservation
+		existingLease      mtypes.Lease
+		existingLeaseFound bool
 
 		won bool
 		msg *mvbeta.MsgCreateBid
@@ -209,12 +272,7 @@ func (o *order) run(checkForExistingBid bool) {
 	// Load existing bid if needed
 	if checkForExistingBid {
 		queryBidCh = runner.Do(func() runner.Result {
-			return runner.NewResult(o.session.Client().Query().Market().Bid(
-				ctx,
-				&mvbeta.QueryBidRequest{
-					ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
-				},
-			))
+			return runner.NewResult(o.queryExistingBidAndLease(ctx))
 		})
 		// Hide the group details result for later
 		storedGroupCh = groupch
@@ -230,21 +288,15 @@ loop:
 
 		case queryBid := <-queryBidCh:
 			err := queryBid.Error()
-			bidFound := true
 			if err != nil {
-				// Use super-advanced technique for detecting if bid is not on blockchain
-				if matchBidNotFound.MatchString(err.Error()) {
-					bidFound = false
-				} else {
-					o.session.Log().Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
-					break loop
-				}
+				o.session.Log().Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
+				break loop
 			}
 
-			if bidFound {
+			existingBid := queryBid.Value().(existingBidQueryResult)
+			if existingBid.bidFound {
 				o.session.Log().Info("found existing bid")
-				bidResponse := queryBid.Value().(*mvbeta.QueryBidResponse)
-				bid := bidResponse.GetBid()
+				bid := existingBid.bid
 				bidState := bid.GetState()
 				if bidState != mvbeta.BidOpen {
 					o.session.Log().Error("bid in unexpected state", "bid-state", bidState)
@@ -252,12 +304,15 @@ loop:
 				}
 				bidPlaced = true
 
-				if o.isStaleBid(bid) {
+				if existingBid.leaseFound {
+					existingLease = existingBid.lease
+					existingLeaseFound = true
+				} else if o.isStaleBid(bid) {
 					o.session.Log().Info("found expired bid", "block-height", bid.GetCreatedAt())
 					break loop
+				} else {
+					bidTimeout = o.getBidTimeout()
 				}
-
-				bidTimeout = o.getBidTimeout()
 			}
 			groupch = storedGroupCh // Allow getting the group details result now
 			storedGroupCh = nil
@@ -265,6 +320,10 @@ loop:
 		case ev := <-o.sub.Events():
 			switch ev := ev.(type) {
 			case *mtypes.EventLeaseCreated:
+				if won {
+					break
+				}
+
 				// different group
 				if !o.orderID.GroupID().Equals(ev.ID.GroupID()) {
 					o.log.Debug("ignoring group", "group", ev.ID.GroupID())
@@ -340,6 +399,18 @@ loop:
 
 			res := result.Value().(dtypes.Group)
 			group = &res
+			if existingLeaseFound {
+				o.log.Info("lease won", "lease", existingLease.ID)
+				if err := o.bus.Publish(event.LeaseWon{
+					LeaseID:   existingLease.ID,
+					Group:     group,
+					Price:     existingLease.GetPrice(),
+					CreatedAt: existingLease.GetCreatedAt(),
+				}); err != nil {
+					o.log.Error("failed to publish to event queue", err)
+				}
+				won = true
+			}
 
 			shouldBidCh = runner.Do(func() runner.Result {
 				return runner.NewResult(o.shouldBid(group))
