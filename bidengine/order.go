@@ -372,12 +372,12 @@ loop:
 			clusterch = nil
 
 			if result.Error() != nil {
-				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel)
+				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
 				o.log.Error("reserving resources", "err", result.Error())
 				break loop
 			}
 
-			reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.SuccessLabel)
+			reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.SuccessLabel).Inc()
 
 			o.log.Info("Reservation fulfilled")
 
@@ -480,9 +480,9 @@ loop:
 			o.log.Debug("unreserving reservation")
 			if err := o.cluster.Unreserve(reservation.OrderID()); err != nil {
 				o.log.Error("error unreserving reservation", "err", err)
-				reservationCounter.WithLabelValues("close", metricsutils.FailLabel)
+				reservationCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
 			} else {
-				reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel)
+				reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel).Inc()
 			}
 		}
 
