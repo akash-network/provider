@@ -356,7 +356,10 @@ initloop:
 }
 
 func podKey(pod *corev1.Pod) string {
-	return pod.Namespace + "/" + pod.Name
+	return k8stypes.NamespacedName{
+		Namespace: pod.Namespace,
+		Name:      pod.Name,
+	}.String()
 }
 
 func isPodAllocated(status corev1.PodStatus) bool {
@@ -538,9 +541,7 @@ func (dp *nodeDiscovery) monitor() error {
 					continue
 				}
 				switch evt.Type {
-				case watch.Added:
-					fallthrough
-				case watch.Modified:
+				case watch.Added, watch.Modified:
 					updateNodeInfo(ctx, obj, &node)
 					if evt.Type == watch.Added || (knode != nil && nodeAllocatableChanged(knode, obj)) {
 						if err = restartPodsWatcher(); err != nil {
@@ -685,8 +686,8 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 func updateNodeInfo(ctx context.Context, knode *corev1.Node, node *v1.Node) {
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
-	// Reset all fields before repopulating from knode so that resources
-	// removed between updates (e.g. GPU device plugin unregistered) don't leave stale values.
+	// Reset the fields owned by node status before repopulating from knode.
+	// Pod allocation state and CPU/GPU info are maintained elsewhere.
 	node.Resources.CPU.Quantity.Allocatable.SetMilli(0)
 	node.Resources.CPU.Quantity.Capacity.SetMilli(0)
 	node.Resources.Memory.Quantity.Allocatable.Set(0)
