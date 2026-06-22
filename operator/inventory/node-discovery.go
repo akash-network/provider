@@ -801,24 +801,21 @@ func removeManagedLabels(in map[string]string) map[string]string {
 	return out
 }
 
-// nodeHasBlockingTaint reports whether any taint would prevent Akash workloads
-// from being scheduled onto the node. Akash pods carry no custom tolerations,
-// so a NoSchedule or NoExecute taint means the node cannot accept workloads and
-// its capacity must be kept out of the inventory; otherwise the provider bids
-// on capacity it can never use and the deployment fails to schedule.
+// isNodeReady reports whether the node can actually accept Akash workloads. It
+// must be both in the Ready condition and free of any scheduling-blocking
+// taint: Akash pods carry no custom tolerations, so a NoSchedule/NoExecute
+// taint (e.g. control-plane, CriticalAddonsOnly) means the node can never host
+// a workload and its capacity must stay out of the inventory; otherwise the
+// provider bids on capacity it cannot use and the deployment fails to schedule.
 // PreferNoSchedule is a soft preference and does not block scheduling.
-func nodeHasBlockingTaint(taints []corev1.Taint) bool {
-	for _, taint := range taints {
+func isNodeReady(node *corev1.Node) bool {
+	for _, taint := range node.Spec.Taints {
 		if taint.Effect == corev1.TaintEffectNoSchedule || taint.Effect == corev1.TaintEffectNoExecute {
-			return true
+			return false
 		}
 	}
 
-	return false
-}
-
-func isNodeReady(conditions []corev1.NodeCondition) bool {
-	for _, c := range conditions {
+	for _, c := range node.Status.Conditions {
 		if c.Type == corev1.NodeReady {
 			return c.Status == "True"
 		}
@@ -840,7 +837,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 	sort.Strings(presentSc)
 	adjConfig.FilterOutStorageClasses(presentSc)
 
-	isExcluded := !isNodeReady(knode.Status.Conditions) || knode.Spec.Unschedulable || nodeHasBlockingTaint(knode.Spec.Taints) || adjConfig.Exclude.IsNodeExcluded(knode.Name)
+	isExcluded := !isNodeReady(knode) || knode.Spec.Unschedulable || adjConfig.Exclude.IsNodeExcluded(knode.Name)
 
 	if isExcluded {
 		node.Capabilities.StorageClasses = []string{}
