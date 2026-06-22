@@ -146,6 +146,8 @@ func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentD
 		annotations["nginx.org/proxy-next-upstream"] = strBuilder.String()
 	}
 
+	annotations["nginx.org/proxy-buffer-size"] = "16k"
+
 	return annotations
 }
 
