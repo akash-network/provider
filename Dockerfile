@@ -22,7 +22,7 @@ ENV DEBIAN_FRONTEND=""
 
 # grpcurl is used to probe the inventory operator's gRPC API (e.g. from a
 # liveness probe). It is not packaged in apt, so install a pinned release.
-ENV GRPCURL_VERSION=1.9.3
+ARG GRPCURL_VERSION=1.9.3
 RUN set -eux; \
     case "$(dpkg --print-architecture)" in \
       amd64) arch=x86_64; sha=a926b62a85787ccf73ef8736b3ae554f1242e39d92bb8767a79d6dd23b11d1d5 ;; \
