@@ -202,7 +202,7 @@ func newDataForScript(r Request) dataForScript {
 
 	for _, attr := range r.GSpec.Requirements.Attributes {
 		if attr.Key == "confidential-compute" && attr.Value == "true" {
-			d.ConfidentialComputeSidecar = true
+			d.ConfidentialCompute = true
 			break
 		}
 	}
