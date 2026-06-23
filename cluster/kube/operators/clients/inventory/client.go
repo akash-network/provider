@@ -46,6 +46,7 @@ type client struct {
 
 type inventory struct {
 	inventoryV1.Cluster
+	safe inventoryV1.Cluster
 }
 
 type inventoryState struct {
