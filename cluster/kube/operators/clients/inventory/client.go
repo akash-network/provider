@@ -46,7 +46,7 @@ type client struct {
 
 type inventory struct {
 	inventoryV1.Cluster
-	ctx context.Context
+	safe inventoryV1.Cluster
 }
 
 type inventoryState struct {
@@ -220,13 +220,13 @@ func (cl *client) subscriber(in <-chan inventoryV1.Cluster, out chan<- ctypes.In
 		case inv := <-in:
 			pending = append(pending, inv)
 			if och == nil {
-				msg = newInventory(cl.ctx, pending[0])
+				msg = newInventory(pending[0])
 				och = out
 			}
 		case och <- msg:
 			pending = pending[1:]
 			if len(pending) > 0 {
-				msg = newInventory(cl.ctx, pending[0])
+				msg = newInventory(pending[0])
 			} else {
 				och = nil
 				msg = nil

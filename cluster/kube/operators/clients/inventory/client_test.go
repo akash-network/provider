@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -212,7 +211,6 @@ func makeInventoryScaffold(t *testing.T) *inventoryScaffold {
 	kc := kfake.NewClientset()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyKubeClientSet, kubernetes.Interface(kc))
 	ctx = context.WithValue(ctx, fromctx.CtxKeyInventoryUnderTest, true)
-	ctx = logr.NewContext(ctx, logr.Discard())
 
 	gSrv := setupInventoryGRPC(ctx, group, ports[0])
 
@@ -320,7 +318,7 @@ func TestInventoryZero(t *testing.T) {
 func makeBaseCluster() inventoryV1.Cluster {
 	return inventoryV1.Cluster{
 		Nodes: inventoryV1.Nodes{
-			inventoryV1.Node{
+			{
 				Name: "node",
 				Resources: inventoryV1.NodeResources{
 					CPU: inventoryV1.CPU{
@@ -330,115 +328,116 @@ func makeBaseCluster() inventoryV1.Cluster {
 						Quantity: inventoryV1.NewResourcePair(1024, 1024, 0, resource.DecimalSI),
 					},
 					GPU: inventoryV1.GPU{
-						Quantity: inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
+						Quantity: inventoryV1.NewResourcePair(4, 4, 0, resource.DecimalSI),
 					},
 					EphemeralStorage: inventoryV1.NewResourcePair(100, 100, 0, resource.DecimalSI),
 					VolumesAttached:  inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 					VolumesMounted:   inventoryV1.NewResourcePair(0, 0, 0, resource.DecimalSI),
 				},
-				Capabilities: inventoryV1.NodeCapabilities{},
+			},
+		},
+		Storage: inventoryV1.ClusterStorage{
+			{
+				Quantity: inventoryV1.NewResourcePair(50, 50, 0, resource.DecimalSI),
+				Info:     inventoryV1.StorageInfo{Class: "default"},
 			},
 		},
 	}
 }
 
-func TestInventoryMetrics_negative_quantities_clamped(t *testing.T) {
-	tests := []struct {
-		name   string
-		mutate func(c *inventoryV1.Cluster)
-		check  func(t *testing.T, m inventoryV1.Metrics)
-	}{
-		{
-			name: "negative_allocatable_gpu",
-			mutate: func(c *inventoryV1.Cluster) {
-				c.Nodes[0].Resources.GPU.Quantity.Allocatable.Set(-1)
-			},
-			check: func(t *testing.T, m inventoryV1.Metrics) {
-				require.Len(t, m.Nodes, 1)
-				assert.Equal(t, uint64(0), m.Nodes[0].Available.GPU, "negative allocatable must yield 0")
-				assert.Equal(t, uint64(0), m.TotalAvailable.GPU)
-			},
-		},
-		{
-			name: "negative_allocatable_cpu",
-			mutate: func(c *inventoryV1.Cluster) {
-				c.Nodes[0].Resources.CPU.Quantity.Allocatable.SetMilli(-1)
-			},
-			check: func(t *testing.T, m inventoryV1.Metrics) {
-				require.Len(t, m.Nodes, 1)
-				assert.Equal(t, uint64(0), m.Nodes[0].Allocatable.CPU)
-				assert.Equal(t, uint64(0), m.TotalAllocatable.CPU)
-			},
-		},
-		{
-			name: "negative_allocatable_memory",
-			mutate: func(c *inventoryV1.Cluster) {
-				c.Nodes[0].Resources.Memory.Quantity.Allocatable.Set(-1)
-			},
-			check: func(t *testing.T, m inventoryV1.Metrics) {
-				require.Len(t, m.Nodes, 1)
-				assert.Equal(t, uint64(0), m.Nodes[0].Allocatable.Memory)
-				assert.Equal(t, uint64(0), m.TotalAllocatable.Memory)
-			},
-		},
-		{
-			name: "negative_allocatable_storage_ephemeral",
-			mutate: func(c *inventoryV1.Cluster) {
-				c.Nodes[0].Resources.EphemeralStorage.Allocatable.Set(-1)
-			},
-			check: func(t *testing.T, m inventoryV1.Metrics) {
-				require.Len(t, m.Nodes, 1)
-				assert.Equal(t, uint64(0), m.Nodes[0].Allocatable.StorageEphemeral)
-				assert.Equal(t, uint64(0), m.TotalAllocatable.StorageEphemeral)
-			},
-		},
-		{
-			name: "negative_allocatable_storage_class",
-			mutate: func(c *inventoryV1.Cluster) {
-				c.Nodes[0].Capabilities.StorageClasses = []string{"default"}
-				c.Storage = inventoryV1.ClusterStorage{
-					{
-						Quantity: inventoryV1.NewResourcePair(0, -1, 0, resource.DecimalSI),
-						Info:     inventoryV1.StorageInfo{Class: "default"},
+func TestInventorySnapshotSanitizesNegativeQuantities(t *testing.T) {
+	cluster := makeBaseCluster()
+	cluster.Nodes[0].Resources.CPU.Quantity.Allocatable.SetMilli(-500)
+	cluster.Nodes[0].Resources.CPU.Quantity.Allocated.SetMilli(-250)
+	cluster.Nodes[0].Resources.Memory.Quantity.Capacity.Set(-1)
+	cluster.Nodes[0].Resources.GPU.Quantity.Allocatable.Set(-1)
+	cluster.Nodes[0].Resources.EphemeralStorage.Allocated.Set(-1)
+	cluster.Storage[0].Quantity.Allocatable.Set(-1)
+
+	inv := newInventory(cluster)
+	snapshot := inv.Snapshot()
+
+	require.Equal(t, int64(0), snapshot.Nodes[0].Resources.CPU.Quantity.Allocatable.MilliValue())
+	require.Equal(t, int64(0), snapshot.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
+	require.Equal(t, int64(0), snapshot.Nodes[0].Resources.Memory.Quantity.Capacity.Value())
+	require.Equal(t, int64(0), snapshot.Nodes[0].Resources.GPU.Quantity.Allocatable.Value())
+	require.Equal(t, int64(0), snapshot.Nodes[0].Resources.EphemeralStorage.Allocated.Value())
+	require.Equal(t, int64(0), snapshot.Storage[0].Quantity.Allocatable.Value())
+
+	require.Equal(t, int64(-500), inv.Cluster.Nodes[0].Resources.CPU.Quantity.Allocatable.MilliValue())
+	require.Equal(t, int64(-250), inv.Cluster.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
+}
+
+func TestInventoryMetricsSanitizesNegativeQuantities(t *testing.T) {
+	cluster := makeBaseCluster()
+	cluster.Nodes[0].Resources.CPU.Quantity.Allocatable.SetMilli(-500)
+	cluster.Nodes[0].Resources.GPU.Quantity.Allocatable.Set(-1)
+	cluster.Storage[0].Quantity.Allocatable.Set(-1)
+
+	metrics := newInventory(cluster).Metrics()
+
+	require.Len(t, metrics.Nodes, 1)
+	require.Equal(t, uint64(0), metrics.Nodes[0].Allocatable.CPU)
+	require.Equal(t, uint64(0), metrics.Nodes[0].Allocatable.GPU)
+	require.Equal(t, uint64(0), metrics.TotalAllocatable.CPU)
+	require.Equal(t, uint64(0), metrics.TotalAllocatable.GPU)
+	require.Equal(t, uint64(0), metrics.TotalAllocatable.Storage["default"])
+}
+
+func TestInventoryAdjustSanitizesNegativeAllocatedBeforeBidding(t *testing.T) {
+	cluster := makeBaseCluster()
+	cluster.Nodes[0].Resources.CPU.Quantity.Allocated.SetMilli(-1000)
+
+	inv := newInventory(cluster)
+	reservation := &testReservation{
+		resources: dvbeta.GroupSpec{
+			Name: "group",
+			Resources: dvbeta.ResourceUnits{
+				{
+					Resources: rtypes.Resources{
+						ID:     1,
+						CPU:    &rtypes.CPU{Units: rtypes.NewResourceValue(1500)},
+						GPU:    &rtypes.GPU{Units: rtypes.NewResourceValue(0)},
+						Memory: &rtypes.Memory{Quantity: rtypes.NewResourceValue(1)},
 					},
-				}
-			},
-			check: func(t *testing.T, m inventoryV1.Metrics) {
-				v, exists := m.TotalAllocatable.Storage["default"]
-				require.True(t, exists, "storage class key must be present")
-				assert.Equal(t, uint64(0), v)
-			},
-		},
-		{
-			name: "allocated_exceeds_allocatable_gpu",
-			mutate: func(c *inventoryV1.Cluster) {
-				c.Nodes[0].Resources.GPU.Quantity = inventoryV1.NewResourcePair(4, 4, 10, resource.DecimalSI)
-			},
-			check: func(t *testing.T, m inventoryV1.Metrics) {
-				require.Len(t, m.Nodes, 1)
-				assert.Equal(t, uint64(0), m.Nodes[0].Available.GPU, "allocated>allocatable must yield 0 available")
-				assert.Equal(t, uint64(4), m.Nodes[0].Allocatable.GPU)
+					Count: 1,
+				},
 			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			scaffold := makeInventoryScaffold(t)
-			cl, err := NewClient(scaffold.ctx)
-			require.NoError(t, err)
-			require.NotNil(t, cl)
+	err := inv.Adjust(reservation)
 
-			cluster := makeBaseCluster()
-			tt.mutate(&cluster)
-			scaffold.gInv.invch <- cluster
+	require.ErrorIs(t, err, ctypes.ErrInsufficientCapacity)
+}
 
-			inv := waitForInventory(t, cl.ResultChan())
-			require.NotNil(t, inv)
+func TestInventoryAdjustKeepsRawStateAndUpdatesSafeState(t *testing.T) {
+	cluster := makeBaseCluster()
+	cluster.Nodes[0].Resources.CPU.Quantity.Allocated.SetMilli(-1000)
 
-			tt.check(t, inv.Metrics())
-		})
+	inv := newInventory(cluster)
+	reservation := &testReservation{
+		resources: dvbeta.GroupSpec{
+			Name: "group",
+			Resources: dvbeta.ResourceUnits{
+				{
+					Resources: rtypes.Resources{
+						ID:     1,
+						CPU:    &rtypes.CPU{Units: rtypes.NewResourceValue(500)},
+						GPU:    &rtypes.GPU{Units: rtypes.NewResourceValue(0)},
+						Memory: &rtypes.Memory{Quantity: rtypes.NewResourceValue(1)},
+					},
+					Count: 1,
+				},
+			},
+		},
 	}
+
+	err := inv.Adjust(reservation)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(-1000), inv.Cluster.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
+	require.Equal(t, int64(500), inv.Snapshot().Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
 }
 
 func TestInventorySingleNodeNoPods(t *testing.T) {

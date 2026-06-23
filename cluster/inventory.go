@@ -47,6 +47,7 @@ var (
 	errInventoryReservation     = errors.New("inventory error")
 	errNoLeasedIPsAvailable     = fmt.Errorf("%w: no leased IPs available", errInventoryReservation)
 	errInsufficientIPs          = fmt.Errorf("%w: insufficient number of IPs", errInventoryReservation)
+	inventoryStatusQuantityZero = resource.NewQuantity(0, resource.DecimalSI)
 )
 
 var (
@@ -840,8 +841,12 @@ func (is *inventoryService) getStatusV1(state *inventoryServiceState) (*provider
 		return nil, errInventoryNotAvailableYet
 	}
 
+	cluster := state.inventory.Snapshot()
+	cluster = *cluster.Dup()
+	sanitizeStatusCluster(&cluster)
+
 	status := &provider.Inventory{
-		Cluster:  state.inventory.Snapshot(),
+		Cluster:  cluster,
 		LeasedIP: leasedIPStatus(state),
 		Reservations: provider.Reservations{
 			Pending: provider.ReservationsMetric{
@@ -867,6 +872,37 @@ func (is *inventoryService) getStatusV1(state *inventoryServiceState) (*provider
 	}
 
 	return status, nil
+}
+
+func sanitizeStatusCluster(cluster *inventoryV1.Cluster) {
+	for idx := range cluster.Nodes {
+		sanitizeStatusNodeResources(&cluster.Nodes[idx].Resources)
+	}
+
+	for idx := range cluster.Storage {
+		sanitizeStatusResourcePair(&cluster.Storage[idx].Quantity)
+	}
+}
+
+func sanitizeStatusNodeResources(resources *inventoryV1.NodeResources) {
+	sanitizeStatusResourcePair(&resources.CPU.Quantity)
+	sanitizeStatusResourcePair(&resources.Memory.Quantity)
+	sanitizeStatusResourcePair(&resources.GPU.Quantity)
+	sanitizeStatusResourcePair(&resources.EphemeralStorage)
+	sanitizeStatusResourcePair(&resources.VolumesAttached)
+	sanitizeStatusResourcePair(&resources.VolumesMounted)
+}
+
+func sanitizeStatusResourcePair(pair *inventoryV1.ResourcePair) {
+	sanitizeStatusQuantity(pair.Capacity)
+	sanitizeStatusQuantity(pair.Allocatable)
+	sanitizeStatusQuantity(pair.Allocated)
+}
+
+func sanitizeStatusQuantity(quantity *resource.Quantity) {
+	if quantity.Cmp(*inventoryStatusQuantityZero) < 0 {
+		quantity.Set(0)
+	}
 }
 
 func reservationCountEndpoints(reservation *reservation) uint {
