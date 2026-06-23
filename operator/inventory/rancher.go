@@ -29,7 +29,7 @@ type rancher struct {
 type rancherStorage struct {
 	isRancher      bool
 	isAkashManaged bool
-	allocated      uint64
+	allocated      resource.Quantity
 }
 
 type rancherStorageClasses map[string]*rancherStorage
@@ -154,7 +154,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 
 					if _, exists = pvMap[obj.Name]; !exists {
 						pvMap[obj.Name] = *obj
-						params.allocated += uint64(res.Value()) // nolint: gosec
+						params.allocated.Add(res)
 					}
 				case watch.Deleted:
 					res, exists := obj.Spec.Capacity[corev1.ResourceStorage]
@@ -163,7 +163,14 @@ func (c *rancher) run(startch chan<- struct{}) error {
 					}
 
 					delete(pvMap, obj.Name)
-					scs[obj.Spec.StorageClassName].allocated -= uint64(res.Value()) // nolint: gosec
+
+					params, exists := scs[obj.Spec.StorageClassName]
+					if !exists {
+						log.Error(fmt.Errorf("storage class %q is not tracked", obj.Spec.StorageClassName), "persistent volume delete event references untracked storage class", "driver", "rancher", "storage_class", obj.Spec.StorageClassName, "persistent_volume", obj.Name, "persistent_volume_id", string(obj.UID))
+						break
+					}
+
+					subStorageAllocatedResource(log, "rancher", obj.Spec.StorageClassName, obj.Name, string(obj.UID), &params.allocated, res, rancherStorageInventoryLogValue(scs))
 				}
 
 				tryScrape()
@@ -229,7 +236,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 									continue
 								}
 
-								params.allocated += uint64(capacity.Value()) // nolint: gosec
+								params.allocated.Add(capacity)
 
 								pvMap[pv.Name] = pv
 							}
@@ -254,7 +261,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 			for class, params := range scs {
 				if params.isRancher && params.isAkashManaged {
 					res = append(res, inventory.Storage{
-						Quantity: inventory.NewResourcePair(allocatable, allocatable, int64(params.allocated), resource.DecimalSI), // nolint: gosec
+						Quantity: inventory.NewResourcePair(allocatable, allocatable, params.allocated.Value(), resource.DecimalSI),
 						Info: inventory.StorageInfo{
 							Class: class,
 						},

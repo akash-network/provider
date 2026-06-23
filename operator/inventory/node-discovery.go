@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
@@ -341,6 +342,13 @@ initloop:
 	}
 }
 
+func podKey(pod *corev1.Pod) string {
+	return k8stypes.NamespacedName{
+		Namespace: pod.Namespace,
+		Name:      pod.Name,
+	}.String()
+}
+
 func isPodAllocated(status corev1.PodStatus) bool {
 	for _, condition := range status.Conditions {
 		if condition.Type == corev1.PodScheduled {
@@ -455,7 +463,7 @@ func (dp *nodeDiscovery) monitor() error {
 
 			addPodAllocatedResources(&node, pod)
 
-			currPods[pod.Name] = *pod
+			currPods[podKey(pod)] = *pod
 		}
 
 		return nil
@@ -545,24 +553,25 @@ func (dp *nodeDiscovery) monitor() error {
 			}
 
 			obj := res.Object.(*corev1.Pod)
+			key := podKey(obj)
 			switch res.Type {
 			case watch.Added:
 				fallthrough
 			case watch.Modified:
-				if _, exists := currPods[obj.Name]; !exists && isPodAllocated(obj.Status) {
-					currPods[obj.Name] = *obj.DeepCopy()
+				if _, exists := currPods[key]; !exists && isPodAllocated(obj.Status) {
+					currPods[key] = *obj.DeepCopy()
 					addPodAllocatedResources(&node, obj)
 				}
 			case watch.Deleted:
-				pod, exists := currPods[obj.Name]
+				pod, exists := currPods[key]
 				if !exists {
 					log.Info("received pod delete event for item that does not exist. check node inventory logic, it's might have bug in it!")
 					break
 				}
 
-				subPodAllocatedResources(&node, &pod)
+				subPodAllocatedResources(log, &node, &pod)
 
-				delete(currPods, obj.Name)
+				delete(currPods, key)
 			}
 			signalState()
 		case <-statech:
@@ -733,29 +742,57 @@ func addPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 	}
 }
 
-func subAllocatedNLZ(allocated *resource.Quantity, val resource.Quantity) {
-	newVal := allocated.Value() - val.Value()
-	if newVal < 0 {
-		newVal = 0
-	}
-
-	allocated.Set(newVal)
+type allocatedResourceChange struct {
+	Node            string `json:"node"`
+	Pod             string `json:"pod"`
+	PodID           string `json:"pod_id"`
+	Resource        string `json:"resource"`
+	AllocatedBefore string `json:"allocated_before"`
+	Subtracted      string `json:"subtracted"`
+	AllocatedAfter  string `json:"allocated_after"`
 }
 
-func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
+func subAllocatedResource(log logr.Logger, node *v1.Node, pod *corev1.Pod, resourceName string, allocated *resource.Quantity, val resource.Quantity) {
+	before := allocated.DeepCopy()
+	after := allocated.DeepCopy()
+	after.Sub(val)
+
+	if after.Cmp(*quantityZero) < 0 {
+		change := allocatedResourceChange{
+			Node:            node.Name,
+			Pod:             podKey(pod),
+			PodID:           string(pod.UID),
+			Resource:        resourceName,
+			AllocatedBefore: before.String(),
+			Subtracted:      val.String(),
+			AllocatedAfter:  after.String(),
+		}
+
+		log.Error(errNegativeAllocatedResource, "inventory allocated resource went negative",
+			"node", node.Name,
+			"pod", change.Pod,
+			"pod_id", change.PodID,
+			"inventory_before", jsonLogValue(node),
+			"change", jsonLogValue(change))
+	}
+
+	*allocated = after
+}
+
+func subPodAllocatedResources(log logr.Logger, node *v1.Node, pod *corev1.Pod) {
 	for _, container := range pod.Spec.Containers {
 		for name, quantity := range container.Resources.Requests {
 			switch name {
 			case corev1.ResourceCPU:
-				subAllocatedNLZ(node.Resources.CPU.Quantity.Allocated, quantity)
+				subAllocatedResource(log, node, pod, string(corev1.ResourceCPU), node.Resources.CPU.Quantity.Allocated, quantity)
 			case corev1.ResourceMemory:
-				subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, quantity)
+				subAllocatedResource(log, node, pod, string(corev1.ResourceMemory), node.Resources.Memory.Quantity.Allocated, quantity)
 			case corev1.ResourceEphemeralStorage:
-				subAllocatedNLZ(node.Resources.EphemeralStorage.Allocated, quantity)
+				subAllocatedResource(log, node, pod, string(corev1.ResourceEphemeralStorage), node.Resources.EphemeralStorage.Allocated, quantity)
 			case builder.ResourceGPUNvidia:
 				fallthrough
 			case builder.ResourceGPUAMD:
-				subAllocatedNLZ(node.Resources.GPU.Quantity.Allocated, quantity)
+				subAllocatedResource(log, node, pod, string(name), node.Resources.GPU.Quantity.Allocated, quantity)
 			}
 		}
 
@@ -764,7 +801,7 @@ func subPodAllocatedResources(node *v1.Node, pod *corev1.Pod) {
 				continue
 			}
 
-			subAllocatedNLZ(node.Resources.Memory.Quantity.Allocated, *vol.EmptyDir.SizeLimit)
+			subAllocatedResource(log, node, pod, "memory.emptydir", node.Resources.Memory.Quantity.Allocated, *vol.EmptyDir.SizeLimit)
 		}
 	}
 }

@@ -30,6 +30,8 @@ func (s *clusterState) run() error {
 
 	defer bus.Unsub(datach)
 
+	log := fromctx.LogrFromCtx(s.ctx).WithName("cluster-state")
+
 	var cfg Config
 
 	trySignal := func() {
@@ -79,6 +81,7 @@ func (s *clusterState) run() error {
 				err: nil,
 			}
 		case <-signalch:
+			logNegativeClusterInventory(log, &state, "cluster-state")
 			bus.Pub(*state.Dup(), []string{topicInventoryCluster}, pubsub.WithRetain())
 		}
 	}

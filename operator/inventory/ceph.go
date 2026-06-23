@@ -336,7 +336,13 @@ func (c *ceph) run(startch chan<- struct{}) error {
 
 						delete(pvMap, obj.Name)
 
-						scs[obj.Spec.StorageClassName].allocated.Sub(res)
+						sc, exists := scs[obj.Spec.StorageClassName]
+						if !exists {
+							log.Error(fmt.Errorf("storage class %q is not tracked", obj.Spec.StorageClassName), "persistent volume delete event references untracked storage class", "driver", "ceph", "storage_class", obj.Spec.StorageClassName, "persistent_volume", obj.Name, "persistent_volume_id", string(obj.UID))
+							break
+						}
+
+						subStorageAllocatedResource(log, "ceph", obj.Spec.StorageClassName, obj.Name, string(obj.UID), sc.allocated, res, cephStorageInventoryLogValue(scs))
 					}
 					signalScrape()
 				}

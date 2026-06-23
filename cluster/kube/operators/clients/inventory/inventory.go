@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
@@ -16,11 +17,20 @@ import (
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
-var _ ctypes.Inventory = (*inventory)(nil)
+var (
+	_ ctypes.Inventory = (*inventory)(nil)
+
+	quantityZero = resource.NewQuantity(0, resource.DecimalSI)
+)
 
 func newInventory(clState inventoryV1.Cluster) *inventory {
+	raw := *clState.Dup()
+	safe := *clState.Dup()
+	sanitizeCluster(&safe)
+
 	inv := &inventory{
-		Cluster: clState,
+		Cluster: raw,
+		safe:    safe,
 	}
 
 	return inv
@@ -29,6 +39,16 @@ func newInventory(clState inventoryV1.Cluster) *inventory {
 func (inv *inventory) dup() inventory {
 	dup := inventory{
 		Cluster: *inv.Cluster.Dup(),
+		safe:    *inv.safe.Dup(),
+	}
+
+	return dup
+}
+
+func (inv *inventory) safeDup() inventory {
+	dup := inventory{
+		Cluster: *inv.safe.Dup(),
+		safe:    *inv.safe.Dup(),
 	}
 
 	return dup
@@ -38,6 +58,37 @@ func (inv *inventory) Dup() ctypes.Inventory {
 	dup := inv.dup()
 
 	return &dup
+}
+
+func sanitizeCluster(cluster *inventoryV1.Cluster) {
+	for idx := range cluster.Nodes {
+		sanitizeNodeResources(&cluster.Nodes[idx].Resources)
+	}
+
+	for idx := range cluster.Storage {
+		sanitizeResourcePair(&cluster.Storage[idx].Quantity)
+	}
+}
+
+func sanitizeNodeResources(resources *inventoryV1.NodeResources) {
+	sanitizeResourcePair(&resources.CPU.Quantity)
+	sanitizeResourcePair(&resources.Memory.Quantity)
+	sanitizeResourcePair(&resources.GPU.Quantity)
+	sanitizeResourcePair(&resources.EphemeralStorage)
+	sanitizeResourcePair(&resources.VolumesAttached)
+	sanitizeResourcePair(&resources.VolumesMounted)
+}
+
+func sanitizeResourcePair(pair *inventoryV1.ResourcePair) {
+	sanitizeQuantity(pair.Capacity)
+	sanitizeQuantity(pair.Allocatable)
+	sanitizeQuantity(pair.Allocated)
+}
+
+func sanitizeQuantity(quantity *resource.Quantity) {
+	if quantity.Cmp(*quantityZero) < 0 {
+		quantity.Set(0)
+	}
 }
 
 // tryAdjust cluster inventory
@@ -235,7 +286,7 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 
 	cparams := make(crd.ReservationClusterSettings)
 
-	currInventory := inv.dup()
+	currInventory := inv.safeDup()
 
 	var err error
 
@@ -295,7 +346,7 @@ nodes:
 
 	if len(resources) == 0 {
 		if !cfg.DryRun {
-			*inv = currInventory
+			inv.safe = *currInventory.Cluster.Dup()
 		}
 
 		reservation.SetAllocatedResources(adjustedResources)
@@ -312,10 +363,12 @@ nodes:
 }
 
 func (inv *inventory) Snapshot() inventoryV1.Cluster {
-	return *inv.Cluster.Dup()
+	return *inv.safe.Dup()
 }
 
 func (inv *inventory) Metrics() inventoryV1.Metrics {
+	safe := inv.safeDup()
+
 	cpuTotal := uint64(0)
 	gpuTotal := uint64(0)
 	memoryTotal := uint64(0)
@@ -329,10 +382,10 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 	storageAvailable := make(map[string]uint64)
 
 	ret := inventoryV1.Metrics{
-		Nodes: make([]inventoryV1.NodeMetrics, 0, len(inv.Nodes)),
+		Nodes: make([]inventoryV1.NodeMetrics, 0, len(safe.Nodes)),
 	}
 
-	for _, nd := range inv.Nodes {
+	for _, nd := range safe.Nodes {
 		invNode := inventoryV1.NodeMetrics{
 			Name: nd.Name,
 			Allocatable: inventoryV1.ResourcesMetric{
@@ -367,7 +420,7 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 		ret.Nodes = append(ret.Nodes, invNode)
 	}
 
-	for _, class := range inv.Storage {
+	for _, class := range safe.Storage {
 		tmp := class.Quantity.Allocatable.DeepCopy()
 		storageTotal[class.Info.Class] = uint64(tmp.Value()) //nolint: gosec
 
