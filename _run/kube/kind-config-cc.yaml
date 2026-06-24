@@ -1,0 +1,32 @@
+---
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    extraPortMappings:
+      - containerPort: 80
+        protocol: TCP
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-snp]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-snp.options]
+        SystemdCgroup = true
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-nvidia-gpu-snp]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-nvidia-gpu-snp.options]
+        SystemdCgroup = true
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-tdx]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-tdx.options]
+        SystemdCgroup = true
+    [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-nvidia-gpu-tdx]
+      runtime_type = "io.containerd.runc.v2"
+      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-nvidia-gpu-tdx.options]
+        SystemdCgroup = true

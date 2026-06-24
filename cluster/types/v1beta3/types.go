@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -51,8 +52,47 @@ type LeaseEvent struct {
 	Object              LeaseEventObject `json:"object" yaml:"object"`
 }
 
+// TEEType represents a validated TEE capability identifier.
+// The provider determines the actual TEE technology (AMD SEV-SNP or Intel TDX)
+// at deployment time based on node capabilities.
+type TEEType string
+
+const (
+	TEETypeNone   TEEType = ""
+	TEETypeCPU    TEEType = "cpu"
+	TEETypeCPUGPU TEEType = "cpu-gpu"
+)
+
+// ParseTEEType validates a raw string and returns the corresponding TEEType.
+// Returns TEETypeNone for empty strings. Returns an error for unknown values.
+func ParseTEEType(s string) (TEEType, error) {
+	switch TEEType(s) {
+	case TEETypeNone, TEETypeCPU, TEETypeCPUGPU:
+		return TEEType(s), nil
+	default:
+		return TEETypeNone, fmt.Errorf("unknown TEE type: %q", s)
+	}
+}
+
+// IsCC returns true if this TEE type represents a confidential compute workload.
+func (t TEEType) IsCC() bool { return t != TEETypeNone }
+
+// IsGPU returns true if this TEE type requires GPU confidential compute.
+func (t TEEType) IsGPU() bool { return t == TEETypeCPUGPU }
+
+// TEEPlatform represents the detected TEE platform on the cluster nodes.
+type TEEPlatform string
+
+const (
+	TEEPlatformNone TEEPlatform = ""
+	TEEPlatformTDX  TEEPlatform = "tdx"
+	TEEPlatformSNP  TEEPlatform = "snp"
+)
+
 type InventoryOptions struct {
-	DryRun bool
+	DryRun      bool
+	TEEType     TEEType
+	TEEPlatform TEEPlatform // detected at startup from node labels
 }
 
 type InventoryOption func(*InventoryOptions) *InventoryOptions
@@ -60,6 +100,20 @@ type InventoryOption func(*InventoryOptions) *InventoryOptions
 func WithDryRun() InventoryOption {
 	return func(opts *InventoryOptions) *InventoryOptions {
 		opts.DryRun = true
+		return opts
+	}
+}
+
+func WithTEEType(t TEEType) InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.TEEType = t
+		return opts
+	}
+}
+
+func WithTEEPlatform(t TEEPlatform) InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.TEEPlatform = t
 		return opts
 	}
 }

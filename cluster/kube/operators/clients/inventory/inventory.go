@@ -43,7 +43,7 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -51,7 +51,7 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.Scheduler
 		return nil, false, true
 	}
 
-	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams) {
+	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams, teeType, teePlatform) {
 		return nil, false, true
 	}
 
@@ -106,6 +106,28 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources) (*crd.Scheduler
 		}
 	}
 
+	// Confidential compute: set runtime class for CPU-only CC (GPU path
+	// sets it in tryAdjustGPU) and reserve sidecar resources.
+	if teeType.IsCC() {
+		if sparams.RuntimeClass == "" {
+			sparams.RuntimeClass = builder.RuntimeClassForTEEType(string(teeType), string(teePlatform))
+		}
+
+		sidecarCPU := rtypes.NewResourceValue(uint64(builder.SidecarCPULimitMillicores))
+		if !nd.Resources.CPU.Quantity.SubMilliNLZ(sidecarCPU) {
+			return nil, false, true
+		}
+
+		sidecarMemBytes := builder.SidecarMemoryLimitBytes
+		if builder.IsGPURuntimeClass(sparams.RuntimeClass) {
+			sidecarMemBytes = builder.SidecarGPUMemoryLimitBytes
+		}
+		sidecarMem := rtypes.NewResourceValue(uint64(sidecarMemBytes)) //nolint:gosec // positive constant
+		if !nd.Resources.Memory.Quantity.SubNLZ(sidecarMem) {
+			return nil, false, true
+		}
+	}
+
 	// all requirements for current group have been satisfied
 	// commit and move on
 	inv.Nodes[node] = nd
@@ -122,7 +144,7 @@ func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *rtypes.CPU) bool {
 	return rp.SubMilliNLZ(res.Units)
 }
 
-func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams) bool {
+func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams, teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) bool {
 	reqCnt := res.Units.Value()
 
 	if reqCnt == 0 {
@@ -160,6 +182,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 		}
 
 		reqCnt--
+
 		if reqCnt == 0 {
 			vendor := strings.ToLower(info.Vendor)
 
@@ -171,10 +194,14 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 			sparams.Resources.GPU.Vendor = vendor
 			sparams.Resources.GPU.Model = info.Name
 
-			switch vendor {
-			case builder.GPUVendorNvidia:
-				sparams.RuntimeClass = runtimeClassNvidia
-			default:
+			if teeType.IsCC() {
+				sparams.RuntimeClass = builder.RuntimeClassForTEEType(string(teeType), string(teePlatform))
+			} else {
+				switch vendor {
+				case builder.GPUVendorNvidia:
+					sparams.RuntimeClass = runtimeClassNvidia
+				default:
+				}
 			}
 
 			key := fmt.Sprintf("vendor/%s/model/%s", vendor, info.Name)
@@ -254,7 +281,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, cfg.TEEType, cfg.TEEPlatform)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes

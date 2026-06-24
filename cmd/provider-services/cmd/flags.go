@@ -359,5 +359,25 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Bool(FlagAttestationWebhookEnabled, false, "Enable attestation sidecar mutating admission webhook for confidential compute")
+	if err := viper.BindPFlag(FlagAttestationWebhookEnabled, cmd.Flags().Lookup(FlagAttestationWebhookEnabled)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Int(FlagAttestationWebhookPort, 9443, "Port for the attestation sidecar webhook server")
+	if err := viper.BindPFlag(FlagAttestationWebhookPort, cmd.Flags().Lookup(FlagAttestationWebhookPort)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagAttestationSidecarImage, "", "Docker image for the attestation sidecar (required when webhook is enabled)")
+	if err := viper.BindPFlag(FlagAttestationSidecarImage, cmd.Flags().Lookup(FlagAttestationSidecarImage)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Bool(FlagAttestationMockMode, false, "Run attestation sidecar in mock mode (synthetic reports, no TEE hardware). For local development only")
+	if err := viper.BindPFlag(FlagAttestationMockMode, cmd.Flags().Lookup(FlagAttestationMockMode)); err != nil {
+		return err
+	}
+
 	return nil
 }

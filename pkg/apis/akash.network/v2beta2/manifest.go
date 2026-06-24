@@ -110,8 +110,10 @@ type SchedulerResources struct {
 }
 
 type SchedulerParams struct {
-	RuntimeClass string              `json:"runtime_class"`
-	Resources    *SchedulerResources `json:"resources,omitempty"`
+	RuntimeClass        string              `json:"runtime_class"`
+	Resources           *SchedulerResources `json:"resources,omitempty"`
+	AttestationDisabled bool                `json:"attestation_disabled,omitempty"`
+	TEEType             string              `json:"tee_type,omitempty"`
 }
 
 type ClusterSettings struct {
@@ -145,7 +147,7 @@ type ManifestServiceExposeHTTPOptions struct {
 // NewManifest creates new manifest with provided details. Returns error in case of failure.
 func NewManifest(ns string, lid mtypes.LeaseID, mgroup *mani.Group, settings ClusterSettings) (*Manifest, error) {
 	if len(mgroup.Services) != len(settings.SchedulerParams) {
-		return nil, fmt.Errorf("%w: group services don't not match scheduler services count (%d) != (%d)",
+		return nil, fmt.Errorf("%w: group services count does not match scheduler services count (%d) != (%d)",
 			ErrInvalidArgs,
 			len(mgroup.Services),
 			len(settings.SchedulerParams),
@@ -310,6 +312,20 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 	resources, err := resourcesFromAkash(ams.Resources)
 	if err != nil {
 		return ManifestService{}, err
+	}
+
+	// Set runtime class and attestation from TEE service params.
+	// Note: proto3 bool defaults to false, but the intended default for attestation
+	// is true (sidecar injected). The Go SDL builder always sets this explicitly.
+	// Non-Go producers must set attestation=true when sidecar injection is desired.
+	if ams.Params != nil && ams.Params.TEE != nil {
+		if schedulerParams == nil {
+			schedulerParams = &SchedulerParams{}
+		}
+		schedulerParams.TEEType = ams.Params.TEE.Type
+		if !ams.Params.TEE.Attestation {
+			schedulerParams.AttestationDisabled = true
+		}
 	}
 
 	ms := ManifestService{

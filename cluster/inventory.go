@@ -30,6 +30,7 @@ import (
 	"pkg.akt.dev/go/util/pubsub"
 	"pkg.akt.dev/node/v2/util/runner"
 
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	cinventory "github.com/akash-network/provider/cluster/types/v1beta3/clients/inventory"
 	cip "github.com/akash-network/provider/cluster/types/v1beta3/clients/ip"
@@ -103,6 +104,7 @@ type inventoryService struct {
 	lc                     lifecycle.Lifecycle
 	waiter                 waiter.OperatorWaiter
 	availableExternalPorts uint
+	teePlatform            ctypes.TEEPlatform
 
 	clients struct {
 		ip        cip.Client
@@ -143,10 +145,16 @@ func newInventoryService(
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
 	is.clients.ip = cfromctx.ClientIPFromContext(ctx)
 
+	is.teePlatform = client.DetectTEEPlatform(ctx)
+	if is.teePlatform != ctypes.TEEPlatformNone {
+		is.log.Info("detected TEE platform", "platform", is.teePlatform)
+	}
+
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
 		res := newReservation(d.LeaseID().OrderID(), d.ManifestGroup())
 		res.SetClusterParams(d.ClusterParams())
+		res.teeType = teeTypeFromClusterParams(d.ClusterParams())
 
 		reservations = append(reservations, res)
 	}
@@ -443,6 +451,67 @@ func leasedIPStatus(state *inventoryServiceState) inventoryV1.ResourcePair {
 		resource.DecimalSI)
 }
 
+// teeTypeFromResourceGroup extracts the TEE type from the placement requirement
+// attributes of a resource group (e.g. tee/type=cpu-gpu).
+func teeTypeFromResourceGroup(rg dtypes.ResourceGroup) ctypes.TEEType {
+	var attrs atypes.Attributes
+	switch v := rg.(type) {
+	case dtypes.GroupSpec:
+		attrs = v.Requirements.Attributes
+	case *dtypes.GroupSpec:
+		attrs = v.Requirements.Attributes
+	case dtypes.Group:
+		attrs = v.GroupSpec.Requirements.Attributes
+	case *dtypes.Group:
+		attrs = v.GroupSpec.Requirements.Attributes
+	default:
+		return ctypes.TEETypeNone
+	}
+	for _, attr := range attrs {
+		if attr.Key == "tee/type" {
+			t, err := ctypes.ParseTEEType(attr.Value)
+			if err == nil {
+				return t
+			}
+		}
+	}
+	return ctypes.TEETypeNone
+}
+
+// teeTypeFromClusterParams extracts the TEE type from stored cluster params
+// (used for existing reservations loaded at startup).
+func teeTypeFromClusterParams(cp interface{}) ctypes.TEEType {
+	var sparams []*crd.SchedulerParams
+	switch v := cp.(type) {
+	case *crd.ClusterSettings:
+		if v == nil {
+			return ctypes.TEETypeNone
+		}
+		sparams = v.SchedulerParams
+	case crd.ClusterSettings:
+		sparams = v.SchedulerParams
+	default:
+		return ctypes.TEETypeNone
+	}
+	for _, sp := range sparams {
+		if sp != nil && sp.TEEType != "" && !sp.AttestationDisabled {
+			t, err := ctypes.ParseTEEType(sp.TEEType)
+			if err == nil {
+				return t
+			}
+		}
+	}
+	return ctypes.TEETypeNone
+}
+
+func (is *inventoryService) adjustOpts(teeType ctypes.TEEType) []ctypes.InventoryOption {
+	opts := []ctypes.InventoryOption{ctypes.WithTEEPlatform(is.teePlatform)}
+	if teeType != ctypes.TEETypeNone {
+		opts = append(opts, ctypes.WithTEEType(teeType))
+	}
+	return opts
+}
+
 func (is *inventoryService) handleRequest(req inventoryRequest, state *inventoryServiceState) {
 	// convert the resources to the committed amount
 	resourcesToCommit := is.resourcesToCommit(req.resources)
@@ -472,7 +541,8 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
-	err := state.inventory.Adjust(reservation)
+	reservation.teeType = teeTypeFromResourceGroup(req.resources)
+	err := state.inventory.Adjust(reservation, is.adjustOpts(reservation.teeType)...)
 	if err != nil {
 		is.log.Info("insufficient capacity for reservation", "order", req.order)
 		inventoryRequestsCounter.WithLabelValues("reserve", "insufficient-capacity").Inc()
@@ -689,7 +759,7 @@ loop:
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
-					if err := state.inventory.Adjust(r); err != nil {
+					if err := state.inventory.Adjust(r, is.adjustOpts(r.teeType)...); err != nil {
 						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
 					}
 				}
