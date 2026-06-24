@@ -9,15 +9,15 @@ import (
 	"github.com/akash-network/provider/cluster/util"
 )
 
-func newReservation(order mtypes.OrderID, resources dtypes.ResourceGroup) *reservation {
+func newReservation(bid mtypes.BidID, resources dtypes.ResourceGroup) *reservation {
 	return &reservation{
-		order:            order,
+		bid:              bid,
 		resources:        resources,
 		endpointQuantity: util.GetEndpointQuantityOfResourceGroup(resources, rtypes.Endpoint_LEASED_IP)}
 }
 
 type reservation struct {
-	order             mtypes.OrderID
+	bid               mtypes.BidID
 	resources         dtypes.ResourceGroup
 	adjustedResources dtypes.ResourceUnits
 	clusterParams     interface{}
@@ -29,7 +29,7 @@ type reservation struct {
 var _ ctypes.Reservation = (*reservation)(nil)
 
 func (r *reservation) OrderID() mtypes.OrderID {
-	return r.order
+	return r.bid.OrderID()
 }
 
 func (r *reservation) Resources() dtypes.ResourceGroup {

@@ -106,6 +106,74 @@ func (_c *Cluster_Reserve_Call) RunAndReturn(run func(orderID v1.OrderID, resour
 	return _c
 }
 
+// ReserveBid provides a mock function for the type Cluster
+func (_mock *Cluster) ReserveBid(bidID v1.BidID, resourceGroup v1beta4.ResourceGroup) (v1beta3.Reservation, error) {
+	ret := _mock.Called(bidID, resourceGroup)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReserveBid")
+	}
+
+	var r0 v1beta3.Reservation
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(v1.BidID, v1beta4.ResourceGroup) (v1beta3.Reservation, error)); ok {
+		return returnFunc(bidID, resourceGroup)
+	}
+	if returnFunc, ok := ret.Get(0).(func(v1.BidID, v1beta4.ResourceGroup) v1beta3.Reservation); ok {
+		r0 = returnFunc(bidID, resourceGroup)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(v1beta3.Reservation)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(v1.BidID, v1beta4.ResourceGroup) error); ok {
+		r1 = returnFunc(bidID, resourceGroup)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Cluster_ReserveBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReserveBid'
+type Cluster_ReserveBid_Call struct {
+	*mock.Call
+}
+
+// ReserveBid is a helper method to define mock.On call
+//   - bidID v1.BidID
+//   - resourceGroup v1beta4.ResourceGroup
+func (_e *Cluster_Expecter) ReserveBid(bidID interface{}, resourceGroup interface{}) *Cluster_ReserveBid_Call {
+	return &Cluster_ReserveBid_Call{Call: _e.mock.On("ReserveBid", bidID, resourceGroup)}
+}
+
+func (_c *Cluster_ReserveBid_Call) Run(run func(bidID v1.BidID, resourceGroup v1beta4.ResourceGroup)) *Cluster_ReserveBid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 v1.BidID
+		if args[0] != nil {
+			arg0 = args[0].(v1.BidID)
+		}
+		var arg1 v1beta4.ResourceGroup
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.ResourceGroup)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Cluster_ReserveBid_Call) Return(reservation v1beta3.Reservation, err error) *Cluster_ReserveBid_Call {
+	_c.Call.Return(reservation, err)
+	return _c
+}
+
+func (_c *Cluster_ReserveBid_Call) RunAndReturn(run func(bidID v1.BidID, resourceGroup v1beta4.ResourceGroup) (v1beta3.Reservation, error)) *Cluster_ReserveBid_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Unreserve provides a mock function for the type Cluster
 func (_mock *Cluster) Unreserve(orderID v1.OrderID) error {
 	ret := _mock.Called(orderID)
@@ -153,6 +221,57 @@ func (_c *Cluster_Unreserve_Call) Return(err error) *Cluster_Unreserve_Call {
 }
 
 func (_c *Cluster_Unreserve_Call) RunAndReturn(run func(orderID v1.OrderID) error) *Cluster_Unreserve_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UnreserveBid provides a mock function for the type Cluster
+func (_mock *Cluster) UnreserveBid(bidID v1.BidID) error {
+	ret := _mock.Called(bidID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnreserveBid")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(v1.BidID) error); ok {
+		r0 = returnFunc(bidID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Cluster_UnreserveBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnreserveBid'
+type Cluster_UnreserveBid_Call struct {
+	*mock.Call
+}
+
+// UnreserveBid is a helper method to define mock.On call
+//   - bidID v1.BidID
+func (_e *Cluster_Expecter) UnreserveBid(bidID interface{}) *Cluster_UnreserveBid_Call {
+	return &Cluster_UnreserveBid_Call{Call: _e.mock.On("UnreserveBid", bidID)}
+}
+
+func (_c *Cluster_UnreserveBid_Call) Run(run func(bidID v1.BidID)) *Cluster_UnreserveBid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 v1.BidID
+		if args[0] != nil {
+			arg0 = args[0].(v1.BidID)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Cluster_UnreserveBid_Call) Return(err error) *Cluster_UnreserveBid_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Cluster_UnreserveBid_Call) RunAndReturn(run func(bidID v1.BidID) error) *Cluster_UnreserveBid_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -384,6 +384,74 @@ func (_c *Service_Reserve_Call) RunAndReturn(run func(orderID v1.OrderID, resour
 	return _c
 }
 
+// ReserveBid provides a mock function for the type Service
+func (_mock *Service) ReserveBid(bidID v1.BidID, resourceGroup v1beta4.ResourceGroup) (v1beta3.Reservation, error) {
+	ret := _mock.Called(bidID, resourceGroup)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReserveBid")
+	}
+
+	var r0 v1beta3.Reservation
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(v1.BidID, v1beta4.ResourceGroup) (v1beta3.Reservation, error)); ok {
+		return returnFunc(bidID, resourceGroup)
+	}
+	if returnFunc, ok := ret.Get(0).(func(v1.BidID, v1beta4.ResourceGroup) v1beta3.Reservation); ok {
+		r0 = returnFunc(bidID, resourceGroup)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(v1beta3.Reservation)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(v1.BidID, v1beta4.ResourceGroup) error); ok {
+		r1 = returnFunc(bidID, resourceGroup)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Service_ReserveBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReserveBid'
+type Service_ReserveBid_Call struct {
+	*mock.Call
+}
+
+// ReserveBid is a helper method to define mock.On call
+//   - bidID v1.BidID
+//   - resourceGroup v1beta4.ResourceGroup
+func (_e *Service_Expecter) ReserveBid(bidID interface{}, resourceGroup interface{}) *Service_ReserveBid_Call {
+	return &Service_ReserveBid_Call{Call: _e.mock.On("ReserveBid", bidID, resourceGroup)}
+}
+
+func (_c *Service_ReserveBid_Call) Run(run func(bidID v1.BidID, resourceGroup v1beta4.ResourceGroup)) *Service_ReserveBid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 v1.BidID
+		if args[0] != nil {
+			arg0 = args[0].(v1.BidID)
+		}
+		var arg1 v1beta4.ResourceGroup
+		if args[1] != nil {
+			arg1 = args[1].(v1beta4.ResourceGroup)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *Service_ReserveBid_Call) Return(reservation v1beta3.Reservation, err error) *Service_ReserveBid_Call {
+	_c.Call.Return(reservation, err)
+	return _c
+}
+
+func (_c *Service_ReserveBid_Call) RunAndReturn(run func(bidID v1.BidID, resourceGroup v1beta4.ResourceGroup) (v1beta3.Reservation, error)) *Service_ReserveBid_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Status provides a mock function for the type Service
 func (_mock *Service) Status(context1 context.Context) (*rest.ClusterStatus, error) {
 	ret := _mock.Called(context1)
@@ -630,6 +698,57 @@ func (_c *Service_Unreserve_Call) Return(err error) *Service_Unreserve_Call {
 }
 
 func (_c *Service_Unreserve_Call) RunAndReturn(run func(orderID v1.OrderID) error) *Service_Unreserve_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UnreserveBid provides a mock function for the type Service
+func (_mock *Service) UnreserveBid(bidID v1.BidID) error {
+	ret := _mock.Called(bidID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnreserveBid")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(v1.BidID) error); ok {
+		r0 = returnFunc(bidID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// Service_UnreserveBid_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnreserveBid'
+type Service_UnreserveBid_Call struct {
+	*mock.Call
+}
+
+// UnreserveBid is a helper method to define mock.On call
+//   - bidID v1.BidID
+func (_e *Service_Expecter) UnreserveBid(bidID interface{}) *Service_UnreserveBid_Call {
+	return &Service_UnreserveBid_Call{Call: _e.mock.On("UnreserveBid", bidID)}
+}
+
+func (_c *Service_UnreserveBid_Call) Run(run func(bidID v1.BidID)) *Service_UnreserveBid_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 v1.BidID
+		if args[0] != nil {
+			arg0 = args[0].(v1.BidID)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Service_UnreserveBid_Call) Return(err error) *Service_UnreserveBid_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *Service_UnreserveBid_Call) RunAndReturn(run func(bidID v1.BidID) error) *Service_UnreserveBid_Call {
 	_c.Call.Return(run)
 	return _c
 }
