@@ -198,7 +198,7 @@ func bidIDWithSequence(orderID mtypes.OrderID, provider sdk.AccAddress, bseq uin
 
 func groupHasGPUModelWildcard(group *dtypes.Group) bool {
 	for _, resource := range group.GroupSpec.GetResourceUnits() {
-		gpu := resource.Resources.GetGPU()
+		gpu := resource.GetGPU()
 		if gpu == nil || gpu.GetUnits().Value() == 0 {
 			continue
 		}
@@ -262,6 +262,7 @@ func (o *order) run(checkForExistingBid bool) {
 		broadcastingBid     *mtypes.BidID
 		wonBid              *mtypes.BidID
 		stopCreatingBids    bool
+		cancelledBids       = make(map[mtypes.BidID]struct{})
 	)
 
 	groupch = runner.Do(func() runner.Result {
@@ -342,13 +343,7 @@ func (o *order) run(checkForExistingBid bool) {
 		}
 
 		bidID := attempts[idx].id
-		o.log.Debug("unreserving reservation", "bid", bidID, "bseq", bidID.BSeq)
-		if err := o.cluster.UnreserveBid(bidID); err != nil {
-			o.log.Error("error unreserving reservation", "err", err, "bid", bidID, "bseq", bidID.BSeq)
-			reservationCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
-		} else {
-			reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel).Inc()
-		}
+		o.unreserveBid(bidID)
 		attempts[idx].reservation = nil
 	}
 
@@ -358,6 +353,23 @@ func (o *order) run(checkForExistingBid bool) {
 		}
 
 		attempts = append(attempts[:idx], attempts[idx+1:]...)
+	}
+
+	isCancelledBid := func(bidID mtypes.BidID) bool {
+		_, exists := cancelledBids[bidID]
+
+		return exists
+	}
+
+	handleCancelledReservation := func(result reservationResult) bool {
+		if !isCancelledBid(result.bidID) {
+			return false
+		}
+		if result.reservation != nil {
+			o.unreserveBid(result.bidID)
+		}
+
+		return true
 	}
 
 loop:
@@ -428,12 +440,6 @@ loop:
 				if ev.ID.Provider != o.session.Provider().Address().String() {
 					orderCompleteCounter.WithLabelValues("lease-lost").Inc()
 					o.log.Info("lease lost", "lease", ev.ID)
-					if broadcastingBid != nil {
-						idx := findBidAttempt(attempts, *broadcastingBid)
-						if idx != -1 {
-							attempts[idx].placed = true
-						}
-					}
 					break loop
 				}
 				orderCompleteCounter.WithLabelValues("lease-won").Inc()
@@ -477,6 +483,7 @@ loop:
 					break
 				}
 
+				cancelledBids[ev.ID] = struct{}{}
 				idx := findBidAttempt(attempts, ev.ID)
 				if idx == -1 {
 					break
@@ -564,6 +571,16 @@ loop:
 			}
 
 			reservationResult := result.Value().(reservationResult)
+			if handleCancelledReservation(reservationResult) {
+				if !startNextReservation() {
+					if placedBidCount(attempts) == 0 && pricech == nil && bidch == nil {
+						break loop
+					}
+					finishBidding()
+				}
+				continue
+			}
+
 			attempt := bidAttempt{
 				id:          reservationResult.bidID,
 				reservation: reservationResult.reservation,
@@ -715,16 +732,18 @@ loop:
 		clusterch = nil
 		if result.Error() == nil {
 			reservationResult := result.Value().(reservationResult)
-			attempt := bidAttempt{
-				id:          reservationResult.bidID,
-				reservation: reservationResult.reservation,
-				existing:    reservationResult.existing,
-				placed:      reservationResult.existing,
-			}
-			if idx := findBidAttempt(attempts, attempt.id); idx == -1 {
-				attempts = append(attempts, attempt)
-			} else {
-				attempts[idx].reservation = attempt.reservation
+			if !handleCancelledReservation(reservationResult) {
+				attempt := bidAttempt{
+					id:          reservationResult.bidID,
+					reservation: reservationResult.reservation,
+					existing:    reservationResult.existing,
+					placed:      reservationResult.existing,
+				}
+				if idx := findBidAttempt(attempts, attempt.id); idx == -1 {
+					attempts = append(attempts, attempt)
+				} else {
+					attempts[idx].reservation = attempt.reservation
+				}
 			}
 		}
 	}
@@ -777,6 +796,9 @@ loop:
 	if groupch != nil {
 		<-groupch
 	}
+	if storedGroupCh != nil {
+		<-storedGroupCh
+	}
 	if clusterch != nil {
 		<-clusterch
 	}
@@ -791,6 +813,16 @@ loop:
 	}
 	if shouldBidCh != nil {
 		<-shouldBidCh
+	}
+}
+
+func (o *order) unreserveBid(bidID mtypes.BidID) {
+	o.log.Debug("unreserving reservation", "bid", bidID, "bseq", bidID.BSeq)
+	if err := o.cluster.UnreserveBid(bidID); err != nil {
+		o.log.Error("error unreserving reservation", "err", err, "bid", bidID, "bseq", bidID.BSeq)
+		reservationCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
+	} else {
+		reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel).Inc()
 	}
 }
 

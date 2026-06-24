@@ -339,6 +339,29 @@ func makeInventoryScaffold(t *testing.T, leaseQty uint) *inventoryScaffold {
 	return scaffold
 }
 
+func TestInventory_ConfirmReservedIPsMatchesExactBid(t *testing.T) {
+	orderID := testutil.OrderID(t)
+	bid0 := mtypes.MakeBidID(orderID, testutil.AccAddress(t))
+	bid1 := bid0
+	bid1.BSeq = 1
+
+	group := makeGroupForInventoryTest(false, false, true)
+	reservation0 := newReservation(bid0, group)
+	reservation1 := newReservation(bid1, group)
+
+	state := &inventoryServiceState{
+		reservations: []*reservation{reservation0, reservation1},
+	}
+	inventory := &inventoryService{
+		log: testutil.Logger(t),
+	}
+
+	inventory.confirmReservedIPs(state, []mtypes.BidID{bid1})
+
+	require.False(t, state.reservations[0].ipsConfirmed)
+	require.True(t, state.reservations[1].ipsConfirmed)
+}
+
 func makeGroupForInventoryTest(sharedHTTP, nodePort, leasedIP bool) manifest.Group {
 	groupServices := make([]manifest.Service, 1)
 

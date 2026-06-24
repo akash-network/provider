@@ -791,16 +791,7 @@ loop:
 				res := run.Value().(runCheckResult)
 				state.ipAddrUsage = res.ipResult
 
-				// Process confirmed IP addresses usage
-				for _, confirmedOrderID := range res.confirmedResult {
-					for i, entry := range state.reservations {
-						if entry.OrderID().Equals(confirmedOrderID) {
-							state.reservations[i].ipsConfirmed = true
-							is.log.Info("confirmed IP allocation", "orderID", confirmedOrderID)
-							break
-						}
-					}
-				}
+				is.confirmReservedIPs(state, res.confirmedResult)
 			} else {
 				is.log.Error("checking IP addresses", "error", err)
 			}
@@ -832,14 +823,27 @@ loop:
 	is.log.Debug("shutdown complete")
 }
 
+func (is *inventoryService) confirmReservedIPs(state *inventoryServiceState, confirmed []mtypes.BidID) {
+	for _, confirmedBidID := range confirmed {
+		for i, entry := range state.reservations {
+			if entry.bid == confirmedBidID {
+				state.reservations[i].ipsConfirmed = true
+				is.log.Info("confirmed IP allocation", "orderID", confirmedBidID.OrderID(), "bid", confirmedBidID)
+				break
+			}
+		}
+	}
+}
+
 type confirmationItem struct {
+	bidID            mtypes.BidID
 	orderID          mtypes.OrderID
 	expectedQuantity uint
 }
 
 type runCheckResult struct {
 	ipResult        cip.AddressUsage
-	confirmedResult []mtypes.OrderID
+	confirmedResult []mtypes.BidID
 }
 
 func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServiceState) <-chan runner.Result {
@@ -857,6 +861,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 		}
 
 		confirm = append(confirm, confirmationItem{
+			bidID:            entry.bid,
 			orderID:          entry.OrderID(),
 			expectedQuantity: entry.endpointQuantity,
 		})
@@ -882,7 +887,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 
 			numConfirmed := uint(len(status))
 			if numConfirmed == confirmItem.expectedQuantity {
-				retval.confirmedResult = append(retval.confirmedResult, confirmItem.orderID)
+				retval.confirmedResult = append(retval.confirmedResult, confirmItem.bidID)
 			}
 		}
 

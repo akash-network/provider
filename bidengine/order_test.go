@@ -256,17 +256,18 @@ func makeOrderForTest(
 				State:    mvbeta.BidOpen.String(),
 			},
 		}
-		response := &mvbeta.QueryBidsResponse{
-			Bids: []mvbeta.QueryBidResponse{
+		response := &mvbeta.QueryBidsResponse{}
+		if bidState == mvbeta.BidOpen {
+			response.Bids = []mvbeta.QueryBidResponse{
 				{
 					Bid: mvbeta.Bid{
 						ID:        bidID,
-						State:     bidState,
+						State:     mvbeta.BidOpen,
 						Price:     sdk.NewInt64DecCoin(sdkutil.DenomUact, int64(testutil.RandRangeInt(100, 1000))),
 						CreatedAt: testBidCreatedAt,
 					},
 				},
-			},
+			}
 		}
 		scaffold.marketMocks.On("Bids", mock.Anything, queryBidsRequest).Return(response, nil)
 	}
@@ -690,7 +691,7 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
 }
 
-func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
+func Test_ShouldBidWhenExistingBidIsLost(t *testing.T) {
 	pricing, err := MakeRandomRangePricing()
 	require.NoError(t, err)
 	cfg := Config{
@@ -702,17 +703,15 @@ func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 
 	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidLost, nil, &cfg, testBidCreatedAt)
 
-	testutil.ChannelWaitForClose(t, order.lc.Done())
+	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	createBidMsg := requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
 
-	// Should not have called reserve
-	scaffold.cluster.AssertNotCalled(t, "ReserveBid", scaffold.bidIDForTest(0), mock.Anything)
+	require.Equal(t, scaffold.bidIDForTest(0), createBidMsg.ID)
+	scaffold.cluster.AssertCalled(t, "ReserveBid", scaffold.bidIDForTest(0), mock.Anything)
 
-	// Should not have closed the bid
-	expMsgs := &mvbeta.MsgCloseBid{
-		ID: mtypes.MakeBidID(order.orderID, scaffold.testAddr),
-	}
+	order.lc.Shutdown(nil)
 
-	scaffold.txClient.AssertNotCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
+	scaffold.cluster.AssertCalled(t, "UnreserveBid", scaffold.bidIDForTest(0))
 }
 
 func Test_ShouldCloseBidWhenAlreadySetAndThenTimeout(t *testing.T) {
