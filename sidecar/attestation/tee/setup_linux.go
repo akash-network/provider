@@ -83,30 +83,44 @@ func ensureNvidiaDevices() {
 // setupGuestRootfs mounts the Kata guest rootfs at guestMountDir and
 // bind-mounts /dev and /proc into it, so nvidia-smi and the NVML helper
 // can run in a chroot with access to the kernel driver.
+//
+// The guest rootfs block device is 253:0 in Kata VMs. Modern Kata images
+// use erofs (read-only), older ones use ext4 on dm-0. We try erofs first
+// since it supports multiple concurrent mounts (no "device or resource
+// busy" errors), then fall back to ext4.
 func setupGuestRootfs() error {
 	const (
-		guestRootDev = "/dev/dm-0"
-		guestRootMaj = 253
-		guestRootMin = 0
+		devPath  = "/dev/akash-guest-root"
+		devMajor = 253
+		devMinor = 0
 	)
 
-	// Create /dev/dm-0 if missing (device-mapper block device).
-	if _, err := os.Stat(guestRootDev); err != nil {
-		dev := unix.Mkdev(guestRootMaj, guestRootMin)
-		if err := unix.Mknod(guestRootDev, unix.S_IFBLK|0660, int(dev)); err != nil {
-			return fmt.Errorf("mknod %s: %w", guestRootDev, err)
+	// Create the block device node if it doesn't exist.
+	if _, err := os.Stat(devPath); err != nil {
+		dev := unix.Mkdev(devMajor, devMinor)
+		if err := unix.Mknod(devPath, unix.S_IFBLK|0660, int(dev)); err != nil {
+			return fmt.Errorf("mknod %s: %w", devPath, err)
 		}
-		fmt.Fprintf(os.Stderr, "nvidia-gpu: created %s\n", guestRootDev)
+		fmt.Fprintf(os.Stderr, "nvidia-gpu: created %s (%d:%d)\n", devPath, devMajor, devMinor)
 	}
 
-	// Mount guest rootfs read-only.
 	if err := os.MkdirAll(guestMountDir, 0755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", guestMountDir, err)
 	}
-	if err := unix.Mount(guestRootDev, guestMountDir, "ext4", unix.MS_RDONLY, ""); err != nil {
-		return fmt.Errorf("mount %s on %s: %w", guestRootDev, guestMountDir, err)
+
+	// Try erofs first (modern Kata images), then ext4 (legacy dm-0).
+	var mountErr error
+	for _, fsType := range []string{"erofs", "ext4"} {
+		mountErr = unix.Mount(devPath, guestMountDir, fsType, unix.MS_RDONLY, "")
+		if mountErr == nil {
+			fmt.Fprintf(os.Stderr, "nvidia-gpu: mounted guest rootfs at %s (fstype=%s)\n", guestMountDir, fsType)
+			break
+		}
+		fmt.Fprintf(os.Stderr, "nvidia-gpu: mount %s as %s failed: %v\n", devPath, fsType, mountErr)
 	}
-	fmt.Fprintf(os.Stderr, "nvidia-gpu: mounted guest rootfs at %s\n", guestMountDir)
+	if mountErr != nil {
+		return fmt.Errorf("mount %s on %s: %w", devPath, guestMountDir, mountErr)
+	}
 
 	// Bind-mount /dev and /proc so chrooted commands can access device
 	// nodes (/dev/nvidiactl, /dev/nvidia0) and /proc/driver/nvidia.

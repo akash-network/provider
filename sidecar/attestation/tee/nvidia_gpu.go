@@ -24,12 +24,14 @@ const (
 // In Kata VMs, the GPU driver is in the guest rootfs but the NVIDIA
 // Container Toolkit only bind-mounts driver files into containers that
 // request GPU resources. The sidecar doesn't request GPUs, so it:
-//  1. Mounts the guest rootfs block device (/dev/dm-0) at /mnt/guest
-//  2. Bind-mounts /dev and /proc into the mount point
-//  3. Runs nvidia-smi and nvml_attestation chrooted into /mnt/guest
+//  1. Discovers the guest rootfs device and filesystem type from /proc/self/mountinfo
+//  2. Mounts the guest rootfs block device read-only at /mnt/guest
+//  3. Bind-mounts /dev and /proc into the mount point
+//  4. Runs nvidia-smi and nvml_attestation chrooted into /mnt/guest
 //
 // This ensures nvidia-smi, libnvidia-ml.so, glibc, and the kernel driver
-// are all from the same guest image — no version mismatches.
+// are all from the same guest image, no version mismatches.
+// Dynamic discovery handles both erofs (modern Kata images) and ext4 (older).
 type NvidiaGPUAttestor struct {
 	SMIPath   string
 	mountOnce sync.Once
@@ -212,7 +214,7 @@ func (n *NvidiaGPUAttestor) ensureMount() error {
 }
 
 // chrootExec runs a binary inside the guest rootfs using SysProcAttr.Chroot.
-// This uses the kernel chroot syscall directly — no external `chroot` binary needed.
+// This uses the kernel chroot syscall directly, no external `chroot` binary needed.
 // The path must be relative to the chroot (e.g. "/bin/nvidia-smi").
 func (n *NvidiaGPUAttestor) chrootExec(ctx context.Context, path string, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, path, args...)
