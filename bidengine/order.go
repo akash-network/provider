@@ -3,7 +3,8 @@ package bidengine
 import (
 	"context"
 	"fmt"
-	"regexp"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/boz/go-lifecycle"
@@ -142,8 +143,6 @@ func newOrderInternal(svc *service, oid mtypes.OrderID, cfg Config, pass Provide
 	return order, nil
 }
 
-var matchBidNotFound = regexp.MustCompile("^.+bid not found.+$")
-
 func (o *order) bidTimeoutEnabled() bool {
 	return o.cfg.BidTimeout > time.Duration(0)
 }
@@ -171,95 +170,261 @@ func (o *order) isStaleBid(bid mvbeta.Bid) bool {
 	return atLeastThisOld > o.cfg.BidTimeout
 }
 
+type bidAttempt struct {
+	id          mtypes.BidID
+	reservation ctypes.Reservation
+	msg         *mvbeta.MsgCreateBid
+	placed      bool
+	existing    bool
+}
+
+type reservationResult struct {
+	bidID       mtypes.BidID
+	existing    bool
+	reservation ctypes.Reservation
+}
+
+type priceResult struct {
+	bidID mtypes.BidID
+	price sdk.DecCoin
+}
+
+func bidIDWithSequence(orderID mtypes.OrderID, provider sdk.AccAddress, bseq uint32) mtypes.BidID {
+	id := mtypes.MakeBidID(orderID, provider)
+	id.BSeq = bseq
+
+	return id
+}
+
+func groupHasGPUModelWildcard(group *dtypes.Group) bool {
+	for _, resource := range group.GroupSpec.GetResourceUnits() {
+		gpu := resource.GetGPU()
+		if gpu == nil || gpu.GetUnits().Value() == 0 {
+			continue
+		}
+
+		for _, attr := range gpu.GetAttributes() {
+			tokens := strings.Split(attr.Key, "/")
+			for idx := 0; idx+1 < len(tokens); idx += 2 {
+				if tokens[idx] == "model" && tokens[idx+1] == "*" {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+func findBidAttempt(attempts []bidAttempt, id mtypes.BidID) int {
+	for idx := range attempts {
+		if attempts[idx].id == id {
+			return idx
+		}
+	}
+
+	return -1
+}
+
+func placedBidCount(attempts []bidAttempt) int {
+	count := 0
+	for _, attempt := range attempts {
+		if attempt.placed {
+			count++
+		}
+	}
+
+	return count
+}
+
 func (o *order) run(checkForExistingBid bool) {
 	defer o.lc.ShutdownCompleted()
 	ctx, cancel := context.WithCancel(context.Background())
+	providerAddr := o.session.Provider().Address()
 
 	var (
-		// Channel for receiving group details query result.
-		groupch <-chan runner.Result
-		// Channel for storing group details result while checking existing bid.
+		groupch       <-chan runner.Result
 		storedGroupCh <-chan runner.Result
-		// Channel for receiving cluster reservation result.
-		clusterch <-chan runner.Result
-		// Channel for receiving bid creation transaction result.
-		bidch <-chan runner.Result
-		// Channel for receiving bid price calculation result.
-		pricech <-chan runner.Result
-		// Channel for receiving existing bid query result.
-		queryBidCh <-chan runner.Result
-		// Channel for receiving result of bid eligibility check.
-		shouldBidCh <-chan runner.Result
-		// Channel that triggers when bid timeout is reached.
-		bidTimeout <-chan time.Time
+		clusterch     <-chan runner.Result
+		bidch         <-chan runner.Result
+		pricech       <-chan runner.Result
+		queryBidsCh   <-chan runner.Result
+		shouldBidCh   <-chan runner.Result
+		bidTimeout    <-chan time.Time
 
-		group       *dtypes.Group
-		reservation ctypes.Reservation
+		group *dtypes.Group
 
-		won bool
-		msg *mvbeta.MsgCreateBid
+		attempts            []bidAttempt
+		pendingExistingBids []mtypes.BidID
+		nextBSeq            uint32
+		maxBidAttempts      uint32 = 1
+		reserveStarted      uint32
+		broadcastingBid     *mtypes.BidID
+		wonBid              *mtypes.BidID
+		stopCreatingBids    bool
+		cancelledBids       = make(map[mtypes.BidID]struct{})
 	)
 
-	// Begin fetching group details immediately.
 	groupch = runner.Do(func() runner.Result {
 		res, err := o.session.Client().Query().Deployment().Group(ctx, &dtypes.QueryGroupRequest{ID: o.orderID.GroupID()})
 		return runner.NewResult(res.GetGroup(), err)
 	})
 
-	// Load existing bid if needed
 	if checkForExistingBid {
-		queryBidCh = runner.Do(func() runner.Result {
-			return runner.NewResult(o.session.Client().Query().Market().Bid(
+		queryBidsCh = runner.Do(func() runner.Result {
+			return runner.NewResult(o.session.Client().Query().Market().Bids(
 				ctx,
-				&mvbeta.QueryBidRequest{
-					ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				&mvbeta.QueryBidsRequest{
+					Filters: mvbeta.BidFilters{
+						Owner:    o.orderID.Owner,
+						DSeq:     o.orderID.DSeq,
+						GSeq:     o.orderID.GSeq,
+						OSeq:     o.orderID.OSeq,
+						Provider: providerAddr.String(),
+						State:    mvbeta.BidOpen.String(),
+					},
 				},
 			))
 		})
-		// Hide the group details result for later
 		storedGroupCh = groupch
 		groupch = nil
 	}
 
-	bidPlaced := false
+	startReservation := func(bidID mtypes.BidID, existing bool) {
+		o.log.Info("requesting reservation", "bid", bidID, "bseq", bidID.BSeq)
+		clusterch = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
+			reservation, err := o.cluster.ReserveBid(bidID, group)
+			return runner.NewResult(reservationResult{
+				bidID:       bidID,
+				existing:    existing,
+				reservation: reservation,
+			}, err)
+		}, reservationDuration))
+	}
+
+	startNextReservation := func() bool {
+		if clusterch != nil || stopCreatingBids {
+			return false
+		}
+
+		if len(pendingExistingBids) != 0 {
+			bidID := pendingExistingBids[0]
+			pendingExistingBids = pendingExistingBids[1:]
+			startReservation(bidID, true)
+			return true
+		}
+
+		if reserveStarted >= maxBidAttempts {
+			return false
+		}
+
+		if nextBSeq == ^uint32(0) {
+			o.log.Error("bid sequence exhausted")
+			stopCreatingBids = true
+			return false
+		}
+
+		bidID := bidIDWithSequence(o.orderID, providerAddr, nextBSeq)
+		nextBSeq++
+		reserveStarted++
+		startReservation(bidID, false)
+		return true
+	}
+
+	finishBidding := func() {
+		if placedBidCount(attempts) != 0 {
+			bidTimeout = o.getBidTimeout()
+		}
+	}
+
+	unreserveAttempt := func(idx int) {
+		if idx < 0 || idx >= len(attempts) || attempts[idx].reservation == nil {
+			return
+		}
+
+		bidID := attempts[idx].id
+		o.unreserveBid(bidID)
+		attempts[idx].reservation = nil
+	}
+
+	removeAttempt := func(idx int) {
+		if idx < 0 || idx >= len(attempts) {
+			return
+		}
+
+		attempts = append(attempts[:idx], attempts[idx+1:]...)
+	}
+
+	isCancelledBid := func(bidID mtypes.BidID) bool {
+		_, exists := cancelledBids[bidID]
+
+		return exists
+	}
+
+	handleCancelledReservation := func(result reservationResult) bool {
+		if !isCancelledBid(result.bidID) {
+			return false
+		}
+		if result.reservation != nil {
+			o.unreserveBid(result.bidID)
+		}
+
+		return true
+	}
+
 loop:
 	for {
 		select {
 		case <-o.lc.ShutdownRequest():
 			break loop
 
-		case queryBid := <-queryBidCh:
-			err := queryBid.Error()
-			bidFound := true
-			if err != nil {
-				// Use super-advanced technique for detecting if bid is not on blockchain
-				if matchBidNotFound.MatchString(err.Error()) {
-					bidFound = false
-				} else {
-					o.session.Log().Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
-					break loop
-				}
+		case queryBids := <-queryBidsCh:
+			queryBidsCh = nil
+			if err := queryBids.Error(); err != nil {
+				o.session.Log().Error("could not get existing bids", "err", err, "errtype", fmt.Sprintf("%T", err))
+				break loop
 			}
 
-			if bidFound {
-				o.session.Log().Info("found existing bid")
-				bidResponse := queryBid.Value().(*mvbeta.QueryBidResponse)
+			bids := queryBids.Value().(*mvbeta.QueryBidsResponse).GetBids()
+			sort.Slice(bids, func(i, j int) bool {
+				return bids[i].GetBid().ID.BSeq < bids[j].GetBid().ID.BSeq
+			})
+
+			staleExistingBid := false
+			for _, bidResponse := range bids {
 				bid := bidResponse.GetBid()
-				bidState := bid.GetState()
-				if bidState != mvbeta.BidOpen {
-					o.session.Log().Error("bid in unexpected state", "bid-state", bidState)
+				if bid.GetState() != mvbeta.BidOpen {
+					o.session.Log().Error("bid in unexpected state", "bid-state", bid.GetState())
 					break loop
 				}
-				bidPlaced = true
-
+				if bid.ID.BSeq == ^uint32(0) {
+					o.session.Log().Error("bid sequence exhausted", "bid", bid.ID)
+					break loop
+				}
+				if bid.ID.BSeq >= nextBSeq {
+					nextBSeq = bid.ID.BSeq + 1
+				}
+				attempts = append(attempts, bidAttempt{
+					id:       bid.ID,
+					placed:   true,
+					existing: true,
+				})
+				pendingExistingBids = append(pendingExistingBids, bid.ID)
 				if o.isStaleBid(bid) {
 					o.session.Log().Info("found expired bid", "block-height", bid.GetCreatedAt())
-					break loop
+					staleExistingBid = true
 				}
-
-				bidTimeout = o.getBidTimeout()
 			}
-			groupch = storedGroupCh // Allow getting the group details result now
+
+			if staleExistingBid {
+				break loop
+			}
+
+			if len(bids) != 0 {
+				o.session.Log().Info("found existing bids", "count", len(bids))
+			}
+
+			groupch = storedGroupCh
 			storedGroupCh = nil
 
 		case ev := <-o.sub.Events():
@@ -275,11 +440,6 @@ loop:
 				if ev.ID.Provider != o.session.Provider().Address().String() {
 					orderCompleteCounter.WithLabelValues("lease-lost").Inc()
 					o.log.Info("lease lost", "lease", ev.ID)
-					// Ensure cleanup runs MsgCloseBid: we may have already set bidPlaced, or have a
-					// bid tx in flight (bidch != nil) that could land on chain; network does not auto-close
-					if bidch != nil {
-						bidPlaced = true
-					}
 					break loop
 				}
 				orderCompleteCounter.WithLabelValues("lease-won").Inc()
@@ -294,7 +454,8 @@ loop:
 				}); err != nil {
 					o.log.Error("failed to publish to event queue", err)
 				}
-				won = true
+				winner := ev.ID.BidID()
+				wonBid = &winner
 
 				break loop
 			case *mtypes.EventOrderClosed:
@@ -307,7 +468,7 @@ loop:
 				orderCompleteCounter.WithLabelValues("order-closed").Inc()
 				break loop
 			case *mtypes.EventBidClosed:
-				if won {
+				if wonBid != nil {
 					// Ignore any event after LeaseCreated
 					continue
 				}
@@ -318,18 +479,25 @@ loop:
 				}
 
 				// Ignore bid closed not for this provider
-				if ev.ID.GetProvider() != o.session.Provider().String() {
+				if ev.ID.GetProvider() != providerAddr.String() {
 					break
 				}
 
-				// Bid has been closed (possibly by someone manually closing it on the CLI)
-				bidPlaced = false // bid already not on the blockchain
+				cancelledBids[ev.ID] = struct{}{}
+				idx := findBidAttempt(attempts, ev.ID)
+				if idx == -1 {
+					break
+				}
+
+				attempts[idx].placed = false
+				unreserveAttempt(idx)
+				removeAttempt(idx)
 				orderCompleteCounter.WithLabelValues("bid-closed-external").Inc()
-				break loop
+				if placedBidCount(attempts) == 0 && clusterch == nil && pricech == nil && bidch == nil {
+					break loop
+				}
 			}
 		case result := <-groupch:
-			// Group details fetched.
-
 			groupch = nil
 			o.log.Info("group fetched")
 
@@ -362,22 +530,35 @@ loop:
 			}
 
 			shouldBidCounter.WithLabelValues("accept").Inc()
-			o.log.Info("requesting reservation")
-			// Begin reserving resources from cluster.
-			clusterch = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
-				return runner.NewResult(o.cluster.Reserve(o.orderID, group))
-			}, reservationDuration))
+			if groupHasGPUModelWildcard(group) {
+				maxBidAttempts = mvbeta.DefaultParams().OrderMaxBids
+			}
+			reserveStarted = uint32(len(attempts))
+			if !startNextReservation() {
+				finishBidding()
+			}
 
 		case result := <-clusterch:
 			clusterch = nil
 
 			if result.Error() != nil {
-				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel)
+				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
 				o.log.Error("reserving resources", "err", result.Error())
-				break loop
+				reservationResult := result.Value().(reservationResult)
+				if reservationResult.existing {
+					break loop
+				}
+
+				if placedBidCount(attempts) == 0 {
+					break loop
+				}
+
+				stopCreatingBids = true
+				finishBidding()
+				continue
 			}
 
-			reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.SuccessLabel)
+			reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.SuccessLabel).Inc()
 
 			o.log.Info("Reservation fulfilled")
 
@@ -389,55 +570,119 @@ loop:
 				}
 			}
 
-			// Resources reserved
-			reservation = result.Value().(ctypes.Reservation)
-			if bidPlaced {
-				o.log.Info("Fulfillment already exists")
-				// fulfillment already created (state recovered via queryExistingOrders)
-				break
+			reservationResult := result.Value().(reservationResult)
+			if handleCancelledReservation(reservationResult) {
+				if !startNextReservation() {
+					if placedBidCount(attempts) == 0 && pricech == nil && bidch == nil {
+						break loop
+					}
+					finishBidding()
+				}
+				continue
 			}
+
+			attempt := bidAttempt{
+				id:          reservationResult.bidID,
+				reservation: reservationResult.reservation,
+				existing:    reservationResult.existing,
+				placed:      reservationResult.existing,
+			}
+
+			if idx := findBidAttempt(attempts, attempt.id); idx == -1 {
+				attempts = append(attempts, attempt)
+			} else {
+				attempts[idx].reservation = attempt.reservation
+			}
+
+			if reservationResult.existing {
+				o.log.Info("Fulfillment already exists")
+				if !startNextReservation() {
+					finishBidding()
+				}
+				continue
+			}
+
 			pricech = runner.Do(metricsutils.ObserveRunner(func() runner.Result {
-				// Calculate price & bid
 				priceReq := Request{
 					Owner:              group.ID.Owner,
 					GSpec:              &group.GroupSpec,
 					PricePrecision:     DefaultPricePrecision,
-					AllocatedResources: reservation.GetAllocatedResources(),
+					AllocatedResources: reservationResult.reservation.GetAllocatedResources(),
 				}
-				return runner.NewResult(o.cfg.PricingStrategy.CalculatePrice(ctx, priceReq))
+				price, err := o.cfg.PricingStrategy.CalculatePrice(ctx, priceReq)
+				return runner.NewResult(priceResult{
+					bidID: reservationResult.bidID,
+					price: price,
+				}, err)
 			}, pricingDuration))
+
 		case result := <-pricech:
 			pricech = nil
 			if result.Error() != nil {
 				o.log.Error("error calculating price", "err", result.Error())
-				break loop
+				priceResult := result.Value().(priceResult)
+				idx := findBidAttempt(attempts, priceResult.bidID)
+				unreserveAttempt(idx)
+				removeAttempt(idx)
+				if placedBidCount(attempts) == 0 {
+					break loop
+				}
+				stopCreatingBids = true
+				finishBidding()
+				continue
 			}
 
-			price := result.Value().(sdk.DecCoin)
+			priceResult := result.Value().(priceResult)
+			price := priceResult.price
 			maxPrice := group.GroupSpec.Price()
 
 			if maxPrice.GetDenom() != price.GetDenom() {
 				o.log.Error("Unsupported Denomination", "calculated", price.String(), "max-price", maxPrice.String())
-				break loop
+				idx := findBidAttempt(attempts, priceResult.bidID)
+				unreserveAttempt(idx)
+				removeAttempt(idx)
+				if placedBidCount(attempts) == 0 {
+					break loop
+				}
+				stopCreatingBids = true
+				finishBidding()
+				continue
 			}
 
 			if maxPrice.IsLT(price) {
 				o.log.Info("Price too high, not bidding", "price", price.String(), "max-price", maxPrice.String())
-				break loop
+				idx := findBidAttempt(attempts, priceResult.bidID)
+				unreserveAttempt(idx)
+				removeAttempt(idx)
+				if placedBidCount(attempts) == 0 {
+					break loop
+				}
+				stopCreatingBids = true
+				finishBidding()
+				continue
 			}
 
 			o.log.Debug("submitting fulfillment", "price", price)
 
-			offer := mvbeta.ResourceOfferFromRU(reservation.GetAllocatedResources())
+			idx := findBidAttempt(attempts, priceResult.bidID)
+			if idx == -1 || attempts[idx].reservation == nil {
+				o.log.Error("priced bid without reservation", "bid", priceResult.bidID)
+				break loop
+			}
 
-			// Begin submitting fulfillment
-			msg = mvbeta.NewMsgCreateBid(mtypes.MakeBidID(o.orderID, o.session.Provider().Address()), price, deposit.Deposit{
+			offer := mvbeta.ResourceOfferFromRU(attempts[idx].reservation.GetAllocatedResources())
+
+			msg := mvbeta.NewMsgCreateBid(priceResult.bidID, price, deposit.Deposit{
 				Amount:  o.cfg.Deposit,
 				Sources: deposit.Sources{deposit.SourceBalance},
 			}, offer)
 			msg.ReclamationWindow = o.cfg.ReclamationWindow
+			attempts[idx].msg = msg
+			bidID := priceResult.bidID
+			broadcastingBid = &bidID
 			bidch = runner.Do(func() runner.Result {
-				return runner.NewResult(o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+				_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
+				return runner.NewResult(bidID, err)
 			})
 
 		case result := <-bidch:
@@ -445,18 +690,33 @@ loop:
 			if result.Error() != nil {
 				bidCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
 				o.log.Error("bid failed", "err", result.Error())
-				break loop
+				if broadcastingBid != nil {
+					idx := findBidAttempt(attempts, *broadcastingBid)
+					unreserveAttempt(idx)
+					removeAttempt(idx)
+				}
+				broadcastingBid = nil
+				if placedBidCount(attempts) == 0 {
+					break loop
+				}
+				stopCreatingBids = true
+				finishBidding()
+				continue
+			}
+
+			bidID := result.Value().(mtypes.BidID)
+			broadcastingBid = nil
+			if idx := findBidAttempt(attempts, bidID); idx != -1 {
+				attempts[idx].placed = true
 			}
 
 			o.log.Info("bid complete")
 			bidCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.SuccessLabel).Inc()
 
-			// Fulfillment placed.
-			bidPlaced = true
-
-			bidTimeout = o.getBidTimeout()
+			if !startNextReservation() {
+				finishBidding()
+			}
 		case <-bidTimeout:
-			// The bid was not acted upon (e.g. lease created or deployment closed) so close it now
 			o.log.Info("bid timeout, closing bid")
 			orderCompleteCounter.WithLabelValues("bid-timeout").Inc()
 			break loop
@@ -467,39 +727,65 @@ loop:
 	o.lc.ShutdownInitiated(nil)
 	o.sub.Close()
 
-	// cancel reservation
-	if !won {
-		if clusterch != nil {
-			result := <-clusterch
-			clusterch = nil
-			if result.Error() == nil {
-				reservation = result.Value().(ctypes.Reservation)
+	if clusterch != nil {
+		result := <-clusterch
+		clusterch = nil
+		if result.Error() == nil {
+			reservationResult := result.Value().(reservationResult)
+			if !handleCancelledReservation(reservationResult) {
+				attempt := bidAttempt{
+					id:          reservationResult.bidID,
+					reservation: reservationResult.reservation,
+					existing:    reservationResult.existing,
+					placed:      reservationResult.existing,
+				}
+				if idx := findBidAttempt(attempts, attempt.id); idx == -1 {
+					attempts = append(attempts, attempt)
+				} else {
+					attempts[idx].reservation = attempt.reservation
+				}
 			}
 		}
-		if reservation != nil {
-			o.log.Debug("unreserving reservation")
-			if err := o.cluster.Unreserve(reservation.OrderID()); err != nil {
-				o.log.Error("error unreserving reservation", "err", err)
-				reservationCounter.WithLabelValues("close", metricsutils.FailLabel)
-			} else {
-				reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel)
+	}
+
+	if bidch != nil {
+		result := <-bidch
+		bidch = nil
+		if result.Error() == nil {
+			bidID := result.Value().(mtypes.BidID)
+			if idx := findBidAttempt(attempts, bidID); idx != -1 {
+				attempts[idx].placed = true
 			}
 		}
+	}
 
-		if bidPlaced {
-			o.log.Debug("closing bid", "order-id", o.orderID)
+	for idx := range attempts {
+		if attempts[idx].reservation == nil {
+			continue
+		}
+		if wonBid != nil && attempts[idx].id == *wonBid {
+			continue
+		}
+		unreserveAttempt(idx)
+	}
 
+	if wonBid == nil {
+		for _, attempt := range attempts {
+			if !attempt.placed {
+				continue
+			}
+
+			o.log.Debug("closing bid", "bid", attempt.id, "bseq", attempt.id.BSeq)
 			msg := &mvbeta.MsgCloseBid{
-				ID:     mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				ID:     attempt.id,
 				Reason: mtypes.LeaseClosedReasonUnspecified,
 			}
-
 			_, err := o.session.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError())
 			if err != nil {
 				o.log.Error("closing bid", "err", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
 			} else {
-				o.log.Info("bid closed", "order-id", o.orderID)
+				o.log.Info("bid closed", "bid", attempt.id, "bseq", attempt.id.BSeq)
 				bidCounter.WithLabelValues("close", metricsutils.SuccessLabel).Inc()
 			}
 		}
@@ -510,6 +796,9 @@ loop:
 	if groupch != nil {
 		<-groupch
 	}
+	if storedGroupCh != nil {
+		<-storedGroupCh
+	}
 	if clusterch != nil {
 		<-clusterch
 	}
@@ -518,6 +807,22 @@ loop:
 	}
 	if pricech != nil {
 		<-pricech
+	}
+	if queryBidsCh != nil {
+		<-queryBidsCh
+	}
+	if shouldBidCh != nil {
+		<-shouldBidCh
+	}
+}
+
+func (o *order) unreserveBid(bidID mtypes.BidID) {
+	o.log.Debug("unreserving reservation", "bid", bidID, "bseq", bidID.BSeq)
+	if err := o.cluster.UnreserveBid(bidID); err != nil {
+		o.log.Error("error unreserving reservation", "err", err, "bid", bidID, "bseq", bidID.BSeq)
+		reservationCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
+	} else {
+		reservationCounter.WithLabelValues("close", metricsutils.SuccessLabel).Inc()
 	}
 }
 

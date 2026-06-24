@@ -78,14 +78,17 @@ type invSnapshotResp struct {
 }
 
 type inventoryRequest struct {
+	bid       mtypes.BidID
+	exactBid  bool
 	order     mtypes.OrderID
 	resources dtypes.ResourceGroup
 	ch        chan<- inventoryResponse
 }
 
 type inventoryResponse struct {
-	value ctypes.Reservation
-	err   error
+	value   ctypes.Reservation
+	removed int64
+	err     error
 }
 
 type inventoryService struct {
@@ -145,7 +148,7 @@ func newInventoryService(
 
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
-		res := newReservation(d.LeaseID().OrderID(), d.ManifestGroup())
+		res := newReservation(d.LeaseID().BidID(), d.ManifestGroup())
 		res.SetClusterParams(d.ClusterParams())
 
 		reservations = append(reservations, res)
@@ -182,7 +185,30 @@ func (is *inventoryService) lookup(order mtypes.OrderID, resources dtypes.Resour
 	}
 }
 
+func (is *inventoryService) lookupBid(bid mtypes.BidID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
+	ch := make(chan inventoryResponse, 1)
+	req := inventoryRequest{
+		bid:       bid,
+		exactBid:  true,
+		order:     bid.OrderID(),
+		resources: resources,
+		ch:        ch,
+	}
+
+	select {
+	case is.lookupch <- req:
+		response := <-ch
+		return response.value, response.err
+	case <-is.lc.ShuttingDown():
+		return nil, ErrNotRunning
+	}
+}
+
 func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
+	return is.reserveBid(bidIDFromOrder(order), resources)
+}
+
+func (is *inventoryService) reserveBid(bid mtypes.BidID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
 	for idx, res := range resources.GetResourceUnits() {
 		if res.CPU == nil {
 			return nil, fmt.Errorf("%w: CPU resource at idx %d is nil", ErrInvalidResource, idx)
@@ -197,7 +223,8 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.Resou
 
 	ch := make(chan inventoryResponse, 1)
 	req := inventoryRequest{
-		order:     order,
+		bid:       bid,
+		order:     bid.OrderID(),
 		resources: resources,
 		ch:        ch,
 	}
@@ -226,13 +253,52 @@ func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint: u
 	case is.unreservech <- req:
 		response := <-ch
 		if response.err == nil {
-			cnt := atomic.AddInt64(&is.reservationCount, -1)
+			cnt := atomic.AddInt64(&is.reservationCount, -response.removed)
 			is.log.Debug("reservation count", "cnt", cnt)
 		}
 		return response.err
 	case <-is.lc.ShuttingDown():
 		return ErrNotRunning
 	}
+}
+
+func (is *inventoryService) unreserveBid(bid mtypes.BidID) error {
+	ch := make(chan inventoryResponse, 1)
+	req := inventoryRequest{
+		bid:      bid,
+		exactBid: true,
+		order:    bid.OrderID(),
+		ch:       ch,
+	}
+
+	select {
+	case is.unreservech <- req:
+		response := <-ch
+		if response.err == nil {
+			cnt := atomic.AddInt64(&is.reservationCount, -response.removed)
+			is.log.Debug("reservation count", "cnt", cnt)
+		}
+		return response.err
+	case <-is.lc.ShuttingDown():
+		return ErrNotRunning
+	}
+}
+
+func bidIDFromOrder(order mtypes.OrderID) mtypes.BidID {
+	return mtypes.BidID{
+		Owner: order.Owner,
+		DSeq:  order.DSeq,
+		GSeq:  order.GSeq,
+		OSeq:  order.OSeq,
+	}
+}
+
+func reservationMatchesLease(res *reservation, leaseID mtypes.LeaseID) bool {
+	if res.bid.Provider == "" {
+		return res.OrderID().Equals(leaseID.OrderID())
+	}
+
+	return res.bid == leaseID.BidID()
 }
 
 func (is *inventoryService) status(ctx context.Context) (inventoryV1.InventoryMetrics, error) {
@@ -447,7 +513,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	// convert the resources to the committed amount
 	resourcesToCommit := is.resourcesToCommit(req.resources)
 	// create new registration if capacity available
-	reservation := newReservation(req.order, resourcesToCommit)
+	reservation := newReservation(req.bid, resourcesToCommit)
 
 	{
 		jReservation, _ := json.Marshal(req.resources.GetResourceUnits())
@@ -554,7 +620,7 @@ loop:
 			case event.ClusterDeployment:
 				// mark reservation allocated if deployment successful
 				for _, res := range state.reservations {
-					if !res.OrderID().Equals(ev.LeaseID.OrderID()) {
+					if !reservationMatchesLease(res, ev.LeaseID) {
 						continue
 					}
 					if res.Resources().GetName() != ev.Group.Name {
@@ -597,7 +663,11 @@ loop:
 		case req := <-is.lookupch:
 			// lookup registration
 			for _, res := range state.reservations {
-				if !res.OrderID().Equals(req.order) {
+				if req.exactBid {
+					if res.bid != req.bid {
+						continue
+					}
+				} else if !res.OrderID().Equals(req.order) {
 					continue
 				}
 				if res.Resources().GetName() != req.resources.GetName() {
@@ -611,26 +681,44 @@ loop:
 			inventoryRequestsCounter.WithLabelValues("lookup", "not-found").Inc()
 			req.ch <- inventoryResponse{err: errReservationNotFound}
 		case req := <-is.unreservech:
-			is.log.Debug("unreserving capacity", "order", req.order)
+			is.log.Debug("unreserving capacity", "order", req.order, "bid", req.bid)
 			// remove reservation
 
-			is.log.Info("attempting to removing reservation", "order", req.order)
+			is.log.Info("attempting to removing reservation", "order", req.order, "bid", req.bid)
 
-			for idx, res := range state.reservations {
-				if !res.OrderID().Equals(req.order) {
+			removed := int64(0)
+			for idx := 0; idx < len(state.reservations); {
+				res := state.reservations[idx]
+				if req.exactBid {
+					if res.bid != req.bid {
+						idx++
+						continue
+					}
+				} else if !res.OrderID().Equals(req.order) {
+					idx++
 					continue
 				}
 
-				is.log.Info("removing reservation", "order", res.OrderID())
+				is.log.Info("removing reservation", "order", res.OrderID(), "bid", res.bid)
 
 				state.reservations = append(state.reservations[:idx], state.reservations[idx+1:]...)
 				// reclaim availableExternalPorts if unreserving allocated resources
 				if res.allocated {
 					is.availableExternalPorts += reservationCountEndpoints(res)
 				}
+				removed++
 
-				req.ch <- inventoryResponse{value: res}
-				is.log.Info("unreserve capacity complete", "order", req.order)
+				if req.exactBid {
+					req.ch <- inventoryResponse{value: res, removed: removed}
+					is.log.Info("unreserve capacity complete", "order", req.order, "bid", req.bid)
+					inventoryRequestsCounter.WithLabelValues("unreserve", "destroyed").Inc()
+					continue loop
+				}
+			}
+
+			if removed != 0 {
+				req.ch <- inventoryResponse{removed: removed}
+				is.log.Info("unreserve capacity complete", "order", req.order, "removed", removed)
 				inventoryRequestsCounter.WithLabelValues("unreserve", "destroyed").Inc()
 				continue loop
 			}
@@ -703,16 +791,7 @@ loop:
 				res := run.Value().(runCheckResult)
 				state.ipAddrUsage = res.ipResult
 
-				// Process confirmed IP addresses usage
-				for _, confirmedOrderID := range res.confirmedResult {
-					for i, entry := range state.reservations {
-						if entry.order.Equals(confirmedOrderID) {
-							state.reservations[i].ipsConfirmed = true
-							is.log.Info("confirmed IP allocation", "orderID", confirmedOrderID)
-							break
-						}
-					}
-				}
+				is.confirmReservedIPs(state, res.confirmedResult)
 			} else {
 				is.log.Error("checking IP addresses", "error", err)
 			}
@@ -744,14 +823,27 @@ loop:
 	is.log.Debug("shutdown complete")
 }
 
+func (is *inventoryService) confirmReservedIPs(state *inventoryServiceState, confirmed []mtypes.BidID) {
+	for _, confirmedBidID := range confirmed {
+		for i, entry := range state.reservations {
+			if entry.bid == confirmedBidID {
+				state.reservations[i].ipsConfirmed = true
+				is.log.Info("confirmed IP allocation", "orderID", confirmedBidID.OrderID(), "bid", confirmedBidID)
+				break
+			}
+		}
+	}
+}
+
 type confirmationItem struct {
+	bidID            mtypes.BidID
 	orderID          mtypes.OrderID
 	expectedQuantity uint
 }
 
 type runCheckResult struct {
 	ipResult        cip.AddressUsage
-	confirmedResult []mtypes.OrderID
+	confirmedResult []mtypes.BidID
 }
 
 func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServiceState) <-chan runner.Result {
@@ -769,6 +861,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 		}
 
 		confirm = append(confirm, confirmationItem{
+			bidID:            entry.bid,
 			orderID:          entry.OrderID(),
 			expectedQuantity: entry.endpointQuantity,
 		})
@@ -794,7 +887,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 
 			numConfirmed := uint(len(status))
 			if numConfirmed == confirmItem.expectedQuantity {
-				retval.confirmedResult = append(retval.confirmedResult, confirmItem.orderID)
+				retval.confirmedResult = append(retval.confirmedResult, confirmItem.bidID)
 			}
 		}
 
