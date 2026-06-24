@@ -49,6 +49,7 @@ type SnapshotStore interface {
 }
 
 type SnapshotBuilder interface {
+	Provider() string
 	Build(context.Context, SnapshotRequest) (*Snapshot, error)
 }
 
@@ -105,6 +106,18 @@ func (s *RecordingSnapshotter) Build(ctx context.Context, req SnapshotRequest) (
 	}
 
 	return snapshot, nil
+}
+
+func (s *RecordingSnapshotter) Provider() string {
+	return s.next.Provider()
+}
+
+func (s *RecordingSnapshotter) LatestCommitted(ctx context.Context) (SnapshotRecord, bool, error) {
+	return s.store.Latest(ctx, s.Provider())
+}
+
+func (s *RecordingSnapshotter) Committed(ctx context.Context, hash []byte) (SnapshotRecord, bool, error) {
+	return s.store.Get(ctx, s.Provider(), hash)
 }
 
 func NewMemorySnapshotStore() *MemorySnapshotStore {

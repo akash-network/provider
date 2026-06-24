@@ -155,7 +155,7 @@ func TestHashPayload(t *testing.T) {
 	require.Equal(t, expected[:], HashPayload(payload))
 }
 
-func TestHashPayloadIgnoresChallengeFields(t *testing.T) {
+func TestHashPayloadIncludesChallengeFields(t *testing.T) {
 	first, err := MarshalDeterministic(&inventoryv1.SnapshotPayload{
 		SchemaVersion: SnapshotPayloadSchemaVersion,
 		Provider:      "akash1provider",
@@ -180,10 +180,10 @@ func TestHashPayloadIgnoresChallengeFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, HashPayload(first), HashPayload(second))
+	require.NotEqual(t, HashPayload(first), HashPayload(second))
 }
 
-func TestHashPayloadIgnoresVolatileInventoryFields(t *testing.T) {
+func TestHashPayloadIncludesPayloadFields(t *testing.T) {
 	first, err := MarshalDeterministic(&inventoryv1.SnapshotPayload{
 		SchemaVersion: SnapshotPayloadSchemaVersion,
 		Provider:      "akash1provider",
@@ -244,7 +244,7 @@ func TestHashPayloadIgnoresVolatileInventoryFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, HashPayload(first), HashPayload(second))
+	require.NotEqual(t, HashPayload(first), HashPayload(second))
 }
 
 func TestHashPayloadIncludesInventoryMaterial(t *testing.T) {

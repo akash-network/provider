@@ -180,6 +180,33 @@ func TestRecordingSnapshotterDoesNotStoreNonceSnapshots(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestRecordingSnapshotterReturnsCommittedSnapshots(t *testing.T) {
+	ctx := context.Background()
+	payload := testSnapshotPayload(t, "payload")
+	snapshot := &Snapshot{
+		Payload:   payload,
+		Hash:      HashPayload(payload),
+		Signature: []byte("signature"),
+		Provider:  "akash1provider",
+	}
+	store := NewMemorySnapshotStore()
+	snapshotter, err := NewRecordingSnapshotter(&testSnapshotBuilder{snapshot: snapshot}, store, time.Now)
+	require.NoError(t, err)
+
+	_, err = snapshotter.Build(ctx, SnapshotRequest{})
+	require.NoError(t, err)
+
+	latest, ok, err := snapshotter.LatestCommitted(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, snapshot.Payload, latest.Snapshot.Payload)
+
+	stored, ok, err := snapshotter.Committed(ctx, snapshot.Hash)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, latest, stored)
+}
+
 func TestRecordingSnapshotterReturnsStoreError(t *testing.T) {
 	expected := errors.New("store failed")
 	payload := testSnapshotPayload(t, "payload")
@@ -203,6 +230,14 @@ func TestRecordingSnapshotterReturnsStoreError(t *testing.T) {
 type testSnapshotBuilder struct {
 	snapshot *Snapshot
 	err      error
+}
+
+func (b *testSnapshotBuilder) Provider() string {
+	if b.snapshot == nil {
+		return ""
+	}
+
+	return b.snapshot.Provider
 }
 
 func (b *testSnapshotBuilder) Build(context.Context, SnapshotRequest) (*Snapshot, error) {

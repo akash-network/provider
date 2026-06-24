@@ -5,11 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cosmos/gogoproto/proto"
-
-	inventoryv1 "pkg.akt.dev/go/inventory/v1"
 
 	ptypes "github.com/akash-network/provider/types"
 )
@@ -90,62 +87,8 @@ func ValidateNonce(nonce []byte) error {
 }
 
 func HashPayload(payload []byte) []byte {
-	payload = snapshotHashPayload(payload)
 	hash := sha256.Sum256(payload)
 	return append([]byte(nil), hash[:]...)
-}
-
-func snapshotHashPayload(payload []byte) []byte {
-	var snapshot inventoryv1.SnapshotPayload
-	if err := proto.Unmarshal(payload, &snapshot); err != nil {
-		return payload
-	}
-	if !isSnapshotPayload(snapshot) {
-		return payload
-	}
-
-	normalizeSnapshotPayloadForHash(&snapshot)
-
-	canonical, err := MarshalDeterministic(&snapshot)
-	if err != nil {
-		return payload
-	}
-
-	return canonical
-}
-
-func isSnapshotPayload(payload inventoryv1.SnapshotPayload) bool {
-	return payload.SchemaVersion != 0 && payload.Provider != "" && payload.ChainID != ""
-}
-
-func normalizeSnapshotPayloadForHash(payload *inventoryv1.SnapshotPayload) {
-	payload.Nonce = nil
-	payload.Timestamp = time.Time{}
-	payload.EvidenceSections = nil
-
-	normalizeClusterForHash(&payload.Cluster)
-}
-
-func normalizeClusterForHash(cluster *inventoryv1.Cluster) {
-	for idx := range cluster.Nodes {
-		normalizeNodeResourcesForHash(&cluster.Nodes[idx].Resources)
-	}
-	for idx := range cluster.Storage {
-		normalizeResourcePairForHash(&cluster.Storage[idx].Quantity)
-	}
-}
-
-func normalizeNodeResourcesForHash(resources *inventoryv1.NodeResources) {
-	normalizeResourcePairForHash(&resources.CPU.Quantity)
-	normalizeResourcePairForHash(&resources.Memory.Quantity)
-	normalizeResourcePairForHash(&resources.GPU.Quantity)
-	normalizeResourcePairForHash(&resources.EphemeralStorage)
-	normalizeResourcePairForHash(&resources.VolumesAttached)
-	normalizeResourcePairForHash(&resources.VolumesMounted)
-}
-
-func normalizeResourcePairForHash(pair *inventoryv1.ResourcePair) {
-	pair.Allocated = nil
 }
 
 func MarshalDeterministic(msg proto.Message) ([]byte, error) {
@@ -166,6 +109,10 @@ func MarshalDeterministic(msg proto.Message) ([]byte, error) {
 	}
 
 	return append([]byte(nil), buf.Bytes()...), nil
+}
+
+func (b *Builder) Provider() string {
+	return b.signer.Address().String()
 }
 
 func (b *Builder) Build(ctx context.Context, req SnapshotRequest) (*Snapshot, error) {
@@ -194,7 +141,7 @@ func (b *Builder) Build(ctx context.Context, req SnapshotRequest) (*Snapshot, er
 		Payload:   append([]byte(nil), payload...),
 		Hash:      hash,
 		Signature: append([]byte(nil), signature...),
-		Provider:  b.signer.Address().String(),
+		Provider:  b.Provider(),
 	}
 	if err := ValidateSnapshot(snapshot); err != nil {
 		return nil, err
