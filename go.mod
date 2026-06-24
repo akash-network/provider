@@ -52,14 +52,23 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
-	pkg.akt.dev/go v0.4.0-a2
-	pkg.akt.dev/go/cli v0.4.0-a2
-	pkg.akt.dev/go/sdl v0.4.0-a2
+	pkg.akt.dev/go v0.4.0-a4
+	pkg.akt.dev/go/cli v0.4.0-a4
+	pkg.akt.dev/go/sdl v0.4.0-a4
 	pkg.akt.dev/node v1.2.2
 	sigs.k8s.io/gateway-api v1.4.1
 	sigs.k8s.io/kind v0.30.0
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0
 	software.sslmate.com/src/go-pkcs12 v0.6.0
+)
+
+require (
+	github.com/Masterminds/goutils v1.1.1 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
+	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
+	github.com/imdario/mergo v0.3.16 // indirect
+	github.com/pseudomuto/protoc-gen-doc v1.5.1 // indirect
+	github.com/pseudomuto/protokit v0.2.0 // indirect
 )
 
 retract (
