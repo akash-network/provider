@@ -716,8 +716,20 @@ func nodeAllocatableChanged(prev *corev1.Node, curr *corev1.Node) bool {
 	return changed
 }
 
+func normalizeArch(arch string) string {
+	switch arch {
+	case "x86_64":
+		return "amd64"
+	case "aarch64":
+		return "arm64"
+	default:
+		return arch
+	}
+}
+
 func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.Node, interconnectPatterns []string) v1.Node {
-	cpuInfo := dp.parseCPUInfo(dp.ctx)
+	arch := normalizeArch(knode.Status.NodeInfo.Architecture)
+	cpuInfo := dp.parseCPUInfo(dp.ctx, arch)
 	gpuInfo := dp.parseGPUInfo(dp.ctx, gpusIDs)
 	ibInfo := dp.parseIBInfo(dp.ctx)
 
@@ -1143,7 +1155,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 	return res, node
 }
 
-func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
+func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context, arch string) v1.CPUInfoS {
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
 	cpus, err := dp.queryCPU(ctx)
@@ -1160,6 +1172,7 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context) v1.CPUInfoS {
 			Vendor: c.Vendor,
 			Model:  c.Model,
 			Vcores: c.NumThreads,
+			Arch:   arch,
 		})
 	}
 

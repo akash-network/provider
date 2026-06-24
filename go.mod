@@ -69,6 +69,9 @@ retract (
 )
 
 replace (
+	// local development: use local chain-sdk with CPUInfo.Arch field
+	pkg.akt.dev/go => ../chain-sdk/go
+
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
 
