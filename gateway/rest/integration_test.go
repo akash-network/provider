@@ -25,6 +25,7 @@ import (
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	providertypes "pkg.akt.dev/go/node/provider/v1beta4"
 	apclient "pkg.akt.dev/go/provider/client"
+	providerV1 "pkg.akt.dev/go/provider/v1"
 	"pkg.akt.dev/go/testutil"
 	ajwt "pkg.akt.dev/go/util/jwt"
 
@@ -82,6 +83,7 @@ func Test_router_Status(t *testing.T) {
 
 		mocks := createMocks()
 		mocks.pclient.On("Status", mock.Anything).Return(expected, nil)
+		mocks.pclient.On("StatusV1", mock.Anything).Return(&providerV1.Status{}, nil)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
