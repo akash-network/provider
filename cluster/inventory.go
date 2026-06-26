@@ -13,6 +13,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"cosmossdk.io/log"
 
@@ -407,15 +408,39 @@ type inventoryServiceState struct {
 	reservations []*reservation
 }
 
-func countPendingIPs(state *inventoryServiceState) uint {
-	pending := uint(0)
+func countReservedIPs(state *inventoryServiceState) uint {
+	reserved := uint(0)
 	for _, entry := range state.reservations {
 		if !entry.ipsConfirmed {
-			pending += entry.endpointQuantity
+			reserved += entry.endpointQuantity
 		}
 	}
 
-	return pending
+	return reserved
+}
+
+func availableLeasedIPs(total, inUse, reserved uint) uint {
+	if inUse >= total {
+		return 0
+	}
+
+	available := total - inUse
+	if reserved >= available {
+		return 0
+	}
+
+	return available - reserved
+}
+
+func leasedIPStatus(state *inventoryServiceState) inventoryV1.ResourcePair {
+	reserved := countReservedIPs(state)
+	allocated := state.ipAddrUsage.InUse + reserved
+
+	return inventoryV1.NewResourcePair(
+		int64(state.ipAddrUsage.Available), // nolint: gosec
+		int64(state.ipAddrUsage.Available), // nolint: gosec
+		int64(allocated),                   // nolint: gosec
+		resource.DecimalSI)
 }
 
 func (is *inventoryService) handleRequest(req inventoryRequest, state *inventoryServiceState) {
@@ -434,15 +459,15 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 			req.ch <- inventoryResponse{err: errNoLeasedIPsAvailable}
 			return
 		}
-		numIPUnused := state.ipAddrUsage.Available - state.ipAddrUsage.InUse
-		pending := countPendingIPs(state)
-		if reservation.endpointQuantity > (numIPUnused - pending) {
+		reserved := countReservedIPs(state)
+		available := availableLeasedIPs(state.ipAddrUsage.Available, state.ipAddrUsage.InUse, reserved)
+		if reservation.endpointQuantity > available {
 			is.log.Info("insufficient number of IP addresses available", "order", req.order)
 			req.ch <- inventoryResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, reservation.endpointQuantity)}
 			return
 		}
 
-		is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "pending", pending)
+		is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "reserved", reserved, "remaining", available)
 	} else {
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
@@ -816,7 +841,8 @@ func (is *inventoryService) getStatusV1(state *inventoryServiceState) (*provider
 	}
 
 	status := &provider.Inventory{
-		Cluster: state.inventory.Snapshot(),
+		Cluster:  state.inventory.Snapshot(),
+		LeasedIP: leasedIPStatus(state),
 		Reservations: provider.Reservations{
 			Pending: provider.ReservationsMetric{
 				Count:     0,
