@@ -15,17 +15,20 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeVersion "k8s.io/apimachinery/pkg/version"
 
 	cryptotypes "github.com/cosmos/cosmos-sdk/crypto/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 	manifestValidation "pkg.akt.dev/go/manifest/v2beta3"
 	qmock "pkg.akt.dev/go/mocks/node/client"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	apclient "pkg.akt.dev/go/provider/client"
+	providerV1 "pkg.akt.dev/go/provider/v1"
 	"pkg.akt.dev/go/sdl"
 	"pkg.akt.dev/go/testutil"
 	ajwt "pkg.akt.dev/go/util/jwt"
@@ -397,15 +400,22 @@ func TestRouteVersionOK(t *testing.T) {
 }
 
 func TestRouteStatusOK(t *testing.T) {
-	runRouterTest(t, []routerTestAuth{}, func(test *routerTest, hdr http.Header) {
+	runRouterTest(t, []routerTestAuth{routerTestAuthNone}, func(test *routerTest, hdr http.Header) {
 		status := &apclient.ProviderStatus{
-			Cluster:               nil,
+			Cluster:               &apclient.ClusterStatus{},
 			Bidengine:             nil,
 			Manifest:              nil,
 			ClusterPublicHostname: "foobar",
 		}
 
 		test.pclient.On("Status", mock.Anything).Return(status, nil)
+		test.pclient.On("StatusV1", mock.Anything).Return(&providerV1.Status{
+			Cluster: &providerV1.ClusterStatus{
+				Inventory: providerV1.Inventory{
+					LeasedIP: inventoryV1.NewResourcePair(10, 10, 6, resource.DecimalSI),
+				},
+			},
+		}, nil)
 
 		uri, err := apclient.MakeURI(test.host, apclient.StatusPath())
 		require.NoError(t, err)
@@ -427,6 +437,12 @@ func TestRouteStatusOK(t *testing.T) {
 		cph, ok := data["cluster_public_hostname"].(string)
 		require.True(t, ok)
 		require.Equal(t, cph, "foobar")
+
+		leasedIP, ok := data["leased_ip"].(map[string]interface{})
+		require.True(t, ok)
+		require.Equal(t, "10", leasedIP["capacity"])
+		require.Equal(t, "10", leasedIP["allocatable"])
+		require.Equal(t, "6", leasedIP["allocated"])
 	})
 }
 
