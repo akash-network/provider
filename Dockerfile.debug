@@ -1,5 +1,4 @@
-ARG GO_VERSION=1.26.2
-FROM golang:${GO_VERSION}-bookworm
+FROM golang:1.26.2-bookworm
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
 COPY provider-services /usr/bin/

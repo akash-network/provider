@@ -287,7 +287,6 @@ dockers:
     build_flag_templates:
       - --pull
       - --platform=linux/amd64
-      - --build-arg=GO_VERSION={{ trimPrefix "go" .Env.GOTOOLCHAIN }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
@@ -308,7 +307,6 @@ dockers:
     build_flag_templates:
       - --pull
       - --platform=linux/arm64
-      - --build-arg=GO_VERSION={{ trimPrefix "go" .Env.GOTOOLCHAIN }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url=https://github.com/akash-network/provider

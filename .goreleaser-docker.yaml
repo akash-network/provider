@@ -134,7 +134,6 @@ dockers:
     goarch: amd64
     build_flag_templates:
       - --platform=linux/amd64
-      - --build-arg=GO_VERSION={{ trimPrefix "go" .Env.GOTOOLCHAIN }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url={{.GitURL}}
@@ -152,7 +151,6 @@ dockers:
     goarch: arm64
     build_flag_templates:
       - --platform=linux/arm64
-      - --build-arg=GO_VERSION={{ trimPrefix "go" .Env.GOTOOLCHAIN }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url={{.GitURL}}
