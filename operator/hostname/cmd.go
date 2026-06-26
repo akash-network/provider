@@ -116,6 +116,11 @@ func addGatewayApiFlags(cmd *cobra.Command) {
 	if err := viper.BindPFlag("gateway-provider", cmd.Flags().Lookup("gateway-provider")); err != nil {
 		panic(err)
 	}
+
+	cmd.Flags().String(providerflags.FlagProxyBufferSize, "16k", "NGINX proxy buffer size for upstream response headers")
+	if err := viper.BindPFlag(providerflags.FlagProxyBufferSize, cmd.Flags().Lookup(providerflags.FlagProxyBufferSize)); err != nil {
+		panic(err)
+	}
 }
 
 func withGatewayApi(ctx context.Context) (context.Context, error) {
