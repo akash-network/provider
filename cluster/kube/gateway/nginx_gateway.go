@@ -13,8 +13,8 @@ import (
 
 	"cosmossdk.io/log"
 
-	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 )
 
 // nginxGateway implements the Gateway API interface for NGINX Gateway Fabric.
