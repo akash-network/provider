@@ -7,11 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"cosmossdk.io/log"
 
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 )
 
 // nginxGateway implements the Gateway API interface for NGINX Gateway Fabric.
@@ -144,6 +147,12 @@ func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentD
 			}
 		}
 		annotations["nginx.org/proxy-next-upstream"] = strBuilder.String()
+	}
+
+	// TODO(temporary): read proxy-buffer-size from viper directly to avoid
+	// plumbing through GatewayConfig; move to GatewayConfig when more settings need it.
+	if v := viper.GetString(providerflags.FlagProxyBufferSize); v != "" {
+		annotations["nginx.org/proxy-buffer-size"] = v
 	}
 
 	return annotations
