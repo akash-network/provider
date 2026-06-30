@@ -368,7 +368,7 @@ func nodeSelectorsFromResources(res *crd.SchedulerResources) []corev1.NodeSelect
 
 		if gpu.Interface != "" {
 			selectors = append(selectors, corev1.NodeSelectorRequirement{
-				Key:      fmt.Sprintf("%s.interface.%s", key, gpu.MemorySize),
+				Key:      fmt.Sprintf("%s.interface.%s", key, gpu.Interface),
 				Operator: corev1.NodeSelectorOpGt,
 				Values: []string{
 					"0",
