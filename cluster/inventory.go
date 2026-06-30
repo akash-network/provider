@@ -789,7 +789,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 				// This error is not really fatal, so don't bail on this entirely. The other results
 				// retrieved in this code are still valid
 				is.log.Error("failed checking IP address usage", "orderID", confirmItem.orderID, "error", err)
-				break
+				continue
 			}
 
 			numConfirmed := uint(len(status))
