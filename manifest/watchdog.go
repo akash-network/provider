@@ -20,29 +20,29 @@ import (
 )
 
 type watchdog struct {
-	leaseID mtypes.LeaseID
-	timeout time.Duration
-	lc      lifecycle.Lifecycle
-	sess    session.Session
-	ctx     context.Context
-	log     log.Logger
+	leaseID          mtypes.LeaseID
+	timeout          time.Duration
+	broadcastTimeout time.Duration
+	lc               lifecycle.Lifecycle
+	sess             session.Session
+	log              log.Logger
 }
 
-func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID mtypes.LeaseID, timeout time.Duration) *watchdog {
-	ctx, cancel := context.WithCancel(context.Background())
-	result := &watchdog{
-		leaseID: leaseID,
-		timeout: timeout,
-		lc:      lifecycle.New(),
-		sess:    sess,
-		ctx:     ctx,
-		log:     sess.Log().With("leaseID", leaseID),
+func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtypes.DeploymentID, leaseID mtypes.LeaseID, timeout, broadcastTimeout time.Duration) *watchdog {
+	if broadcastTimeout <= 0 {
+		broadcastTimeout = DefaultBroadcastTimeout
 	}
 
-	go func() {
-		result.lc.WatchChannel(parent)
-		cancel()
-	}()
+	result := &watchdog{
+		leaseID:          leaseID,
+		timeout:          timeout,
+		broadcastTimeout: broadcastTimeout,
+		lc:               lifecycle.New(),
+		sess:             sess,
+		log:              sess.Log().With("leaseID", leaseID),
+	}
+
+	go result.lc.WatchChannel(parent)
 
 	go func() {
 		<-result.lc.Done()
@@ -58,6 +58,10 @@ func (wd *watchdog) stop() {
 	wd.lc.ShutdownAsync(nil)
 }
 
+// run waits for the manifest timeout, then broadcasts MsgCloseBid.
+//
+// Once the close-bid broadcast starts, it must not inherit watchdog shutdown
+// cancellation. Otherwise a provider shutdown can leave the expired bid open.
 func (wd *watchdog) run() {
 	defer wd.lc.ShutdownCompleted()
 
@@ -71,21 +75,32 @@ func (wd *watchdog) run() {
 		wd.log.Info("watchdog closing bid")
 
 		runch = runner.Do(func() runner.Result {
+			ctx, cancel := context.WithTimeout(context.Background(), wd.broadcastTimeout)
+			defer cancel()
+
 			msg := &mvbeta.MsgCloseBid{
 				ID:     mtypes.MakeBidID(wd.leaseID.OrderID(), wd.sess.Provider().Address()),
 				Reason: mtypes.LeaseClosedReasonManifestTimeout,
 			}
 
-			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(wd.ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
+			return runner.NewResult(wd.sess.Client().Tx().BroadcastMsgs(ctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()))
 		})
 	case err = <-wd.lc.ShutdownRequest():
 	}
 
-	wd.lc.ShutdownInitiated(err)
-	if runch != nil {
-		result := <-runch
-		if err := result.Error(); err != nil {
-			wd.log.Error("failed closing bid", "err", err)
+	shutdownRequest := wd.lc.ShutdownRequest()
+	for runch != nil {
+		select {
+		case result := <-runch:
+			if err := result.Error(); err != nil {
+				wd.log.Error("failed closing bid", "err", err)
+			}
+			runch = nil
+		case err = <-shutdownRequest:
+			wd.log.Info("watchdog shutdown requested, waiting for bid close tx to complete")
+			shutdownRequest = nil
 		}
 	}
+
+	wd.lc.ShutdownInitiated(err)
 }
