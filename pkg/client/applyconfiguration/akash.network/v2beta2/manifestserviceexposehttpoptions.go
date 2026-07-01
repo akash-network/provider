@@ -21,12 +21,13 @@ package v2beta2
 // ManifestServiceExposeHTTPOptionsApplyConfiguration represents a declarative configuration of the ManifestServiceExposeHTTPOptions type for use
 // with apply.
 type ManifestServiceExposeHTTPOptionsApplyConfiguration struct {
-	MaxBodySize *uint32  `json:"max_body_size,omitempty"`
-	ReadTimeout *uint32  `json:"read_timeout,omitempty"`
-	SendTimeout *uint32  `json:"send_timeout,omitempty"`
-	NextTries   *uint32  `json:"next_tries,omitempty"`
-	NextTimeout *uint32  `json:"next_timeout,omitempty"`
-	NextCases   []string `json:"next_cases,omitempty"`
+	MaxBodySize     *uint32  `json:"max_body_size,omitempty"`
+	ProxyBufferSize *uint32  `json:"proxy_buffer_size,omitempty"`
+	ReadTimeout     *uint32  `json:"read_timeout,omitempty"`
+	SendTimeout     *uint32  `json:"send_timeout,omitempty"`
+	NextTries       *uint32  `json:"next_tries,omitempty"`
+	NextTimeout     *uint32  `json:"next_timeout,omitempty"`
+	NextCases       []string `json:"next_cases,omitempty"`
 }
 
 // ManifestServiceExposeHTTPOptionsApplyConfiguration constructs a declarative configuration of the ManifestServiceExposeHTTPOptions type for use with
@@ -40,6 +41,14 @@ func ManifestServiceExposeHTTPOptions() *ManifestServiceExposeHTTPOptionsApplyCo
 // If called multiple times, the MaxBodySize field is set to the value of the last call.
 func (b *ManifestServiceExposeHTTPOptionsApplyConfiguration) WithMaxBodySize(value uint32) *ManifestServiceExposeHTTPOptionsApplyConfiguration {
 	b.MaxBodySize = &value
+	return b
+}
+
+// WithProxyBufferSize sets the ProxyBufferSize field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ProxyBufferSize field is set to the value of the last call.
+func (b *ManifestServiceExposeHTTPOptionsApplyConfiguration) WithProxyBufferSize(value uint32) *ManifestServiceExposeHTTPOptionsApplyConfiguration {
+	b.ProxyBufferSize = &value
 	return b
 }
 

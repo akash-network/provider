@@ -169,6 +169,8 @@ spec:
                                   properties:
                                     max_body_size:
                                       type: integer
+                                    proxy_buffer_size:
+                                      type: integer
                                     read_timeout:
                                       type: integer
                                     send_timeout:
@@ -341,6 +343,8 @@ spec:
                                   type: object
                                   properties:
                                     max_body_size:
+                                      type: integer
+                                    proxy_buffer_size:
                                       type: integer
                                     read_timeout:
                                       type: integer

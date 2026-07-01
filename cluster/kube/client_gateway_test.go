@@ -68,16 +68,17 @@ func TestNginxGatewayAnnotations(t *testing.T) {
 	impl := gateway.NewNginxGateway(log.NewNopLogger())
 
 	directive := chostname.ConnectToDeploymentDirective{
-		Hostname:    "test.example.com",
-		LeaseID:     mtypes.LeaseID{},
-		ServiceName: "test-service",
-		ServicePort: 8080,
-		ReadTimeout: 60000,
-		SendTimeout: 60000,
-		NextTimeout: 30000,
-		MaxBodySize: 1048576,
-		NextTries:   3,
-		NextCases:   []string{"error", "timeout"},
+		Hostname:        "test.example.com",
+		LeaseID:         mtypes.LeaseID{},
+		ServiceName:     "test-service",
+		ServicePort:     8080,
+		ReadTimeout:     60000,
+		SendTimeout:     60000,
+		NextTimeout:     30000,
+		MaxBodySize:     1048576,
+		ProxyBufferSize: 16384,
+		NextTries:       3,
+		NextCases:       []string{"error", "timeout"},
 	}
 
 	annotations := impl.BuildAnnotations(directive)
@@ -89,6 +90,7 @@ func TestNginxGatewayAnnotations(t *testing.T) {
 	assert.Equal(t, "30s", annotations["nginx.org/proxy-next-upstream-timeout"])
 	assert.Equal(t, "3", annotations["nginx.org/proxy-next-upstream-tries"])
 	assert.Equal(t, "error timeout", annotations["nginx.org/proxy-next-upstream"])
+	assert.Equal(t, "16384", annotations["nginx.org/proxy-buffer-size"])
 }
 
 func TestNginxGatewayAnnotationsWithHTTPCodes(t *testing.T) {
@@ -140,4 +142,7 @@ func TestNginxGatewayAnnotationsMinimal(t *testing.T) {
 
 	_, hasNextUpstream := annotations["nginx.org/proxy-next-upstream"]
 	assert.False(t, hasNextUpstream, "Should not set proxy-next-upstream when NextCases is empty")
+
+	_, hasProxyBufferSize := annotations["nginx.org/proxy-buffer-size"]
+	assert.False(t, hasProxyBufferSize, "Should not set proxy-buffer-size when ProxyBufferSize is 0")
 }

@@ -134,12 +134,13 @@ type ManifestServiceExpose struct {
 }
 
 type ManifestServiceExposeHTTPOptions struct {
-	MaxBodySize uint32   `json:"max_body_size,omitempty"`
-	ReadTimeout uint32   `json:"read_timeout,omitempty"`
-	SendTimeout uint32   `json:"send_timeout,omitempty"`
-	NextTries   uint32   `json:"next_tries,omitempty"`
-	NextTimeout uint32   `json:"next_timeout,omitempty"`
-	NextCases   []string `json:"next_cases,omitempty"`
+	MaxBodySize     uint32   `json:"max_body_size,omitempty"`
+	ProxyBufferSize uint32   `json:"proxy_buffer_size,omitempty"`
+	ReadTimeout     uint32   `json:"read_timeout,omitempty"`
+	SendTimeout     uint32   `json:"send_timeout,omitempty"`
+	NextTries       uint32   `json:"next_tries,omitempty"`
+	NextTimeout     uint32   `json:"next_timeout,omitempty"`
+	NextCases       []string `json:"next_cases,omitempty"`
 }
 
 // NewManifest creates new manifest with provided details. Returns error in case of failure.
@@ -380,12 +381,13 @@ func (mse ManifestServiceExpose) toAkash() (mani.ServiceExpose, error) {
 		EndpointSequenceNumber: mse.EndpointSequenceNumber,
 		IP:                     mse.IP,
 		HTTPOptions: mani.ServiceExposeHTTPOptions{
-			MaxBodySize: mse.HTTPOptions.MaxBodySize,
-			ReadTimeout: mse.HTTPOptions.ReadTimeout,
-			SendTimeout: mse.HTTPOptions.SendTimeout,
-			NextTries:   mse.HTTPOptions.NextTries,
-			NextTimeout: mse.HTTPOptions.NextTimeout,
-			NextCases:   mse.HTTPOptions.NextCases,
+			MaxBodySize:     mse.HTTPOptions.MaxBodySize,
+			ProxyBufferSize: mse.HTTPOptions.ProxyBufferSize,
+			ReadTimeout:     mse.HTTPOptions.ReadTimeout,
+			SendTimeout:     mse.HTTPOptions.SendTimeout,
+			NextTries:       mse.HTTPOptions.NextTries,
+			NextTimeout:     mse.HTTPOptions.NextTimeout,
+			NextCases:       mse.HTTPOptions.NextCases,
 		},
 	}, nil
 }
@@ -408,12 +410,13 @@ func manifestServiceExposeFromAkash(amse mani.ServiceExpose) ManifestServiceExpo
 		IP:                     amse.IP,
 		EndpointSequenceNumber: amse.EndpointSequenceNumber,
 		HTTPOptions: ManifestServiceExposeHTTPOptions{
-			MaxBodySize: amse.HTTPOptions.MaxBodySize,
-			ReadTimeout: amse.HTTPOptions.ReadTimeout,
-			SendTimeout: amse.HTTPOptions.SendTimeout,
-			NextTries:   amse.HTTPOptions.NextTries,
-			NextTimeout: amse.HTTPOptions.NextTimeout,
-			NextCases:   amse.HTTPOptions.NextCases,
+			MaxBodySize:     amse.HTTPOptions.MaxBodySize,
+			ProxyBufferSize: amse.HTTPOptions.ProxyBufferSize,
+			ReadTimeout:     amse.HTTPOptions.ReadTimeout,
+			SendTimeout:     amse.HTTPOptions.SendTimeout,
+			NextTries:       amse.HTTPOptions.NextTries,
+			NextTimeout:     amse.HTTPOptions.NextTimeout,
+			NextCases:       amse.HTTPOptions.NextCases,
 		},
 	}
 }
