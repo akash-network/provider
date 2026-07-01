@@ -7,5 +7,4 @@ const (
 	FlagWebRefreshInterval = "web-refresh-interval"
 	FlagRetryDelay         = "retry-delay"
 	FlagKubeConfig         = "kubeconfig"
-	FlagProxyBufferSize    = "proxy-buffer-size"
 )

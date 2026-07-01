@@ -410,6 +410,7 @@ func (s *E2EGatewayAPI) verifyHTTPRouteParentRef(namespace, routeName, gatewayNa
 //   - max_body_size: 2097152 -> nginx.org/client-max-body-size: "2097152"
 //   - next_tries: 3 -> nginx.org/proxy-next-upstream-tries: "3"
 //   - next_timeout: 30000 (ms) -> nginx.org/proxy-next-upstream-timeout: "30s"
+//   - proxy_buffer_size: 32768 -> nginx.org/proxy-buffer-size: "32768"
 func (s *E2EGatewayAPI) verifyHTTPRouteAnnotations(namespace, routeName string) {
 	if s.dc == nil {
 		s.T().Skip("dynamic client not available")
@@ -445,6 +446,10 @@ func (s *E2EGatewayAPI) verifyHTTPRouteAnnotations(namespace, routeName string) 
 	// next_timeout: 30000ms -> 30s
 	assert.Equal(s.T(), "30s", annotations["nginx.org/proxy-next-upstream-timeout"],
 		"next_timeout should be converted to seconds with 's' suffix")
+
+	// proxy_buffer_size: 32768 bytes
+	assert.Equal(s.T(), "32768", annotations["nginx.org/proxy-buffer-size"],
+		"proxy_buffer_size should be set")
 }
 
 // TestGatewayAPISuite runs the Gateway API e2e test suite
