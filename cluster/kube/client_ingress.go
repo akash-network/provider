@@ -47,6 +47,10 @@ func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirectiv
 		fmt.Sprintf("%s/proxy-body-size", root):           strconv.Itoa(int(directive.MaxBodySize)),
 	}
 
+	if directive.ProxyBufferSize > 0 {
+		result[fmt.Sprintf("%s/proxy-buffer-size", root)] = strconv.Itoa(int(directive.ProxyBufferSize))
+	}
+
 	nextTimeoutKey := fmt.Sprintf("%s/proxy-next-upstream-timeout", root)
 	nextTimeout := 0 // default magic value for disable
 	if directive.NextTimeout > 0 {
