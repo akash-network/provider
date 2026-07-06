@@ -108,8 +108,6 @@ const (
 	FlagMonitorMaxRetries                = "monitor-max-retries"
 	FlagMonitorRetryPeriod               = "monitor-retry-period"
 	FlagMonitorRetryPeriodJitter         = "monitor-retry-period-jitter"
-	FlagMonitorHealthcheckPeriod         = "monitor-healthcheck-period"
-	FlagMonitorHealthcheckPeriodJitter   = "monitor-healthcheck-period-jitter"
 	FlagPersistentConfigBackend          = "persistent-config-backend"
 	FlagPersistentConfigPath             = "persistent-config-path"
 	FlagGatewayTLSCert                   = "gateway-tls-cert"
@@ -213,10 +211,6 @@ func RunCmd() *cobra.Command {
 
 			if viper.GetDuration(FlagMonitorRetryPeriod) < 4*time.Second {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorRetryPeriod, 4*time.Second) // nolint: err113
-			}
-
-			if viper.GetDuration(FlagMonitorHealthcheckPeriod) < 4*time.Second {
-				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorHealthcheckPeriod, 4*time.Second) // nolint: err113
 			}
 
 			pconfigBackend := viper.GetString(FlagPersistentConfigBackend)
@@ -496,8 +490,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	monitorMaxRetries := viper.GetUint(FlagMonitorMaxRetries)
 	monitorRetryPeriod := viper.GetDuration(FlagMonitorRetryPeriod)
 	monitorRetryPeriodJitter := viper.GetDuration(FlagMonitorRetryPeriodJitter)
-	monitorHealthcheckPeriod := viper.GetDuration(FlagMonitorHealthcheckPeriod)
-	monitorHealthcheckPeriodJitter := viper.GetDuration(FlagMonitorHealthcheckPeriodJitter)
 
 	pricing, err := createBidPricingStrategy(strategy)
 	if err != nil {
@@ -669,8 +661,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod
 	config.MonitorRetryPeriodJitter = monitorRetryPeriodJitter
-	config.MonitorHealthcheckPeriod = monitorHealthcheckPeriod
-	config.MonitorHealthcheckPeriodJitter = monitorHealthcheckPeriodJitter
 
 	if len(providerConfig) != 0 {
 		pConf, err := xpconfig.ReadConfigPath(providerConfig)
