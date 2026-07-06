@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"testing"
+	"time"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/stretchr/testify/mock"
@@ -47,6 +48,22 @@ func TestMonitorInstantiate(t *testing.T) {
 	require.NotNil(t, monitor)
 
 	monitor.lc.Shutdown(nil)
+}
+
+func TestMonitorHealthcheckDisabledWhenPeriodZero(t *testing.T) {
+	config := NewDefaultConfig()
+	require.Zero(t, config.MonitorHealthcheckPeriod)
+	require.Zero(t, config.MonitorHealthcheckPeriodJitter)
+
+	monitor := &deploymentMonitor{
+		config: config,
+	}
+
+	var tickch <-chan time.Time
+	require.NotPanics(t, func() {
+		tickch = monitor.scheduleHealthcheck()
+	})
+	require.Nil(t, tickch)
 }
 
 func TestMonitorSendsClusterDeploymentPending(t *testing.T) {

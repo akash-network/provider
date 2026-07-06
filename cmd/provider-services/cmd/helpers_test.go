@@ -41,3 +41,9 @@ func TestUnwrappingURLError(t *testing.T) {
 	require.Error(t, err)
 	require.Regexp(t, expectedErrMsgForRPC, err)
 }
+
+func TestRunCmdDoesNotExposeMonitorHealthcheckFlags(t *testing.T) {
+	cmd := RunCmd()
+	require.Nil(t, cmd.Flags().Lookup("monitor-healthcheck-period"))
+	require.Nil(t, cmd.Flags().Lookup("monitor-healthcheck-period-jitter"))
+}
