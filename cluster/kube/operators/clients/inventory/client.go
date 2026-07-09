@@ -46,7 +46,8 @@ type client struct {
 
 type inventory struct {
 	inventoryV1.Cluster
-	safe inventoryV1.Cluster
+	// sanitized keeps the non-negative view used for bids, snapshots, and metrics.
+	sanitized inventoryV1.Cluster
 }
 
 type inventoryState struct {

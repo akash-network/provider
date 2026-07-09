@@ -25,12 +25,12 @@ var (
 
 func newInventory(clState inventoryV1.Cluster) *inventory {
 	raw := *clState.Dup()
-	safe := *clState.Dup()
-	sanitizeCluster(&safe)
+	sanitized := *clState.Dup()
+	sanitizeCluster(&sanitized)
 
 	inv := &inventory{
-		Cluster: raw,
-		safe:    safe,
+		Cluster:   raw,
+		sanitized: sanitized,
 	}
 
 	return inv
@@ -38,17 +38,17 @@ func newInventory(clState inventoryV1.Cluster) *inventory {
 
 func (inv *inventory) dup() inventory {
 	dup := inventory{
-		Cluster: *inv.Cluster.Dup(),
-		safe:    *inv.safe.Dup(),
+		Cluster:   *inv.Cluster.Dup(),
+		sanitized: *inv.sanitized.Dup(),
 	}
 
 	return dup
 }
 
-func (inv *inventory) safeDup() inventory {
+func (inv *inventory) sanitizedDup() inventory {
 	dup := inventory{
-		Cluster: *inv.safe.Dup(),
-		safe:    *inv.safe.Dup(),
+		Cluster:   *inv.sanitized.Dup(),
+		sanitized: *inv.sanitized.Dup(),
 	}
 
 	return dup
@@ -313,7 +313,7 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 
 	cparams := make(crd.ReservationClusterSettings)
 
-	currInventory := inv.safeDup()
+	currInventory := inv.sanitizedDup()
 
 	var err error
 
@@ -373,7 +373,7 @@ nodes:
 
 	if len(resources) == 0 {
 		if !cfg.DryRun {
-			inv.safe = *currInventory.Cluster.Dup()
+			inv.sanitized = *currInventory.Cluster.Dup()
 		}
 
 		reservation.SetAllocatedResources(adjustedResources)
@@ -390,11 +390,11 @@ nodes:
 }
 
 func (inv *inventory) Snapshot() inventoryV1.Cluster {
-	return *inv.safe.Dup()
+	return *inv.sanitized.Dup()
 }
 
 func (inv *inventory) Metrics() inventoryV1.Metrics {
-	safe := inv.safeDup()
+	sanitized := inv.sanitizedDup()
 
 	cpuTotal := uint64(0)
 	gpuTotal := uint64(0)
@@ -409,10 +409,10 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 	storageAvailable := make(map[string]uint64)
 
 	ret := inventoryV1.Metrics{
-		Nodes: make([]inventoryV1.NodeMetrics, 0, len(safe.Nodes)),
+		Nodes: make([]inventoryV1.NodeMetrics, 0, len(sanitized.Nodes)),
 	}
 
-	for _, nd := range safe.Nodes {
+	for _, nd := range sanitized.Nodes {
 		invNode := inventoryV1.NodeMetrics{
 			Name: nd.Name,
 			Allocatable: inventoryV1.ResourcesMetric{
@@ -447,7 +447,7 @@ func (inv *inventory) Metrics() inventoryV1.Metrics {
 		ret.Nodes = append(ret.Nodes, invNode)
 	}
 
-	for _, class := range safe.Storage {
+	for _, class := range sanitized.Storage {
 		tmp := class.Quantity.Allocatable.DeepCopy()
 		storageTotal[class.Info.Class] = uint64(tmp.Value()) //nolint: gosec
 
