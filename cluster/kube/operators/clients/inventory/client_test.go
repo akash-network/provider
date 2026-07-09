@@ -364,8 +364,8 @@ func TestInventorySnapshotSanitizesNegativeQuantities(t *testing.T) {
 	require.Equal(t, int64(0), snapshot.Nodes[0].Resources.EphemeralStorage.Allocated.Value())
 	require.Equal(t, int64(0), snapshot.Storage[0].Quantity.Allocatable.Value())
 
-	require.Equal(t, int64(-500), inv.Cluster.Nodes[0].Resources.CPU.Quantity.Allocatable.MilliValue())
-	require.Equal(t, int64(-250), inv.Cluster.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
+	require.Equal(t, int64(-500), inv.Nodes[0].Resources.CPU.Quantity.Allocatable.MilliValue())
+	require.Equal(t, int64(-250), inv.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
 }
 
 func TestInventoryMetricsSanitizesNegativeQuantities(t *testing.T) {
@@ -411,7 +411,7 @@ func TestInventoryAdjustSanitizesNegativeAllocatedBeforeBidding(t *testing.T) {
 	require.ErrorIs(t, err, ctypes.ErrInsufficientCapacity)
 }
 
-func TestInventoryAdjustKeepsRawStateAndUpdatesSafeState(t *testing.T) {
+func TestInventoryAdjustKeepsRawStateAndUpdatesSanitizedState(t *testing.T) {
 	cluster := makeBaseCluster()
 	cluster.Nodes[0].Resources.CPU.Quantity.Allocated.SetMilli(-1000)
 
@@ -436,7 +436,7 @@ func TestInventoryAdjustKeepsRawStateAndUpdatesSafeState(t *testing.T) {
 	err := inv.Adjust(reservation)
 
 	require.NoError(t, err)
-	require.Equal(t, int64(-1000), inv.Cluster.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
+	require.Equal(t, int64(-1000), inv.Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
 	require.Equal(t, int64(500), inv.Snapshot().Nodes[0].Resources.CPU.Quantity.Allocated.MilliValue())
 }
 
