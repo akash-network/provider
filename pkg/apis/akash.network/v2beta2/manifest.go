@@ -185,12 +185,15 @@ func (m *Manifest) Deployment() (ctypes.IDeployment, error) {
 		return nil, err
 	}
 
+	cparams := make(ReservationClusterSettings, len(group.Services))
+	for i := range group.Services {
+		cparams[group.Services[i].Resources.ID] = schedulerParams[i]
+	}
+
 	return &deployment{
-		lid:   lid,
-		group: group,
-		cparams: ClusterSettings{
-			SchedulerParams: schedulerParams,
-		},
+		lid:             lid,
+		group:           group,
+		cparams:         cparams,
 		resourceVersion: m.ResourceVersion,
 	}, nil
 }
