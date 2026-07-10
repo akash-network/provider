@@ -251,16 +251,6 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Duration(FlagMonitorHealthcheckPeriod, 10*time.Second, "monitor healthcheck period. defaults to 10s")
-	if err := viper.BindPFlag(FlagMonitorHealthcheckPeriod, cmd.Flags().Lookup(FlagMonitorHealthcheckPeriod)); err != nil {
-		return err
-	}
-
-	cmd.Flags().Duration(FlagMonitorHealthcheckPeriodJitter, 5*time.Second, "monitor healthcheck window. defaults to 5s")
-	if err := viper.BindPFlag(FlagMonitorHealthcheckPeriodJitter, cmd.Flags().Lookup(FlagMonitorHealthcheckPeriodJitter)); err != nil {
-		return err
-	}
-
 	cmd.Flags().String(FlagPersistentConfigBackend, "bbolt", "backend storage for persistent config. defaults to bbolt. available options: bbolt")
 	if err := viper.BindPFlag(FlagPersistentConfigBackend, cmd.Flags().Lookup(FlagPersistentConfigBackend)); err != nil {
 		return err

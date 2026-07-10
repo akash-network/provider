@@ -224,10 +224,18 @@ func (m *deploymentMonitor) scheduleRetry() <-chan time.Time {
 }
 
 func (m *deploymentMonitor) scheduleHealthcheck() <-chan time.Time {
+	if m.config.MonitorHealthcheckPeriod <= 0 {
+		return nil
+	}
+
 	return m.schedule(m.config.MonitorHealthcheckPeriod, m.config.MonitorHealthcheckPeriodJitter)
 }
 
 func (m *deploymentMonitor) schedule(minTime, jitter time.Duration) <-chan time.Time {
-	period := minTime + time.Duration(rand.Int63n(int64(jitter))) // nolint: gosec
+	period := minTime
+	if jitter > 0 {
+		period += time.Duration(rand.Int63n(int64(jitter))) // nolint: gosec
+	}
+
 	return time.After(period)
 }

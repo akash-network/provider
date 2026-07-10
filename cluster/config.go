@@ -36,8 +36,6 @@ func NewDefaultConfig() Config {
 		MonitorMaxRetries:               40,
 		MonitorRetryPeriod:              time.Second * 4, // nolint revive
 		MonitorRetryPeriodJitter:        time.Second * 15,
-		MonitorHealthcheckPeriod:        time.Second * 10, // nolint revive
-		MonitorHealthcheckPeriodJitter:  time.Second * 5,
 		IngressMode:                     builder.IngressModeIngress,
 		GatewayName:                     "akash-gateway",
 		GatewayNamespace:                "akash-gateway",
