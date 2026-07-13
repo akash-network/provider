@@ -33,7 +33,8 @@ func (s *SEVGuest) Available() bool {
 const (
 	// ioctl request ID for SNP_GET_REPORT on x86_64
 	// _IOWR('S', 0x00, struct snp_guest_request_ioctl)
-	snpGetReportIoctl = 0xc0185300
+	// Size field: 0x20 = 32 bytes (MsgVersion u32 + pad u32 + ReqData u64 + RespData u64 + FWErr u64)
+	snpGetReportIoctl = 0xc0205300
 
 	snpReportRespSize = 4096 + 32 // sizeof(struct snp_report_resp)
 )
