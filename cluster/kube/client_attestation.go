@@ -133,10 +133,10 @@ func (c *client) DetectTEEPlatform(ctx context.Context) ctypes.TEEPlatform {
 	}
 
 	for _, node := range nodes.Items {
-		if node.Labels[intelTDXLabelKey] == "true" {
+		if node.Labels[intelTDXLabelKey] == builder.ValTrue {
 			return ctypes.TEEPlatformTDX
 		}
-		if node.Labels[amdSNPLabelKey] == "true" {
+		if node.Labels[amdSNPLabelKey] == builder.ValTrue {
 			return ctypes.TEEPlatformSNP
 		}
 	}
