@@ -231,10 +231,30 @@ spec:
                                       memory_size:
                                         type: string
                                         format: uint64
+                                  interconnect:
+                                    type: object
+                                    nullable: true
+                                    properties:
+                                      enabled:
+                                        type: boolean
+                                      units:
+                                        type: integer
+                                        format: int64
+                                        minimum: 0
+                                      resource_name:
+                                        type: string
+                                      fabric:
+                                        type: string
+                                      nccl_hca_prefixes:
+                                        type: array
+                                        items:
+                                          type: string
                               attestation_disabled:
                                 type: boolean
                               tee_type:
                                 type: string
+                          interconnect_group:
+                            type: string
                           credentials:
                             type: object
                             nullable: true

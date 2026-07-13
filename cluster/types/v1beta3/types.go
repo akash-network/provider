@@ -28,6 +28,12 @@ var (
 	// ErrInsufficientCapacity is the new error when capacity is insufficient
 	ErrInsufficientCapacity  = errors.New("insufficient capacity")
 	ErrGroupResourceMismatch = errors.New("group resource mismatch")
+	// ErrInvalidInterconnectGroup rejects bids whose interconnect group
+	// label could never be applied to a pod: the group name is stamped
+	// verbatim as a Kubernetes label value (and anti-affinity selector),
+	// so a name the kube API would reject at admission must fail the bid
+	// instead of producing a paid lease whose workloads cannot deploy.
+	ErrInvalidInterconnectGroup = errors.New("invalid interconnect group")
 )
 
 // ServiceLog stores name, stream and scanner

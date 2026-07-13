@@ -16,6 +16,7 @@ import (
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
 	rtypes "pkg.akt.dev/go/node/types/resources/v1beta4"
 	"pkg.akt.dev/go/node/types/unit"
 	"pkg.akt.dev/go/testutil"
@@ -847,4 +848,36 @@ func TestInventory_OverReservations(t *testing.T) {
 
 	// No ports used yet
 	require.Equal(t, uint(1000-countOfRandomPortService), inv.availableExternalPorts) // nolint: gosec
+}
+
+// placementRequirements must survive the resources-to-commit copy for every
+// concrete ResourceGroup shape the bid path produces — an empty extraction
+// silently disables the tenant's `capabilities/gpu-interconnect/fabric/...`
+// pin in the inventory client's Adjust (CS-6 / AKT-406 regression).
+func TestPlacementRequirementsPreserved(t *testing.T) {
+	attrs := attrtypes.Attributes{
+		{Key: "capabilities/gpu-interconnect", Value: "true"},
+		{Key: "capabilities/gpu-interconnect/fabric/infiniband", Value: "true"},
+	}
+	spec := dvbeta.GroupSpec{
+		Name: "ic",
+		Requirements: attrtypes.PlacementRequirements{
+			Attributes: attrs,
+		},
+	}
+
+	for name, rg := range map[string]dvbeta.ResourceGroup{
+		"GroupSpec":  spec,
+		"*GroupSpec": &spec,
+		"Group":      dvbeta.Group{GroupSpec: spec},
+		"*Group":     &dvbeta.Group{GroupSpec: spec},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, attrs, placementRequirements(rg).Attributes)
+		})
+	}
+
+	t.Run("unknown type stays permissive", func(t *testing.T) {
+		require.Empty(t, placementRequirements(nil).Attributes)
+	})
 }
