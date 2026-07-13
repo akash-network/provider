@@ -23,9 +23,10 @@ Install k8s dependencies for integration tests against "KinD"
 
 Usage: $0 [kind|ssh] $1 [crd|ns|metrics]
   kind:
-    init:   init cluster configuration
-    ns:     install akash namespace
-    crd:    install the akash CRDs
+    init:       init cluster configuration
+    cc-runtime: register mock CC runtime handlers in containerd (Kind nodes)
+    ns:         install akash namespace
+    crd:        install the akash CRDs
   ssh:
     init:   init cluster configuration
     ns:     install akash namespace
@@ -237,11 +238,43 @@ EOF'
     esac
 }
 
+install_cc_runtime() {
+    local kind_name=${1:-$(kind get clusters 2>/dev/null | head -1)}
+    if [ -z "$kind_name" ]; then
+        echo >&2 "no Kind cluster found"
+        exit 1
+    fi
+
+    for node in $(kind get nodes --name "$kind_name" 2>/dev/null); do
+        docker exec "$node" bash -c '
+            if grep -q kata-qemu-snp /etc/containerd/config.toml; then
+                echo "CC runtime handlers already registered"
+                exit 0
+            fi
+            for rt in kata-qemu-snp kata-qemu-nvidia-gpu-snp kata-qemu-tdx kata-qemu-nvidia-gpu-tdx; do
+                cat >> /etc/containerd/config.toml <<RTEOF
+
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.${rt}]
+  runtime_type = "io.containerd.runc.v2"
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.${rt}.options]
+    SystemdCgroup = true
+RTEOF
+            done
+            systemctl restart containerd
+            echo "containerd restarted with CC runtime aliases"
+        '
+    done
+}
+
 command_kind() {
     case "$1" in
     init)
         install_ns
         install_crd
+        ;;
+    cc-runtime)
+        shift
+        install_cc_runtime "$@"
         ;;
     *)
         echo "invalid command \"$1\""

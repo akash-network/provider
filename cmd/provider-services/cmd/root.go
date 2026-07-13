@@ -41,6 +41,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(leaseStatusCmd())
 	cmd.AddCommand(leaseEventsCmd())
 	cmd.AddCommand(leaseLogsCmd())
+	cmd.AddCommand(leaseAttestationCmd())
 	cmd.AddCommand(serviceStatusCmd())
 	cmd.AddCommand(RunCmd())
 	cmd.AddCommand(LeaseShellCmd())

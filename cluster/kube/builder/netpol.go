@@ -69,6 +69,20 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 		},
 	}
 
+	// Allow the K8s API server pod proxy to reach the attestation sidecar.
+	// The proxy flows through the kubelet on the host network, which does
+	// not match any namespace selector. We open port 8790 to all sources;
+	// the sidecar itself runs inside the TEE and uses TLS for auth.
+	attestPort := intstr.FromInt(8790)
+	ingressRules = append(ingressRules, netv1.NetworkPolicyIngressRule{
+		Ports: []netv1.NetworkPolicyPort{
+			{
+				Protocol: &tcpProtocol,
+				Port:     &attestPort,
+			},
+		},
+	})
+
 	// Add Gateway API ingress rule if gateway-api mode is enabled
 	if b.settings.IngressMode == IngressModeGateway && b.settings.GatewayNamespace != "" {
 		ingressRules = append(ingressRules, netv1.NetworkPolicyIngressRule{

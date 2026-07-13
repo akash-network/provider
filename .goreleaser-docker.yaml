@@ -88,6 +88,20 @@ builds:
       - -extldflags "-L./.cache/lib -lwasmvm_muslc.x86_64 -Wl,-z,muldefs -lm -lrt -lc -lpthread"
     gcflags:
       - "all=-N -l"
+  - id: attestation-sidecar-linux-amd64
+    binary: attestation-sidecar
+    dir: sidecar/attestation
+    main: .
+    goarch:
+      - amd64
+    goos:
+      - linux
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
 archives:
   - formats:
       - binary
@@ -160,3 +174,23 @@ dockers:
       - --label=org.opencontainers.image.revision={{ .FullCommit }}
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
+  - dockerfile: sidecar/attestation/Dockerfile
+    ids:
+      - attestation-sidecar-linux-amd64
+    use: buildx
+    goos: linux
+    goarch: amd64
+    extra_files:
+      - sidecar/attestation/nvml-helper
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --build-arg=NVML_SRC=sidecar/attestation/nvml-helper/nvml_attestation.c
+      - --label=org.opencontainers.image.title=attestation-sidecar
+      - --label=org.opencontainers.image.description=TEE attestation sidecar for Akash confidential compute
+      - --label=org.opencontainers.image.url={{.GitURL}}
+      - --label=org.opencontainers.image.source={{.GitURL}}
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.created={{ time "2006-01-02T15:04:05Z07:00" }}
+      - --label=org.opencontainers.image.revision={{ .FullCommit }}
+    image_templates:
+      - "{{ .Env.DOCKER_IMAGE }}-attestation-sidecar:latest"

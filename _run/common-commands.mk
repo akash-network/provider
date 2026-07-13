@@ -14,7 +14,8 @@ PRICE          ?= 10uakt
 CERT_HOSTNAME  ?= localhost
 LEASE_SERVICES ?= web
 
-RESOURCE_SERVER_HOST ?= localhost:8445
+RESOURCE_SERVER_HOST    ?= localhost:8445
+GATEWAY_GRPC_ENDPOINT  ?= localhost:8444
 
 GW_AUTH_TYPE   ?= jwt
 
@@ -292,6 +293,10 @@ provider-lease-events:
 		--from "$(KEY_NAME)" \
 		--provider "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: provider-lease-attestation
+provider-lease-attestation:
+	$(PROVIDER_SERVICES) lease-attestation 		--dseq      "$(DSEQ)"     		--gseq      "$(GSEQ)"     		--oseq      "$(OSEQ)"     		--from      "$(KEY_NAME)" 		--provider  "$(PROVIDER_ADDRESS)" 		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: provider-lease-status
 provider-lease-status:

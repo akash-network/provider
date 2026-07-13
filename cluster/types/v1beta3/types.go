@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 
@@ -51,8 +52,122 @@ type LeaseEvent struct {
 	Object              LeaseEventObject `json:"object" yaml:"object"`
 }
 
+// TEEType represents a validated TEE capability identifier.
+// The provider determines the actual TEE technology (AMD SEV-SNP or Intel TDX)
+// at deployment time based on node capabilities.
+type TEEType string
+
+const (
+	TEETypeNone   TEEType = ""
+	TEETypeCPU    TEEType = "cpu"
+	TEETypeCPUGPU TEEType = "cpu-gpu"
+)
+
+// ParseTEEType validates a raw string and returns the corresponding TEEType.
+// Returns TEETypeNone for empty strings. Returns an error for unknown values.
+func ParseTEEType(s string) (TEEType, error) {
+	switch TEEType(s) {
+	case TEETypeNone, TEETypeCPU, TEETypeCPUGPU:
+		return TEEType(s), nil
+	default:
+		return TEETypeNone, fmt.Errorf("unknown TEE type: %q", s)
+	}
+}
+
+// IsCC returns true if this TEE type represents a confidential compute workload.
+func (t TEEType) IsCC() bool { return t != TEETypeNone }
+
+// IsGPU returns true if this TEE type requires GPU confidential compute.
+func (t TEEType) IsGPU() bool { return t == TEETypeCPUGPU }
+
+// RuntimeClass identifies a Kubernetes RuntimeClass for workload scheduling.
+type RuntimeClass string
+
+func (rc RuntimeClass) String() string {
+	return string(rc)
+}
+
+const (
+	RuntimeClassKataQemuSNP          RuntimeClass = "kata-qemu-snp"
+	RuntimeClassKataQemuNvidiaGPUSNP RuntimeClass = "kata-qemu-nvidia-gpu-snp"
+	RuntimeClassKataQemuTDX          RuntimeClass = "kata-qemu-tdx"
+	RuntimeClassKataQemuNvidiaGPUTDX RuntimeClass = "kata-qemu-nvidia-gpu-tdx"
+)
+
+type runtimeClassFilter struct {
+	cc  bool
+	gpu bool
+	snp bool
+	tdx bool
+}
+
+type RuntimeClassOption func(*runtimeClassFilter)
+
+func WithCC() RuntimeClassOption {
+	return func(f *runtimeClassFilter) { f.cc = true }
+}
+
+func WithGPU() RuntimeClassOption {
+	return func(f *runtimeClassFilter) { f.gpu = true }
+}
+
+func WithSNP() RuntimeClassOption {
+	return func(f *runtimeClassFilter) { f.snp = true }
+}
+
+func WithTDX() RuntimeClassOption {
+	return func(f *runtimeClassFilter) { f.tdx = true }
+}
+
+var runtimeClassAttrs = map[RuntimeClass]runtimeClassFilter{
+	RuntimeClassKataQemuSNP:          {cc: true, snp: true},
+	RuntimeClassKataQemuNvidiaGPUSNP: {cc: true, snp: true, gpu: true},
+	RuntimeClassKataQemuTDX:          {cc: true, tdx: true},
+	RuntimeClassKataQemuNvidiaGPUTDX: {cc: true, tdx: true, gpu: true},
+}
+
+// Is checks whether rc is a known runtime class matching all the given
+// filters. With no options it matches any known runtime class.
+func (rc RuntimeClass) Is(opts ...RuntimeClassOption) bool {
+	attrs, known := runtimeClassAttrs[rc]
+	if !known {
+		return false
+	}
+
+	for _, opt := range opts {
+		var required runtimeClassFilter
+		opt(&required)
+
+		if required.cc && !attrs.cc {
+			return false
+		}
+		if required.gpu && !attrs.gpu {
+			return false
+		}
+		if required.snp && !attrs.snp {
+			return false
+		}
+		if required.tdx && !attrs.tdx {
+			return false
+		}
+	}
+
+	return true
+}
+
+// TEEPlatform represents the detected TEE platform on the cluster nodes.
+type TEEPlatform string
+
+const (
+	TEEPlatformNone TEEPlatform = ""
+	TEEPlatformTDX  TEEPlatform = "tdx"
+	TEEPlatformSNP  TEEPlatform = "snp"
+)
+
 type InventoryOptions struct {
-	DryRun bool
+	DryRun      bool
+	TEEType     TEEType
+	TEEPlatform TEEPlatform // detected at startup from node labels
 }
 
 type InventoryOption func(*InventoryOptions) *InventoryOptions
@@ -60,6 +175,20 @@ type InventoryOption func(*InventoryOptions) *InventoryOptions
 func WithDryRun() InventoryOption {
 	return func(opts *InventoryOptions) *InventoryOptions {
 		opts.DryRun = true
+		return opts
+	}
+}
+
+func WithTEEType(t TEEType) InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.TEEType = t
+		return opts
+	}
+}
+
+func WithTEEPlatform(t TEEPlatform) InventoryOption {
+	return func(opts *InventoryOptions) *InventoryOptions {
+		opts.TEEPlatform = t
 		return opts
 	}
 }

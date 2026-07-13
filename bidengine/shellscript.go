@@ -200,6 +200,13 @@ func newDataForScript(r Request) dataForScript {
 		d.PricePrecision = &r.PricePrecision
 	}
 
+	for _, attr := range r.GSpec.Requirements.Attributes {
+		if attr.Key == "confidential-compute" && attr.Value == "true" {
+			d.ConfidentialCompute = true
+			break
+		}
+	}
+
 	resources := r.GSpec.Resources
 	if len(r.AllocatedResources) > 0 {
 		resources = r.AllocatedResources

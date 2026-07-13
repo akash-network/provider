@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"google.golang.org/grpc"
@@ -18,6 +19,7 @@ import (
 	"pkg.akt.dev/go/util/ctxlog"
 
 	"pkg.akt.dev/go/grpc/gogoreflection"
+	leasev1 "pkg.akt.dev/go/provider/lease/v1"
 	providerv1 "pkg.akt.dev/go/provider/v1"
 	ajwt "pkg.akt.dev/go/util/jwt"
 
@@ -57,7 +59,7 @@ func ClaimsFromCtx(ctx context.Context) *ajwt.Claims {
 	return val.(*ajwt.Claims)
 }
 
-func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.StatusClient) error {
+func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, client provider.Client) error {
 	tlsCfg, err := gwutils.NewServerTLSConfig(ctx, cquery, endpoint)
 	if err != nil {
 		return err
@@ -73,7 +75,7 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 		MinTime:             30 * time.Second,
 		PermitWithoutStream: false,
-	}), grpc.ChainUnaryInterceptor(authInterceptor()))
+	}), grpc.ChainUnaryInterceptor(authInterceptor(ctx)))
 
 	pRPC := &grpcProviderV1{
 		ctx:    ctx,
@@ -81,6 +83,12 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 	}
 
 	providerv1.RegisterProviderRPCServer(grpcSrv, pRPC)
+
+	leaseRPC := &grpcLeaseV1{
+		cclient: client.Cluster(),
+	}
+	leasev1.RegisterLeaseRPCServer(grpcSrv, leaseRPC)
+
 	gogoreflection.Register(grpcSrv)
 
 	group.Go(func() error {
@@ -105,8 +113,13 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 	return nil
 }
 
-func authInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+// authInterceptor returns a gRPC unary interceptor that validates JWT/mTLS credentials.
+// The serverCtx carries application-level values (e.g. AccountQuerier) that the
+// per-request gRPC context does not inherit, so we merge them here.
+func authInterceptor(serverCtx context.Context) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
+		log := ctxlog.LogcFromCtx(serverCtx)
+
 		var tokString string
 		var peerCerts []*x509.Certificate
 
@@ -118,15 +131,26 @@ func authInterceptor() grpc.UnaryServerInterceptor {
 
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			tokens := md["authorization"]
-			if len(tokens) == 1 {
-				tokString = tokens[1]
+			if len(tokens) > 0 {
+				tokString = tokens[0]
+				// Strip "Bearer " prefix to match REST auth extraction.
+				if parts := strings.Fields(tokString); len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+					tokString = parts[1]
+				}
 			}
 		}
 
-		claims, err := gwutils.AuthProcess(ctx, peerCerts, tokString)
+		log.Debug("grpc auth", "method", info.FullMethod, "has_token", tokString != "", "peer_certs", len(peerCerts))
+
+		// Use serverCtx for AuthProcess so it can find AccountQuerier and other
+		// application-level values that are not present in the per-request gRPC ctx.
+		claims, err := gwutils.AuthProcess(serverCtx, peerCerts, tokString)
 		if err != nil {
+			log.Error("grpc auth failed", "method", info.FullMethod, "error", err)
 			return nil, err
 		}
+
+		log.Debug("grpc auth ok", "method", info.FullMethod, "issuer", claims.Issuer, "access", claims.Leases.Access)
 
 		ctx = ContextWithClaims(ctx, claims)
 

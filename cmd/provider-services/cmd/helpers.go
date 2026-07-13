@@ -353,6 +353,27 @@ func ProviderPersistentPreRunE(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+func resolveProviderURL(ctx context.Context, cctx sdkclient.Context, flags *pflag.FlagSet, cl aclient.QueryClient, paddr sdk.AccAddress) (*url.URL, error) {
+	purl, err := flags.GetString(flagProviderURL)
+	if err != nil {
+		return nil, err
+	}
+
+	if cl != nil && purl == "" {
+		dcl, err := discovery.DiscoverQueryClient(ctx, cctx)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := dcl.Provider().Provider(ctx, &ptypes.QueryProviderRequest{Owner: paddr.String()})
+		if err != nil {
+			return nil, err
+		}
+		purl = resp.Provider.HostURI
+	}
+
+	return url.Parse(purl)
+}
+
 func queryClientOrNil(cl aclient.Client) aclient.QueryClient {
 	if cl == nil {
 		return nil

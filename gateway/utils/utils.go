@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"google.golang.org/grpc/codes"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -174,5 +175,18 @@ func jwtErrorToHTTP(token *jwt.Token, err error) *httperror.HttpError {
 		return httperror.ErrJWTInvalid
 	default:
 		return httperror.ErrJWTInvalid
+	}
+}
+
+func HTTPToGRPCCode(httpStatus int) codes.Code {
+	switch {
+	case httpStatus == 404:
+		return codes.NotFound
+	case httpStatus == 502:
+		return codes.Unavailable
+	case httpStatus >= 400 && httpStatus < 500:
+		return codes.InvalidArgument
+	default:
+		return codes.Internal
 	}
 }
