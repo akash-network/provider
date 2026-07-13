@@ -51,6 +51,32 @@ const (
 )
 
 const (
+	AkashAttestationDisabledAnnotation = "akash.network/attestation-disabled"
+)
+
+type RuntimeClass = ctypes.RuntimeClass
+
+const (
+	RuntimeClassKataQemuSNP          = ctypes.RuntimeClassKataQemuSNP
+	RuntimeClassKataQemuNvidiaGPUSNP = ctypes.RuntimeClassKataQemuNvidiaGPUSNP
+	RuntimeClassKataQemuTDX          = ctypes.RuntimeClassKataQemuTDX
+	RuntimeClassKataQemuNvidiaGPUTDX = ctypes.RuntimeClassKataQemuNvidiaGPUTDX
+)
+
+const megabytes int64 = 1024 * 1024
+
+const (
+	SidecarCPULimitMillicores    int64 = 100
+	SidecarMemoryLimitBytes      int64 = 64 * megabytes
+	SidecarCPURequestMillicores  int64 = 10
+	SidecarMemoryRequestBytes    int64 = 32 * megabytes
+	SidecarGPUMemoryLimitBytes   int64 = 128 * megabytes
+	SidecarGPUMemoryRequestBytes int64 = 64 * megabytes
+	MinPrimaryCPUMillicores      int64 = 10
+	MinPrimaryMemoryBytes        int64 = 16 * megabytes
+)
+
+const (
 	envVarAkashGroupSequence         = "AKASH_GROUP_SEQUENCE"
 	envVarAkashDeploymentSequence    = "AKASH_DEPLOYMENT_SEQUENCE"
 	envVarAkashOrderSequence         = "AKASH_ORDER_SEQUENCE"

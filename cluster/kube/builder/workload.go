@@ -13,15 +13,46 @@ import (
 	"pkg.akt.dev/go/sdl"
 	sdlutil "pkg.akt.dev/go/sdl/util"
 
+	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 const (
-	ResourceGPUNvidia = corev1.ResourceName("nvidia.com/gpu")
-	ResourceGPUAMD    = corev1.ResourceName("amd.com/gpu")
-	GPUVendorNvidia   = "nvidia"
-	GPUVendorAMD      = "amd"
+	ResourceGPUNvidia     = corev1.ResourceName("nvidia.com/gpu")
+	ResourceGPUNvidiaPGPU = corev1.ResourceName("nvidia.com/pgpu")
+	ResourceGPUAMD        = corev1.ResourceName("amd.com/gpu")
+	GPUVendorNvidia       = "nvidia"
+	GPUVendorAMD          = "amd"
 )
+
+type RuntimeClassOption = ctypes.RuntimeClassOption
+
+var (
+	WithCC  = ctypes.WithCC
+	WithGPU = ctypes.WithGPU
+	WithSNP = ctypes.WithSNP
+	WithTDX = ctypes.WithTDX
+)
+
+// RuntimeClassForTEEType maps a TEE type ("cpu", "cpu-gpu") to the corresponding
+// Kata runtime class using the detected TEE platform ("tdx" or "snp").
+func RuntimeClassForTEEType(teeType string, teePlatform string) RuntimeClass {
+	isGPU := teeType == "cpu-gpu"
+	switch teePlatform {
+	case "tdx":
+		if isGPU {
+			return RuntimeClassKataQemuNvidiaGPUTDX
+		}
+		return RuntimeClassKataQemuTDX
+	case "snp":
+		if isGPU {
+			return RuntimeClassKataQemuNvidiaGPUSNP
+		}
+		return RuntimeClassKataQemuSNP
+	default:
+		return ""
+	}
+}
 
 type workloadBase interface {
 	builderBase
@@ -94,17 +125,38 @@ func (b *Workload) container() corev1.Container {
 			Requests: make(corev1.ResourceList),
 		},
 		ImagePullPolicy: corev1.PullIfNotPresent,
-		SecurityContext: &corev1.SecurityContext{
-			RunAsNonRoot:             &falseValue,
-			Privileged:               &falseValue,
-			AllowPrivilegeEscalation: &falseValue,
-		},
+	}
+
+	sidecarEnabled := sparams != nil &&
+		sparams.RuntimeClass.Is(WithCC()) &&
+		!sparams.AttestationDisabled
+
+	kcontainer.SecurityContext = &corev1.SecurityContext{
+		RunAsNonRoot:             &falseValue,
+		Privileged:               &falseValue,
+		AllowPrivilegeEscalation: &falseValue,
 	}
 
 	if cpu := service.Resources.CPU; cpu != nil {
-		requestedCPU := sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units)
-		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(requestedCPU.Value()), resource.Milli).DeepCopy() // nolint: gosec
-		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(int64(cpu.Units.Value()), resource.Milli).DeepCopy()      // nolint: gosec
+		cpuLimit := int64(cpu.Units.Value())                                                                 // nolint: gosec
+		cpuRequest := int64(sdlutil.ComputeCommittedResources(b.settings.CPUCommitLevel, cpu.Units).Value()) // nolint: gosec
+
+		if sidecarEnabled {
+			cpuLimit -= SidecarCPULimitMillicores
+			cpuRequest -= SidecarCPURequestMillicores
+			if cpuLimit < MinPrimaryCPUMillicores {
+				cpuLimit = MinPrimaryCPUMillicores
+			}
+			if cpuRequest < MinPrimaryCPUMillicores {
+				cpuRequest = MinPrimaryCPUMillicores
+			}
+			if cpuRequest > cpuLimit {
+				cpuRequest = cpuLimit
+			}
+		}
+
+		kcontainer.Resources.Requests[corev1.ResourceCPU] = resource.NewScaledQuantity(cpuRequest, resource.Milli).DeepCopy()
+		kcontainer.Resources.Limits[corev1.ResourceCPU] = resource.NewScaledQuantity(cpuLimit, resource.Milli).DeepCopy()
 	}
 
 	if gpu := service.Resources.GPU; gpu != nil && gpu.Units.Value() > 0 {
@@ -112,7 +164,11 @@ func (b *Workload) container() corev1.Container {
 
 		switch sparams.Resources.GPU.Vendor {
 		case GPUVendorNvidia:
-			resourceName = ResourceGPUNvidia
+			if sparams.RuntimeClass.Is(WithCC()) {
+				resourceName = ResourceGPUNvidiaPGPU // VFIO passthrough for CC
+			} else {
+				resourceName = ResourceGPUNvidia
+			}
 		case GPUVendorAMD:
 			resourceName = ResourceGPUAMD
 		default:
@@ -148,11 +204,32 @@ func (b *Workload) container() corev1.Container {
 		}
 	}
 
-	// fixme: ram is never expected to be nil
 	if mem := service.Resources.Memory; mem != nil {
-		requestedRAM := sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity)
-		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(int64(requestedRAM.Value()), resource.DecimalSI).DeepCopy()            // nolint: gosec
-		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(int64(mem.Quantity.Value()+requestedMem), resource.DecimalSI).DeepCopy() // nolint: gosec
+		memLimit := int64(mem.Quantity.Value() + requestedMem)                                                     // nolint: gosec
+		memRequest := int64(sdlutil.ComputeCommittedResources(b.settings.MemoryCommitLevel, mem.Quantity).Value()) // nolint: gosec
+
+		if sidecarEnabled {
+			sidecarMemLimit := SidecarMemoryLimitBytes
+			sidecarMemRequest := SidecarMemoryRequestBytes
+			if sparams.RuntimeClass.Is(WithGPU()) {
+				sidecarMemLimit = SidecarGPUMemoryLimitBytes
+				sidecarMemRequest = SidecarGPUMemoryRequestBytes
+			}
+			memLimit -= sidecarMemLimit
+			memRequest -= sidecarMemRequest
+			if memLimit < MinPrimaryMemoryBytes {
+				memLimit = MinPrimaryMemoryBytes
+			}
+			if memRequest < MinPrimaryMemoryBytes {
+				memRequest = MinPrimaryMemoryBytes
+			}
+			if memRequest > memLimit {
+				memRequest = memLimit
+			}
+		}
+
+		kcontainer.Resources.Requests[corev1.ResourceMemory] = resource.NewQuantity(memRequest, resource.DecimalSI).DeepCopy()
+		kcontainer.Resources.Limits[corev1.ResourceMemory] = resource.NewQuantity(memLimit, resource.DecimalSI).DeepCopy()
 	}
 
 	if service.Params != nil {
@@ -188,7 +265,6 @@ func (b *Workload) container() corev1.Container {
 	return kcontainer
 }
 
-// Return RAM volumes
 func (b *Workload) volumes() []corev1.Volume {
 	var volumes []corev1.Volume // nolint:prealloc
 
@@ -264,16 +340,25 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 	return pvcs
 }
 
+func (b *Workload) podAnnotations() map[string]string {
+	params := b.sparams[b.serviceIdx]
+	if params != nil && params.AttestationDisabled {
+		return map[string]string{
+			AkashAttestationDisabledAnnotation: "true",
+		}
+	}
+	return nil
+}
+
 func (b *Workload) runtimeClass() *string {
 	params := b.sparams[b.serviceIdx]
 
 	var effectiveRuntimeClassName *string
 
 	if params != nil {
-		if len(params.RuntimeClass) != 0 && params.RuntimeClass != runtimeClassNoneValue {
-			runtimeClass := new(string)
-			*runtimeClass = params.RuntimeClass
-			effectiveRuntimeClassName = runtimeClass
+		rc := string(params.RuntimeClass)
+		if len(rc) != 0 && rc != runtimeClassNoneValue {
+			effectiveRuntimeClassName = &rc
 		}
 	}
 
@@ -303,6 +388,38 @@ func (b *Workload) affinity() *corev1.Affinity {
 
 	if params != nil && params.Resources != nil {
 		selectors = append(selectors, nodeSelectorsFromResources(params.Resources)...)
+	}
+
+	if params != nil && params.RuntimeClass.Is(WithCC()) {
+		selectors = append(selectors, corev1.NodeSelectorRequirement{
+			Key:      "katacontainers.io/kata-runtime",
+			Operator: corev1.NodeSelectorOpIn,
+			Values:   []string{"true"},
+		})
+
+		// TEE-specific node labels
+		if params.RuntimeClass.Is(WithSNP()) {
+			selectors = append(selectors, corev1.NodeSelectorRequirement{
+				Key:      "amd.feature.node.kubernetes.io/snp",
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"true"},
+			})
+		}
+		if params.RuntimeClass.Is(WithTDX()) {
+			selectors = append(selectors, corev1.NodeSelectorRequirement{
+				Key:      "intel.feature.node.kubernetes.io/tdx",
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"true"},
+			})
+		}
+
+		if params.RuntimeClass.Is(WithGPU()) {
+			selectors = append(selectors, corev1.NodeSelectorRequirement{
+				Key:      "nvidia.com/cc.ready.state",
+				Operator: corev1.NodeSelectorOpIn,
+				Values:   []string{"true"},
+			})
+		}
 	}
 
 	for _, storage := range service.Resources.Storage {

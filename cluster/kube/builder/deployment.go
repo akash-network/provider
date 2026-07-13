@@ -57,7 +57,8 @@ func (b *deployment) Create() (*appsv1.Deployment, error) { // nolint:unparam
 			Replicas:             b.replicas(),
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: b.labels(),
+					Labels:      b.labels(),
+					Annotations: b.podAnnotations(),
 				},
 				Spec: corev1.PodSpec{
 					Affinity:         b.affinity(),
@@ -85,6 +86,7 @@ func (b *deployment) Update(obj *appsv1.Deployment) (*appsv1.Deployment, error) 
 	uobj.Spec.Selector.MatchLabels = b.selectorLabels()
 	uobj.Spec.Replicas = b.replicas()
 	uobj.Spec.Template.Labels = b.labels()
+	uobj.Spec.Template.Annotations = b.podAnnotations()
 	uobj.Spec.Template.Spec.Affinity = b.affinity()
 	uobj.Spec.Template.Spec.RuntimeClassName = b.runtimeClass()
 	uobj.Spec.Template.Spec.AutomountServiceAccountToken = b.automountServiceAccountToken()

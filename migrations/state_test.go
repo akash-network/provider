@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestStateManager_Load_NonExistentFile(t *testing.T) {
@@ -16,18 +18,10 @@ func TestStateManager_Load_NonExistentFile(t *testing.T) {
 	sm := NewStateManager(statePath)
 	state, err := sm.Load()
 
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if state == nil {
-		t.Fatal("expected state to be non-nil")
-	}
-	if len(state.Applied) != 0 {
-		t.Errorf("expected empty Applied slice, got %v", state.Applied)
-	}
-	if !state.LastRun.IsZero() {
-		t.Errorf("expected zero LastRun, got %v", state.LastRun)
-	}
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	require.Empty(t, state.Applied)
+	require.True(t, state.LastRun.IsZero())
 }
 
 func TestStateManager_Load_ExistingFile(t *testing.T) {
@@ -53,27 +47,14 @@ func TestStateManager_Load_ExistingFile(t *testing.T) {
 	sm := NewStateManager(statePath)
 	state, err := sm.Load()
 
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if state == nil {
-		t.Fatal("expected state to be non-nil")
-	}
-	if len(state.Applied) != len(expectedState.Applied) {
-		t.Errorf("expected Applied length %d, got %d", len(expectedState.Applied), len(state.Applied))
-	}
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	require.Equal(t, len(expectedState.Applied), len(state.Applied))
 	for i, v := range expectedState.Applied {
-		if i >= len(state.Applied) || state.Applied[i] != v {
-			t.Errorf("expected Applied[%d] = %q, got %q", i, v, state.Applied[i])
-		}
+		require.Equal(t, v, state.Applied[i], "Applied[%d]", i)
 	}
-	diff := state.LastRun.Sub(expectedState.LastRun)
-	if diff < 0 {
-		diff = -diff
-	}
-	if diff > time.Second {
-		t.Errorf("expected LastRun within 1 second, got difference of %v", diff)
-	}
+	require.InDelta(t, 0, state.LastRun.Sub(expectedState.LastRun).Seconds(), 1.0,
+		"LastRun should be within 1 second")
 }
 
 func TestStateManager_Load_InvalidJSON(t *testing.T) {
