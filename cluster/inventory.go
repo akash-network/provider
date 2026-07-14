@@ -331,11 +331,35 @@ func (is *inventoryService) resourcesToCommit(rgroup dtypes.ResourceGroup) dtype
 
 	result := dtypes.GroupSpec{
 		Name:         rgroup.GetName(),
-		Requirements: atypes.PlacementRequirements{},
+		Requirements: placementRequirements(rgroup),
 		Resources:    replacedResources,
 	}
 
 	return result
+}
+
+// placementRequirements extracts the on-chain placement requirements from
+// the concrete ResourceGroup shapes the bid path produces. The committed
+// copy must carry them (CS-6 / AKT-406): the inventory client's Adjust
+// reads the `capabilities/gpu-interconnect/fabric/...` pin off
+// reservation.Resources() to gate interconnect node selection — an empty
+// Requirements here silently disabled the tenant's fabric pin.
+// Restart-recovered reservations are built from the off-chain manifest
+// group instead, which carries no requirements; those stay permissive
+// (their pods are already placed, only capacity re-accounting happens).
+func placementRequirements(rgroup dtypes.ResourceGroup) atypes.PlacementRequirements {
+	switch rg := rgroup.(type) {
+	case *dtypes.Group:
+		return rg.GroupSpec.Requirements
+	case dtypes.Group:
+		return rg.GroupSpec.Requirements
+	case *dtypes.GroupSpec:
+		return rg.Requirements
+	case dtypes.GroupSpec:
+		return rg.Requirements
+	default:
+		return atypes.PlacementRequirements{}
+	}
 }
 
 func (is *inventoryService) updateInventoryMetrics(metrics inventoryV1.Metrics) {
