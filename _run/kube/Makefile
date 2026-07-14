@@ -135,13 +135,26 @@ clean-kube:
 .PHONY: kube-deployments-rollout
 kube-deployments-rollout: #$(patsubst %, kube-deployment-rollout-%,$(KUSTOMIZE_INSTALLS))
 
-.PHONY: kube-setup-kube
+# Gateway API and confidential compute are orthogonal: append each mode's setup
+# as an independent prerequisite so both run when both flags are true.
+KUBE_SETUP_KUBE_DEPS :=
 ifeq ($(GATEWAY_API),true)
-kube-setup-kube: kube-setup-hostname-operator-gateway
+KUBE_SETUP_KUBE_DEPS += kube-setup-gateway
+endif
+ifeq ($(CONFIDENTIAL_COMPUTE),true)
+KUBE_SETUP_KUBE_DEPS += kube-setup-confidential-compute
+endif
+
+.PHONY: kube-setup-kube
+kube-setup-kube: $(KUBE_SETUP_KUBE_DEPS)
+
+.PHONY: kube-setup-gateway
+kube-setup-gateway: kube-setup-hostname-operator-gateway
 	@echo "  [GW] Persisting Gateway API configuration to cache..."
 	@touch $(GW_MARKER)
-else ifeq ($(CONFIDENTIAL_COMPUTE),true)
-kube-setup-kube:
+
+.PHONY: kube-setup-confidential-compute
+kube-setup-confidential-compute:
 	@echo "  [CC] Persisting CC configuration to cache..."
 	@touch $(CC_MARKER)
 	@echo "  [CC] Labeling nodes for confidential compute scheduling..."
@@ -154,9 +167,6 @@ kube-setup-kube:
 			--overwrite; \
 	done
 	@echo "  [CC] Dev cluster setup complete (RuntimeClasses + node labels + sidecar)."
-else
-kube-setup-kube:
-endif
 
 .PHONY: kube-setup-ingress-gateway
 kube-setup-ingress-gateway:
