@@ -6,7 +6,7 @@ COPY provider-services /usr/bin/
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN \
-    go install github.com/go-delve/delve/cmd/dlv@latest \
+    go install github.com/go-delve/delve/cmd/dlv@v1.26.3 \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
     tini \

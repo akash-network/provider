@@ -77,7 +77,9 @@ type checkDeploymentExistsRequest struct {
 // Cluster is the interface that wraps Reserve and Unreserve methods
 type Cluster interface {
 	Reserve(mtypes.OrderID, dtypes.ResourceGroup) (ctypes.Reservation, error)
+	ReserveBid(mtypes.BidID, dtypes.ResourceGroup) (ctypes.Reservation, error)
 	Unreserve(mtypes.OrderID) error
+	UnreserveBid(mtypes.BidID) error
 }
 
 // StatusClient is the interface which includes status of service
@@ -225,8 +227,16 @@ func (s *service) Reserve(order mtypes.OrderID, resources dtypes.ResourceGroup) 
 	return s.inventory.reserve(order, resources)
 }
 
+func (s *service) ReserveBid(bid mtypes.BidID, resources dtypes.ResourceGroup) (ctypes.Reservation, error) {
+	return s.inventory.reserveBid(bid, resources)
+}
+
 func (s *service) Unreserve(order mtypes.OrderID) error {
 	return s.inventory.unreserve(order)
+}
+
+func (s *service) UnreserveBid(bid mtypes.BidID) error {
+	return s.inventory.unreserveBid(bid)
 }
 
 func (s *service) HostnameService() ctypes.HostnameServiceClient {
@@ -353,7 +363,7 @@ loop:
 					break
 				}
 
-				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
+				reservation, err := s.inventory.lookupBid(ev.LeaseID.BidID(), mgroup)
 				if err != nil {
 					s.log.Error("error looking up manifest", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
 					break
