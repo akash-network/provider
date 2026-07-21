@@ -411,8 +411,13 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	default:
 	}
 
-	err := req.value.Manifest.Validate()
-	if err != nil {
+	// Any failure from Manifest.Validate is a client-side validation error.
+	// Ensure it is classified as such even if the upstream error is not already
+	// tagged with ErrInvalidManifest, so the gateway returns 4xx rather than 500.
+	if err := req.value.Manifest.Validate(); err != nil {
+		if !errors.Is(err, maniv2beta2.ErrInvalidManifest) {
+			err = fmt.Errorf("%w: %w", maniv2beta2.ErrInvalidManifest, err)
+		}
 		return err
 	}
 

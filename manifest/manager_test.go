@@ -1,5 +1,17 @@
 package manifest
 
+import (
+	"context"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	maniv2beta2 "pkg.akt.dev/go/manifest/v2beta3"
+
+	"github.com/akash-network/provider/utils/httperror"
+)
+
 // import (
 // 	"context"
 // 	"testing"
@@ -421,3 +433,39 @@ package manifest
 // 		t.Fatal("timed out waiting for service shutdown")
 // 	}
 // }
+
+// TestValidateRequestWrapsManifestError ensures that a manifest validation
+// failure is tagged with ErrInvalidManifest, even when the underlying error
+// from Manifest.Validate is not already tagged. This keeps the gateway from
+// returning a 500 for what is a client-side error (see akash-network/support#421).
+func TestValidateRequestWrapsManifestError(t *testing.T) {
+	// A service with zero-value (nil) resources fails resource validation with a
+	// raw error that upstream does not tag with ErrInvalidManifest.
+	mani := maniv2beta2.Manifest{
+		{
+			Name: "group1",
+			Services: []maniv2beta2.Service{
+				{
+					Name:  "svc1",
+					Image: "test-image",
+					Count: 1,
+				},
+			},
+		},
+	}
+
+	rawErr := mani.Validate()
+	require.Error(t, rawErr)
+	require.NotErrorIs(t, rawErr, maniv2beta2.ErrInvalidManifest,
+		"precondition: upstream error is expected to be untagged")
+
+	m := &manager{}
+	err := m.validateRequest(manifestRequest{
+		ctx:   context.Background(),
+		value: &submitRequest{Manifest: mani},
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, maniv2beta2.ErrInvalidManifest)
+	require.Equal(t, http.StatusUnprocessableEntity,
+		httperror.StatusCodeFrom(ManifestSubmitErrorToHTTP(err)))
+}
