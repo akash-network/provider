@@ -14,19 +14,18 @@ import (
 )
 
 type Config struct {
-	ClusterWaitReadyDuration    time.Duration
-	ClusterPublicHostname       string
-	ClusterExternalPortQuantity uint
-	BidPricingStrategy          bidengine.BidPricingStrategy
-	BidDeposit                  sdk.Coin
-	BidTimeout                  time.Duration
-	ManifestTimeout             time.Duration
-	BalanceCheckerCfg           BalanceCheckerConfig
-	Attributes                  attrtypes.Attributes
-	MaxGroupVolumes             int
-	RPCQueryTimeout             time.Duration
-	CachedResultMaxAge          time.Duration
-	ReclamationWindow           *time.Duration
+	ClusterWaitReadyDuration time.Duration
+	ClusterPublicHostname    string
+	BidPricingStrategy       bidengine.BidPricingStrategy
+	BidDeposit               sdk.Coin
+	BidTimeout               time.Duration
+	ManifestTimeout          time.Duration
+	BalanceCheckerCfg        BalanceCheckerConfig
+	Attributes               attrtypes.Attributes
+	MaxGroupVolumes          int
+	RPCQueryTimeout          time.Duration
+	CachedResultMaxAge       time.Duration
+	ReclamationWindow        *time.Duration
 	cluster.Config
 }
 

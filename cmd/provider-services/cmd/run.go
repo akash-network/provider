@@ -656,7 +656,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	config := provider.NewDefaultConfig()
 	config.ClusterWaitReadyDuration = clusterWaitReadyDuration
 	config.ClusterPublicHostname = clusterPublicHostname
-	config.ClusterExternalPortQuantity = nodePortQuantity
+	config.InventoryExternalPortQuantity = nodePortQuantity
 	config.InventoryResourceDebugFrequency = inventoryResourceDebugFreq
 	config.InventoryResourcePollPeriod = inventoryResourcePollPeriod
 	config.CPUCommitLevel = overcommitPercentCPU
