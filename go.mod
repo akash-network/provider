@@ -6,6 +6,7 @@ require (
 	cosmossdk.io/errors v1.0.2
 	cosmossdk.io/log v1.6.1
 	cosmossdk.io/math v1.5.3
+	github.com/BurntSushi/toml v1.5.0
 	github.com/avast/retry-go/v4 v4.6.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/boz/go-lifecycle v0.1.1
@@ -51,6 +52,7 @@ require (
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
+	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	pkg.akt.dev/go v0.4.1
 	pkg.akt.dev/go/cli v0.2.4
 	pkg.akt.dev/go/sdl v0.4.1
@@ -131,7 +133,6 @@ require (
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/CosmWasm/wasmd v0.61.7 // indirect
 	github.com/CosmWasm/wasmvm/v3 v3.0.2 // indirect
 	github.com/DataDog/datadog-go v4.8.3+incompatible // indirect
@@ -380,7 +381,6 @@ require (
 	k8s.io/gengo/v2 v2.0.0-20250820003526-c297c0c1eb9d // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
-	k8s.io/utils v0.0.0-20260108192941-914a6e750570 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 	pgregory.net/rapid v1.2.0 // indirect
 	pkg.akt.dev/specs v0.0.1 // indirect

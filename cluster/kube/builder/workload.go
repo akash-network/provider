@@ -357,12 +357,36 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 
 func (b *Workload) podAnnotations() map[string]string {
 	params := b.sparams[b.serviceIdx]
+	annotations := map[string]string{}
+
 	if params != nil && params.AttestationDisabled {
-		return map[string]string{
-			AkashAttestationDisabledAnnotation: "true",
+		annotations[AkashAttestationDisabledAnnotation] = ValTrue
+	}
+
+	// For confidential-compute workloads the container image is pulled inside
+	// the guest, so the host-side imagePullSecrets never reach it. Deliver the
+	// tenant's registry credentials into the guest via measured initdata so
+	// image-rs can pull private images without a KBS or attestation. The
+	// host-side imagePullSecret is still set (see imagePullSecrets) for the
+	// host-side manifest resolve.
+	if params != nil && params.RuntimeClass.Is(WithCC()) {
+		if creds := b.group.Services[b.serviceIdx].Credentials; creds != nil {
+			value, err := ccImageRegistryAuthAnnotation(creds)
+			switch {
+			case err != nil:
+				b.log.Error("failed to build confidential-compute registry auth initdata; private image pulls may fail",
+					"service", b.group.Services[b.serviceIdx].Name, "err", err)
+			case value != "":
+				annotations[ccInitDataAnnotation] = value
+			}
 		}
 	}
-	return nil
+
+	if len(annotations) == 0 {
+		return nil
+	}
+
+	return annotations
 }
 
 func (b *Workload) runtimeClass() *string {
