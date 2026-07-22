@@ -261,6 +261,9 @@ dockers:
     build_flag_templates:
       - --pull
       - --platform=linux/amd64
+      - --build-arg=GRPCURL_VERSION={{ .Env.GRPCURL_VERSION }}
+      - --build-arg=GRPCURL_SHA256_AMD64={{ .Env.GRPCURL_SHA256_AMD64 }}
+      - --build-arg=GRPCURL_SHA256_ARM64={{ .Env.GRPCURL_SHA256_ARM64 }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
@@ -281,6 +284,9 @@ dockers:
     build_flag_templates:
       - --pull
       - --platform=linux/arm64
+      - --build-arg=GRPCURL_VERSION={{ .Env.GRPCURL_VERSION }}
+      - --build-arg=GRPCURL_SHA256_AMD64={{ .Env.GRPCURL_SHA256_AMD64 }}
+      - --build-arg=GRPCURL_SHA256_ARM64={{ .Env.GRPCURL_SHA256_ARM64 }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url=https://github.com/akash-network/provider
