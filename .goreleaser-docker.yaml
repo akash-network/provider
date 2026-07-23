@@ -114,6 +114,9 @@ dockers:
     goarch: amd64
     build_flag_templates:
       - --platform=linux/amd64
+      - --build-arg=GRPCURL_VERSION={{ .Env.GRPCURL_VERSION }}
+      - --build-arg=GRPCURL_SHA256_AMD64={{ .Env.GRPCURL_SHA256_AMD64 }}
+      - --build-arg=GRPCURL_SHA256_ARM64={{ .Env.GRPCURL_SHA256_ARM64 }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url={{.GitURL}}
@@ -131,6 +134,9 @@ dockers:
     goarch: arm64
     build_flag_templates:
       - --platform=linux/arm64
+      - --build-arg=GRPCURL_VERSION={{ .Env.GRPCURL_VERSION }}
+      - --build-arg=GRPCURL_SHA256_AMD64={{ .Env.GRPCURL_SHA256_AMD64 }}
+      - --build-arg=GRPCURL_SHA256_ARM64={{ .Env.GRPCURL_SHA256_ARM64 }}
       - --label=org.opencontainers.image.title={{ .ProjectName }}
       - --label=org.opencontainers.image.description={{ .ProjectName }}
       - --label=org.opencontainers.image.url={{.GitURL}}
