@@ -382,6 +382,13 @@ func buildDirective(ev chostname.ResourceEvent, serviceExpose crd.ManifestServic
 		directive.NextCases = serviceExpose.HTTPOptions.NextCases
 	}
 
+	// proxy_buffer_size is intentionally left unset (0) in the manifest so its
+	// version hash stays byte-identical to older manifests. Imply the default
+	// here, at the ingress layer, where it never enters the hash.
+	if directive.ProxyBufferSize == 0 {
+		directive.ProxyBufferSize = 16384
+	}
+
 	return directive
 }
 
