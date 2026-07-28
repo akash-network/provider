@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -101,6 +102,8 @@ const (
 	FlagDeploymentBlockedHostnames       = "deployment-blocked-hostnames"
 	FlagAuthPem                          = "auth-pem"
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
+	FlagCCPersistenceKBSURL              = "cc-persistence-kbs-url"
+	FlagCCPersistenceMasterKey           = "cc-persistence-master-key"
 	FlagBidTimeout                       = "bid-timeout"
 	FlagReclamationWindow                = "reclamation-window"
 	FlagManifestTimeout                  = "manifest-timeout"
@@ -492,6 +495,8 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	overcommitPercentMemory := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentMemory)/100.0)
 	blockedHostnames := viper.GetStringSlice(FlagDeploymentBlockedHostnames)
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
+	ccPersistenceKBSURL := viper.GetString(FlagCCPersistenceKBSURL)
+	ccPersistenceMasterKeyB64 := viper.GetString(FlagCCPersistenceMasterKey)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
 	reclamationWindow := viper.GetDuration(FlagReclamationWindow)
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
@@ -556,6 +561,28 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.StorageCommitLevel = overcommitPercentStorage
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
+	kubeSettings.CCPersistenceKBSURL = strings.TrimSpace(ccPersistenceKBSURL)
+
+	// Master key for deriving confidential-storage DEKs. Required (and must be
+	// stable) when the feature is enabled; if unset we generate an ephemeral one
+	// so single-session testing works, warning that persistence will not survive
+	// a provider restart.
+	if kubeSettings.CCPersistenceKBSURL != "" {
+		if mk := strings.TrimSpace(ccPersistenceMasterKeyB64); mk != "" {
+			decoded, derr := base64.StdEncoding.DecodeString(mk)
+			if derr != nil {
+				return fmt.Errorf("invalid %s: %w", FlagCCPersistenceMasterKey, derr)
+			}
+			kubeSettings.CCPersistenceMasterKey = decoded
+		} else {
+			ephemeral := make([]byte, 32)
+			if _, rerr := crypto_rand.Read(ephemeral); rerr != nil {
+				return fmt.Errorf("generate cc-persistence master key: %w", rerr)
+			}
+			kubeSettings.CCPersistenceMasterKey = ephemeral
+			logger.Info("cc-persistence: no master key configured; generated an ephemeral one — confidential persistent data will be lost across provider restarts. Set --cc-persistence-master-key for production.")
+		}
+	}
 
 	// Discover all API server endpoint addresses for network policies.
 	// HA control planes expose multiple backends in the "kubernetes" Endpoints

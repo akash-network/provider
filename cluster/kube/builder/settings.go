@@ -80,6 +80,19 @@ type Settings struct {
 
 	// Gateway provider when using gateway-api mode
 	GatewayProvider string
+
+	// CCPersistenceKBSURL is the Key Broker Service (Trustee) endpoint the
+	// confidential guest's attestation-agent uses to retrieve per-lease volume
+	// encryption keys (DEKs) for persistent confidential storage. When empty the
+	// feature is disabled and CC + persistent volumes must be rejected upstream
+	// (bid/inventory) rather than silently losing data.
+	CCPersistenceKBSURL string
+
+	// CCPersistenceMasterKey is the provider secret from which per-lease volume
+	// encryption keys (DEKs) are deterministically derived. It must be stable
+	// across provider restarts (set via flag) so persistent confidential data
+	// remains decryptable.
+	CCPersistenceMasterKey []byte
 }
 
 var ErrSettingsValidation = errors.New("settings validation")

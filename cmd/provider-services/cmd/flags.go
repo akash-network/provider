@@ -176,6 +176,16 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().String(FlagCCPersistenceKBSURL, "", "Key Broker Service (Trustee) URL for confidential-compute persistent storage; empty disables the feature")
+	if err := viper.BindPFlag(FlagCCPersistenceKBSURL, cmd.Flags().Lookup(FlagCCPersistenceKBSURL)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagCCPersistenceMasterKey, "", "base64-encoded master key from which confidential-storage volume keys are derived; must be stable across restarts (auto-generated ephemerally if unset)")
+	if err := viper.BindPFlag(FlagCCPersistenceMasterKey, cmd.Flags().Lookup(FlagCCPersistenceMasterKey)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Duration(FlagBidTimeout, 5*time.Minute, "time after which bids are cancelled if no lease is created")
 	if err := viper.BindPFlag(FlagBidTimeout, cmd.Flags().Lookup(FlagBidTimeout)); err != nil {
 		return err

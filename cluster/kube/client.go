@@ -559,6 +559,13 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 			return err
 		}
 
+		// Register per-lease DEKs in KBS for confidential persistent volumes
+		// before the guest attests and retrieves them. Fails loud if the feature
+		// is requested but cannot be honored.
+		if err = c.provisionCCPersistenceKeys(ctx, settings, workload); err != nil {
+			return err
+		}
+
 		service := &group.Services[svcIdx]
 
 		svc := &deploymentService{}

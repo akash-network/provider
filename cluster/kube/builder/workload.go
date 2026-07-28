@@ -248,10 +248,27 @@ func (b *Workload) container() corev1.Container {
 	}
 
 	if service.Params != nil {
+		// Confidential persistent volumes are attached as raw block devices
+		// (volumeDevices); the kata-agent dm-crypts and mounts them at the SDL
+		// mount path inside the guest. All other volumes are ordinary filesystem
+		// mounts.
+		ccPersistDev := map[string]string{}
+		for _, v := range b.ccPersistentVolumes() {
+			ccPersistDev[v.VolumeName] = v.DevicePath
+		}
+
 		for _, params := range service.Params.Storage {
+			name := fmt.Sprintf("%s-%s", service.Name, params.Name)
+			if devicePath, ok := ccPersistDev[params.Name]; ok {
+				kcontainer.VolumeDevices = append(kcontainer.VolumeDevices, corev1.VolumeDevice{
+					Name:       name,
+					DevicePath: devicePath,
+				})
+				continue
+			}
 			kcontainer.VolumeMounts = append(kcontainer.VolumeMounts, corev1.VolumeMount{
 				// matches VolumeName in persistentVolumeClaims below
-				Name:      fmt.Sprintf("%s-%s", service.Name, params.Name),
+				Name:      name,
 				ReadOnly:  params.ReadOnly,
 				MountPath: params.Mount,
 			})
@@ -325,7 +342,15 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 			continue
 		}
 
+		// Confidential workloads cannot use Filesystem-mode PVCs: virtio-fs is
+		// disabled (shared_fs=none) so the mount never reaches the guest and kata
+		// silently substitutes tmpfs. A Block-mode PVC hot-plugs into the guest as
+		// a raw device that the kata-agent dm-crypts and mounts (see
+		// cc_persistent_storage.go).
 		volumeMode := corev1.PersistentVolumeFilesystem
+		if b.isCC() {
+			volumeMode = corev1.PersistentVolumeBlock
+		}
 		pvc := corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: fmt.Sprintf("%s-%s", service.Name, storage.Name),
@@ -379,6 +404,17 @@ func (b *Workload) podAnnotations() map[string]string {
 			case value != "":
 				annotations[ccInitDataAnnotation] = value
 			}
+		}
+
+		// Confidential persistent storage: point the guest at the KBS and describe
+		// each block volume's device→mount→key mapping via kernel_params. The
+		// kata-agent retrieves the per-lease key from KBS after attestation and
+		// dm-crypts + mounts the device. See cc_persistent_storage.go.
+		if value, ok, err := b.ccSecureStorageKernelParams(); err != nil {
+			b.log.Error("failed to build confidential persistent storage kernel params; durable storage will not be provisioned",
+				"service", b.group.Services[b.serviceIdx].Name, "err", err)
+		} else if ok {
+			annotations[ccKernelParamsAnnotation] = value
 		}
 	}
 
