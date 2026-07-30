@@ -369,7 +369,6 @@ func buildDirective(ev chostname.ResourceEvent, serviceExpose crd.ManifestServic
 		directive.SendTimeout = 60000
 		directive.NextTimeout = 60000
 		directive.MaxBodySize = 1048576
-		directive.ProxyBufferSize = 16384
 		directive.NextTries = 3
 		directive.NextCases = []string{"error", "timeout"}
 	} else {
@@ -377,7 +376,6 @@ func buildDirective(ev chostname.ResourceEvent, serviceExpose crd.ManifestServic
 		directive.SendTimeout = serviceExpose.HTTPOptions.SendTimeout
 		directive.NextTimeout = serviceExpose.HTTPOptions.NextTimeout
 		directive.MaxBodySize = serviceExpose.HTTPOptions.MaxBodySize
-		directive.ProxyBufferSize = serviceExpose.HTTPOptions.ProxyBufferSize
 		directive.NextTries = serviceExpose.HTTPOptions.NextTries
 		directive.NextCases = serviceExpose.HTTPOptions.NextCases
 	}
