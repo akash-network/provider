@@ -95,6 +95,7 @@ const (
 	FlagDeploymentIngressExposeLBHosts   = "deployment-ingress-expose-lb-hosts"
 	FlagDeploymentNetworkPoliciesEnabled = "deployment-network-policies-enabled"
 	FlagDockerImagePullSecretsName       = "docker-image-pull-secrets-name" // nolint: gosec
+	FlagInterconnectRoCENetworksNS       = "interconnect-roce-networks-namespace"
 	FlagOvercommitPercentMemory          = "overcommit-pct-mem"
 	FlagOvercommitPercentCPU             = "overcommit-pct-cpu"
 	FlagOvercommitPercentStorage         = "overcommit-pct-storage"
@@ -557,6 +558,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.StorageCommitLevel = overcommitPercentStorage
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
+	kubeSettings.InterconnectRoCENetworksNamespace = strings.TrimSpace(viper.GetString(FlagInterconnectRoCENetworksNS))
 
 	// Discover all API server endpoint addresses for network policies.
 	// HA control planes expose multiple backends in the "kubernetes" Endpoints

@@ -80,6 +80,26 @@ type Settings struct {
 
 	// Gateway provider when using gateway-api mode
 	GatewayProvider string
+
+	// InterconnectRoCENetworksNamespace is the namespace the kube client
+	// scans for multus NetworkAttachmentDefinitions to attach to
+	// interconnect workloads when the pinned fabric is RoCE. Operators
+	// create one NAD per rail there (and nothing else); the provider picks
+	// them all up at deploy time, so adding a rail needs no provider
+	// restart. Empty disables the attachment entirely.
+	InterconnectRoCENetworksNamespace string
+
+	// InterconnectRoCENetworks is the resolved comma-separated list of
+	// NAD references ("namespace/name") applied verbatim as the pod's
+	// `k8s.v1.cni.cncf.io/networks` annotation on RoCE-pinned interconnect
+	// workloads. Populated per-deploy by the kube client from the NADs
+	// found in InterconnectRoCENetworksNamespace — not set from provider
+	// flags. RoCEv2 is IP-addressed: building a QP resolves the remote
+	// rail IP through the pod's own network namespace, so the pod needs
+	// the rail netdevs (and the RoCEv2 GIDs they register) — the RDMA
+	// verbs device alone is not enough. InfiniBand is LID-addressed and
+	// needs no attachment.
+	InterconnectRoCENetworks string
 }
 
 var ErrSettingsValidation = errors.New("settings validation")

@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime/debug"
 	"slices"
+	"sort"
 	"strings"
 
 	"cosmossdk.io/log"
@@ -20,6 +21,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/version"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
@@ -47,6 +49,14 @@ var (
 	kubeCallsCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "provider_kube_calls",
 	}, []string{"action", "result"})
+
+	// nadGVR addresses multus NetworkAttachmentDefinitions via the dynamic
+	// client — the typed clientset for k8s.cni.cncf.io is not vendored.
+	nadGVR = schema.GroupVersionResource{
+		Group:    "k8s.cni.cncf.io",
+		Version:  "v1",
+		Resource: "network-attachment-definitions",
+	}
 )
 
 // Client interface includes cluster client
@@ -409,6 +419,59 @@ type deployObjNames struct {
 	services     map[string]string
 }
 
+// deploymentNeedsRoCENetworks reports whether any service in the deployment
+// carries an interconnect pin on a RoCE fabric — the only case where rail
+// NetworkAttachmentDefinitions must be attached to the pods.
+func deploymentNeedsRoCENetworks(d builder.IClusterDeployment) bool {
+	for _, sp := range d.ClusterParams().SchedulerParams {
+		if sp == nil || sp.Resources == nil || sp.Resources.Interconnect == nil {
+			continue
+		}
+		if ic := sp.Resources.Interconnect; ic.Enabled && ic.Fabric == builder.InterconnectFabricRoCE {
+			return true
+		}
+	}
+	return false
+}
+
+// interconnectRoCENetworks resolves the multus annotation value for RoCE
+// interconnect workloads: every NetworkAttachmentDefinition in the rails
+// namespace, sorted by name, as "namespace/name" references. A RoCE pod
+// without the rail netdevs cannot establish RDMA connections at all, so a
+// configured namespace that resolves no NADs — missing namespace, empty
+// namespace, or a cluster without the multus CRD (NotFound) — fails the
+// deploy with ErrNoRoCERailNetworks rather than delivering a broken lease.
+// An empty namespace argument is the explicit operator opt-out and returns
+// no networks without an API call.
+func (c *client) interconnectRoCENetworks(ctx context.Context, namespace string) (string, error) {
+	if namespace == "" {
+		return "", nil
+	}
+
+	list, err := c.dc.Resource(nadGVR).Namespace(namespace).List(ctx, metav1.ListOptions{})
+	metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "nad-list", err, kerrors.IsNotFound)
+
+	if err != nil {
+		if kerrors.IsNotFound(err) {
+			return "", fmt.Errorf("%w: namespace %q (multus CRD not installed)", kubeclienterrors.ErrNoRoCERailNetworks, namespace)
+		}
+		return "", err
+	}
+
+	if len(list.Items) == 0 {
+		return "", fmt.Errorf("%w: namespace %q", kubeclienterrors.ErrNoRoCERailNetworks, namespace)
+	}
+
+	refs := make([]string, 0, len(list.Items))
+	for idx := range list.Items {
+		refs = append(refs, namespace+"/"+list.Items[idx].GetName())
+	}
+
+	sort.Strings(refs)
+
+	return strings.Join(refs, ","), nil
+}
+
 func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err error) {
 	var settings builder.Settings
 	var valid bool
@@ -439,6 +502,25 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 	lid := cdeployment.LeaseID()
 	group := cdeployment.ManifestGroup()
+
+	// RoCE interconnect pods need the rail NADs in their netns (see
+	// builder.Workload.podAnnotations). Resolved per-deploy so rails added
+	// by the operator are picked up without a provider restart. No rails
+	// found fails the deploy — a RoCE pod without them cannot do RDMA, and
+	// a loud failure beats a broken lease the tenant pays for. An empty
+	// namespace is the explicit opt-out.
+	if deploymentNeedsRoCENetworks(cdeployment) {
+		if settings.InterconnectRoCENetworksNamespace == "" {
+			c.log.Info("RoCE rail network attachment disabled (empty namespace); interconnect pods will not reach the rail fabric", "lease", lid)
+		} else {
+			networks, nerr := c.interconnectRoCENetworks(ctx, settings.InterconnectRoCENetworksNamespace)
+			if nerr != nil {
+				return nerr
+			}
+
+			settings.InterconnectRoCENetworks = networks
+		}
+	}
 
 	po := &previousObj{}
 

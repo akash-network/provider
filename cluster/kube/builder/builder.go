@@ -96,10 +96,19 @@ const (
 	// NCCL tuning vars, injected only for services whose reservation
 	// pinned an interconnect HCA. Tenants may override any of these by
 	// setting the same key in service.env (addIfNotPresent honors that).
-	envVarNCCLIBDisable     = "NCCL_IB_DISABLE"
-	envVarNCCLIBHCA         = "NCCL_IB_HCA"
-	envVarNCCLIBGIDIndex    = "NCCL_IB_GID_INDEX"
-	nccLIBGIDIndexRoCEValue = "3"
+	envVarNCCLIBDisable  = "NCCL_IB_DISABLE"
+	envVarNCCLIBHCA      = "NCCL_IB_HCA"
+	envVarNCCLIBGIDIndex = "NCCL_IB_GID_INDEX"
+)
+
+const (
+	// InterconnectFabricRoCE matches SchedulerResourceInterconnect.Fabric as
+	// stamped by tryAdjustInterconnect from the node's discovered link layer.
+	InterconnectFabricRoCE = "roce"
+
+	// multusNetworksAnnotation is the standard CNCF annotation multus watches
+	// to attach secondary networks (NetworkAttachmentDefinitions) to a pod.
+	multusNetworksAnnotation = "k8s.v1.cni.cncf.io/networks"
 )
 
 var (
