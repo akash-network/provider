@@ -11,22 +11,23 @@ import (
 
 	"github.com/akash-network/provider/bidengine"
 	"github.com/akash-network/provider/cluster"
+	"github.com/akash-network/provider/manifest"
 )
 
 type Config struct {
-	ClusterWaitReadyDuration    time.Duration
-	ClusterPublicHostname       string
-	ClusterExternalPortQuantity uint
-	BidPricingStrategy          bidengine.BidPricingStrategy
-	BidDeposit                  sdk.Coin
-	BidTimeout                  time.Duration
-	ManifestTimeout             time.Duration
-	BalanceCheckerCfg           BalanceCheckerConfig
-	Attributes                  attrtypes.Attributes
-	MaxGroupVolumes             int
-	RPCQueryTimeout             time.Duration
-	CachedResultMaxAge          time.Duration
-	ReclamationWindow           *time.Duration
+	ClusterWaitReadyDuration time.Duration
+	ClusterPublicHostname    string
+	BidPricingStrategy       bidengine.BidPricingStrategy
+	BidDeposit               sdk.Coin
+	BidTimeout               time.Duration
+	ManifestTimeout          time.Duration
+	BroadcastTimeout         time.Duration
+	BalanceCheckerCfg        BalanceCheckerConfig
+	Attributes               attrtypes.Attributes
+	MaxGroupVolumes          int
+	RPCQueryTimeout          time.Duration
+	CachedResultMaxAge       time.Duration
+	ReclamationWindow        *time.Duration
 	cluster.Config
 }
 
@@ -34,6 +35,7 @@ func NewDefaultConfig() Config {
 	return Config{
 		ClusterWaitReadyDuration: time.Second * 10,
 		BidDeposit:               mtypes.DefaultBidMinDeposit,
+		BroadcastTimeout:         manifest.DefaultBroadcastTimeout,
 		BalanceCheckerCfg: BalanceCheckerConfig{
 			LeaseFundsCheckInterval: 1 * time.Minute,
 			WithdrawalPeriod:        24 * time.Hour,

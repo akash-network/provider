@@ -7,11 +7,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/viper"
+
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"cosmossdk.io/log"
 
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 )
 
 // nginxGateway implements the Gateway API interface for NGINX Gateway Fabric.
@@ -99,7 +102,6 @@ func (n *nginxGateway) BuildHTTPRouteSpec(
 // - nginx.org/proxy-next-upstream-timeout: Retry timeout (retry policies experimental in Gateway API)
 // - nginx.org/proxy-next-upstream-tries: Maximum retry attempts
 // - nginx.org/proxy-next-upstream: Conditions for retrying requests
-// - nginx.org/proxy-buffer-size: Upstream response header buffer size
 //
 // Note: HTTPRoute.Spec.Rules[].Timeouts is not used because NGINX Gateway Fabric
 // does not support it yet (see https://github.com/nginx/nginx-gateway-fabric/issues/2164)
@@ -147,9 +149,10 @@ func (n *nginxGateway) BuildAnnotations(directive chostname.ConnectToDeploymentD
 		annotations["nginx.org/proxy-next-upstream"] = strBuilder.String()
 	}
 
-	// Proxy buffer size - sized to the upstream response headers (set via SDL http_options)
-	if directive.ProxyBufferSize > 0 {
-		annotations["nginx.org/proxy-buffer-size"] = strconv.Itoa(int(directive.ProxyBufferSize))
+	// TODO(temporary): read proxy-buffer-size from viper directly to avoid
+	// plumbing through GatewayConfig; move to GatewayConfig when more settings need it.
+	if v := viper.GetString(providerflags.FlagProxyBufferSize); v != "" {
+		annotations["nginx.org/proxy-buffer-size"] = v
 	}
 
 	return annotations

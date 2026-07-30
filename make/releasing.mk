@@ -4,6 +4,12 @@ GORELEASER_IMAGE         := ghcr.io/goreleaser/goreleaser-cross:$(GOTOOLCHAIN_SE
 GORELEASER_MOUNT_CONFIG  ?= false
 GORELEASER_MOD_MOUNT     ?= $(shell cat $(ROOT_DIR)/.github/repo | tr -d '\n')
 
+# grpcurl version and per-arch checksums bundled into the provider image. Read
+# from .env so bumping the release only touches that file, not the Dockerfile.
+GRPCURL_VERSION          ?= $(shell sed -n 's/^GRPCURL_VERSION=//p' $(ROOT_DIR)/.env)
+GRPCURL_SHA256_AMD64     ?= $(shell sed -n 's/^GRPCURL_SHA256_AMD64=//p' $(ROOT_DIR)/.env)
+GRPCURL_SHA256_ARM64     ?= $(shell sed -n 's/^GRPCURL_SHA256_ARM64=//p' $(ROOT_DIR)/.env)
+
 GORELEASER_SKIP_FLAGS    := $(GORELEASER_SKIP)
 GORELEASER_SKIP          :=
 
@@ -77,6 +83,9 @@ docker-image: wasmvm-libs
 		-e GOPATH=/go \
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
 		-e GOWORK="$(GORELEASER_GOWORK)" \
+		-e GRPCURL_VERSION="$(GRPCURL_VERSION)" \
+		-e GRPCURL_SHA256_AMD64="$(GRPCURL_SHA256_AMD64)" \
+		-e GRPCURL_SHA256_ARM64="$(GRPCURL_SHA256_ARM64)" \
 		-v $(GOPATH):/go \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
@@ -106,6 +115,9 @@ release: wasmvm-libs gen-changelog
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \
 		-e GOPATH=/go \
 		-e GOWORK="$(GORELEASER_GOWORK)" \
+		-e GRPCURL_VERSION="$(GRPCURL_VERSION)" \
+		-e GRPCURL_SHA256_AMD64="$(GRPCURL_SHA256_AMD64)" \
+		-e GRPCURL_SHA256_ARM64="$(GRPCURL_SHA256_ARM64)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(GOPATH):/go \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \

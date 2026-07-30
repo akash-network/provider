@@ -231,7 +231,7 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Duration(FlagTxBroadcastTimeout, 30*time.Second, "tx broadcast timeout. defaults to 30s")
+	cmd.Flags().Duration(FlagTxBroadcastTimeout, cfg.BroadcastTimeout, "tx broadcast timeout. defaults to 30s")
 	if err := viper.BindPFlag(FlagTxBroadcastTimeout, cmd.Flags().Lookup(FlagTxBroadcastTimeout)); err != nil {
 		return err
 	}
@@ -366,6 +366,11 @@ func addRunFlags(cmd *cobra.Command) error {
 
 	cmd.Flags().Bool(FlagAttestationMockMode, false, "Run attestation sidecar in mock mode (synthetic reports, no TEE hardware). For local development only")
 	if err := viper.BindPFlag(FlagAttestationMockMode, cmd.Flags().Lookup(FlagAttestationMockMode)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(providerflags.FlagProxyBufferSize, "16k", "NGINX proxy buffer size for upstream response headers")
+	if err := viper.BindPFlag(providerflags.FlagProxyBufferSize, cmd.Flags().Lookup(providerflags.FlagProxyBufferSize)); err != nil {
 		return err
 	}
 

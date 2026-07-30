@@ -15,6 +15,8 @@ import (
 
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
+	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
+	"pkg.akt.dev/go/sdl"
 	"pkg.akt.dev/go/testutil"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -687,4 +689,154 @@ func TestServiceStatusWithoutIngress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, status)
 	require.Len(t, status.URIs, 0)
+}
+
+func TestServiceStatusStatefulSetDetection(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	ns := builder.LidNS(lid)
+
+	lns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: ns,
+		},
+	}
+
+	testCases := []struct {
+		name             string
+		serviceName      string
+		services         manifest.Services
+		expectedWorkload string
+	}{
+		{
+			name:        "PersistentStorage_UsesStatefulSet",
+			serviceName: "postgres",
+			services: manifest.Services{
+				{
+					Name:  "postgres",
+					Image: "postgres:latest",
+					Resources: rtypes.Resources{
+						Storage: []rtypes.Storage{
+							{
+								Name:     "data",
+								Quantity: rtypes.NewResourceValue(10737418240), // 10Gi
+								Attributes: attrtypes.Attributes{
+									{
+										Key:   sdl.StorageAttributePersistent,
+										Value: "true",
+									},
+								},
+							},
+						},
+					},
+					Count: 1,
+				},
+			},
+			expectedWorkload: "StatefulSet",
+		},
+		{
+			name:        "NonPersistentStorage_UsesDeployment",
+			serviceName: "web",
+			services: manifest.Services{
+				{
+					Name:  "web",
+					Image: "nginx:latest",
+					Resources: rtypes.Resources{
+						Storage: []rtypes.Storage{
+							{
+								Name:     "tmp",
+								Quantity: rtypes.NewResourceValue(1073741824), // 1Gi
+								Attributes: attrtypes.Attributes{
+									{
+										Key:   sdl.StorageAttributePersistent,
+										Value: "false",
+									},
+								},
+							},
+						},
+					},
+					Count: 2,
+				},
+			},
+			expectedWorkload: "Deployment",
+		},
+		{
+			name:        "NoStorage_UsesDeployment",
+			serviceName: "api",
+			services: manifest.Services{
+				{
+					Name:      "api",
+					Image:     "myapp:latest",
+					Resources: rtypes.Resources{},
+					Count:     3,
+				},
+			},
+			expectedWorkload: "Deployment",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create the manifest
+			mg := &manifest.Group{
+				Name:     "test-group",
+				Services: tc.services,
+			}
+
+			cparams := crd.ClusterSettings{
+				SchedulerParams: make([]*crd.SchedulerParams, len(mg.Services)),
+			}
+
+			m, err := crd.NewManifest(testKubeClientNs, lid, mg, cparams)
+			require.NoError(t, err)
+
+			// Create the deployment or statefulset
+			var kobjs []runtime.Object
+			kobjs = append(kobjs, lns)
+
+			if tc.expectedWorkload == "StatefulSet" {
+				ss := &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      tc.serviceName,
+						Namespace: ns,
+					},
+					Spec: appsv1.StatefulSetSpec{},
+					Status: appsv1.StatefulSetStatus{
+						CurrentReplicas: 1,
+						Replicas:        1,
+					},
+				}
+				kobjs = append(kobjs, ss)
+			} else {
+				depl := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      tc.serviceName,
+						Namespace: ns,
+					},
+					Spec: appsv1.DeploymentSpec{},
+					Status: appsv1.DeploymentStatus{
+						AvailableReplicas: int32(tc.services[0].Count),
+						Replicas:          int32(tc.services[0].Count),
+					},
+				}
+				kobjs = append(kobjs, depl)
+			}
+
+			clientInterface := clientForTest(t, kobjs, []runtime.Object{m})
+
+			// Test ServiceStatus
+			status, err := clientInterface.ServiceStatus(context.Background(), lid, tc.serviceName)
+			require.NoError(t, err)
+			require.NotNil(t, status)
+			require.Equal(t, tc.serviceName, status.Name)
+
+			// Verify we can find the correct workload type
+			if tc.expectedWorkload == "StatefulSet" {
+				require.Equal(t, int32(1), status.Available)
+				require.Equal(t, int32(1), status.Total)
+			} else {
+				require.Equal(t, int32(tc.services[0].Count), status.Available)
+				require.Equal(t, int32(tc.services[0].Count), status.Total)
+			}
+		})
+	}
 }
