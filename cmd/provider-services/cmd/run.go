@@ -95,6 +95,10 @@ const (
 	FlagDeploymentIngressExposeLBHosts   = "deployment-ingress-expose-lb-hosts"
 	FlagDeploymentNetworkPoliciesEnabled = "deployment-network-policies-enabled"
 	FlagDockerImagePullSecretsName       = "docker-image-pull-secrets-name" // nolint: gosec
+	FlagCCKBSURL                         = "cc-kbs-url"
+	FlagCCKBSCertFile                    = "cc-kbs-cert-file"
+	FlagCCImageSecurityPolicyURI         = "cc-image-security-policy-uri"
+	FlagCCAgentPolicyFile                = "cc-agent-policy-file"
 	FlagOvercommitPercentMemory          = "overcommit-pct-mem"
 	FlagOvercommitPercentCPU             = "overcommit-pct-cpu"
 	FlagOvercommitPercentStorage         = "overcommit-pct-storage"
@@ -483,6 +487,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	deploymentIngressDomain := viper.GetString(FlagDeploymentIngressDomain)
 	deploymentNetworkPoliciesEnabled := viper.GetBool(FlagDeploymentNetworkPoliciesEnabled)
 	dockerImagePullSecretsName := viper.GetString(FlagDockerImagePullSecretsName)
+	ccKBSURL := strings.TrimSpace(viper.GetString(FlagCCKBSURL))
+	ccKBSCertFile := strings.TrimSpace(viper.GetString(FlagCCKBSCertFile))
+	ccImageSecurityPolicyURI := strings.TrimSpace(viper.GetString(FlagCCImageSecurityPolicyURI))
+	ccAgentPolicyFile := strings.TrimSpace(viper.GetString(FlagCCAgentPolicyFile))
 	strategy := viper.GetString(FlagBidPricingStrategy)
 	deploymentIngressExposeLBHosts := viper.GetBool(FlagDeploymentIngressExposeLBHosts)
 	overcommitPercentStorage := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentStorage)/100.0)
@@ -557,6 +565,15 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	kubeSettings.StorageCommitLevel = overcommitPercentStorage
 	kubeSettings.DeploymentRuntimeClass = deploymentRuntimeClass
 	kubeSettings.DockerImagePullSecretsName = strings.TrimSpace(dockerImagePullSecretsName)
+	kubeSettings.CCInitData, err = loadCCInitDataSettings(
+		ccKBSURL,
+		ccKBSCertFile,
+		ccImageSecurityPolicyURI,
+		ccAgentPolicyFile,
+	)
+	if err != nil {
+		return err
+	}
 
 	// Discover all API server endpoint addresses for network policies.
 	// HA control planes expose multiple backends in the "kubernetes" Endpoints
