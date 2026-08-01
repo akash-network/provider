@@ -6,10 +6,32 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 	atestutil "pkg.akt.dev/go/testutil"
 
 	mtestutil "github.com/akash-network/provider/testutil/manifest/v2beta2"
 )
+
+func TestManifestStorageKeyRefRoundTrip(t *testing.T) {
+	const keyRef = "sealed.header.payload.signature"
+	original := mani.Service{
+		Name: "proof",
+		Params: &mani.ServiceParams{Storage: []mani.StorageParams{{
+			Name:     "data",
+			Mount:    "/proof",
+			ReadOnly: false,
+			KeyRef:   keyRef,
+		}}},
+	}
+
+	stored, err := manifestServiceFromProvider(original, nil)
+	require.NoError(t, err)
+	require.Equal(t, keyRef, stored.Params.Storage[0].KeyRef)
+
+	recovered, err := stored.fromCRD()
+	require.NoError(t, err)
+	require.Equal(t, keyRef, recovered.Params.Storage[0].KeyRef)
+}
 
 func Test_Manifest_encoding(t *testing.T) {
 	for _, spec := range mtestutil.Generators {

@@ -200,6 +200,10 @@ spec:
                                       type: boolean
                                     mount:
                                       type: string
+                                    keyRef:
+                                      type: string
+                                      maxLength: 65536
+                                      pattern: '^$|^sealed\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
                               permissions:
                                 type: object
                                 nullable: true
@@ -397,6 +401,10 @@ spec:
                                       type: boolean
                                     mount:
                                       type: string
+                                    keyRef:
+                                      type: string
+                                      maxLength: 65536
+                                      pattern: '^$|^sealed\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$'
                               permissions:
                                 type: object
                                 nullable: true

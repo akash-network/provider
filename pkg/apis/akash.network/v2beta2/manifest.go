@@ -88,6 +88,7 @@ type ManifestStorageParams struct {
 	Name     string `json:"name"     yaml:"name"`
 	Mount    string `json:"mount"    yaml:"mount"`
 	ReadOnly bool   `json:"readOnly" yaml:"readOnly"`
+	KeyRef   string `json:"keyRef,omitempty" yaml:"keyRef,omitempty"`
 }
 
 type ManifestServicePermissions struct {
@@ -319,6 +320,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				Name:     storage.Name,
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
+				KeyRef:   storage.KeyRef,
 			})
 		}
 
@@ -385,6 +387,7 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				Name:     storage.Name,
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
+				KeyRef:   storage.KeyRef,
 			})
 		}
 
