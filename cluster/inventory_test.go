@@ -881,3 +881,71 @@ func TestPlacementRequirementsPreserved(t *testing.T) {
 		require.Empty(t, placementRequirements(nil).Attributes)
 	})
 }
+
+func TestTEETypeFromResourceGroup(t *testing.T) {
+	group := func(attrs attrtypes.Attributes) dvbeta.ResourceGroup {
+		return dvbeta.GroupSpec{
+			Requirements: attrtypes.PlacementRequirements{Attributes: attrs},
+		}
+	}
+
+	tests := []struct {
+		name    string
+		attrs   attrtypes.Attributes
+		want    ctypes.TEEType
+		wantErr string
+	}{
+		{name: "absent", want: ctypes.TEETypeNone},
+		{name: "CPU", attrs: attrtypes.Attributes{{Key: "tee/type", Value: "cpu"}}, want: ctypes.TEETypeCPU},
+		{name: "CPU and GPU", attrs: attrtypes.Attributes{{Key: "tee/type", Value: "cpu-gpu"}}, want: ctypes.TEETypeCPUGPU},
+		{name: "invalid", attrs: attrtypes.Attributes{{Key: "tee/type", Value: "future"}}, wantErr: "invalid tee/type"},
+		{name: "duplicate", attrs: attrtypes.Attributes{
+			{Key: "tee/type", Value: "cpu"},
+			{Key: "tee/type", Value: "cpu-gpu"},
+		}, wantErr: "duplicate tee/type"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := teeTypeFromResourceGroup(group(tt.attrs))
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.Equal(t, ctypes.TEETypeNone, got)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestTEETypeFromClusterParams(t *testing.T) {
+	tests := []struct {
+		name    string
+		params  []*crd.SchedulerParams
+		want    ctypes.TEEType
+		wantErr string
+	}{
+		{name: "absent", want: ctypes.TEETypeNone},
+		{name: "CPU", params: []*crd.SchedulerParams{{TEEType: "cpu"}}, want: ctypes.TEETypeCPU},
+		{name: "disabled ignored", params: []*crd.SchedulerParams{{TEEType: "future", AttestationDisabled: true}}, want: ctypes.TEETypeNone},
+		{name: "invalid", params: []*crd.SchedulerParams{{TEEType: "future"}}, wantErr: "invalid stored TEE type"},
+		{name: "conflicting", params: []*crd.SchedulerParams{
+			{TEEType: "cpu"},
+			{TEEType: "cpu-gpu"},
+		}, wantErr: "conflicting stored TEE types"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := teeTypeFromClusterParams(crd.ClusterSettings{SchedulerParams: tt.params})
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				require.Equal(t, ctypes.TEETypeNone, got)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}

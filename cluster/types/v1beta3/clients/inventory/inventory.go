@@ -283,7 +283,7 @@ func (inv *inventory) Dup() ctypes.Inventory {
 // tryAdjust cluster inventory
 // It returns two boolean values. First indicates if node-wide resources satisfy (true) requirements
 // Seconds indicates if cluster-wide resources satisfy (true) requirements
-func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) (*crd.SchedulerParams, bool, bool) {
+func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.TEEType, ccRuntimeClass builder.RuntimeClass) (*crd.SchedulerParams, bool, bool) {
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
@@ -291,7 +291,7 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.
 		return nil, false, true
 	}
 
-	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams, teeType, teePlatform) {
+	if !tryAdjustGPU(&nd.Resources.GPU, res.GPU, sparams, teeType, ccRuntimeClass) {
 		return nil, false, true
 	}
 
@@ -350,7 +350,7 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.
 	// sets it in tryAdjustGPU) and reserve sidecar resources.
 	if teeType.IsCC() {
 		if sparams.RuntimeClass == "" {
-			sparams.RuntimeClass = builder.RuntimeClassForTEEType(string(teeType), string(teePlatform))
+			sparams.RuntimeClass = ccRuntimeClass
 		}
 
 		sidecarCPU := rtypes.NewResourceValue(uint64(builder.SidecarCPULimitMillicores))
@@ -384,7 +384,7 @@ func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *rtypes.CPU) bool {
 	return rp.SubMilliNLZ(res.Units)
 }
 
-func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams, teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) bool {
+func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams, teeType ctypes.TEEType, ccRuntimeClass builder.RuntimeClass) bool {
 	reqCnt := res.Units.Value()
 
 	if reqCnt == 0 {
@@ -434,7 +434,7 @@ func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerPa
 			sparams.Resources.GPU.Model = info.Name
 
 			if teeType.IsCC() {
-				sparams.RuntimeClass = builder.RuntimeClassForTEEType(string(teeType), string(teePlatform))
+				sparams.RuntimeClass = ccRuntimeClass
 			}
 
 			key := fmt.Sprintf("vendor/%s/model/%s", vendor, info.Name)
@@ -477,6 +477,15 @@ func (inv *inventory) Adjust(reservation ctypes.ReservationGroup, opts ...ctypes
 		cfg = opt(cfg)
 	}
 
+	ccRuntimeClass := builder.RuntimeClass("")
+	if cfg.TEEType.IsCC() {
+		var err error
+		ccRuntimeClass, err = builder.RuntimeClassForTEEType(cfg.TEEType, cfg.TEEPlatform)
+		if err != nil {
+			return err
+		}
+	}
+
 	origResources := reservation.Resources().GetResourceUnits()
 	resources := make(dvbeta.ResourceUnits, 0, len(origResources))
 	adjustedResources := make(dvbeta.ResourceUnits, 0, len(origResources))
@@ -514,7 +523,7 @@ nodes:
 			}
 
 			for ; resources[i].Count > 0; resources[i].Count-- {
-				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, cfg.TEEType, cfg.TEEPlatform)
+				sparams, nStatus, cStatus := currInventory.tryAdjust(nodeIdx, adjusted, cfg.TEEType, ccRuntimeClass)
 				if !cStatus {
 					// cannot satisfy cluster-wide resources, stop lookup
 					break nodes

@@ -105,8 +105,9 @@ type Client interface {
 	// When service is empty, the first pod with a sidecar is used (legacy behavior).
 	AttestationQuote(ctx context.Context, lID mtypes.LeaseID, service string, podIndex uint, requestBody []byte) ([]byte, int, error)
 
-	// DetectTEEPlatform probes K8s node labels to determine the TEE platform
-	// available on the cluster (TDX or SNP). Returns TEEPlatformNone if no CC nodes found.
+	// DetectTEEPlatform probes managed K8s node labels to determine the TEE
+	// platform available to Akash workloads. It returns TEEPlatformNone when
+	// discovery cannot resolve one homogeneous platform.
 	DetectTEEPlatform(ctx context.Context) ctypes.TEEPlatform
 }
 
