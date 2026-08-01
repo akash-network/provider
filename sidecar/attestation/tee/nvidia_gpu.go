@@ -115,68 +115,113 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 	}
 
 	deviceCount := binary.LittleEndian.Uint32(data[0:4])
-	off := 4
-
-	reports := make([]GPUDeviceReport, 0, deviceCount)
-
-	for i := uint32(0); i < deviceCount; i++ {
-		if off+4 > len(data) {
-			return nil, fmt.Errorf("truncated output at device %d index", i)
-		}
-		devIdx := binary.LittleEndian.Uint32(data[off : off+4])
-		off += 4
-
-		if off+4 > len(data) {
-			return nil, fmt.Errorf("truncated output at device %d report size", i)
-		}
-		reportSize := binary.LittleEndian.Uint32(data[off : off+4])
-		off += 4
-
-		if off+int(reportSize) > len(data) {
-			return nil, fmt.Errorf("truncated output at device %d report data (need %d, have %d)", i, reportSize, len(data)-off)
-		}
-		report := make([]byte, reportSize)
-		copy(report, data[off:off+int(reportSize)])
-		off += int(reportSize)
-
-		// CEC report
-		if off+4 > len(data) {
-			return nil, fmt.Errorf("truncated output at device %d CEC size", i)
-		}
-		cecSize := binary.LittleEndian.Uint32(data[off : off+4])
-		off += 4
-
-		if cecSize > 0 {
-			if off+int(cecSize) > len(data) {
-				return nil, fmt.Errorf("truncated output at device %d CEC data", i)
-			}
-			// Append CEC report to the main report
-			report = append(report, data[off:off+int(cecSize)]...)
-			off += int(cecSize)
-		}
-
-		// Cert chain (optional absent in older helper builds)
-		if off+4 <= len(data) {
-			certSize := binary.LittleEndian.Uint32(data[off : off+4])
-			off += 4
-			if certSize > 0 && off+int(certSize) <= len(data) {
-				// Append cert chain to report tenants split on PEM marker
-				report = append(report, data[off:off+int(certSize)]...)
-				off += int(certSize)
-			}
-		}
-
-		reports = append(reports, GPUDeviceReport{
-			DeviceIndex: devIdx,
-			Report:      report,
-		})
-	}
-
-	if len(reports) == 0 {
+	if deviceCount == 0 {
 		return nil, fmt.Errorf("attest-all returned 0 device reports")
 	}
 
+	// Every device requires four uint32 fields even when all variable-length
+	// fields are empty. Bound the count by the payload before allocating so an
+	// untrusted helper response cannot force an unreasonable allocation.
+	const minimumDeviceFrameSize = 4 * 4
+	if uint64(deviceCount) > uint64((len(data)-4)/minimumDeviceFrameSize) {
+		return nil, fmt.Errorf("device count %d exceeds framed payload size", deviceCount)
+	}
+
+	off := 4
+	reports := make([]GPUDeviceReport, 0, deviceCount)
+	seenDeviceIndices := make(map[uint32]struct{}, deviceCount)
+
+	for i := uint32(0); i < deviceCount; i++ {
+		devIdx, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d index", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		if _, duplicate := seenDeviceIndices[devIdx]; duplicate {
+			return nil, fmt.Errorf("duplicate device index %d", devIdx)
+		}
+		seenDeviceIndices[devIdx] = struct{}{}
+
+		reportSize, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d report size", i))
+		if err != nil {
+			return nil, err
+		}
+		if reportSize == 0 {
+			return nil, fmt.Errorf("device %d attestation report is empty", i)
+		}
+		off = next
+		report, next, err := readFrameBytes(data, off, reportSize, fmt.Sprintf("device %d report data", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		attestationReport := append([]byte(nil), report...)
+
+		cecSize, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d CEC size", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		cec, next, err := readFrameBytes(data, off, cecSize, fmt.Sprintf("device %d CEC data", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		cecReport := append([]byte(nil), cec...)
+
+		// The certificate-size word is mandatory, including when its value is
+		// zero. Without it, the next device index is indistinguishable from a
+		// certificate size in a multi-GPU payload.
+		certSize, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d certificate size", i))
+		if err != nil {
+			return nil, err
+		}
+		if certSize == 0 {
+			return nil, fmt.Errorf("device %d certificate chain is empty", i)
+		}
+		off = next
+		cert, next, err := readFrameBytes(data, off, certSize, fmt.Sprintf("device %d certificate data", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		certificateChain := append([]byte(nil), cert...)
+
+		legacyReport := make([]byte, 0, len(attestationReport)+len(cecReport)+len(certificateChain))
+		legacyReport = append(legacyReport, attestationReport...)
+		legacyReport = append(legacyReport, cecReport...)
+		legacyReport = append(legacyReport, certificateChain...)
+
+		reports = append(reports, GPUDeviceReport{
+			DeviceIndex:       devIdx,
+			Report:            legacyReport,
+			AttestationReport: attestationReport,
+			CECReport:         cecReport,
+			CertificateChain:  certificateChain,
+		})
+	}
+
+	if off != len(data) {
+		return nil, fmt.Errorf("attest-all output has %d trailing bytes", len(data)-off)
+	}
+
 	return reports, nil
+}
+
+func readFrameUint32(data []byte, off int, field string) (uint32, int, error) {
+	if len(data)-off < 4 {
+		return 0, off, fmt.Errorf("truncated output at %s", field)
+	}
+	return binary.LittleEndian.Uint32(data[off : off+4]), off + 4, nil
+}
+
+func readFrameBytes(data []byte, off int, size uint32, field string) ([]byte, int, error) {
+	remaining := len(data) - off
+	if uint64(size) > uint64(remaining) {
+		return nil, off, fmt.Errorf("truncated output at %s (need %d, have %d)", field, size, remaining)
+	}
+	next := off + int(size)
+	return data[off:next], next, nil
 }
 
 // ensureMount prepares the chroot environment. Platform-specific setup

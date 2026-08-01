@@ -56,9 +56,11 @@ func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteR
 		}
 		result.GPUReports = make([]GPUDeviceReport, gpuCount)
 		for i := 0; i < gpuCount; i++ {
+			report := buildMockGPUReport(reportData, i)
 			result.GPUReports[i] = GPUDeviceReport{
-				DeviceIndex: uint32(i), //nolint:gosec // mock device index
-				Report:      buildMockGPUReport(reportData, i),
+				DeviceIndex:       uint32(i), //nolint:gosec // mock device index
+				Report:            report,
+				AttestationReport: append([]byte(nil), report...),
 			}
 		}
 	}

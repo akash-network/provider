@@ -23,6 +23,8 @@
  *     N bytes:    attestation report
  *     4 bytes LE: CEC report size (0 if not present)
  *     N bytes:    CEC report (omitted if size is 0)
+ *     4 bytes LE: certificate chain size
+ *     M bytes:    PEM-encoded certificate chain
  *   attest outputs exactly one device; attest-all outputs all CC-capable devices.
  *
  * Exit codes:
@@ -44,21 +46,27 @@ typedef int nvmlReturn_t;
 typedef void* nvmlDevice_t;
 
 #define NVML_SUCCESS 0
+#define MAX_GPU_DEVICES 64
+#define NVML_GPU_CERT_CHAIN_SIZE 0x1000
+#define NVML_GPU_ATTESTATION_CERT_CHAIN_SIZE 0x1400
+#define NVML_CC_GPU_ATTESTATION_REPORT_SIZE 0x2000
+#define NVML_CC_GPU_CEC_ATTESTATION_REPORT_SIZE 0x1000
+#define NVML_CC_GPU_CEC_NONCE_SIZE 0x20
 
 typedef struct {
     uint32_t certChainSize;
     uint32_t attestationCertChainSize;
-    uint8_t  certChain[4096];
-    uint8_t  attestationCertChain[5120];
+    uint8_t  certChain[NVML_GPU_CERT_CHAIN_SIZE];
+    uint8_t  attestationCertChain[NVML_GPU_ATTESTATION_CERT_CHAIN_SIZE];
 } nvmlConfComputeGpuCertificate_t;
 
 typedef struct {
     uint32_t isCecAttestationReportPresent;
     uint32_t attestationReportSize;
     uint32_t cecAttestationReportSize;
-    uint8_t  nonce[32];
-    uint8_t  attestationReport[8192];
-    uint8_t  cecAttestationReport[4096];
+    uint8_t  nonce[NVML_CC_GPU_CEC_NONCE_SIZE];
+    uint8_t  attestationReport[NVML_CC_GPU_ATTESTATION_REPORT_SIZE];
+    uint8_t  cecAttestationReport[NVML_CC_GPU_CEC_ATTESTATION_REPORT_SIZE];
 } nvmlConfComputeGpuAttestationReport_t;
 
 /* Function pointer types */
@@ -101,7 +109,8 @@ static int attest_device(
 ) {
     nvmlConfComputeGpuAttestationReport_t report;
     memset(&report, 0, sizeof(report));
-    memcpy(report.nonce, nonce, nonceLen < 32 ? nonceLen : 32);
+    memcpy(report.nonce, nonce,
+           nonceLen < NVML_CC_GPU_CEC_NONCE_SIZE ? nonceLen : NVML_CC_GPU_CEC_NONCE_SIZE);
 
     nvmlReturn_t ret = nvmlDeviceGetAttReport(device, &report);
     if (ret != NVML_SUCCESS) {
@@ -109,11 +118,18 @@ static int attest_device(
         return ret;
     }
 
-    /* Clamp driver-reported sizes to buffer bounds */
-    if (report.attestationReportSize > sizeof(report.attestationReport))
-        report.attestationReportSize = sizeof(report.attestationReport);
-    if (report.cecAttestationReportSize > sizeof(report.cecAttestationReport))
-        report.cecAttestationReportSize = sizeof(report.cecAttestationReport);
+    /* Driver-reported sizes are untrusted. Truncation would produce evidence
+     * that no longer matches the signed report, so reject it instead. */
+    if (report.attestationReportSize > sizeof(report.attestationReport)) {
+        fprintf(stderr, "GPU %u: attestation report size %u exceeds buffer size %zu\n",
+                devIdx, report.attestationReportSize, sizeof(report.attestationReport));
+        return 1;
+    }
+    if (report.cecAttestationReportSize > sizeof(report.cecAttestationReport)) {
+        fprintf(stderr, "GPU %u: CEC report size %u exceeds buffer size %zu\n",
+                devIdx, report.cecAttestationReportSize, sizeof(report.cecAttestationReport));
+        return 1;
+    }
 
     /* Write device index */
     write_le32(devIdx);
@@ -130,26 +146,29 @@ static int attest_device(
         write_le32(0);
     }
 
-    /* Append attestation cert chain if available.
-     * The cert chain is PEM-encoded and starts with "-----BEGIN CERTIFICATE-----".
-     * Tenants can split the report blob on this marker to extract it.
-     * If cert collection fails, we skip silently — the attestation report
-     * is still valid, just without an embedded cert chain. */
-    if (nvmlDeviceGetCert) {
-        nvmlConfComputeGpuCertificate_t cert;
-        memset(&cert, 0, sizeof(cert));
-        if (nvmlDeviceGetCert(device, &cert) == NVML_SUCCESS &&
-            cert.attestationCertChainSize > 0) {
-            if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain))
-                cert.attestationCertChainSize = sizeof(cert.attestationCertChain);
-            write_le32(cert.attestationCertChainSize);
-            fwrite(cert.attestationCertChain, 1, cert.attestationCertChainSize, stdout);
-        } else {
-            write_le32(0);
-        }
-    } else {
-        write_le32(0);
+    /* Local verification requires the attestation certificate chain. A report
+     * without it cannot be authenticated, so fail instead of returning partial
+     * evidence that downstream code could accidentally accept. */
+    if (!nvmlDeviceGetCert) {
+        fprintf(stderr, "GPU %u: nvmlDeviceGetConfComputeGpuCertificate not available\n", devIdx);
+        return 1;
     }
+
+    nvmlConfComputeGpuCertificate_t cert;
+    memset(&cert, 0, sizeof(cert));
+    ret = nvmlDeviceGetCert(device, &cert);
+    if (ret != NVML_SUCCESS || cert.attestationCertChainSize == 0) {
+        fprintf(stderr, "GPU %u: nvmlDeviceGetConfComputeGpuCertificate: %d (size=%u)\n",
+                devIdx, ret, cert.attestationCertChainSize);
+        return 1;
+    }
+    if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain)) {
+        fprintf(stderr, "GPU %u: certificate chain size %u exceeds buffer size %zu\n",
+                devIdx, cert.attestationCertChainSize, sizeof(cert.attestationCertChain));
+        return 1;
+    }
+    write_le32(cert.attestationCertChainSize);
+    fwrite(cert.attestationCertChain, 1, cert.attestationCertChainSize, stdout);
 
     return 0;
 }
@@ -193,19 +212,30 @@ int main(int argc, char **argv) {
         nvmlShutdown();
         return 3;
     }
+    if (count > MAX_GPU_DEVICES) {
+        fprintf(stderr, "GPU count %u exceeds helper maximum %u\n", count, MAX_GPU_DEVICES);
+        nvmlShutdown();
+        return 4;
+    }
 
     /* Build list of CC-capable devices */
-    nvmlDevice_t devices[64];
-    uint32_t     deviceIdxs[64];
+    nvmlDevice_t devices[MAX_GPU_DEVICES];
+    uint32_t     deviceIdxs[MAX_GPU_DEVICES];
     uint32_t     ccCount = 0;
 
-    for (uint32_t i = 0; i < count && ccCount < 64; i++) {
+    for (uint32_t i = 0; i < count; i++) {
         nvmlDevice_t d;
         if (nvmlDeviceGetHandle(i, &d) != NVML_SUCCESS) continue;
         if (nvmlDeviceGetCert) {
             nvmlConfComputeGpuCertificate_t cert;
             memset(&cert, 0, sizeof(cert));
             if (nvmlDeviceGetCert(d, &cert) == NVML_SUCCESS && cert.attestationCertChainSize > 0) {
+                if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain)) {
+                    fprintf(stderr, "GPU %u: certificate chain size %u exceeds buffer size %zu\n",
+                            i, cert.attestationCertChainSize, sizeof(cert.attestationCertChain));
+                    nvmlShutdown();
+                    return 4;
+                }
                 devices[ccCount] = d;
                 deviceIdxs[ccCount] = i;
                 ccCount++;
@@ -254,10 +284,10 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        uint8_t nonce[32];
-        int nonceLen = hex2bytes(argv[2], nonce, 32);
-        if (nonceLen < 0) {
-            fprintf(stderr, "invalid nonce hex\n");
+        uint8_t nonce[NVML_CC_GPU_CEC_NONCE_SIZE];
+        int nonceLen = hex2bytes(argv[2], nonce, NVML_CC_GPU_CEC_NONCE_SIZE);
+        if (nonceLen != NVML_CC_GPU_CEC_NONCE_SIZE) {
+            fprintf(stderr, "nonce must be exactly 32 bytes\n");
             nvmlShutdown();
             return 1;
         }
@@ -293,10 +323,10 @@ int main(int argc, char **argv) {
             return 3;
         }
 
-        uint8_t nonce[32];
-        int nonceLen = hex2bytes(argv[2], nonce, 32);
-        if (nonceLen < 0) {
-            fprintf(stderr, "invalid nonce hex\n");
+        uint8_t nonce[NVML_CC_GPU_CEC_NONCE_SIZE];
+        int nonceLen = hex2bytes(argv[2], nonce, NVML_CC_GPU_CEC_NONCE_SIZE);
+        if (nonceLen != NVML_CC_GPU_CEC_NONCE_SIZE) {
+            fprintf(stderr, "nonce must be exactly 32 bytes\n");
             nvmlShutdown();
             return 1;
         }
@@ -338,9 +368,12 @@ int main(int argc, char **argv) {
             return 4;
         }
 
-        /* Clamp to buffer bound and write attestation cert chain */
-        if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain))
-            cert.attestationCertChainSize = sizeof(cert.attestationCertChain);
+        if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain)) {
+            fprintf(stderr, "certificate chain size %u exceeds buffer size %zu\n",
+                    cert.attestationCertChainSize, sizeof(cert.attestationCertChain));
+            nvmlShutdown();
+            return 4;
+        }
         fwrite(cert.attestationCertChain, 1, cert.attestationCertChainSize, stdout);
         nvmlShutdown();
         return 0;
