@@ -88,31 +88,37 @@ static int hex2bytes(const char *hex, uint8_t *out, int maxlen) {
     return len/2;
 }
 
-static void write_le32(uint32_t val) {
+static int write_le32(uint32_t val) {
     uint8_t buf[4];
     buf[0] = val & 0xFF;
     buf[1] = (val >> 8) & 0xFF;
     buf[2] = (val >> 16) & 0xFF;
     buf[3] = (val >> 24) & 0xFF;
-    fwrite(buf, 1, 4, stdout);
+    return fwrite(buf, 1, 4, stdout) == 4 ? 0 : 1;
 }
 
-/* Attest a single device and write its report to stdout.
- * Returns 0 on success, non-zero on failure. */
-static int attest_device(
+typedef struct {
+    uint32_t devIdx;
+    nvmlConfComputeGpuAttestationReport_t report;
+    nvmlConfComputeGpuCertificate_t cert;
+} collectedAttestation_t;
+
+/* Collect and validate one complete device frame without writing output. */
+static int collect_attestation(
     fn_deviceGetAttReport nvmlDeviceGetAttReport,
     fn_deviceGetCert nvmlDeviceGetCert,
     nvmlDevice_t device,
     uint32_t devIdx,
     const uint8_t *nonce,
-    int nonceLen
+    int nonceLen,
+    collectedAttestation_t *evidence
 ) {
-    nvmlConfComputeGpuAttestationReport_t report;
-    memset(&report, 0, sizeof(report));
-    memcpy(report.nonce, nonce,
+    memset(evidence, 0, sizeof(*evidence));
+    evidence->devIdx = devIdx;
+    memcpy(evidence->report.nonce, nonce,
            nonceLen < NVML_CC_GPU_CEC_NONCE_SIZE ? nonceLen : NVML_CC_GPU_CEC_NONCE_SIZE);
 
-    nvmlReturn_t ret = nvmlDeviceGetAttReport(device, &report);
+    nvmlReturn_t ret = nvmlDeviceGetAttReport(device, &evidence->report);
     if (ret != NVML_SUCCESS) {
         fprintf(stderr, "GPU %u: nvmlDeviceGetConfComputeGpuAttestationReport: %d\n", devIdx, ret);
         return ret;
@@ -120,30 +126,17 @@ static int attest_device(
 
     /* Driver-reported sizes are untrusted. Truncation would produce evidence
      * that no longer matches the signed report, so reject it instead. */
-    if (report.attestationReportSize > sizeof(report.attestationReport)) {
+    if (evidence->report.attestationReportSize > sizeof(evidence->report.attestationReport)) {
         fprintf(stderr, "GPU %u: attestation report size %u exceeds buffer size %zu\n",
-                devIdx, report.attestationReportSize, sizeof(report.attestationReport));
+                devIdx, evidence->report.attestationReportSize,
+                sizeof(evidence->report.attestationReport));
         return 1;
     }
-    if (report.cecAttestationReportSize > sizeof(report.cecAttestationReport)) {
+    if (evidence->report.cecAttestationReportSize > sizeof(evidence->report.cecAttestationReport)) {
         fprintf(stderr, "GPU %u: CEC report size %u exceeds buffer size %zu\n",
-                devIdx, report.cecAttestationReportSize, sizeof(report.cecAttestationReport));
+                devIdx, evidence->report.cecAttestationReportSize,
+                sizeof(evidence->report.cecAttestationReport));
         return 1;
-    }
-
-    /* Write device index */
-    write_le32(devIdx);
-
-    /* Write attestation report */
-    write_le32(report.attestationReportSize);
-    fwrite(report.attestationReport, 1, report.attestationReportSize, stdout);
-
-    /* Write CEC report (size=0 if not present) */
-    if (report.isCecAttestationReportPresent && report.cecAttestationReportSize > 0) {
-        write_le32(report.cecAttestationReportSize);
-        fwrite(report.cecAttestationReport, 1, report.cecAttestationReportSize, stdout);
-    } else {
-        write_le32(0);
     }
 
     /* Local verification requires the attestation certificate chain. A report
@@ -154,21 +147,41 @@ static int attest_device(
         return 1;
     }
 
-    nvmlConfComputeGpuCertificate_t cert;
-    memset(&cert, 0, sizeof(cert));
-    ret = nvmlDeviceGetCert(device, &cert);
-    if (ret != NVML_SUCCESS || cert.attestationCertChainSize == 0) {
+    ret = nvmlDeviceGetCert(device, &evidence->cert);
+    if (ret != NVML_SUCCESS || evidence->cert.attestationCertChainSize == 0) {
         fprintf(stderr, "GPU %u: nvmlDeviceGetConfComputeGpuCertificate: %d (size=%u)\n",
-                devIdx, ret, cert.attestationCertChainSize);
+                devIdx, ret, evidence->cert.attestationCertChainSize);
         return 1;
     }
-    if (cert.attestationCertChainSize > sizeof(cert.attestationCertChain)) {
+    if (evidence->cert.attestationCertChainSize > sizeof(evidence->cert.attestationCertChain)) {
         fprintf(stderr, "GPU %u: certificate chain size %u exceeds buffer size %zu\n",
-                devIdx, cert.attestationCertChainSize, sizeof(cert.attestationCertChain));
+                devIdx, evidence->cert.attestationCertChainSize,
+                sizeof(evidence->cert.attestationCertChain));
         return 1;
     }
-    write_le32(cert.attestationCertChainSize);
-    fwrite(cert.attestationCertChain, 1, cert.attestationCertChainSize, stdout);
+
+    return 0;
+}
+
+static int write_attestation(const collectedAttestation_t *evidence) {
+    const nvmlConfComputeGpuAttestationReport_t *report = &evidence->report;
+    const nvmlConfComputeGpuCertificate_t *cert = &evidence->cert;
+    uint32_t cecSize = report->isCecAttestationReportPresent
+        ? report->cecAttestationReportSize
+        : 0;
+
+    if (write_le32(evidence->devIdx) != 0 ||
+        write_le32(report->attestationReportSize) != 0 ||
+        fwrite(report->attestationReport, 1, report->attestationReportSize, stdout)
+            != report->attestationReportSize ||
+        write_le32(cecSize) != 0 ||
+        fwrite(report->cecAttestationReport, 1, cecSize, stdout) != cecSize ||
+        write_le32(cert->attestationCertChainSize) != 0 ||
+        fwrite(cert->attestationCertChain, 1, cert->attestationCertChainSize, stdout)
+            != cert->attestationCertChainSize) {
+        fprintf(stderr, "GPU %u: failed to write attestation output\n", evidence->devIdx);
+        return 1;
+    }
 
     return 0;
 }
@@ -300,7 +313,19 @@ int main(int argc, char **argv) {
             return 3;
         }
 
-        int rc = attest_device(nvmlDeviceGetAttReport, nvmlDeviceGetCert, dev, idx, nonce, nonceLen);
+        collectedAttestation_t evidence;
+        int rc = collect_attestation(
+            nvmlDeviceGetAttReport,
+            nvmlDeviceGetCert,
+            dev,
+            idx,
+            nonce,
+            nonceLen,
+            &evidence
+        );
+        if (rc == 0) {
+            rc = write_attestation(&evidence);
+        }
         nvmlShutdown();
         return rc ? 4 : 0;
     }
@@ -331,18 +356,37 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        /* Write device count header */
-        write_le32(ccCount);
+        collectedAttestation_t *evidence = calloc(ccCount, sizeof(*evidence));
+        if (!evidence) {
+            fprintf(stderr, "failed to allocate multi-GPU attestation buffer\n");
+            nvmlShutdown();
+            return 4;
+        }
 
-        int failures = 0;
         for (uint32_t i = 0; i < ccCount; i++) {
-            if (attest_device(nvmlDeviceGetAttReport, nvmlDeviceGetCert, devices[i], deviceIdxs[i], nonce, nonceLen) != 0) {
-                failures++;
+            if (collect_attestation(
+                    nvmlDeviceGetAttReport,
+                    nvmlDeviceGetCert,
+                    devices[i],
+                    deviceIdxs[i],
+                    nonce,
+                    nonceLen,
+                    &evidence[i]
+                ) != 0) {
+                free(evidence);
+                nvmlShutdown();
+                return 4;
             }
         }
 
+        int writeFailed = write_le32(ccCount);
+        for (uint32_t i = 0; i < ccCount && writeFailed == 0; i++) {
+            writeFailed = write_attestation(&evidence[i]);
+        }
+
+        free(evidence);
         nvmlShutdown();
-        return failures > 0 ? 4 : 0;
+        return writeFailed ? 4 : 0;
     }
 
     if (strcmp(cmd, "cert") == 0) {
