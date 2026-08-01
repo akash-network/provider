@@ -948,4 +948,29 @@ func TestTEETypeFromClusterParams(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+
+	t.Run("reservation settings", func(t *testing.T) {
+		got, err := teeTypeFromClusterParams(crd.ReservationClusterSettings{
+			1: {TEEType: "cpu-gpu"},
+		})
+		require.NoError(t, err)
+		require.Equal(t, ctypes.TEETypeCPUGPU, got)
+	})
+
+	t.Run("invalid reservation settings", func(t *testing.T) {
+		got, err := teeTypeFromClusterParams(crd.ReservationClusterSettings{
+			1: {TEEType: "future"},
+		})
+		require.ErrorContains(t, err, "invalid stored TEE type")
+		require.Equal(t, ctypes.TEETypeNone, got)
+	})
+
+	t.Run("conflicting reservation settings", func(t *testing.T) {
+		got, err := teeTypeFromClusterParams(crd.ReservationClusterSettings{
+			1: {TEEType: "cpu"},
+			2: {TEEType: "cpu-gpu"},
+		})
+		require.ErrorContains(t, err, "conflicting stored TEE types")
+		require.Equal(t, ctypes.TEETypeNone, got)
+	})
 }

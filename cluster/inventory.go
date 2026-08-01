@@ -523,6 +523,11 @@ func teeTypeFromClusterParams(cp interface{}) (ctypes.TEEType, error) {
 		sparams = v.SchedulerParams
 	case crd.ClusterSettings:
 		sparams = v.SchedulerParams
+	case crd.ReservationClusterSettings:
+		sparams = make([]*crd.SchedulerParams, 0, len(v))
+		for _, sp := range v {
+			sparams = append(sparams, sp)
+		}
 	default:
 		return ctypes.TEETypeNone, nil
 	}
