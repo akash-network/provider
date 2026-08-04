@@ -139,6 +139,12 @@ func ValidateSettings(settings Settings) error {
 			)
 		}
 	}
+	if len(settings.CCPersistentStorageClasses) != 0 && settings.CCInitData == nil {
+		return fmt.Errorf(
+			"%w: confidential persistent storage classes require confidential-compute initdata",
+			ErrSettingsValidation,
+		)
+	}
 
 	return nil
 }
@@ -197,7 +203,7 @@ func validateCCInitDataSettings(settings CCInitDataSettings) error {
 	if !strings.Contains(settings.AgentPolicy, "package agent_policy") {
 		return errors.New("agent policy must declare package agent_policy")
 	}
-	if strings.Contains(settings.AgentPolicy, `"""`) || strings.ContainsAny(settings.AgentPolicy, "\x00\r") {
+	if !isInitDataTOMLSafe(settings.AgentPolicy) {
 		return errors.New("agent policy cannot be represented safely in initdata TOML")
 	}
 

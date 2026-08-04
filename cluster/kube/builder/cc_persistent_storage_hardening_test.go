@@ -73,4 +73,9 @@ func TestConfidentialPersistentStorageClassSettingsValidation(t *testing.T) {
 		CCPersistentStorageClasses: map[string]struct{}{"Not A Storage Class": {}},
 	})
 	require.ErrorContains(t, err, "invalid confidential persistent storage class")
+
+	err = ValidateSettings(Settings{
+		CCPersistentStorageClasses: map[string]struct{}{"beta3": {}},
+	})
+	require.ErrorContains(t, err, "require confidential-compute initdata")
 }

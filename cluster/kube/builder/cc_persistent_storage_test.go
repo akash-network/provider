@@ -29,7 +29,7 @@ import (
 	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
-const testSealedKeyRef = "sealed.eyJhbGciOiJFUzI1NiJ9.eyJuYW1lIjoia2JzOi8vL2RlZmF1bHQvdGVzdC9zaGEyNTYtMDAifQ.c2lnbmF0dXJl"
+const testSealedKeyRef = "sealed.eyJhbGciOiJFUzI1NiJ9.eyJuYW1lIjoia2JzOi8vL2RlZmF1bHQvdGVzdC9zaGEyNTYtMDAifQ.c2lnbmF0dXJl" // gitleaks:allow -- synthetic fixture
 
 type ccStorageSpec struct {
 	name       string
@@ -216,6 +216,18 @@ func TestConfidentialInitDataIsDeterministic(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, firstAnnotation, secondAnnotation)
 	require.Equal(t, firstDigest, secondDigest)
+}
+
+func TestConfidentialInitDataPreservesLeadingNewline(t *testing.T) {
+	settings := *testCCInitDataSettings(t)
+	settings.AgentPolicy = "\npackage agent_policy\n\ndefault allow = true\n"
+
+	raw, err := buildConfidentialInitData(settings, "sha256", "proof", nil, "")
+	require.NoError(t, err)
+	var document map[string]any
+	require.NoError(t, toml.Unmarshal(raw, &document))
+	data := document["data"].(map[string]any)
+	require.Equal(t, settings.AgentPolicy, data[ccInitDataPolicyKey])
 }
 
 func TestSealedEnvironmentRequiresMeasuredCDHConfiguration(t *testing.T) {

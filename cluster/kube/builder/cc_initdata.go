@@ -200,10 +200,14 @@ func buildConfidentialInitData(
 }
 
 func writeInitDataMultiline(buffer *bytes.Buffer, name, value string) error {
-	if strings.Contains(value, `"""`) || strings.ContainsAny(value, "\x00\r") {
+	if !isInitDataTOMLSafe(value) {
 		return fmt.Errorf("initdata value %q cannot be represented safely in TOML", name)
 	}
 	escaped := strings.ReplaceAll(value, `\`, `\\`)
-	fmt.Fprintf(buffer, "%q = \"\"\"%s\"\"\"\n", name, escaped)
+	fmt.Fprintf(buffer, "%q = \"\"\"\n%s\"\"\"\n", name, escaped)
 	return nil
+}
+
+func isInitDataTOMLSafe(value string) bool {
+	return !strings.Contains(value, `"""`) && !strings.ContainsAny(value, "\x00\r")
 }

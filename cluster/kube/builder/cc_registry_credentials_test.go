@@ -7,17 +7,31 @@ import (
 	"github.com/stretchr/testify/require"
 
 	mani "pkg.akt.dev/go/manifest/v2beta3"
+	"pkg.akt.dev/go/testutil"
+
+	crd "github.com/akash-network/provider/pkg/apis/akash.network/v2beta2"
 )
 
 func TestConfidentialRegistryCredentialsAreKBSReferenced(t *testing.T) {
 	const resourceURI = "kbs:///lease-scope/registry/auth"
-	workload := newCCStorageWorkload(t, RuntimeClassKataQemuSNP)
-	workload.settings.DockerImagePullSecretsName = "provider-wide-pull-secret"
-	workload.group.Services[0].Credentials = &mani.ImageCredentials{URI: resourceURI}
-	var err error
-	workload.registryCredentialsURI, err = workload.confidentialRegistryCredentialsURI()
+	fixture := newCCStorageWorkload(t, RuntimeClassKataQemuSNP)
+	fixture.settings.DockerImagePullSecretsName = "provider-wide-pull-secret"
+	fixture.group.Services[0].Credentials = &mani.ImageCredentials{URI: resourceURI}
+	manifest, err := crd.NewManifest(
+		"lease",
+		fixture.deployment.LeaseID(),
+		&fixture.group,
+		crd.ClusterSettings{SchedulerParams: fixture.sparams},
+	)
 	require.NoError(t, err)
-	workload.ccInitDataAnnotation, workload.ccInitDataSHA256, err = workload.confidentialInitDataAnnotation()
+
+	workload, err := NewWorkloadBuilder(
+		testutil.Logger(t),
+		fixture.settings,
+		fixture.deployment,
+		manifest,
+		0,
+	)
 	require.NoError(t, err)
 
 	raw, document := decodeCCInitData(t, workload.ccInitDataAnnotation)
@@ -26,6 +40,7 @@ func TestConfidentialRegistryCredentialsAreKBSReferenced(t *testing.T) {
 	require.NotContains(t, string(raw), "username")
 	require.NotContains(t, string(raw), "password")
 	require.Empty(t, workload.imagePullSecrets())
+	require.Empty(t, workload.secretsRefs)
 	require.Nil(t, workload.ImagePullCredentials())
 }
 
