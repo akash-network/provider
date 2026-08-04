@@ -66,6 +66,15 @@ func TestQuoteResponseSeparatesEveryGPUReportComponent(t *testing.T) {
 	if len(response.GPUReports) != 2 {
 		t.Fatalf("expected two GPU reports, got %d", len(response.GPUReports))
 	}
+	var rawResponse struct {
+		GPUReports []map[string]json.RawMessage `json:"gpu_reports"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &rawResponse); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := rawResponse.GPUReports[1]["cec_report"]; present {
+		t.Fatal("absent CEC report must be omitted from the JSON response")
+	}
 
 	want := []GPUReportEntry{
 		{
