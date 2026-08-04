@@ -37,6 +37,7 @@ type ManifestServiceCredentials struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+	URI      string `json:"uri,omitempty"`
 }
 
 // ManifestService stores name, image, args, env, unit, count and expose list of service
@@ -88,6 +89,7 @@ type ManifestStorageParams struct {
 	Name     string `json:"name"     yaml:"name"`
 	Mount    string `json:"mount"    yaml:"mount"`
 	ReadOnly bool   `json:"readOnly" yaml:"readOnly"`
+	KeyRef   string `json:"keyRef,omitempty" yaml:"keyRef,omitempty"`
 }
 
 type ManifestServicePermissions struct {
@@ -291,6 +293,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 			Email:    ms.Credentials.Email,
 			Username: ms.Credentials.Username,
 			Password: ms.Credentials.Password,
+			URI:      ms.Credentials.URI,
 		}
 	}
 
@@ -319,6 +322,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				Name:     storage.Name,
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
+				KeyRef:   storage.KeyRef,
 			})
 		}
 
@@ -385,6 +389,7 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				Name:     storage.Name,
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
+				KeyRef:   storage.KeyRef,
 			})
 		}
 
@@ -406,6 +411,7 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 			Email:    ams.Credentials.Email,
 			Username: ams.Credentials.Username,
 			Password: ams.Credentials.Password,
+			URI:      ams.Credentials.URI,
 		}
 	}
 

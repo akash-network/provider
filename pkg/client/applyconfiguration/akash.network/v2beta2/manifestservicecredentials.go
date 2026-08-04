@@ -25,6 +25,7 @@ type ManifestServiceCredentialsApplyConfiguration struct {
 	Email    *string `json:"email,omitempty"`
 	Username *string `json:"username,omitempty"`
 	Password *string `json:"password,omitempty"`
+	URI      *string `json:"uri,omitempty"`
 }
 
 // ManifestServiceCredentialsApplyConfiguration constructs a declarative configuration of the ManifestServiceCredentials type for use with
@@ -62,5 +63,13 @@ func (b *ManifestServiceCredentialsApplyConfiguration) WithUsername(value string
 // If called multiple times, the Password field is set to the value of the last call.
 func (b *ManifestServiceCredentialsApplyConfiguration) WithPassword(value string) *ManifestServiceCredentialsApplyConfiguration {
 	b.Password = &value
+	return b
+}
+
+// WithURI sets the URI field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the URI field is set to the value of the last call.
+func (b *ManifestServiceCredentialsApplyConfiguration) WithURI(value string) *ManifestServiceCredentialsApplyConfiguration {
+	b.URI = &value
 	return b
 }
