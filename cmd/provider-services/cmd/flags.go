@@ -165,6 +165,18 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().StringSlice(
+		FlagCCPersistentStorageClasses,
+		nil,
+		"Block storage classes qualified for confidential persistent storage (empty disables the feature)",
+	)
+	if err := viper.BindPFlag(
+		FlagCCPersistentStorageClasses,
+		cmd.Flags().Lookup(FlagCCPersistentStorageClasses),
+	); err != nil {
+		return err
+	}
+
 	cmd.Flags().Uint64(FlagOvercommitPercentMemory, 0, "Percentage of memory overcommit")
 	if err := viper.BindPFlag(FlagOvercommitPercentMemory, cmd.Flags().Lookup(FlagOvercommitPercentMemory)); err != nil {
 		return err

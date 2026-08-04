@@ -23,6 +23,20 @@ const (
 	ccInitDataSecureVolumesKey      = "akash-secure-volumes.json"
 )
 
+type ccPersistentStorageDescriptor struct {
+	Version       string                         `json:"version"`
+	ContainerName string                         `json:"containerName"`
+	Volumes       []ccPersistentVolumeDescriptor `json:"volumes"`
+}
+
+type ccPersistentVolumeDescriptor struct {
+	DevicePath string `json:"devicePath"`
+	KeyRef     string `json:"keyRef"`
+	MountPath  string `json:"mountPath"`
+	ReadOnly   bool   `json:"readOnly"`
+	VolumeID   string `json:"volumeId"`
+}
+
 func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 	service := &b.group.Services[b.serviceIdx]
 	hasSealedEnvironment, err := serviceHasSealedEnvironment(service.Env)
@@ -158,20 +172,20 @@ func buildConfidentialInitData(
 	}
 
 	if len(volumes) != 0 {
-		descriptorVolumes := make([]map[string]any, 0, len(volumes))
+		descriptorVolumes := make([]ccPersistentVolumeDescriptor, 0, len(volumes))
 		for _, volume := range volumes {
-			descriptorVolumes = append(descriptorVolumes, map[string]any{
-				"devicePath": volume.DevicePath,
-				"keyRef":     volume.KeyRef,
-				"mountPath":  volume.MountPath,
-				"readOnly":   volume.ReadOnly,
-				"volumeId":   volume.VolumeID,
+			descriptorVolumes = append(descriptorVolumes, ccPersistentVolumeDescriptor{
+				DevicePath: volume.DevicePath,
+				KeyRef:     volume.KeyRef,
+				MountPath:  volume.MountPath,
+				ReadOnly:   volume.ReadOnly,
+				VolumeID:   volume.VolumeID,
 			})
 		}
-		descriptor, err := json.Marshal(map[string]any{
-			"containerName": containerName,
-			"version":       "1",
-			"volumes":       descriptorVolumes,
+		descriptor, err := json.Marshal(ccPersistentStorageDescriptor{
+			ContainerName: containerName,
+			Version:       "1",
+			Volumes:       descriptorVolumes,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("encode confidential persistent-volume descriptor: %w", err)

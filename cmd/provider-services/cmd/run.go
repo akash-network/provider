@@ -99,6 +99,7 @@ const (
 	FlagCCKBSCertFile                    = "cc-kbs-cert-file"
 	FlagCCImageSecurityPolicyURI         = "cc-image-security-policy-uri"
 	FlagCCAgentPolicyFile                = "cc-agent-policy-file"
+	FlagCCPersistentStorageClasses       = "cc-persistent-storage-classes"
 	FlagOvercommitPercentMemory          = "overcommit-pct-mem"
 	FlagOvercommitPercentCPU             = "overcommit-pct-cpu"
 	FlagOvercommitPercentStorage         = "overcommit-pct-storage"
@@ -491,6 +492,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	ccKBSCertFile := strings.TrimSpace(viper.GetString(FlagCCKBSCertFile))
 	ccImageSecurityPolicyURI := strings.TrimSpace(viper.GetString(FlagCCImageSecurityPolicyURI))
 	ccAgentPolicyFile := strings.TrimSpace(viper.GetString(FlagCCAgentPolicyFile))
+	ccPersistentStorageClasses := viper.GetStringSlice(FlagCCPersistentStorageClasses)
 	strategy := viper.GetString(FlagBidPricingStrategy)
 	deploymentIngressExposeLBHosts := viper.GetBool(FlagDeploymentIngressExposeLBHosts)
 	overcommitPercentStorage := 1.0 + float64(viper.GetUint64(FlagOvercommitPercentStorage)/100.0)
@@ -573,6 +575,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	)
 	if err != nil {
 		return err
+	}
+	kubeSettings.CCPersistentStorageClasses = make(map[string]struct{}, len(ccPersistentStorageClasses))
+	for _, storageClass := range ccPersistentStorageClasses {
+		storageClass = strings.TrimSpace(storageClass)
+		if storageClass != "" {
+			kubeSettings.CCPersistentStorageClasses[storageClass] = struct{}{}
+		}
 	}
 
 	// Discover all API server endpoint addresses for network policies.

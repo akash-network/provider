@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	kvalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	vutil "pkg.akt.dev/node/v2/util/validation"
 )
@@ -89,9 +90,15 @@ type Settings struct {
 
 	// CCInitData configures the public Trustee connection and measured guest
 	// policy used by confidential workloads that contain sealed environment
-	// values or tenant-signed persistent-volume key references. It never holds
-	// a KBS administrator credential or secret plaintext.
+	// values, tenant-signed persistent-volume key references, or KBS registry
+	// credential references. It never holds a KBS administrator credential or
+	// secret plaintext.
 	CCInitData *CCInitDataSettings
+
+	// CCPersistentStorageClasses is the operator-maintained set of Block
+	// storage classes qualified to return deterministically sanitized volumes.
+	// An empty set disables confidential persistent storage.
+	CCPersistentStorageClasses map[string]struct{}
 }
 
 // CCInitDataSettings contains the operator-controlled, non-secret inputs from
@@ -119,6 +126,17 @@ func ValidateSettings(settings Settings) error {
 	if settings.CCInitData != nil {
 		if err := validateCCInitDataSettings(*settings.CCInitData); err != nil {
 			return fmt.Errorf("%w: confidential-compute initdata: %w", ErrSettingsValidation, err)
+		}
+	}
+
+	for storageClass := range settings.CCPersistentStorageClasses {
+		if errs := kvalidation.IsDNS1123Subdomain(storageClass); len(errs) != 0 {
+			return fmt.Errorf(
+				"%w: invalid confidential persistent storage class %q: %s",
+				ErrSettingsValidation,
+				storageClass,
+				strings.Join(errs, "; "),
+			)
 		}
 	}
 
