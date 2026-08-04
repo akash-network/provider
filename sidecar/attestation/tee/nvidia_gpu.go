@@ -14,8 +14,9 @@ import (
 )
 
 const (
-	nvmlHelperPath = "/usr/bin/nvml_attestation"
-	guestMountDir  = "/mnt/guest"
+	nvmlHelperPath           = "/usr/bin/nvml_attestation"
+	guestMountDir            = "/mnt/guest"
+	nvmlDeviceUUIDBufferSize = 80
 )
 
 // NvidiaGPUAttestor collects GPU attestation evidence via NVML for
@@ -83,6 +84,9 @@ func (n *NvidiaGPUAttestor) probe() (string, error) {
 //	4 bytes LE: device count
 //	Per device:
 //	  4 bytes LE: device index
+//	  4 bytes LE: NVML device architecture
+//	  4 bytes LE: device UUID size
+//	  N bytes:    device UUID reported by NVML
 //	  4 bytes LE: attestation report size
 //	  N bytes:    attestation report
 //	  4 bytes LE: CEC report size (0 if not present)
@@ -119,10 +123,10 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 		return nil, fmt.Errorf("attest-all returned 0 device reports")
 	}
 
-	// Every device requires four uint32 fields even when all variable-length
+	// Every device requires six uint32 fields even when all variable-length
 	// fields are empty. Bound the count by the payload before allocating so an
 	// untrusted helper response cannot force an unreasonable allocation.
-	const minimumDeviceFrameSize = 4 * 4
+	const minimumDeviceFrameSize = 6 * 4
 	if uint64(deviceCount) > uint64((len(data)-4)/minimumDeviceFrameSize) {
 		return nil, fmt.Errorf("device count %d exceeds framed payload size", deviceCount)
 	}
@@ -141,6 +145,34 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 			return nil, fmt.Errorf("duplicate device index %d", devIdx)
 		}
 		seenDeviceIndices[devIdx] = struct{}{}
+
+		architectureValue, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d architecture", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		architecture, err := nvidiaArchitectureName(architectureValue)
+		if err != nil {
+			return nil, fmt.Errorf("device %d: %w", i, err)
+		}
+
+		uuidSize, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d UUID size", i))
+		if err != nil {
+			return nil, err
+		}
+		if uuidSize == 0 || uuidSize >= nvmlDeviceUUIDBufferSize {
+			return nil, fmt.Errorf("device %d UUID has invalid size %d", i, uuidSize)
+		}
+		off = next
+		uuidBytes, next, err := readFrameBytes(data, off, uuidSize, fmt.Sprintf("device %d UUID", i))
+		if err != nil {
+			return nil, err
+		}
+		off = next
+		uuid := string(uuidBytes)
+		if !validNvidiaGPUUUID(uuid) {
+			return nil, fmt.Errorf("device %d has invalid NVML UUID", i)
+		}
 
 		reportSize, next, err := readFrameUint32(data, off, fmt.Sprintf("device %d report size", i))
 		if err != nil {
@@ -194,6 +226,8 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 
 		reports = append(reports, GPUDeviceReport{
 			DeviceIndex:       devIdx,
+			Architecture:      architecture,
+			UUID:              uuid,
 			Report:            legacyReport,
 			AttestationReport: attestationReport,
 			CECReport:         cecReport,
@@ -206,6 +240,37 @@ func parseMultiGPUOutput(data []byte) ([]GPUDeviceReport, error) {
 	}
 
 	return reports, nil
+}
+
+func nvidiaArchitectureName(value uint32) (string, error) {
+	switch value {
+	case 9:
+		return "HOPPER", nil
+	case 10:
+		return "BLACKWELL", nil
+	default:
+		return "", fmt.Errorf("unsupported NVIDIA device architecture %d", value)
+	}
+}
+
+func validNvidiaGPUUUID(value string) bool {
+	const prefix = "GPU-"
+	if len(value) != len(prefix)+36 || !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for index, char := range value[len(prefix):] {
+		switch index {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return false
+			}
+		default:
+			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func readFrameUint32(data []byte, off int, field string) (uint32, int, error) {

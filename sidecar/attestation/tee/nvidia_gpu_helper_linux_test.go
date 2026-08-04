@@ -13,6 +13,7 @@ import (
 
 const fakeNVMLSource = `
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -55,6 +56,18 @@ nvmlReturn_t nvmlDeviceGetCount_v2(uint32_t *count) {
 nvmlReturn_t nvmlDeviceGetHandleByIndex_v2(uint32_t index, nvmlDevice_t *device) {
     *device = (void *)(uintptr_t)(index + 1);
     return NVML_SUCCESS;
+}
+
+nvmlReturn_t nvmlDeviceGetArchitecture(nvmlDevice_t device, uint32_t *architecture) {
+    (void)device;
+    *architecture = 10;
+    return NVML_SUCCESS;
+}
+
+nvmlReturn_t nvmlDeviceGetUUID(nvmlDevice_t device, char *uuid, uint32_t length) {
+    uint32_t index = (uint32_t)(uintptr_t)device - 1;
+    int written = snprintf(uuid, length, "GPU-00000000-0000-0000-0000-%012u", index);
+    return written > 0 && (uint32_t)written < length ? NVML_SUCCESS : 999;
 }
 
 nvmlReturn_t nvmlDeviceGetConfComputeGpuCertificate(
@@ -140,11 +153,13 @@ func TestNVMLHelperFramesTwoGPUs(t *testing.T) {
 	}
 
 	want := []GPUDeviceReport{
-		{DeviceIndex: 0, AttestationReport: []byte("gpu0"), CECReport: []byte("cec0"), CertificateChain: []byte("cert0")},
-		{DeviceIndex: 1, AttestationReport: []byte("gpu1"), CECReport: []byte("cec1"), CertificateChain: []byte("cert1")},
+		{DeviceIndex: 0, Architecture: "BLACKWELL", UUID: "GPU-00000000-0000-0000-0000-000000000000", AttestationReport: []byte("gpu0"), CECReport: []byte("cec0"), CertificateChain: []byte("cert0")},
+		{DeviceIndex: 1, Architecture: "BLACKWELL", UUID: "GPU-00000000-0000-0000-0000-000000000001", AttestationReport: []byte("gpu1"), CECReport: []byte("cec1"), CertificateChain: []byte("cert1")},
 	}
 	for i := range want {
 		if reports[i].DeviceIndex != want[i].DeviceIndex ||
+			reports[i].Architecture != want[i].Architecture ||
+			reports[i].UUID != want[i].UUID ||
 			!bytes.Equal(reports[i].AttestationReport, want[i].AttestationReport) ||
 			!bytes.Equal(reports[i].CECReport, want[i].CECReport) ||
 			!bytes.Equal(reports[i].CertificateChain, want[i].CertificateChain) {

@@ -59,6 +59,8 @@ func (m *MockProvider) GetQuote(_ context.Context, reportData [64]byte) (*QuoteR
 			report := buildMockGPUReport(reportData, i)
 			result.GPUReports[i] = GPUDeviceReport{
 				DeviceIndex:       uint32(i), //nolint:gosec // mock device index
+				Architecture:      "BLACKWELL",
+				UUID:              fmt.Sprintf("GPU-00000000-0000-0000-0000-%012x", i),
 				Report:            report,
 				AttestationReport: append([]byte(nil), report...),
 			}

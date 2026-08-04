@@ -30,6 +30,8 @@ func TestQuoteResponseSeparatesEveryGPUReportComponent(t *testing.T) {
 		GPUReports: []tee.GPUDeviceReport{
 			{
 				DeviceIndex:       2,
+				Architecture:      "BLACKWELL",
+				UUID:              "GPU-00000000-0000-0000-0000-000000000002",
 				Report:            []byte("gpu-2cec-2cert-2"),
 				AttestationReport: []byte("gpu-2"),
 				CECReport:         []byte("cec-2"),
@@ -37,6 +39,8 @@ func TestQuoteResponseSeparatesEveryGPUReportComponent(t *testing.T) {
 			},
 			{
 				DeviceIndex:       7,
+				Architecture:      "BLACKWELL",
+				UUID:              "GPU-00000000-0000-0000-0000-000000000007",
 				Report:            []byte("gpu-7cert-7"),
 				AttestationReport: []byte("gpu-7"),
 				CertificateChain:  []byte("cert-7"),
@@ -66,6 +70,8 @@ func TestQuoteResponseSeparatesEveryGPUReportComponent(t *testing.T) {
 	want := []GPUReportEntry{
 		{
 			DeviceIndex:       2,
+			Architecture:      "BLACKWELL",
+			UUID:              "GPU-00000000-0000-0000-0000-000000000002",
 			Report:            base64.StdEncoding.EncodeToString([]byte("gpu-2cec-2cert-2")),
 			AttestationReport: base64.StdEncoding.EncodeToString([]byte("gpu-2")),
 			CECReport:         base64.StdEncoding.EncodeToString([]byte("cec-2")),
@@ -73,6 +79,8 @@ func TestQuoteResponseSeparatesEveryGPUReportComponent(t *testing.T) {
 		},
 		{
 			DeviceIndex:       7,
+			Architecture:      "BLACKWELL",
+			UUID:              "GPU-00000000-0000-0000-0000-000000000007",
 			Report:            base64.StdEncoding.EncodeToString([]byte("gpu-7cert-7")),
 			AttestationReport: base64.StdEncoding.EncodeToString([]byte("gpu-7")),
 			CertificateChain:  base64.StdEncoding.EncodeToString([]byte("cert-7")),

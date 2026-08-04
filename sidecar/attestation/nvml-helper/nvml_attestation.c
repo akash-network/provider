@@ -19,6 +19,9 @@
  * Binary output format for attest / attest-all:
  *   For each device:
  *     4 bytes LE: device index
+ *     4 bytes LE: NVML device architecture
+ *     4 bytes LE: device UUID size
+ *     N bytes:    device UUID reported by NVML
  *     4 bytes LE: attestation report size
  *     N bytes:    attestation report
  *     4 bytes LE: CEC report size (0 if not present)
@@ -52,6 +55,7 @@ typedef void* nvmlDevice_t;
 #define NVML_CC_GPU_ATTESTATION_REPORT_SIZE 0x2000
 #define NVML_CC_GPU_CEC_ATTESTATION_REPORT_SIZE 0x1000
 #define NVML_CC_GPU_CEC_NONCE_SIZE 0x20
+#define NVML_DEVICE_UUID_BUFFER_SIZE 80
 
 typedef struct {
     uint32_t certChainSize;
@@ -76,6 +80,8 @@ typedef nvmlReturn_t (*fn_deviceGetCount)(uint32_t*);
 typedef nvmlReturn_t (*fn_deviceGetHandleByIndex)(uint32_t, nvmlDevice_t*);
 typedef nvmlReturn_t (*fn_deviceGetCert)(nvmlDevice_t, nvmlConfComputeGpuCertificate_t*);
 typedef nvmlReturn_t (*fn_deviceGetAttReport)(nvmlDevice_t, nvmlConfComputeGpuAttestationReport_t*);
+typedef nvmlReturn_t (*fn_deviceGetArchitecture)(nvmlDevice_t, uint32_t*);
+typedef nvmlReturn_t (*fn_deviceGetUUID)(nvmlDevice_t, char*, uint32_t);
 
 static int hex2bytes(const char *hex, uint8_t *out, int maxlen) {
     int len = strlen(hex);
@@ -99,6 +105,8 @@ static int write_le32(uint32_t val) {
 
 typedef struct {
     uint32_t devIdx;
+    uint32_t architecture;
+    char uuid[NVML_DEVICE_UUID_BUFFER_SIZE];
     nvmlConfComputeGpuAttestationReport_t report;
     nvmlConfComputeGpuCertificate_t cert;
 } collectedAttestation_t;
@@ -107,6 +115,8 @@ typedef struct {
 static int collect_attestation(
     fn_deviceGetAttReport nvmlDeviceGetAttReport,
     fn_deviceGetCert nvmlDeviceGetCert,
+    fn_deviceGetArchitecture nvmlDeviceGetArchitecture,
+    fn_deviceGetUUID nvmlDeviceGetUUID,
     nvmlDevice_t device,
     uint32_t devIdx,
     const uint8_t *nonce,
@@ -115,10 +125,27 @@ static int collect_attestation(
 ) {
     memset(evidence, 0, sizeof(*evidence));
     evidence->devIdx = devIdx;
+
+    if (!nvmlDeviceGetArchitecture || !nvmlDeviceGetUUID) {
+        fprintf(stderr, "GPU %u: NVML device identity APIs are unavailable\n", devIdx);
+        return 1;
+    }
+    nvmlReturn_t ret = nvmlDeviceGetArchitecture(device, &evidence->architecture);
+    if (ret != NVML_SUCCESS) {
+        fprintf(stderr, "GPU %u: nvmlDeviceGetArchitecture: %d\n", devIdx, ret);
+        return ret;
+    }
+    ret = nvmlDeviceGetUUID(device, evidence->uuid, sizeof(evidence->uuid));
+    if (ret != NVML_SUCCESS || evidence->uuid[0] == '\0' ||
+        memchr(evidence->uuid, '\0', sizeof(evidence->uuid)) == NULL) {
+        fprintf(stderr, "GPU %u: nvmlDeviceGetUUID: %d (invalid UUID)\n", devIdx, ret);
+        return ret == NVML_SUCCESS ? 1 : ret;
+    }
+
     memcpy(evidence->report.nonce, nonce,
            nonceLen < NVML_CC_GPU_CEC_NONCE_SIZE ? nonceLen : NVML_CC_GPU_CEC_NONCE_SIZE);
 
-    nvmlReturn_t ret = nvmlDeviceGetAttReport(device, &evidence->report);
+    ret = nvmlDeviceGetAttReport(device, &evidence->report);
     if (ret != NVML_SUCCESS) {
         fprintf(stderr, "GPU %u: nvmlDeviceGetConfComputeGpuAttestationReport: %d\n", devIdx, ret);
         return ret;
@@ -169,8 +196,12 @@ static int write_attestation(const collectedAttestation_t *evidence) {
     uint32_t cecSize = report->isCecAttestationReportPresent
         ? report->cecAttestationReportSize
         : 0;
+    uint32_t uuidSize = (uint32_t)strlen(evidence->uuid);
 
     if (write_le32(evidence->devIdx) != 0 ||
+        write_le32(evidence->architecture) != 0 ||
+        write_le32(uuidSize) != 0 ||
+        fwrite(evidence->uuid, 1, uuidSize, stdout) != uuidSize ||
         write_le32(report->attestationReportSize) != 0 ||
         fwrite(report->attestationReport, 1, report->attestationReportSize, stdout)
             != report->attestationReportSize ||
@@ -206,6 +237,8 @@ int main(int argc, char **argv) {
     fn_deviceGetHandleByIndex nvmlDeviceGetHandle = dlsym(lib, "nvmlDeviceGetHandleByIndex_v2");
     fn_deviceGetCert nvmlDeviceGetCert = dlsym(lib, "nvmlDeviceGetConfComputeGpuCertificate");
     fn_deviceGetAttReport nvmlDeviceGetAttReport = dlsym(lib, "nvmlDeviceGetConfComputeGpuAttestationReport");
+    fn_deviceGetArchitecture nvmlDeviceGetArchitecture = dlsym(lib, "nvmlDeviceGetArchitecture");
+    fn_deviceGetUUID nvmlDeviceGetUUID = dlsym(lib, "nvmlDeviceGetUUID");
 
     if (!nvmlInit || !nvmlShutdown || !nvmlDeviceGetCount || !nvmlDeviceGetHandle) {
         fprintf(stderr, "failed to resolve core NVML symbols\n");
@@ -317,6 +350,8 @@ int main(int argc, char **argv) {
         int rc = collect_attestation(
             nvmlDeviceGetAttReport,
             nvmlDeviceGetCert,
+            nvmlDeviceGetArchitecture,
+            nvmlDeviceGetUUID,
             dev,
             idx,
             nonce,
@@ -367,6 +402,8 @@ int main(int argc, char **argv) {
             if (collect_attestation(
                     nvmlDeviceGetAttReport,
                     nvmlDeviceGetCert,
+                    nvmlDeviceGetArchitecture,
+                    nvmlDeviceGetUUID,
                     devices[i],
                     deviceIdxs[i],
                     nonce,

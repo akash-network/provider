@@ -25,10 +25,12 @@ type QuoteRequest struct {
 }
 
 // GPUReportEntry holds attestation evidence for a single GPU in the response.
-// AttestationReport and CertificateChain map directly to Trustee's evidence and
-// certificate values after the tenant supplies the device architecture and UUID.
+// Architecture and UUID are collected directly from NVML alongside the signed
+// evidence; callers must not replace them with tenant-provided metadata.
 type GPUReportEntry struct {
 	DeviceIndex       uint32 `json:"device_index"`
+	Architecture      string `json:"architecture"`
+	UUID              string `json:"uuid"`
 	Report            string `json:"report"` // base64 legacy report || CEC || certificate chain
 	AttestationReport string `json:"attestation_report"`
 	CECReport         string `json:"cec_report,omitempty"`
@@ -133,6 +135,8 @@ func quoteHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 			for i, gr := range report.GPUReports {
 				resp.GPUReports[i] = GPUReportEntry{
 					DeviceIndex:       gr.DeviceIndex,
+					Architecture:      gr.Architecture,
+					UUID:              gr.UUID,
 					Report:            base64.StdEncoding.EncodeToString(gr.Report),
 					AttestationReport: base64.StdEncoding.EncodeToString(gr.AttestationReport),
 					CECReport:         base64.StdEncoding.EncodeToString(gr.CECReport),
