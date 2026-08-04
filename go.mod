@@ -2,7 +2,7 @@ module github.com/akash-network/provider
 
 // Temporary review dependency. Remove this replace after
 // https://github.com/akash-network/chain-sdk/pull/352 is released.
-replace pkg.akt.dev/go => github.com/chalabi2/chain-sdk/go v0.0.0-20260801084345-b754587d2ba0
+replace pkg.akt.dev/go => github.com/chalabi2/chain-sdk/go v0.0.0-20260804181356-3b116cac5e13
 
 go 1.26.2
 

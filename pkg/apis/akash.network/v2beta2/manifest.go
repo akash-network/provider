@@ -37,6 +37,7 @@ type ManifestServiceCredentials struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+	URI      string `json:"uri,omitempty"`
 }
 
 // ManifestService stores name, image, args, env, unit, count and expose list of service
@@ -292,6 +293,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 			Email:    ms.Credentials.Email,
 			Username: ms.Credentials.Username,
 			Password: ms.Credentials.Password,
+			URI:      ms.Credentials.URI,
 		}
 	}
 
@@ -409,6 +411,7 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 			Email:    ams.Credentials.Email,
 			Username: ams.Credentials.Username,
 			Password: ams.Credentials.Password,
+			URI:      ams.Credentials.URI,
 		}
 	}
 

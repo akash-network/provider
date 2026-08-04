@@ -1424,8 +1424,8 @@ github.com/cespare/xxhash/v2 v2.1.1/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XL
 github.com/cespare/xxhash/v2 v2.2.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/chalabi2/chain-sdk/go v0.0.0-20260801084345-b754587d2ba0 h1:3yT79tnhiahFp8MdzlqaAG/pIUFlrNelYtm3ADatPL4=
-github.com/chalabi2/chain-sdk/go v0.0.0-20260801084345-b754587d2ba0/go.mod h1:QLtvv279agqCxKdg0sCHLKNWRK+wc8SfZoTOgsKMiog=
+github.com/chalabi2/chain-sdk/go v0.0.0-20260804181356-3b116cac5e13 h1:O0Di+RFLR6mzACbglYMeyiZQVrMbk+yMp35Qm15hL1M=
+github.com/chalabi2/chain-sdk/go v0.0.0-20260804181356-3b116cac5e13/go.mod h1:QLtvv279agqCxKdg0sCHLKNWRK+wc8SfZoTOgsKMiog=
 github.com/cheggaaa/pb v1.0.27/go.mod h1:pQciLPpbU0oxA0h+VJYYLxO+XeDQb5pZijXscXHm81s=
 github.com/chzyer/logex v1.1.10/go.mod h1:+Ywpsq7O8HXn0nuIou7OrIPyXbp3wmkHB+jjWRnGsAI=
 github.com/chzyer/logex v1.2.1 h1:XHDu3E6q+gdHgsdTPH6ImJMIp436vR6MPtH8gP05QzM=

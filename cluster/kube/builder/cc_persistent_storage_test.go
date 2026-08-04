@@ -110,6 +110,8 @@ func newCCStorageWorkload(t *testing.T, runtimeClass RuntimeClass, specs ...ccSt
 func prepareCCStorageWorkload(t *testing.T, workload *Workload) {
 	t.Helper()
 	var err error
+	workload.registryCredentialsURI, err = workload.confidentialRegistryCredentialsURI()
+	require.NoError(t, err)
 	workload.secureVolumes, err = workload.confidentialPersistentVolumes()
 	require.NoError(t, err)
 	workload.ccInitDataAnnotation, workload.ccInitDataSHA256, err = workload.confidentialInitDataAnnotation()
@@ -186,9 +188,9 @@ func TestConfidentialInitDataIsDeterministic(t *testing.T) {
 	)
 	volumes, err := workload.confidentialPersistentVolumes()
 	require.NoError(t, err)
-	first, err := buildConfidentialInitData(*workload.settings.CCInitData, "sha256", "proof", volumes)
+	first, err := buildConfidentialInitData(*workload.settings.CCInitData, "sha256", "proof", volumes, "")
 	require.NoError(t, err)
-	second, err := buildConfidentialInitData(*workload.settings.CCInitData, "sha256", "proof", volumes)
+	second, err := buildConfidentialInitData(*workload.settings.CCInitData, "sha256", "proof", volumes, "")
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 
@@ -219,7 +221,7 @@ func TestConfidentialInitDataMatchesCanaryContract(t *testing.T) {
 		VolumeID:   ccPersistentVolumeID("proof", "data", testSealedKeyRef),
 	}}
 
-	raw, err := buildConfidentialInitData(settings, "sha256", "proof", volumes)
+	raw, err := buildConfidentialInitData(settings, "sha256", "proof", volumes, "")
 	require.NoError(t, err)
 	digest := sha256.Sum256(raw)
 	require.Equal(

@@ -33,6 +33,22 @@ func TestManifestStorageKeyRefRoundTrip(t *testing.T) {
 	require.Equal(t, keyRef, recovered.Params.Storage[0].KeyRef)
 }
 
+func TestManifestRegistryCredentialsURIRoundTrip(t *testing.T) {
+	const uri = "kbs:///lease-scope/registry/auth"
+	original := mani.Service{
+		Name:        "proof",
+		Credentials: &mani.ImageCredentials{URI: uri},
+	}
+
+	stored, err := manifestServiceFromProvider(original, nil)
+	require.NoError(t, err)
+	require.Equal(t, uri, stored.Credentials.URI)
+
+	recovered, err := stored.fromCRD()
+	require.NoError(t, err)
+	require.Equal(t, uri, recovered.Credentials.URI)
+}
+
 func Test_Manifest_encoding(t *testing.T) {
 	for _, spec := range mtestutil.Generators {
 		// ensure decode(encode(obj)) == obj

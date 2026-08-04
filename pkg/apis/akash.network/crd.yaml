@@ -271,6 +271,10 @@ spec:
                                 type: string
                               password:
                                 type: string
+                              uri:
+                                type: string
+                                maxLength: 2048
+                                pattern: '^kbs:///[A-Za-z0-9_-][A-Za-z0-9._-]*/[A-Za-z0-9_-][A-Za-z0-9._-]*/[A-Za-z0-9_-][A-Za-z0-9._-]*$'
     - name: v2beta1
       served: false
       storage: false

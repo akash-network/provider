@@ -62,13 +62,14 @@ type workloadBase interface {
 
 type Workload struct {
 	builder
-	serviceIdx           int
-	volumesObjs          []corev1.Volume
-	pvcsObjs             []corev1.PersistentVolumeClaim
-	secretsRefs          []corev1.LocalObjectReference
-	secureVolumes        []ccPersistentVolume
-	ccInitDataAnnotation string
-	ccInitDataSHA256     string
+	serviceIdx             int
+	volumesObjs            []corev1.Volume
+	pvcsObjs               []corev1.PersistentVolumeClaim
+	secretsRefs            []corev1.LocalObjectReference
+	secureVolumes          []ccPersistentVolume
+	registryCredentialsURI string
+	ccInitDataAnnotation   string
+	ccInitDataSHA256       string
 }
 
 var _ workloadBase = (*Workload)(nil)
@@ -95,6 +96,10 @@ func NewWorkloadBuilder(
 			sparams:    sparams,
 		},
 		serviceIdx: serviceIdx,
+	}
+	res.registryCredentialsURI, err = res.confidentialRegistryCredentialsURI()
+	if err != nil {
+		return nil, fmt.Errorf("validate registry credentials: %w", err)
 	}
 	res.secureVolumes, err = res.confidentialPersistentVolumes()
 	if err != nil {
@@ -602,11 +607,14 @@ func (b *Workload) selectorLabels() map[string]string {
 }
 
 func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
+	if b.registryCredentialsURI != "" {
+		return nil
+	}
+
 	sname := b.settings.DockerImagePullSecretsName
 
-	service := &b.group.Services[b.serviceIdx]
-	if service.Credentials != nil {
-		sname = NewServiceCredentials(b, service.Credentials).Name()
+	if credentials := b.ImagePullCredentials(); credentials != nil {
+		sname = NewServiceCredentials(b, credentials).Name()
 	}
 
 	if sname == "" {

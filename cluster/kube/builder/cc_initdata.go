@@ -29,7 +29,7 @@ func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	required := hasSealedEnvironment || len(b.secureVolumes) != 0
+	required := hasSealedEnvironment || len(b.secureVolumes) != 0 || b.registryCredentialsURI != ""
 	if !required {
 		return "", "", nil
 	}
@@ -52,7 +52,13 @@ func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 		return "", "", fmt.Errorf("sealed workload data uses an unsupported confidential runtime %q", sparams.RuntimeClass)
 	}
 
-	raw, err := buildConfidentialInitData(*b.settings.CCInitData, algorithm, service.Name, b.secureVolumes)
+	raw, err := buildConfidentialInitData(
+		*b.settings.CCInitData,
+		algorithm,
+		service.Name,
+		b.secureVolumes,
+		b.registryCredentialsURI,
+	)
 	if err != nil {
 		return "", "", err
 	}
@@ -101,6 +107,7 @@ func buildConfidentialInitData(
 	algorithm string,
 	containerName string,
 	volumes []ccPersistentVolume,
+	registryCredentialsURI string,
 ) ([]byte, error) {
 	if err := validateCCInitDataSettings(settings); err != nil {
 		return nil, fmt.Errorf("invalid confidential-compute initdata settings: %w", err)
@@ -124,6 +131,15 @@ func buildConfidentialInitData(
 		"kbs_cert = '''\n" + certificate + "'''\n\n" +
 		"[image]\n" +
 		fmt.Sprintf("image_security_policy_uri = %q\n", settings.ImageSecurityPolicyURI)
+	if registryCredentialsURI != "" {
+		if err := validateCCKBSResourceURI(registryCredentialsURI); err != nil {
+			return nil, err
+		}
+		cdhConfig += fmt.Sprintf(
+			"authenticated_registry_credentials_uri = %q\n",
+			registryCredentialsURI,
+		)
+	}
 
 	var raw bytes.Buffer
 	fmt.Fprintf(&raw, "version = %q\n", ccInitDataVersion)
