@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -26,6 +27,8 @@ var _ leasev1.LeaseRPCServer = (*grpcLeaseV1)(nil)
 
 type sidecarGPUReport struct {
 	DeviceIndex       uint32 `json:"device_index"`
+	Architecture      string `json:"architecture"`
+	UUID              string `json:"uuid"`
 	Report            string `json:"report"`
 	AttestationReport string `json:"attestation_report"`
 	CECReport         string `json:"cec_report"`
@@ -114,6 +117,12 @@ func parseSidecarAttestationQuoteResponse(data []byte) (*leasev1.AttestationQuot
 			return nil, fmt.Errorf("duplicate GPU device index %d", gr.DeviceIndex)
 		}
 		seenDeviceIndices[gr.DeviceIndex] = struct{}{}
+		if gr.Architecture != "HOPPER" && gr.Architecture != "BLACKWELL" {
+			return nil, fmt.Errorf("GPU %d: unsupported architecture %q", gr.DeviceIndex, gr.Architecture)
+		}
+		if !validNvidiaGPUUUID(gr.UUID) {
+			return nil, fmt.Errorf("GPU %d: invalid NVML UUID", gr.DeviceIndex)
+		}
 
 		legacyReport, err := decodeRequiredBase64("legacy GPU report", gr.Report)
 		if err != nil {
@@ -150,6 +159,8 @@ func parseSidecarAttestationQuoteResponse(data []byte) (*leasev1.AttestationQuot
 
 		resp.GpuReports = append(resp.GpuReports, leasev1.AttestationGPUReport{
 			DeviceIndex:       gr.DeviceIndex,
+			Architecture:      gr.Architecture,
+			UUID:              gr.UUID,
 			Report:            gr.Report,
 			AttestationReport: gr.AttestationReport,
 			CecReport:         gr.CECReport,
@@ -158,6 +169,26 @@ func parseSidecarAttestationQuoteResponse(data []byte) (*leasev1.AttestationQuot
 	}
 
 	return resp, nil
+}
+
+func validNvidiaGPUUUID(value string) bool {
+	const prefix = "GPU-"
+	if len(value) != len(prefix)+36 || !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for index, char := range value[len(prefix):] {
+		switch index {
+		case 8, 13, 18, 23:
+			if char != '-' {
+				return false
+			}
+		default:
+			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func decodeRequiredBase64(field, value string) ([]byte, error) {

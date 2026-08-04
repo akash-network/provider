@@ -70,7 +70,7 @@ retract (
 
 replace (
 	// Temporary review dependency. Remove after akash-network/chain-sdk#351 is released.
-	pkg.akt.dev/go => github.com/chalabi2/chain-sdk/go v0.0.0-20260801071020-5ebaf803b104
+	pkg.akt.dev/go => github.com/chalabi2/chain-sdk/go v0.0.0-20260804195217-a9b6f4203f43
 
 	// use cosmos fork of keyring
 	github.com/99designs/keyring => github.com/cosmos/keyring v1.2.0
