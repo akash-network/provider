@@ -357,12 +357,29 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 
 func (b *Workload) podAnnotations() map[string]string {
 	params := b.sparams[b.serviceIdx]
+
+	var obj map[string]string
+
 	if params != nil && params.AttestationDisabled {
-		return map[string]string{
+		obj = map[string]string{
 			AkashAttestationDisabledAnnotation: "true",
 		}
 	}
-	return nil
+
+	// RoCEv2 resolves the remote rail IP through the pod's own network
+	// namespace, so interconnect pods on a RoCE fabric need the rail
+	// netdevs attached — the RDMA verbs device alone cannot complete
+	// QP setup. InfiniBand is LID-addressed and skips this entirely.
+	if ic := sparamsInterconnect(params); ic != nil && ic.Enabled && ic.Fabric == InterconnectFabricRoCE {
+		if networks := strings.TrimSpace(b.settings.InterconnectRoCENetworks); networks != "" {
+			if obj == nil {
+				obj = make(map[string]string, 1)
+			}
+			obj[multusNetworksAnnotation] = networks
+		}
+	}
+
+	return obj
 }
 
 func (b *Workload) runtimeClass() *string {
@@ -610,18 +627,17 @@ func (b *Workload) addEnvVarsForDeployment(envVarsAlreadyAdded map[string]int, e
 	// comma-separated list natively, so mixed-vendor hosts like
 	// ["mlx5","bnxt_re"] just emit `NCCL_IB_HCA=mlx5,bnxt_re`.
 	//
-	// AKT-494: NCCL on RoCE requires NCCL_IB_GID_INDEX=3 to select the
-	// RoCEv2 + VLAN GID — the common production GID. Without it NCCL
-	// falls back to auto-detect, which works on uniform single-GID hosts
-	// but picks the wrong GID on multi-GID nodes. IB stays untouched
-	// (NCCL's default behaviour is correct there).
+	// NCCL_IB_GID_INDEX is deliberately NOT injected, for RoCE included.
+	// RoCE pods reach the rail through multus-attached netdevs in their own
+	// network namespace (see podAnnotations); the RoCEv2 GIDs those netdevs
+	// register land at a pod-specific index (host GID entries are not
+	// visible from the pod netns), so any fixed value is wrong. NCCL
+	// auto-selects the RoCEv2 GID from the pod's table, which is correct on
+	// both fabrics. Tenants can still pin an index via service.env.
 	if ic := sparamsInterconnect(b.sparams[b.serviceIdx]); ic != nil && ic.Enabled {
 		env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBDisable, "0")
 		if hca := strings.Join(ic.NCCLHCAPrefixes, ","); hca != "" {
 			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBHCA, hca)
-		}
-		if ic.Fabric == "roce" {
-			env = addIfNotPresent(envVarsAlreadyAdded, env, envVarNCCLIBGIDIndex, nccLIBGIDIndexRoCEValue)
 		}
 	}
 

@@ -105,9 +105,12 @@ func TestWorkloadJoinsMultipleHCAPrefixes(t *testing.T) {
 	require.Equal(t, "mlx5,bnxt_re", env[envVarNCCLIBHCA])
 }
 
-// AKT-494: NCCL on RoCE needs NCCL_IB_GID_INDEX=3 to pick the RoCEv2 +
-// VLAN GID. The builder auto-injects it for RoCE-pinned reservations.
-func TestWorkloadInjectsGIDIndexOnRoCE(t *testing.T) {
+// NCCL_IB_GID_INDEX is never injected — on RoCE the pod's rail netdevs
+// (multus-attached, see podAnnotations) register RoCEv2 GIDs at a
+// pod-specific index invisible to any fixed host-side value, and NCCL's
+// auto-selection picks the right one from the pod's own GID table. On IB
+// the default selection is correct too.
+func TestWorkloadOmitsGIDIndexOnRoCE(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
@@ -115,12 +118,10 @@ func TestWorkloadInjectsGIDIndexOnRoCE(t *testing.T) {
 
 	container := workload.container()
 	env := envMap(container.Env)
-	require.Equal(t, "3", env[envVarNCCLIBGIDIndex])
+	_, hasGID := env[envVarNCCLIBGIDIndex]
+	require.False(t, hasGID, "RoCE reservations must not carry an auto-injected NCCL_IB_GID_INDEX")
 }
 
-// AKT-494: IB fabrics do NOT get NCCL_IB_GID_INDEX injected — NCCL's
-// default GID selection is correct on IB, and overriding it can pick the
-// wrong index on multi-port hosts.
 func TestWorkloadOmitsGIDIndexOnInfiniBand(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
@@ -133,10 +134,9 @@ func TestWorkloadOmitsGIDIndexOnInfiniBand(t *testing.T) {
 	require.False(t, hasGID, "InfiniBand reservations must not carry an explicit NCCL_IB_GID_INDEX")
 }
 
-// AKT-494: a tenant who already set NCCL_IB_GID_INDEX in SDL env wins —
-// addIfNotPresent honors the override on RoCE just like every other
-// auto-injected NCCL knob.
-func TestWorkloadRespectsSDLGIDIndexOverrideOnRoCE(t *testing.T) {
+// A tenant who sets NCCL_IB_GID_INDEX in SDL env keeps it — the builder
+// passes service.env through untouched.
+func TestWorkloadRespectsSDLGIDIndexOnRoCE(t *testing.T) {
 	lid := testutil.LeaseID(t)
 	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
 
@@ -148,6 +148,59 @@ func TestWorkloadRespectsSDLGIDIndexOverrideOnRoCE(t *testing.T) {
 	container := workload.container()
 	env := envMap(container.Env)
 	require.Equal(t, "5", env[envVarNCCLIBGIDIndex])
+}
+
+// RoCE-pinned services get the configured rail networks attached via the
+// multus annotation — RoCEv2 QP setup resolves the remote rail IP through
+// the pod netns, so the rail netdevs must be in the pod.
+func TestWorkloadAttachesRoCENetworks(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	workload.settings.InterconnectRoCENetworks = "default/rail0,default/rail1"
+	stampinterconnect(workload, "", interconnectParamsWith("roce", []string{"mlx5"}))
+
+	annotations := workload.podAnnotations()
+	require.Equal(t, "default/rail0,default/rail1", annotations[multusNetworksAnnotation])
+}
+
+// InfiniBand is LID-addressed — no rail attachment even when networks are
+// configured.
+func TestWorkloadNoNetworkAnnotationOnInfiniBand(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	workload.settings.InterconnectRoCENetworks = "default/rail0"
+	stampinterconnect(workload, "", interconnectParamsWith("infiniband", []string{"mlx5"}))
+
+	annotations := workload.podAnnotations()
+	_, has := annotations[multusNetworksAnnotation]
+	require.False(t, has, "InfiniBand workloads must not get the multus annotation")
+}
+
+// RoCE with no networks configured: no annotation (nothing to attach).
+func TestWorkloadNoNetworkAnnotationWhenUnconfigured(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	stampinterconnect(workload, "", interconnectParamsWith("roce", []string{"mlx5"}))
+
+	annotations := workload.podAnnotations()
+	_, has := annotations[multusNetworksAnnotation]
+	require.False(t, has)
+}
+
+// Non-interconnect services never get the annotation regardless of
+// provider config.
+func TestWorkloadNoNetworkAnnotationWithoutInterconnect(t *testing.T) {
+	lid := testutil.LeaseID(t)
+	_, workload := testSetup(t, "../../../testdata/deployment/deployment.yaml", 0, lid)
+
+	workload.settings.InterconnectRoCENetworks = "default/rail0"
+
+	annotations := workload.podAnnotations()
+	_, has := annotations[multusNetworksAnnotation]
+	require.False(t, has)
 }
 
 func TestWorkloadNointerconnectNoEnvNoResource(t *testing.T) {

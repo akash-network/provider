@@ -100,6 +100,11 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().String(FlagInterconnectRoCENetworksNS, "akash-rails", "Namespace scanned for multus NetworkAttachmentDefinitions to attach to GPU interconnect workloads on RoCE fabrics; every NAD found there is attached. Empty disables attachment")
+	if err := viper.BindPFlag(FlagInterconnectRoCENetworksNS, cmd.Flags().Lookup(FlagInterconnectRoCENetworksNS)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Uint(FlagClusterNodePortQuantity, 1, "The number of node ports available on the Kubernetes cluster")
 	if err := viper.BindPFlag(FlagClusterNodePortQuantity, cmd.Flags().Lookup(FlagClusterNodePortQuantity)); err != nil {
 		return err

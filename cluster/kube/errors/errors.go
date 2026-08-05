@@ -19,6 +19,7 @@ var (
 	ErrInvalidHostnameConnection = fmt.Errorf("%w: invalid hostname connection", errKubeClient)
 	ErrNotConfiguredWithSettings = fmt.Errorf("%w: not configured with settings in the context passed to function", errKubeClient)
 	ErrAlreadyExists             = fmt.Errorf("%w: resource already exists", errKubeClient)
+	ErrNoRoCERailNetworks        = fmt.Errorf("%w: no RoCE rail NetworkAttachmentDefinitions found", errKubeClient)
 )
 
 // IsKubeAPIUnreachable reports whether err indicates the kube API server is unreachable.
