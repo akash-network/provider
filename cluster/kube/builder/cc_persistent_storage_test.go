@@ -65,6 +65,23 @@ func testCCInitDataSettings(t *testing.T) *CCInitDataSettings {
 	}
 }
 
+func providerManagedKBSParams() *mani.KBSParams {
+	return &mani.KBSParams{
+		Source: &mani.KBSParams_Provider{Provider: &mani.ProviderKBSParams{}},
+	}
+}
+
+func tenantManagedKBSParams(settings CCInitDataSettings) *mani.KBSParams {
+	return &mani.KBSParams{
+		Source: &mani.KBSParams_Tenant{Tenant: &mani.TenantKBSParams{
+			URL:                    settings.KBSURL,
+			Certificate:            settings.KBSCertificate,
+			ImageSecurityPolicyURI: settings.ImageSecurityPolicyURI,
+			AgentPolicy:            settings.AgentPolicy,
+		}},
+	}
+}
+
 func newCCStorageWorkload(t *testing.T, runtimeClass RuntimeClass, specs ...ccStorageSpec) *Workload {
 	t.Helper()
 
@@ -93,11 +110,23 @@ func newCCStorageWorkload(t *testing.T, runtimeClass RuntimeClass, specs ...ccSt
 		})
 	}
 
+	params := &mani.ServiceParams{Storage: parameterStorage}
+	if runtimeClass.Is(WithCC()) {
+		teeType := "cpu"
+		if runtimeClass.Is(WithGPU()) {
+			teeType = "cpu-gpu"
+		}
+		params.TEE = &mani.TEEParams{
+			Type:        teeType,
+			Attestation: true,
+			KBS:         providerManagedKBSParams(),
+		}
+	}
 	service := mani.Service{
 		Name:      "proof",
 		Count:     1,
 		Resources: rtypes.Resources{Storage: resourceStorage},
-		Params:    &mani.ServiceParams{Storage: parameterStorage},
+		Params:    params,
 	}
 	group := mani.Group{Services: mani.Services{service}}
 	return &Workload{
@@ -241,6 +270,64 @@ func TestSealedEnvironmentRequiresMeasuredCDHConfiguration(t *testing.T) {
 	require.Contains(t, data[ccInitDataCDHKey], "name = \"cc_kbc\"")
 }
 
+func TestConfidentialInitDataUsesExplicitKBSSelection(t *testing.T) {
+	t.Run("provider managed", func(t *testing.T) {
+		workload := newCCStorageWorkload(t, RuntimeClassKataQemuSNP)
+		workload.group.Services[0].Env = []string{"CANARY=" + testSealedKeyRef}
+		prepareCCStorageWorkload(t, workload)
+
+		raw, _ := decodeCCInitData(t, workload.ccInitDataAnnotation)
+		require.Contains(t, string(raw), workload.settings.CCInitData.KBSURL)
+	})
+
+	t.Run("tenant managed", func(t *testing.T) {
+		workload := newCCStorageWorkload(
+			t,
+			RuntimeClassKataQemuSNP,
+			ccStorageSpec{
+				name:       "data",
+				mount:      "/proof",
+				persistent: true,
+				keyRef:     testSealedKeyRef,
+			},
+		)
+		tenant := *testCCInitDataSettings(t)
+		tenant.KBSURL = "https://kbs.tenant.example:8443"
+		tenant.ImageSecurityPolicyURI = "kbs:///tenant/security-policy/sha256-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+		tenant.AgentPolicy = "package agent_policy\n\ndefault allow = false\n"
+		workload.group.Services[0].Params.TEE.KBS = tenantManagedKBSParams(tenant)
+		workload.settings.CCInitData = nil
+		workload.group.Services[0].Env = []string{"CANARY=" + testSealedKeyRef}
+		prepareCCStorageWorkload(t, workload)
+
+		raw, _ := decodeCCInitData(t, workload.ccInitDataAnnotation)
+		require.Len(t, workload.secureVolumes, 1)
+		require.Contains(t, string(raw), tenant.KBSURL)
+		require.Contains(t, string(raw), tenant.ImageSecurityPolicyURI)
+		require.Contains(t, string(raw), "default allow = false")
+	})
+
+	t.Run("missing selection", func(t *testing.T) {
+		workload := newCCStorageWorkload(t, RuntimeClassKataQemuSNP)
+		workload.group.Services[0].Params.TEE.KBS = nil
+		workload.group.Services[0].Env = []string{"CANARY=" + testSealedKeyRef}
+
+		_, _, err := workload.confidentialInitDataAnnotation()
+		require.ErrorContains(t, err, "explicit provider or tenant KBS selection")
+	})
+
+	t.Run("invalid tenant bundle", func(t *testing.T) {
+		workload := newCCStorageWorkload(t, RuntimeClassKataQemuSNP)
+		tenant := *testCCInitDataSettings(t)
+		tenant.KBSCertificate = "not a certificate"
+		workload.group.Services[0].Params.TEE.KBS = tenantManagedKBSParams(tenant)
+		workload.group.Services[0].Env = []string{"CANARY=" + testSealedKeyRef}
+
+		_, _, err := workload.confidentialInitDataAnnotation()
+		require.ErrorContains(t, err, "KBS certificate")
+	})
+}
+
 func TestConfidentialPersistentStorageRejectsUnsafeContracts(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -341,7 +428,7 @@ func TestSealedEnvironmentContractValidation(t *testing.T) {
 	workload.group.Services[0].Env = []string{"SECRET=" + testSealedKeyRef}
 	workload.settings.CCInitData = nil
 	_, _, err := workload.confidentialInitDataAnnotation()
-	require.ErrorContains(t, err, "requires provider confidential-compute initdata settings")
+	require.ErrorContains(t, err, "provider-managed KBS selection requires provider confidential-compute initdata settings")
 
 	workload = newCCStorageWorkload(t, RuntimeClass(""))
 	workload.group.Services[0].Env = []string{"SECRET=" + testSealedKeyRef}

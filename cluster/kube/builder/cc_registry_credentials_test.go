@@ -24,6 +24,8 @@ func TestConfidentialRegistryCredentialsAreKBSReferenced(t *testing.T) {
 		crd.ClusterSettings{SchedulerParams: fixture.sparams},
 	)
 	require.NoError(t, err)
+	require.Equal(t, "cpu", manifest.Spec.Group.Services[0].SchedulerParams.TEEType)
+	require.NotNil(t, manifest.Spec.Group.Services[0].Params.KBS)
 
 	workload, err := NewWorkloadBuilder(
 		testutil.Logger(t),

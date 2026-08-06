@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 )
 
 const (
@@ -44,6 +46,8 @@ func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 		return "", "", err
 	}
 	required := hasSealedEnvironment || len(b.secureVolumes) != 0 || b.registryCredentialsURI != ""
+	kbsSelection := serviceKBSSelection(service)
+	required = required || kbsSelection != nil
 	if !required {
 		return "", "", nil
 	}
@@ -52,8 +56,9 @@ func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 	if sparams == nil || !sparams.RuntimeClass.Is(WithCC()) {
 		return "", "", fmt.Errorf("sealed workload data requires a confidential runtime")
 	}
-	if b.settings.CCInitData == nil {
-		return "", "", fmt.Errorf("sealed workload data requires provider confidential-compute initdata settings")
+	settings, err := b.resolveCCInitDataSettings(kbsSelection)
+	if err != nil {
+		return "", "", err
 	}
 
 	algorithm := ""
@@ -67,7 +72,7 @@ func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 	}
 
 	raw, err := buildConfidentialInitData(
-		*b.settings.CCInitData,
+		settings,
 		algorithm,
 		service.Name,
 		b.secureVolumes,
@@ -99,6 +104,46 @@ func (b *Workload) confidentialInitDataAnnotation() (string, string, error) {
 	digest := sha256.Sum256(raw)
 
 	return annotation, hex.EncodeToString(digest[:]), nil
+}
+
+func serviceKBSSelection(service *mani.Service) *mani.KBSParams {
+	if service.Params == nil || service.Params.TEE == nil {
+		return nil
+	}
+	return service.Params.TEE.KBS
+}
+
+func (b *Workload) resolveCCInitDataSettings(selection *mani.KBSParams) (CCInitDataSettings, error) {
+	if selection == nil {
+		return CCInitDataSettings{}, fmt.Errorf(
+			"sealed workload data requires an explicit provider or tenant KBS selection",
+		)
+	}
+
+	switch source := selection.Source.(type) {
+	case *mani.KBSParams_Provider:
+		if source.Provider == nil {
+			return CCInitDataSettings{}, fmt.Errorf("provider-managed KBS selection is empty")
+		}
+		if b.settings.CCInitData == nil {
+			return CCInitDataSettings{}, fmt.Errorf(
+				"provider-managed KBS selection requires provider confidential-compute initdata settings",
+			)
+		}
+		return *b.settings.CCInitData, nil
+	case *mani.KBSParams_Tenant:
+		if source.Tenant == nil {
+			return CCInitDataSettings{}, fmt.Errorf("tenant-managed KBS selection is empty")
+		}
+		return CCInitDataSettings{
+			KBSURL:                 source.Tenant.URL,
+			KBSCertificate:         source.Tenant.Certificate,
+			ImageSecurityPolicyURI: source.Tenant.ImageSecurityPolicyURI,
+			AgentPolicy:            source.Tenant.AgentPolicy,
+		}, nil
+	default:
+		return CCInitDataSettings{}, fmt.Errorf("KBS selection must be provider or tenant managed")
+	}
 }
 
 func serviceHasSealedEnvironment(environment []string) (bool, error) {

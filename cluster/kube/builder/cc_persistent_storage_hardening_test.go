@@ -77,5 +77,5 @@ func TestConfidentialPersistentStorageClassSettingsValidation(t *testing.T) {
 	err = ValidateSettings(Settings{
 		CCPersistentStorageClasses: map[string]struct{}{"beta3": {}},
 	})
-	require.ErrorContains(t, err, "require confidential-compute initdata")
+	require.NoError(t, err, "tenant-managed KBS workloads do not require provider KBS defaults")
 }

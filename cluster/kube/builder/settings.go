@@ -88,11 +88,10 @@ type Settings struct {
 	// Gateway provider when using gateway-api mode
 	GatewayProvider string
 
-	// CCInitData configures the public Trustee connection and measured guest
-	// policy used by confidential workloads that contain sealed environment
-	// values, tenant-signed persistent-volume key references, or KBS registry
-	// credential references. It never holds a KBS administrator credential or
-	// secret plaintext.
+	// CCInitData configures the provider-managed public Trustee connection and
+	// measured guest policy. Tenants may instead supply a complete public KBS
+	// configuration in the manifest. Neither source contains a KBS
+	// administrator credential or secret plaintext.
 	CCInitData *CCInitDataSettings
 
 	// CCPersistentStorageClasses is the operator-maintained set of Block
@@ -101,8 +100,9 @@ type Settings struct {
 	CCPersistentStorageClasses map[string]struct{}
 }
 
-// CCInitDataSettings contains the operator-controlled, non-secret inputs from
-// which the provider deterministically constructs Kata initdata.
+// CCInitDataSettings contains the non-secret public inputs from which the
+// provider deterministically constructs Kata initdata. Values come from either
+// the provider-managed defaults or one complete tenant-managed manifest bundle.
 type CCInitDataSettings struct {
 	KBSURL                 string
 	KBSCertificate         string
@@ -139,13 +139,6 @@ func ValidateSettings(settings Settings) error {
 			)
 		}
 	}
-	if len(settings.CCPersistentStorageClasses) != 0 && settings.CCInitData == nil {
-		return fmt.Errorf(
-			"%w: confidential persistent storage classes require confidential-compute initdata",
-			ErrSettingsValidation,
-		)
-	}
-
 	return nil
 }
 
