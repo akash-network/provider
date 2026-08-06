@@ -224,11 +224,9 @@ spec:
                                 properties:
                                   provider:
                                     type: object
-                                    nullable: true
                                     additionalProperties: false
                                   tenant:
                                     type: object
-                                    nullable: true
                                     additionalProperties: false
                                     required:
                                       - url
@@ -465,11 +463,9 @@ spec:
                                 properties:
                                   provider:
                                     type: object
-                                    nullable: true
                                     additionalProperties: false
                                   tenant:
                                     type: object
-                                    nullable: true
                                     additionalProperties: false
                                     required:
                                       - url

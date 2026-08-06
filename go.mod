@@ -55,6 +55,7 @@ require (
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
 	k8s.io/code-generator v0.34.1
+	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912
 	k8s.io/kubectl v0.33.3
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
 	pkg.akt.dev/go v0.4.2
@@ -385,7 +386,6 @@ require (
 	k8s.io/cli-runtime v0.33.3 // indirect
 	k8s.io/gengo/v2 v2.0.0-20250820003526-c297c0c1eb9d // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 	pgregory.net/rapid v1.2.0 // indirect
 	pkg.akt.dev/specs v0.0.1 // indirect
