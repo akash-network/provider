@@ -38,6 +38,12 @@ var httpRouteGVR = schema.GroupVersionResource{
 	Resource: "httproutes",
 }
 
+var snippetsFilterGVR = schema.GroupVersionResource{
+	Group:    "gateway.nginx.org",
+	Version:  "v1alpha1",
+	Resource: "snippetsfilters",
+}
+
 // E2EGatewayAPI is the test suite for Gateway API integration tests.
 // It embeds IntegrationTestSuite with gatewayAPIMode enabled.
 type E2EGatewayAPI struct {
@@ -164,8 +170,8 @@ func (s *E2EGatewayAPI) TestE2EGatewayAPIHTTPRouteCreation() {
 		s.verifyHTTPRouteParentRef(ns, "gateway-test.localhost", "akash-gateway", "akash-gateway")
 	})
 
-	s.T().Run("HTTPRoute has correct annotations", func(t *testing.T) {
-		s.verifyHTTPRouteAnnotations(ns, "gateway-test.localhost")
+	s.T().Run("HTTPRoute references SnippetsFilter with http_options", func(t *testing.T) {
+		s.verifyHTTPRouteSnippet(ns, "gateway-test.localhost")
 	})
 
 	// Verify provider status
@@ -403,14 +409,17 @@ func (s *E2EGatewayAPI) verifyHTTPRouteParentRef(namespace, routeName, gatewayNa
 	}
 }
 
-// verifyHTTPRouteAnnotations checks that the HTTPRoute has correct annotations for HTTP options.
-// Expected annotations based on deployment-v2-gateway-api.yaml http_options:
-//   - read_timeout: 60000 (ms) -> nginx.org/proxy-read-timeout: "60" (seconds)
-//   - send_timeout: 60000 (ms) -> nginx.org/proxy-send-timeout: "60" (seconds)
-//   - max_body_size: 2097152 -> nginx.org/client-max-body-size: "2097152"
-//   - next_tries: 3 -> nginx.org/proxy-next-upstream-tries: "3"
-//   - next_timeout: 30000 (ms) -> nginx.org/proxy-next-upstream-timeout: "30s"
-func (s *E2EGatewayAPI) verifyHTTPRouteAnnotations(namespace, routeName string) {
+// verifyHTTPRouteSnippet checks that the HTTPRoute references a per-route
+// SnippetsFilter through an ExtensionRef filter, and that the SnippetsFilter
+// carries the SDL http_options as nginx directives. NGF applies http_options via
+// SnippetsFilters, not nginx.org/* annotations. Directives from
+// deployment-v2-gateway-api.yaml http_options (timeouts in milliseconds):
+//   - max_body_size: 2097152 -> client_max_body_size 2097152;
+//   - read_timeout: 60000 -> proxy_read_timeout 60000ms;
+//   - send_timeout: 60000 -> proxy_send_timeout 60000ms;
+//   - next_tries: 3 -> proxy_next_upstream_tries 3;
+//   - next_timeout: 30000 -> proxy_next_upstream_timeout 30000ms;
+func (s *E2EGatewayAPI) verifyHTTPRouteSnippet(namespace, routeName string) {
 	if s.dc == nil {
 		s.T().Skip("dynamic client not available")
 		return
@@ -422,29 +431,48 @@ func (s *E2EGatewayAPI) verifyHTTPRouteAnnotations(namespace, routeName string) 
 	route, err := s.dc.Resource(httpRouteGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
 	require.NoError(s.T(), err)
 
-	annotations := route.GetAnnotations()
-	s.T().Logf("HTTPRoute annotations: %v", annotations)
+	spec, ok := route.Object["spec"].(map[string]interface{})
+	require.True(s.T(), ok, "HTTPRoute should have spec")
+	rules, ok := spec["rules"].([]interface{})
+	require.True(s.T(), ok, "HTTPRoute should have rules")
+	require.NotEmpty(s.T(), rules)
+	rule := rules[0].(map[string]interface{})
+	filters, ok := rule["filters"].([]interface{})
+	require.True(s.T(), ok, "rule should have an ExtensionRef filter")
+	require.NotEmpty(s.T(), filters)
 
-	// Verify NGINX Gateway Fabric annotations match http_options from SDL
-	// read_timeout: 60000ms -> 60s
-	assert.Equal(s.T(), "60", annotations["nginx.org/proxy-read-timeout"],
-		"read_timeout should be converted to seconds")
+	filter := filters[0].(map[string]interface{})
+	assert.Equal(s.T(), "ExtensionRef", filter["type"], "filter should be an ExtensionRef")
+	extRef, ok := filter["extensionRef"].(map[string]interface{})
+	require.True(s.T(), ok, "filter should have extensionRef")
+	assert.Equal(s.T(), "gateway.nginx.org", extRef["group"])
+	assert.Equal(s.T(), "SnippetsFilter", extRef["kind"])
+	assert.Equal(s.T(), routeName, extRef["name"], "ExtensionRef should reference the route's SnippetsFilter")
 
-	// send_timeout: 60000ms -> 60s
-	assert.Equal(s.T(), "60", annotations["nginx.org/proxy-send-timeout"],
-		"send_timeout should be converted to seconds")
+	sf, err := s.dc.Resource(snippetsFilterGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	require.NoError(s.T(), err, "SnippetsFilter %s should exist", routeName)
 
-	// max_body_size: 2097152 bytes
-	assert.Equal(s.T(), "2097152", annotations["nginx.org/client-max-body-size"],
-		"max_body_size should be set")
+	sfSpec, ok := sf.Object["spec"].(map[string]interface{})
+	require.True(s.T(), ok, "SnippetsFilter should have spec")
+	snippets, ok := sfSpec["snippets"].([]interface{})
+	require.True(s.T(), ok, "SnippetsFilter should have snippets")
+	require.NotEmpty(s.T(), snippets)
+	snippet := snippets[0].(map[string]interface{})
+	assert.Equal(s.T(), "http.server.location", snippet["context"])
 
-	// next_tries: 3
-	assert.Equal(s.T(), "3", annotations["nginx.org/proxy-next-upstream-tries"],
-		"next_tries should be set")
+	value, ok := snippet["value"].(string)
+	require.True(s.T(), ok, "snippet should have a value")
+	s.T().Logf("SnippetsFilter value:\n%s", value)
 
-	// next_timeout: 30000ms -> 30s
-	assert.Equal(s.T(), "30s", annotations["nginx.org/proxy-next-upstream-timeout"],
-		"next_timeout should be converted to seconds with 's' suffix")
+	for _, want := range []string{
+		"client_max_body_size 2097152;",
+		"proxy_read_timeout 60000ms;",
+		"proxy_send_timeout 60000ms;",
+		"proxy_next_upstream_tries 3;",
+		"proxy_next_upstream_timeout 30000ms;",
+	} {
+		assert.Contains(s.T(), value, want, "snippet should contain %q", want)
+	}
 }
 
 // TestGatewayAPISuite runs the Gateway API e2e test suite

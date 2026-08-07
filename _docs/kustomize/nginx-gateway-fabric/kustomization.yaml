@@ -8,3 +8,31 @@ resources:
   - gateway.yaml
 patches:
   - path: nodeport-patch.yaml
+  - target:
+      group: apps
+      version: v1
+      kind: Deployment
+      name: nginx-gateway
+      namespace: nginx-gateway
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --snippets-filters
+  - target:
+      group: rbac.authorization.k8s.io
+      version: v1
+      kind: ClusterRole
+      name: nginx-gateway
+    patch: |-
+      - op: add
+        path: /rules/-
+        value:
+          apiGroups: ["gateway.nginx.org"]
+          resources: ["snippetsfilters"]
+          verbs: ["list", "watch"]
+      - op: add
+        path: /rules/-
+        value:
+          apiGroups: ["gateway.nginx.org"]
+          resources: ["snippetsfilters/status"]
+          verbs: ["update"]
