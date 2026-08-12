@@ -8,7 +8,18 @@ KIND_NAME := kube
 
 include _run/common-kind-vars.mk
 
+# GATEWAY_API selects the ingress endpoint the e2e suite dials, matching the cluster
+# brought up by kube-cluster-setup (GATEWAY_API=true installs NGF + the akash-gateway
+# Gateway). The default cluster maps ingress-nginx on container port 80, discovered
+# dynamically as KIND_HTTP_PORT. The gateway-api cluster (kind-config-gateway.yaml)
+# has no port-80 mapping; it publishes NGF's NodePort (listener :80) on the fixed
+# host port 8080, so KIND_HTTP_PORT would be empty there.
+GATEWAY_API ?= false
+ifeq ($(GATEWAY_API),true)
+KIND_VARS              ?= KUBE_INGRESS_IP="$(KIND_K8S_IP)" KUBE_INGRESS_PORT="8080"
+else
 KIND_VARS              ?= KUBE_INGRESS_IP="$(KIND_K8S_IP)" KUBE_INGRESS_PORT="$(KIND_HTTP_PORT)"
+endif
 
 # This is statically specified in the vagrant configuration
 # todo @troian check it still necessary
@@ -19,13 +30,19 @@ KUBE_NODE_IP ?= 172.18.8.101
 
 INTEGRATION_VARS := TEST_INTEGRATION=true
 
+# TEST_E2E_SUITE selects which e2e suite test-e2e-integration runs. Default is the
+# main suite; set TEST_E2E_SUITE=TestGatewayAPISuite against a gateway-api cluster
+# (GATEWAY_API=true at cluster setup, which installs NGF and the akash-gateway
+# Gateway) to run the Gateway/NGF suite.
+TEST_E2E_SUITE ?= TestIntegrationTestSuite
+
 .PHONY: test-e2e-integration
 test-e2e-integration:
 	# Assumes cluster created and configured:
 	# ```
 	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e
 	# ```
-	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 3000s
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run $(TEST_E2E_SUITE) -timeout 3000s
 
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:
