@@ -60,8 +60,9 @@ func (NoopHTTPRouteObserver) OnDelete(error) {}
 // SnippetsFilter makes NGF set ResolvedRefs=False and serve HTTP 500 for that
 // rule, so an existing route keeps its working spec until the filter is applied.
 // The SnippetsFilter is owner-referenced to the route for garbage collection, so
-// a brand-new route is created without the filter first to mint a UID, then the
-// filter is applied and only then is the reference added.
+// a brand-new route is first created as a detached placeholder (no ParentRefs or
+// rules) to mint a UID; its routable spec is attached only after the filter is
+// accepted, so a failed reconcile never exposes the backend without its options.
 func CreateOrUpdateHTTPRoute(
 	ctx context.Context,
 	dc dynamic.Interface,
@@ -116,23 +117,26 @@ func CreateOrUpdateHTTPRoute(
 	routeExists := getErr == nil
 
 	var ownerUID types.UID
-	createdBare := false
+	createdPlaceholder := false
 	if routeExists {
 		ownerUID = existing.GetUID()
 	} else if len(exts) > 0 {
-		bareSpec := spec
-		bareSpec.Rules = rulesWithoutFilters(spec.Rules)
-		bare, err := toUnstructured(bareSpec)
+		// Create a detached placeholder with an empty spec (no ParentRefs, hostnames,
+		// or rules) purely to mint a UID for the SnippetsFilter owner reference. It
+		// must not be routable: if the filter apply, its acceptance, or the final
+		// update fails, the backend must not be exposed without its http_options. The
+		// routable spec is attached below, only after the filter is accepted.
+		placeholder, err := toUnstructured(gatewayv1.HTTPRouteSpec{})
 		if err != nil {
 			return err
 		}
-		created, err := routes.Create(ctx, bare, metav1.CreateOptions{})
+		created, err := routes.Create(ctx, placeholder, metav1.CreateOptions{})
 		if err != nil {
 			observer.OnCreate(err)
 			return err
 		}
 		ownerUID = created.GetUID()
-		createdBare = true
+		createdPlaceholder = true
 	}
 
 	if err := applyRouteExtensions(ctx, dc, ns, routeName, ownerUID, exts); err != nil {
@@ -145,7 +149,7 @@ func CreateOrUpdateHTTPRoute(
 	}
 
 	// Brand-new route with no extensions: nothing was created above, so create it.
-	if !routeExists && !createdBare {
+	if !routeExists && !createdPlaceholder {
 		_, err = routes.Create(ctx, u, metav1.CreateOptions{})
 		observer.OnCreate(err)
 		return err
@@ -170,18 +174,6 @@ func CreateOrUpdateHTTPRoute(
 		observer.OnCreate(err)
 	}
 	return err
-}
-
-// rulesWithoutFilters returns a copy of rules with per-rule Filters cleared,
-// leaving the input untouched. Used to create a new HTTPRoute without its
-// ExtensionRef so the referenced SnippetsFilter can be applied first.
-func rulesWithoutFilters(rules []gatewayv1.HTTPRouteRule) []gatewayv1.HTTPRouteRule {
-	out := make([]gatewayv1.HTTPRouteRule, len(rules))
-	copy(out, rules)
-	for i := range out {
-		out[i].Filters = nil
-	}
-	return out
 }
 
 // applyRouteExtensions upserts auxiliary CRD objects (e.g. an NGF SnippetsFilter)

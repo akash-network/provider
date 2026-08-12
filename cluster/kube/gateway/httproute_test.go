@@ -37,10 +37,9 @@ func newFakeDC() *dynamicfake.FakeDynamicClient {
 func acceptSnippetsFilters(dc *dynamicfake.FakeDynamicClient) {
 	accept := func(action clienttesting.Action) (bool, runtime.Object, error) {
 		var obj *unstructured.Unstructured
-		switch a := action.(type) {
-		case clienttesting.CreateAction:
-			obj, _ = a.GetObject().(*unstructured.Unstructured)
-		case clienttesting.UpdateAction:
+		// clienttesting.CreateAction embeds UpdateAction, so this single case
+		// matches both create and update actions (both expose GetObject).
+		if a, ok := action.(clienttesting.UpdateAction); ok {
 			obj, _ = a.GetObject().(*unstructured.Unstructured)
 		}
 		if obj != nil {
@@ -181,4 +180,29 @@ func TestExtensionAccepted(t *testing.T) {
 	require.False(t, extensionAccepted(sf("Accepted", "False", 2), 2), "not accepted")
 	require.False(t, extensionAccepted(sf("Programmed", "True", 2), 2), "wrong condition type")
 	require.False(t, extensionAccepted(&unstructured.Unstructured{Object: map[string]interface{}{}}, 2), "no status")
+}
+
+// TestCreateOrUpdateHTTPRouteNewRoutePlaceholderNotRoutable asserts that when the
+// SnippetsFilter cannot be applied for a brand-new route, the placeholder left
+// behind is detached (no ParentRefs, no rules), so the backend is never exposed
+// without its http_options.
+func TestCreateOrUpdateHTTPRouteNewRoutePlaceholderNotRoutable(t *testing.T) {
+	dc := newFakeDC()
+	directive := routeDirective()
+	ns := builder.LidNS(directive.LeaseID)
+
+	dc.PrependReactor("create", "snippetsfilters", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("boom")
+	})
+
+	err := CreateOrUpdateHTTPRoute(context.Background(), dc, routeConfig(), directive, NoopHTTPRouteObserver{})
+	require.Error(t, err, "SnippetsFilter apply failure must fail the reconcile")
+
+	route, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(context.Background(), directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err, "the placeholder route should still exist")
+
+	parentRefs, _, _ := unstructured.NestedSlice(route.Object, "spec", "parentRefs")
+	require.Empty(t, parentRefs, "placeholder must have no parentRefs (not attached to the gateway)")
+	rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")
+	require.Empty(t, rules, "placeholder must have no rules (backend not exposed)")
 }
