@@ -26,6 +26,10 @@ func Cmd() *cobra.Command {
 
 			ns := viper.GetString(providerflags.FlagK8sManifestNS)
 
+			if err := providerflags.ValidateProxyBufferSize(viper.GetString(providerflags.FlagProxyBufferSize)); err != nil {
+				return err
+			}
+
 			config := common.GetOperatorConfigFromViper()
 
 			logger := common.OpenLogger().With("op", "hostname")
