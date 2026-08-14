@@ -4,7 +4,7 @@ BUILD_TAGS_E2E := e2e integration
 BUILD_TAGS_ALL := "$(BUILD_TAGS_K8S_INTEGRATION) $(BUILD_TAGS_E2E)"
 TEST_MODULES ?= $(shell $(GO) list ./... | grep -v '/mocks\|/kubernetes_mock\|/pkg/client')
 
-KIND_NAME := kube
+KIND_NAME ?= kube
 
 include _run/common-kind-vars.mk
 
