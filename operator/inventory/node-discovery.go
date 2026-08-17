@@ -42,6 +42,18 @@ var (
 	labelNvidiaComGPUPresent = fmt.Sprintf("%s.present", builder.ResourceGPUNvidia)
 )
 
+const (
+	// cpuQueryMaxAttempts and cpuQueryRetryDelay guard against the startup
+	// race between this pod watching for the per-node hardware-discovery
+	// pod to reach PodRunning and that pod's API server actually binding
+	// its listen port. parseCPUInfo runs exactly once at startup (unlike
+	// GPU, which gets a second chance via the vendor-registry event), so
+	// losing this race leaves CPU.Info empty for the node's entire
+	// lifetime, silently disabling arch-based bid filtering.
+	cpuQueryMaxAttempts = 5
+	cpuQueryRetryDelay  = 200 * time.Millisecond
+)
+
 type k8sPatch struct {
 	Op    string      `json:"op"`
 	Path  string      `json:"path"`
@@ -1158,9 +1170,24 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context, arch string) v1.CPUInfoS {
 	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
 
-	cpus, err := dp.queryCPU(ctx)
+	var cpus *cpu.Info
+	var err error
+	for attempt := 1; attempt <= cpuQueryMaxAttempts; attempt++ {
+		cpus, err = dp.queryCPU(ctx)
+		if err == nil {
+			break
+		}
+		if attempt == cpuQueryMaxAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+		case <-dp.ctx.Done():
+		case <-time.After(cpuQueryRetryDelay):
+		}
+	}
 	if err != nil {
-		log.Error(err, "unable to query cpu")
+		log.Error(err, "unable to query cpu", "attempts", cpuQueryMaxAttempts)
 		return v1.CPUInfoS{}
 	}
 
