@@ -24,6 +24,7 @@ type ManifestStorageParamsApplyConfiguration struct {
 	Name     *string `json:"name,omitempty"`
 	Mount    *string `json:"mount,omitempty"`
 	ReadOnly *bool   `json:"readOnly,omitempty"`
+	KeyRef   *string `json:"keyRef,omitempty"`
 }
 
 // ManifestStorageParamsApplyConfiguration constructs a declarative configuration of the ManifestStorageParams type for use with
@@ -53,5 +54,13 @@ func (b *ManifestStorageParamsApplyConfiguration) WithMount(value string) *Manif
 // If called multiple times, the ReadOnly field is set to the value of the last call.
 func (b *ManifestStorageParamsApplyConfiguration) WithReadOnly(value bool) *ManifestStorageParamsApplyConfiguration {
 	b.ReadOnly = &value
+	return b
+}
+
+// WithKeyRef sets the KeyRef field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the KeyRef field is set to the value of the last call.
+func (b *ManifestStorageParamsApplyConfiguration) WithKeyRef(value string) *ManifestStorageParamsApplyConfiguration {
+	b.KeyRef = &value
 	return b
 }

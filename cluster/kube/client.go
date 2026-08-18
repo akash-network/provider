@@ -645,8 +645,8 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 		svc := &deploymentService{}
 
-		if service.Credentials != nil {
-			svc.credentials = builder.NewServiceCredentials(workload, service.Credentials)
+		if credentials := workload.ImagePullCredentials(); credentials != nil {
+			svc.credentials = builder.NewServiceCredentials(workload, credentials)
 		}
 
 		persistent := false

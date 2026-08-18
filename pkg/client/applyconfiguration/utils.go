@@ -60,8 +60,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &akashnetworkv2beta2.ManifestServiceExposeApplyConfiguration{}
 	case v2beta2.SchemeGroupVersion.WithKind("ManifestServiceExposeHTTPOptions"):
 		return &akashnetworkv2beta2.ManifestServiceExposeHTTPOptionsApplyConfiguration{}
+	case v2beta2.SchemeGroupVersion.WithKind("ManifestServiceKBSParams"):
+		return &akashnetworkv2beta2.ManifestServiceKBSParamsApplyConfiguration{}
 	case v2beta2.SchemeGroupVersion.WithKind("ManifestServiceParams"):
 		return &akashnetworkv2beta2.ManifestServiceParamsApplyConfiguration{}
+	case v2beta2.SchemeGroupVersion.WithKind("ManifestServiceTenantKBSParams"):
+		return &akashnetworkv2beta2.ManifestServiceTenantKBSParamsApplyConfiguration{}
 	case v2beta2.SchemeGroupVersion.WithKind("ManifestSpec"):
 		return &akashnetworkv2beta2.ManifestSpecApplyConfiguration{}
 	case v2beta2.SchemeGroupVersion.WithKind("ManifestStorageParams"):

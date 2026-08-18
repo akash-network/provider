@@ -37,6 +37,7 @@ type ManifestServiceCredentials struct {
 	Email    string `json:"email"`
 	Username string `json:"username"`
 	Password string `json:"password"`
+	URI      string `json:"uri,omitempty"`
 }
 
 // ManifestService stores name, image, args, env, unit, count and expose list of service
@@ -88,6 +89,7 @@ type ManifestStorageParams struct {
 	Name     string `json:"name"     yaml:"name"`
 	Mount    string `json:"mount"    yaml:"mount"`
 	ReadOnly bool   `json:"readOnly" yaml:"readOnly"`
+	KeyRef   string `json:"keyRef,omitempty" yaml:"keyRef,omitempty"`
 }
 
 type ManifestServicePermissions struct {
@@ -98,9 +100,26 @@ type ManifestServicePermissions struct {
 	Delete []string `json:"delete,omitempty"`
 }
 
+type ManifestServiceProviderKBSParams struct{}
+
+type ManifestServiceTenantKBSParams struct {
+	URL                    string `json:"url"`
+	Certificate            string `json:"certificate"`
+	ImageSecurityPolicyURI string `json:"image_security_policy_uri"`
+	AgentPolicy            string `json:"agent_policy"`
+}
+
+// ManifestServiceKBSParams preserves the protobuf oneof while a manifest is
+// stored as a Kubernetes CRD. Exactly one pointer must be set.
+type ManifestServiceKBSParams struct {
+	Provider *ManifestServiceProviderKBSParams `json:"provider,omitempty"`
+	Tenant   *ManifestServiceTenantKBSParams   `json:"tenant,omitempty"`
+}
+
 type ManifestServiceParams struct {
 	Storage     []ManifestStorageParams     `json:"storage,omitempty"`
 	Permissions *ManifestServicePermissions `json:"permissions,omitempty"`
+	KBS         *ManifestServiceKBSParams   `json:"kbs,omitempty"`
 }
 
 type SchedulerResourceGPU struct {
@@ -291,6 +310,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 			Email:    ms.Credentials.Email,
 			Username: ms.Credentials.Username,
 			Password: ms.Credentials.Password,
+			URI:      ms.Credentials.URI,
 		}
 	}
 
@@ -319,6 +339,7 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				Name:     storage.Name,
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
+				KeyRef:   storage.KeyRef,
 			})
 		}
 
@@ -333,6 +354,25 @@ func (ms *ManifestService) fromCRD() (mani.Service, error) {
 				// Delete: ms.Params.Permissions.Delete,
 			}
 		}
+	}
+
+	if ms.SchedulerParams != nil && ms.SchedulerParams.TEEType != "" {
+		if ams.Params == nil {
+			ams.Params = &mani.ServiceParams{}
+		}
+		ams.Params.TEE = &mani.TEEParams{
+			Type:        ms.SchedulerParams.TEEType,
+			Attestation: !ms.SchedulerParams.AttestationDisabled,
+		}
+		if ms.Params != nil && ms.Params.KBS != nil {
+			kbs, err := ms.Params.KBS.toAkash()
+			if err != nil {
+				return mani.Service{}, fmt.Errorf("convert KBS parameters from CRD: %w", err)
+			}
+			ams.Params.TEE.KBS = kbs
+		}
+	} else if ms.Params != nil && ms.Params.KBS != nil {
+		return mani.Service{}, fmt.Errorf("KBS parameters require TEE scheduler parameters")
 	}
 
 	return *ams, nil
@@ -385,6 +425,7 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				Name:     storage.Name,
 				Mount:    storage.Mount,
 				ReadOnly: storage.ReadOnly,
+				KeyRef:   storage.KeyRef,
 			})
 		}
 
@@ -398,6 +439,14 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 				// Delete: ams.Params.Permissions.Delete,
 			}
 		}
+
+		if ams.Params.TEE != nil && ams.Params.TEE.KBS != nil {
+			kbs, err := manifestServiceKBSParamsFromProvider(ams.Params.TEE.KBS)
+			if err != nil {
+				return ManifestService{}, fmt.Errorf("convert KBS parameters to CRD: %w", err)
+			}
+			ms.Params.KBS = kbs
+		}
 	}
 
 	if ams.Credentials != nil {
@@ -406,10 +455,62 @@ func manifestServiceFromProvider(ams mani.Service, schedulerParams *SchedulerPar
 			Email:    ams.Credentials.Email,
 			Username: ams.Credentials.Username,
 			Password: ams.Credentials.Password,
+			URI:      ams.Credentials.URI,
 		}
 	}
 
 	return ms, nil
+}
+
+func manifestServiceKBSParamsFromProvider(params *mani.KBSParams) (*ManifestServiceKBSParams, error) {
+	if params == nil {
+		return nil, nil
+	}
+
+	switch source := params.Source.(type) {
+	case *mani.KBSParams_Provider:
+		if source.Provider == nil {
+			return nil, fmt.Errorf("provider-managed KBS selection is empty")
+		}
+		return &ManifestServiceKBSParams{Provider: &ManifestServiceProviderKBSParams{}}, nil
+	case *mani.KBSParams_Tenant:
+		if source.Tenant == nil {
+			return nil, fmt.Errorf("tenant-managed KBS selection is empty")
+		}
+		return &ManifestServiceKBSParams{Tenant: &ManifestServiceTenantKBSParams{
+			URL:                    source.Tenant.URL,
+			Certificate:            source.Tenant.Certificate,
+			ImageSecurityPolicyURI: source.Tenant.ImageSecurityPolicyURI,
+			AgentPolicy:            source.Tenant.AgentPolicy,
+		}}, nil
+	default:
+		return nil, fmt.Errorf("KBS selection must be provider or tenant managed")
+	}
+}
+
+func (params *ManifestServiceKBSParams) toAkash() (*mani.KBSParams, error) {
+	if params == nil {
+		return nil, nil
+	}
+	if params.Provider != nil && params.Tenant != nil {
+		return nil, fmt.Errorf("KBS selection cannot mix provider and tenant configuration")
+	}
+	if params.Provider != nil {
+		return &mani.KBSParams{
+			Source: &mani.KBSParams_Provider{Provider: &mani.ProviderKBSParams{}},
+		}, nil
+	}
+	if params.Tenant != nil {
+		return &mani.KBSParams{
+			Source: &mani.KBSParams_Tenant{Tenant: &mani.TenantKBSParams{
+				URL:                    params.Tenant.URL,
+				Certificate:            params.Tenant.Certificate,
+				ImageSecurityPolicyURI: params.Tenant.ImageSecurityPolicyURI,
+				AgentPolicy:            params.Tenant.AgentPolicy,
+			}},
+		}, nil
+	}
+	return nil, fmt.Errorf("KBS selection must be provider or tenant managed")
 }
 
 func (mse ManifestServiceExpose) toAkash() (mani.ServiceExpose, error) {

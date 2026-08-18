@@ -34,23 +34,32 @@ var (
 	WithTDX = ctypes.WithTDX
 )
 
-// RuntimeClassForTEEType maps a TEE type ("cpu", "cpu-gpu") to the corresponding
-// Kata runtime class using the detected TEE platform ("tdx" or "snp").
-func RuntimeClassForTEEType(teeType string, teePlatform string) RuntimeClass {
-	isGPU := teeType == "cpu-gpu"
-	switch teePlatform {
-	case "tdx":
-		if isGPU {
-			return RuntimeClassKataQemuNvidiaGPUTDX
-		}
-		return RuntimeClassKataQemuTDX
-	case "snp":
-		if isGPU {
-			return RuntimeClassKataQemuNvidiaGPUSNP
-		}
-		return RuntimeClassKataQemuSNP
+// RuntimeClassForTEEType maps a validated TEE request and detected platform to
+// its Kata runtime class. Missing and unknown values are errors so confidential
+// workloads can never fall through to the default OCI runtime.
+func RuntimeClassForTEEType(teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) (RuntimeClass, error) {
+	var isGPU bool
+	switch teeType {
+	case ctypes.TEETypeCPU:
+	case ctypes.TEETypeCPUGPU:
+		isGPU = true
 	default:
-		return ""
+		return "", fmt.Errorf("unsupported TEE type %q", teeType)
+	}
+
+	switch teePlatform {
+	case ctypes.TEEPlatformTDX:
+		if isGPU {
+			return RuntimeClassKataQemuNvidiaGPUTDX, nil
+		}
+		return RuntimeClassKataQemuTDX, nil
+	case ctypes.TEEPlatformSNP:
+		if isGPU {
+			return RuntimeClassKataQemuNvidiaGPUSNP, nil
+		}
+		return RuntimeClassKataQemuSNP, nil
+	default:
+		return "", fmt.Errorf("unsupported TEE platform %q for TEE type %q", teePlatform, teeType)
 	}
 }
 
@@ -62,10 +71,14 @@ type workloadBase interface {
 
 type Workload struct {
 	builder
-	serviceIdx  int
-	volumesObjs []corev1.Volume
-	pvcsObjs    []corev1.PersistentVolumeClaim
-	secretsRefs []corev1.LocalObjectReference
+	serviceIdx             int
+	volumesObjs            []corev1.Volume
+	pvcsObjs               []corev1.PersistentVolumeClaim
+	secretsRefs            []corev1.LocalObjectReference
+	secureVolumes          []ccPersistentVolume
+	registryCredentialsURI string
+	ccInitDataAnnotation   string
+	ccInitDataSHA256       string
 }
 
 var _ workloadBase = (*Workload)(nil)
@@ -92,6 +105,18 @@ func NewWorkloadBuilder(
 			sparams:    sparams,
 		},
 		serviceIdx: serviceIdx,
+	}
+	res.registryCredentialsURI, err = res.confidentialRegistryCredentialsURI()
+	if err != nil {
+		return nil, fmt.Errorf("validate registry credentials: %w", err)
+	}
+	res.secureVolumes, err = res.confidentialPersistentVolumes()
+	if err != nil {
+		return nil, fmt.Errorf("validate confidential persistent storage: %w", err)
+	}
+	res.ccInitDataAnnotation, res.ccInitDataSHA256, err = res.confidentialInitDataAnnotation()
+	if err != nil {
+		return nil, fmt.Errorf("build confidential-compute initdata: %w", err)
 	}
 
 	res.volumesObjs = res.volumes()
@@ -249,9 +274,17 @@ func (b *Workload) container() corev1.Container {
 
 	if service.Params != nil {
 		for _, params := range service.Params.Storage {
+			name := fmt.Sprintf("%s-%s", service.Name, params.Name)
+			if secureVolume, ok := b.confidentialPersistentVolume(name); ok {
+				kcontainer.VolumeDevices = append(kcontainer.VolumeDevices, corev1.VolumeDevice{
+					Name:       name,
+					DevicePath: secureVolume.DevicePath,
+				})
+				continue
+			}
 			kcontainer.VolumeMounts = append(kcontainer.VolumeMounts, corev1.VolumeMount{
 				// matches VolumeName in persistentVolumeClaims below
-				Name:      fmt.Sprintf("%s-%s", service.Name, params.Name),
+				Name:      name,
 				ReadOnly:  params.ReadOnly,
 				MountPath: params.Mount,
 			})
@@ -325,10 +358,14 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 			continue
 		}
 
+		name := fmt.Sprintf("%s-%s", service.Name, storage.Name)
 		volumeMode := corev1.PersistentVolumeFilesystem
+		if _, secure := b.confidentialPersistentVolume(name); secure {
+			volumeMode = corev1.PersistentVolumeBlock
+		}
 		pvc := corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: fmt.Sprintf("%s-%s", service.Name, storage.Name),
+				Name: name,
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
 				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
@@ -356,14 +393,11 @@ func (b *Workload) persistentVolumeClaims() []corev1.PersistentVolumeClaim {
 }
 
 func (b *Workload) podAnnotations() map[string]string {
+	annotations := make(map[string]string)
 	params := b.sparams[b.serviceIdx]
 
-	var obj map[string]string
-
 	if params != nil && params.AttestationDisabled {
-		obj = map[string]string{
-			AkashAttestationDisabledAnnotation: "true",
-		}
+		annotations[AkashAttestationDisabledAnnotation] = "true"
 	}
 
 	// RoCEv2 resolves the remote rail IP through the pod's own network
@@ -372,14 +406,18 @@ func (b *Workload) podAnnotations() map[string]string {
 	// QP setup. InfiniBand is LID-addressed and skips this entirely.
 	if ic := sparamsInterconnect(params); ic != nil && ic.Enabled && ic.Fabric == InterconnectFabricRoCE {
 		if networks := strings.TrimSpace(b.settings.InterconnectRoCENetworks); networks != "" {
-			if obj == nil {
-				obj = make(map[string]string, 1)
-			}
-			obj[multusNetworksAnnotation] = networks
+			annotations[multusNetworksAnnotation] = networks
 		}
 	}
 
-	return obj
+	if b.ccInitDataAnnotation != "" {
+		annotations[ccInitDataAnnotation] = b.ccInitDataAnnotation
+		annotations[AkashCCInitDataSHA256Annotation] = b.ccInitDataSHA256
+	}
+	if len(annotations) == 0 {
+		return nil
+	}
+	return annotations
 }
 
 func (b *Workload) runtimeClass() *string {
@@ -590,11 +628,14 @@ func (b *Workload) selectorLabels() map[string]string {
 }
 
 func (b *Workload) imagePullSecrets() []corev1.LocalObjectReference {
+	if b.registryCredentialsURI != "" {
+		return nil
+	}
+
 	sname := b.settings.DockerImagePullSecretsName
 
-	service := &b.group.Services[b.serviceIdx]
-	if service.Credentials != nil {
-		sname = NewServiceCredentials(b, service.Credentials).Name()
+	if credentials := b.ImagePullCredentials(); credentials != nil {
+		sname = NewServiceCredentials(b, credentials).Name()
 	}
 
 	if sname == "" {

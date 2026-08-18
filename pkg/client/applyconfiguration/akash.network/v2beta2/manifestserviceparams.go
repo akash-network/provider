@@ -23,6 +23,7 @@ package v2beta2
 type ManifestServiceParamsApplyConfiguration struct {
 	Storage     []ManifestStorageParamsApplyConfiguration     `json:"storage,omitempty"`
 	Permissions *ManifestServicePermissionsApplyConfiguration `json:"permissions,omitempty"`
+	KBS         *ManifestServiceKBSParamsApplyConfiguration   `json:"kbs,omitempty"`
 }
 
 // ManifestServiceParamsApplyConfiguration constructs a declarative configuration of the ManifestServiceParams type for use with
@@ -49,5 +50,13 @@ func (b *ManifestServiceParamsApplyConfiguration) WithStorage(values ...*Manifes
 // If called multiple times, the Permissions field is set to the value of the last call.
 func (b *ManifestServiceParamsApplyConfiguration) WithPermissions(value *ManifestServicePermissionsApplyConfiguration) *ManifestServiceParamsApplyConfiguration {
 	b.Permissions = value
+	return b
+}
+
+// WithKBS sets the KBS field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the KBS field is set to the value of the last call.
+func (b *ManifestServiceParamsApplyConfiguration) WithKBS(value *ManifestServiceKBSParamsApplyConfiguration) *ManifestServiceParamsApplyConfiguration {
+	b.KBS = value
 	return b
 }

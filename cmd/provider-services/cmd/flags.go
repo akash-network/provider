@@ -150,6 +150,38 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().String(FlagCCKBSURL, "", "HTTPS provider-managed Trustee KBS origin used when an SDL selects provider KBS mode")
+	if err := viper.BindPFlag(FlagCCKBSURL, cmd.Flags().Lookup(FlagCCKBSURL)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagCCKBSCertFile, "", "Path to the public provider-managed Trustee KBS certificate chain")
+	if err := viper.BindPFlag(FlagCCKBSCertFile, cmd.Flags().Lookup(FlagCCKBSCertFile)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagCCImageSecurityPolicyURI, "", "Content-addressed kbs:/// image security policy URI for provider KBS mode")
+	if err := viper.BindPFlag(FlagCCImageSecurityPolicyURI, cmd.Flags().Lookup(FlagCCImageSecurityPolicyURI)); err != nil {
+		return err
+	}
+
+	cmd.Flags().String(FlagCCAgentPolicyFile, "", "Path to the measured Kata agent policy for provider KBS mode")
+	if err := viper.BindPFlag(FlagCCAgentPolicyFile, cmd.Flags().Lookup(FlagCCAgentPolicyFile)); err != nil {
+		return err
+	}
+
+	cmd.Flags().StringSlice(
+		FlagCCPersistentStorageClasses,
+		nil,
+		"Block storage classes qualified for confidential persistent storage (empty disables the feature)",
+	)
+	if err := viper.BindPFlag(
+		FlagCCPersistentStorageClasses,
+		cmd.Flags().Lookup(FlagCCPersistentStorageClasses),
+	); err != nil {
+		return err
+	}
+
 	cmd.Flags().Uint64(FlagOvercommitPercentMemory, 0, "Percentage of memory overcommit")
 	if err := viper.BindPFlag(FlagOvercommitPercentMemory, cmd.Flags().Lookup(FlagOvercommitPercentMemory)); err != nil {
 		return err

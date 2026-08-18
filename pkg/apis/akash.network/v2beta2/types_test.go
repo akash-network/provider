@@ -6,10 +6,107 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	mani "pkg.akt.dev/go/manifest/v2beta3"
 	atestutil "pkg.akt.dev/go/testutil"
 
 	mtestutil "github.com/akash-network/provider/testutil/manifest/v2beta2"
 )
+
+func TestManifestStorageKeyRefRoundTrip(t *testing.T) {
+	const keyRef = "sealed.header.payload.signature"
+	original := mani.Service{
+		Name: "proof",
+		Params: &mani.ServiceParams{Storage: []mani.StorageParams{{
+			Name:     "data",
+			Mount:    "/proof",
+			ReadOnly: false,
+			KeyRef:   keyRef,
+		}}},
+	}
+
+	stored, err := manifestServiceFromProvider(original, nil)
+	require.NoError(t, err)
+	require.Equal(t, keyRef, stored.Params.Storage[0].KeyRef)
+
+	recovered, err := stored.fromCRD()
+	require.NoError(t, err)
+	require.Equal(t, keyRef, recovered.Params.Storage[0].KeyRef)
+}
+
+func TestManifestRegistryCredentialsURIRoundTrip(t *testing.T) {
+	const uri = "kbs:///lease-scope/registry/auth"
+	original := mani.Service{
+		Name:        "proof",
+		Credentials: &mani.ImageCredentials{URI: uri},
+	}
+
+	stored, err := manifestServiceFromProvider(original, nil)
+	require.NoError(t, err)
+	require.Equal(t, uri, stored.Credentials.URI)
+
+	recovered, err := stored.fromCRD()
+	require.NoError(t, err)
+	require.Equal(t, uri, recovered.Credentials.URI)
+}
+
+func TestManifestKBSSelectionRoundTrip(t *testing.T) {
+	tests := []struct {
+		name string
+		kbs  *mani.KBSParams
+	}{
+		{
+			name: "provider managed",
+			kbs: &mani.KBSParams{
+				Source: &mani.KBSParams_Provider{Provider: &mani.ProviderKBSParams{}},
+			},
+		},
+		{
+			name: "tenant managed",
+			kbs: &mani.KBSParams{
+				Source: &mani.KBSParams_Tenant{Tenant: &mani.TenantKBSParams{
+					URL:                    "https://kbs.tenant.example",
+					Certificate:            "tenant public certificate",
+					ImageSecurityPolicyURI: "kbs:///tenant/security-policy/sha256-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					AgentPolicy:            "package agent_policy\n\ndefault allow = false\n",
+				}},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			original := mani.Service{
+				Name: "proof",
+				Params: &mani.ServiceParams{TEE: &mani.TEEParams{
+					Type:        "cpu",
+					Attestation: true,
+					KBS:         test.kbs,
+				}},
+			}
+
+			stored, err := manifestServiceFromProvider(original, nil)
+			require.NoError(t, err)
+			require.NotNil(t, stored.Params.KBS)
+
+			recovered, err := stored.fromCRD()
+			require.NoError(t, err)
+			require.Equal(t, original.Params.TEE, recovered.Params.TEE)
+		})
+	}
+}
+
+func TestManifestKBSSelectionRejectsMixedCRDState(t *testing.T) {
+	stored := ManifestService{
+		Params: &ManifestServiceParams{KBS: &ManifestServiceKBSParams{
+			Provider: &ManifestServiceProviderKBSParams{},
+			Tenant:   &ManifestServiceTenantKBSParams{},
+		}},
+		SchedulerParams: &SchedulerParams{TEEType: "cpu"},
+	}
+
+	_, err := stored.fromCRD()
+	require.ErrorContains(t, err, "cannot mix provider and tenant")
+}
 
 func Test_Manifest_encoding(t *testing.T) {
 	for _, spec := range mtestutil.Generators {

@@ -1,11 +1,18 @@
 package builder
 
 import (
+	"bytes"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	kvalidation "k8s.io/apimachinery/pkg/util/validation"
 
 	vutil "pkg.akt.dev/node/v2/util/validation"
 )
@@ -100,6 +107,27 @@ type Settings struct {
 	// verbs device alone is not enough. InfiniBand is LID-addressed and
 	// needs no attachment.
 	InterconnectRoCENetworks string
+
+	// CCInitData configures the provider-managed public Trustee connection and
+	// measured guest policy. Tenants may instead supply a complete public KBS
+	// configuration in the manifest. Neither source contains a KBS
+	// administrator credential or secret plaintext.
+	CCInitData *CCInitDataSettings
+
+	// CCPersistentStorageClasses is the operator-maintained set of Block
+	// storage classes qualified to return deterministically sanitized volumes.
+	// An empty set disables confidential persistent storage.
+	CCPersistentStorageClasses map[string]struct{}
+}
+
+// CCInitDataSettings contains the non-secret public inputs from which the
+// provider deterministically constructs Kata initdata. Values come from either
+// the provider-managed defaults or one complete tenant-managed manifest bundle.
+type CCInitDataSettings struct {
+	KBSURL                 string
+	KBSCertificate         string
+	ImageSecurityPolicyURI string
+	AgentPolicy            string
 }
 
 var ErrSettingsValidation = errors.New("settings validation")
@@ -113,6 +141,87 @@ func ValidateSettings(settings Settings) error {
 		if !vutil.IsDomainName(settings.DeploymentIngressDomain) {
 			return fmt.Errorf("%w: invalid domain name %q", ErrSettingsValidation, settings.DeploymentIngressDomain)
 		}
+	}
+
+	if settings.CCInitData != nil {
+		if err := validateCCInitDataSettings(*settings.CCInitData); err != nil {
+			return fmt.Errorf("%w: confidential-compute initdata: %w", ErrSettingsValidation, err)
+		}
+	}
+
+	for storageClass := range settings.CCPersistentStorageClasses {
+		if errs := kvalidation.IsDNS1123Subdomain(storageClass); len(errs) != 0 {
+			return fmt.Errorf(
+				"%w: invalid confidential persistent storage class %q: %s",
+				ErrSettingsValidation,
+				storageClass,
+				strings.Join(errs, "; "),
+			)
+		}
+	}
+	return nil
+}
+
+func validateCCInitDataSettings(settings CCInitDataSettings) error {
+	kbsURL, err := url.Parse(settings.KBSURL)
+	if err != nil || kbsURL.Scheme != "https" || kbsURL.Host == "" {
+		return errors.New("KBS URL must be an HTTPS origin")
+	}
+	if kbsURL.User != nil || kbsURL.Path != "" || kbsURL.RawPath != "" || kbsURL.Opaque != "" ||
+		kbsURL.RawQuery != "" || kbsURL.ForceQuery || kbsURL.Fragment != "" {
+		return errors.New("KBS URL must not contain credentials, a path, query, or fragment")
+	}
+
+	if strings.ContainsAny(settings.KBSCertificate, "\x00\r") {
+		return errors.New("KBS certificate contains unsupported control characters")
+	}
+	certificate := bytes.TrimSpace([]byte(settings.KBSCertificate))
+	certificates := 0
+	for len(certificate) != 0 {
+		if !bytes.HasPrefix(certificate, []byte("-----BEGIN CERTIFICATE-----")) {
+			return errors.New("KBS certificate must contain only PEM certificates")
+		}
+		block, rest := pem.Decode(certificate)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return errors.New("KBS certificate must contain only PEM certificates")
+		}
+		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+			return fmt.Errorf("parse KBS certificate: %w", err)
+		}
+		certificates++
+		certificate = bytes.TrimSpace(rest)
+	}
+	if certificates == 0 || certificates > 5 {
+		return errors.New("KBS certificate chain must contain between one and five certificates")
+	}
+
+	if err := validateCCKBSResourceURI(settings.ImageSecurityPolicyURI); err != nil {
+		return errors.New("image security policy URI must be a canonical kbs:/// resource URI")
+	}
+
+	policyURI, err := url.Parse(settings.ImageSecurityPolicyURI)
+	if err != nil || policyURI.Scheme != "kbs" || policyURI.Host != "" || policyURI.RawPath != "" ||
+		policyURI.Opaque != "" || policyURI.RawQuery != "" || policyURI.ForceQuery || policyURI.Fragment != "" {
+		return errors.New("image security policy URI must be a kbs:/// resource URI")
+	}
+	parts := strings.Split(strings.TrimPrefix(policyURI.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] == "" || parts[1] != "security-policy" || !strings.HasPrefix(parts[2], "sha256-") {
+		return errors.New("image security policy URI must be content addressed")
+	}
+	digest := strings.TrimPrefix(parts[2], "sha256-")
+	decodedDigest, err := hex.DecodeString(digest)
+	if err != nil || len(decodedDigest) != 32 || digest != strings.ToLower(digest) {
+		return errors.New("image security policy URI must end in a lowercase SHA-256 digest")
+	}
+
+	if len(settings.AgentPolicy) == 0 || len(settings.AgentPolicy) > 1024*1024 {
+		return errors.New("agent policy must be between one byte and one MiB")
+	}
+	if !strings.Contains(settings.AgentPolicy, "package agent_policy") {
+		return errors.New("agent policy must declare package agent_policy")
+	}
+	if !isInitDataTOMLSafe(settings.AgentPolicy) {
+		return errors.New("agent policy cannot be represented safely in initdata TOML")
 	}
 
 	return nil
