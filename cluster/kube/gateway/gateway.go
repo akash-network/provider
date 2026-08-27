@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
@@ -31,4 +32,9 @@ type GatewayProvider interface {
 		servicePort int32,
 		directive chostname.ConnectToDeploymentDirective,
 	) gatewayv1.HTTPRouteSpec
+
+	// BuildRouteExtensions returns auxiliary CRD objects to apply alongside the
+	// HTTPRoute (e.g. an NGF SnippetsFilter). They are applied owner-referenced to
+	// the HTTPRoute so they are garbage-collected with it. Returns nil when none.
+	BuildRouteExtensions(namespace, routeName string, directive chostname.ConnectToDeploymentDirective) []*unstructured.Unstructured
 }
