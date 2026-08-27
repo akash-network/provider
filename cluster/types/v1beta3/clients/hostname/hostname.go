@@ -73,4 +73,14 @@ type ConnectToDeploymentDirective struct {
 	MaxBodySize uint32
 	NextTries   uint32
 	NextCases   []string
+	// New nginx proxy buffering/tuning options. The sizes are bytes and zero == unset
+	// (annotation omitted; nginx default applies); ProxyConnectTimeout is milliseconds.
+	// ProxyBufferingDisable mirrors the manifest's buffering_disabled: false leaves the
+	// nginx default (buffering on), true renders proxy_buffering off.
+	ProxyBufferingDisable bool
+	ProxyBufferSize        uint32
+	ProxyBuffersNumber     uint32
+	ProxyBuffersSize       uint32
+	ProxyBusyBuffersSize   uint32
+	ProxyConnectTimeout    uint32
 }

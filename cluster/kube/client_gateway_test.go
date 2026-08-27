@@ -24,13 +24,14 @@ func TestNginxGatewayHTTPRouteSpec(t *testing.T) {
 		SendTimeout: 30000,
 	}
 
+	exts := impl.BuildRouteExtensions("test-namespace", "test.example.com", directive)
 	spec := impl.BuildHTTPRouteSpec(
 		"test-gateway",
 		"test-namespace",
 		"test.example.com",
 		"test-service",
 		8080,
-		directive,
+		exts,
 	)
 
 	require.Len(t, spec.ParentRefs, 1)

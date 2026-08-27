@@ -73,6 +73,25 @@ func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirectiv
 	}
 
 	result[fmt.Sprintf("%s/proxy-next-upstream", root)] = strBuilder.String()
+
+	// Community ingress-nginx has no per-buffer-size annotation, so ProxyBuffersSize is NGF-only.
+	// Buffering is on by default, so only the explicit "off" needs an annotation.
+	if directive.ProxyBufferingDisable {
+		result[fmt.Sprintf("%s/proxy-buffering", root)] = "off"
+	}
+	if directive.ProxyBufferSize > 0 {
+		result[fmt.Sprintf("%s/proxy-buffer-size", root)] = strconv.Itoa(int(directive.ProxyBufferSize))
+	}
+	if directive.ProxyBuffersNumber > 0 {
+		result[fmt.Sprintf("%s/proxy-buffers-number", root)] = strconv.Itoa(int(directive.ProxyBuffersNumber))
+	}
+	if directive.ProxyBusyBuffersSize > 0 {
+		result[fmt.Sprintf("%s/proxy-busy-buffers-size", root)] = strconv.Itoa(int(directive.ProxyBusyBuffersSize))
+	}
+	if directive.ProxyConnectTimeout > 0 {
+		result[fmt.Sprintf("%s/proxy-connect-timeout", root)] = fmt.Sprintf("%d", int(math.Ceil(float64(directive.ProxyConnectTimeout)/1000.0)))
+	}
+
 	return result
 }
 

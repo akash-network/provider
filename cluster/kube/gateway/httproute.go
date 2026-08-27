@@ -78,16 +78,15 @@ func CreateOrUpdateHTTPRoute(
 	builder.AppendLeaseLabels(directive.LeaseID, labels)
 
 	annotations := config.Provider.BuildAnnotations(directive)
+	exts := config.Provider.BuildRouteExtensions(ns, routeName, directive)
 	spec := config.Provider.BuildHTTPRouteSpec(
 		config.GatewayName,
 		config.GatewayNamespace,
 		directive.Hostname,
 		directive.ServiceName,
 		directive.ServicePort,
-		directive,
+		exts,
 	)
-
-	exts := config.Provider.BuildRouteExtensions(ns, routeName, directive)
 
 	toUnstructured := func(s gatewayv1.HTTPRouteSpec) (*unstructured.Unstructured, error) {
 		obj := &gatewayv1.HTTPRoute{

@@ -11,6 +11,17 @@ services:
           max_body_size: 2097152
           next_cases:
             - off
+          # nginx proxy tuning, grouped under `proxy` (nested object).
+          # Deliberately non-default values so they're distinguishable from nginx
+          # defaults when inspecting the rendered config (`nginx -T`).
+          # busy_buffers_size must be >= buffer_size and <= (buffers_number-1)*buffers_size.
+          proxy:
+            buffering_disable: true   # nginx default is "on" -> expect `proxy_buffering off;`
+            buffer_size: 12288        # 12k (default is page size, 4k/8k)
+            buffers_number: 6         # default 8
+            buffers_size: 24576       # 24k -> `proxy_buffers 6 24576;`
+            busy_buffers_size: 49152  # 48k
+            connect_timeout: 7000     # 7s in ms -> `proxy_connect_timeout 7s;`
         accept:
           - hello.localhost
         to:
