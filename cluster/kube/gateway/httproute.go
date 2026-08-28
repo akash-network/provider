@@ -20,7 +20,6 @@ import (
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
-	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
@@ -78,16 +77,15 @@ func CreateOrUpdateHTTPRoute(
 	builder.AppendLeaseLabels(directive.LeaseID, labels)
 
 	annotations := config.Provider.BuildAnnotations(directive)
+	exts := config.Provider.BuildRouteExtensions(ns, routeName, directive)
 	spec := config.Provider.BuildHTTPRouteSpec(
 		config.GatewayName,
 		config.GatewayNamespace,
 		directive.Hostname,
 		directive.ServiceName,
 		directive.ServicePort,
-		directive,
+		exts,
 	)
-
-	exts := config.Provider.BuildRouteExtensions(ns, routeName, directive)
 
 	toUnstructured := func(s gatewayv1.HTTPRouteSpec) (*unstructured.Unstructured, error) {
 		obj := &gatewayv1.HTTPRoute{
@@ -325,20 +323,14 @@ func ListHTTPRouteConnections(
 			if err != nil {
 				return err
 			}
-			if len(route.Spec.Hostnames) == 0 {
-				return fmt.Errorf("%w: no hostnames specified", kubeclienterrors.ErrInvalidHostnameConnection)
-			}
-			if len(route.Spec.Rules) == 0 {
-				return fmt.Errorf("%w: no rules specified", kubeclienterrors.ErrInvalidHostnameConnection)
+			if len(route.Spec.Hostnames) == 0 || len(route.Spec.Rules) == 0 {
+				return nil
 			}
 			rule := route.Spec.Rules[0]
-			if len(rule.BackendRefs) == 0 {
-				return fmt.Errorf("%w: no backend refs", kubeclienterrors.ErrInvalidHostnameConnection)
+			if len(rule.BackendRefs) == 0 || rule.BackendRefs[0].Port == nil {
+				return nil
 			}
 			backendRef := rule.BackendRefs[0]
-			if backendRef.Port == nil {
-				return fmt.Errorf("%w: backend ref has no port", kubeclienterrors.ErrInvalidHostnameConnection)
-			}
 
 			results = append(results, chostname.LeaseIDHostnameConnection{
 				LeaseID:      routeLeaseID,
