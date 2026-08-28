@@ -421,6 +421,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return err
 	}
 
+	// Cap tenant-supplied proxy buffer sizes before they reach the shared gateway.
+	if err := validateProxyBufferLimits(req.value.Manifest); err != nil {
+		return err
+	}
+
 	// ensure that an uploaded manifest matches the hash declared on
 	// the Akash Deployment.Version
 	version, err := req.value.Manifest.Version()

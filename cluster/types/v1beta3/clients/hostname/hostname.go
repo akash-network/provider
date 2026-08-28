@@ -73,4 +73,67 @@ type ConnectToDeploymentDirective struct {
 	MaxBodySize uint32
 	NextTries   uint32
 	NextCases   []string
+	// New nginx proxy buffering/tuning options. The sizes are bytes and zero == unset
+	// (annotation omitted; nginx default applies); ProxyConnectTimeout is milliseconds.
+	// ProxyBufferingDisable mirrors the manifest's buffering_disabled: false leaves the
+	// nginx default (buffering on), true renders proxy_buffering off.
+	ProxyBufferingDisable bool
+	ProxyBufferSize       uint32
+	ProxyBuffersNumber    uint32
+	ProxyBuffersSize      uint32
+	ProxyBusyBuffersSize  uint32
+	ProxyConnectTimeout   uint32
+}
+
+// IngressProxyBuffers is the validated proxy buffer sizing for the community
+// ingress-nginx path, in bytes. A zero field means "do not emit that annotation".
+type IngressProxyBuffers struct {
+	BufferSize uint32
+	Number     uint32
+	BusySize   uint32
+}
+
+// IngressProxyBuffers derives the proxy buffer annotations that are safe to emit on
+// the community ingress-nginx path. Unlike NGF (which sets proxy_buffers <n> <size>
+// directly), ingress-nginx sizes each pooled buffer from proxy-buffer-size and has no
+// per-buffer-size annotation, so consistency is checked against BufferSize. nginx
+// rejects the whole config on reload unless proxy_busy_buffers_size is within
+// [proxy_buffer_size, (buffers-1)*proxy_buffer_size] with at least 2 buffers, and a
+// rejected reload freezes config for every tenant on the shared controller. So the
+// buffer size is always safe on its own, but the number/busy pair is dropped unless
+// it forms a set nginx will accept. When only one of them is set the other is filled
+// from the effective default (ingress-nginx uses 4 buffers; nginx uses 2*buffer_size
+// for busy), and the filled-in values are returned - not the raw ones - so the emitted
+// annotations are internally consistent regardless of the controller's own defaults.
+func (d ConnectToDeploymentDirective) IngressProxyBuffers() IngressProxyBuffers {
+	out := IngressProxyBuffers{}
+
+	bufferSize := d.ProxyBufferSize
+	if bufferSize > 0 {
+		out.BufferSize = bufferSize
+	}
+
+	number := d.ProxyBuffersNumber
+	busy := d.ProxyBusyBuffersSize
+	if (number == 0 && busy == 0) || bufferSize == 0 {
+		return out
+	}
+
+	if number == 0 {
+		number = 4 // ingress-nginx default proxy-buffers-number
+	}
+	if number < 2 {
+		return out
+	}
+
+	if busy == 0 {
+		busy = 2 * bufferSize // nginx default proxy_busy_buffers_size
+	}
+	if busy < bufferSize || busy > (number-1)*bufferSize {
+		return out
+	}
+
+	out.Number = number
+	out.BusySize = busy
+	return out
 }

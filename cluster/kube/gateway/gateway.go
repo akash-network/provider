@@ -22,15 +22,16 @@ type GatewayProvider interface {
 	BuildAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string
 
 	// BuildHTTPRouteSpec builds the HTTPRoute spec with implementation-specific features.
-	// This includes standard Gateway API features (hostnames, routes, backends) as well as
-	// implementation-specific filters and configurations.
+	// This includes standard Gateway API features (hostnames, routes, backends) plus an
+	// ExtensionRef filter for each route extension, so the rule references exactly the
+	// objects BuildRouteExtensions returns and the two cannot diverge.
 	BuildHTTPRouteSpec(
 		gatewayName string,
 		gatewayNamespace string,
 		hostname string,
 		serviceName string,
 		servicePort int32,
-		directive chostname.ConnectToDeploymentDirective,
+		extensions []*unstructured.Unstructured,
 	) gatewayv1.HTTPRouteSpec
 
 	// BuildRouteExtensions returns auxiliary CRD objects to apply alongside the
