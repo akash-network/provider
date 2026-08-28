@@ -191,6 +191,16 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Duration(FlagReclamationRPCTimeout, 30*time.Second, "timeout for each chain RPC made while closing a reclaimed lease")
+	if err := viper.BindPFlag(FlagReclamationRPCTimeout, cmd.Flags().Lookup(FlagReclamationRPCTimeout)); err != nil {
+		return err
+	}
+
+	cmd.Flags().Duration(FlagReclamationCloseRetryInterval, time.Minute, "wait between retries when closing a reclaimed lease fails")
+	if err := viper.BindPFlag(FlagReclamationCloseRetryInterval, cmd.Flags().Lookup(FlagReclamationCloseRetryInterval)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Duration(FlagManifestTimeout, 5*time.Minute, "time after which bids are cancelled if no manifest is received")
 	if err := viper.BindPFlag(FlagManifestTimeout, cmd.Flags().Lookup(FlagManifestTimeout)); err != nil {
 		return err
