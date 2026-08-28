@@ -384,8 +384,16 @@ loop:
 					"lease", ev.ID,
 					"reason", ev.Reason,
 					"deadline", ev.Deadline)
-				// Workloads continue running during the reclamation window.
-				// Teardown occurs when EventLeaseClosed is received after the window elapses.
+				// Workloads keep running during the reclamation window. The lease's manager
+				// arms a timer for the deadline and broadcasts MsgCloseBid once it elapses in
+				// block time; the resulting EventLeaseClosed drives teardown here.
+				if manager := s.managers[ev.ID]; manager != nil {
+					if err := manager.reclaim(ev.Deadline); err != nil {
+						s.log.Error("arming reclamation close", "err", err, "lease", ev.ID)
+					}
+				} else {
+					s.log.Warn("reclaim event for lease with no local manager", "lease", ev.ID)
+				}
 			}
 		case ch := <-s.statusch:
 			ch <- &apclient.ClusterStatus{
