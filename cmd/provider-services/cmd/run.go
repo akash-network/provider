@@ -104,6 +104,8 @@ const (
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
 	FlagReclamationWindow                = "reclamation-window"
+	FlagReclamationRPCTimeout            = "reclamation-rpc-timeout"
+	FlagReclamationCloseRetryInterval    = "reclamation-close-retry-interval"
 	FlagManifestTimeout                  = "manifest-timeout"
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
@@ -499,6 +501,8 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	deploymentRuntimeClass := viper.GetString(FlagDeploymentRuntimeClass)
 	bidTimeout := viper.GetDuration(FlagBidTimeout)
 	reclamationWindow := viper.GetDuration(FlagReclamationWindow)
+	reclamationRPCTimeout := viper.GetDuration(FlagReclamationRPCTimeout)
+	reclamationCloseRetryInterval := viper.GetDuration(FlagReclamationCloseRetryInterval)
 	manifestTimeout := viper.GetDuration(FlagManifestTimeout)
 	broadcastTimeout := viper.GetDuration(FlagTxBroadcastTimeout)
 	metricsListener := viper.GetString(FlagMetricsListener)
@@ -682,6 +686,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	if reclamationWindow > 0 {
 		config.ReclamationWindow = &reclamationWindow
+	}
+	if reclamationRPCTimeout > 0 {
+		config.ReclamationRPCTimeout = reclamationRPCTimeout
+	}
+	if reclamationCloseRetryInterval > 0 {
+		config.ReclamationCloseRetryInterval = reclamationCloseRetryInterval
 	}
 	config.MonitorMaxRetries = monitorMaxRetries
 	config.MonitorRetryPeriod = monitorRetryPeriod
