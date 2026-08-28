@@ -227,10 +227,6 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagMonitorRetryPeriod, 4*time.Second) // nolint: err113
 			}
 
-			if err := providerflags.ValidateProxyBufferSize(viper.GetString(providerflags.FlagProxyBufferSize)); err != nil {
-				return err
-			}
-
 			pconfigBackend := viper.GetString(FlagPersistentConfigBackend)
 			pconfigPath := viper.GetString(FlagPersistentConfigPath)
 
