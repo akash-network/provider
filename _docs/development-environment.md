@@ -45,22 +45,18 @@ Currently supported host platforms:
 All examples are located within [_run](https://github.com/akash-network/provider/blob/gpu/_run) directory.
 [Commands](#commands) are implemented as `make` targets.
 
-There are three ways we use to set up the k8s cluster.
+There are two ways we use to set up the k8s cluster.
 
 - kind
-- minukube
 - ssh
 
-Both `kind` and `minikube` are e2e, i.e. the configuration is capable of spinning up cluster and the local host, whereas `ssh` expects cluster to be configured before use.
+`kind` is e2e, i.e. the configuration is capable of spinning up cluster and the local host, whereas `ssh` expects cluster to be configured before use.
 
 ### Runbook
 
-There are four configuration variants, each presented as directory within [_run](https://github.com/akash-network/provider/blob/gpu/_run).
+There are two configuration variants, each presented as directory within [_run](https://github.com/akash-network/provider/blob/gpu/_run).
 
 - `kube` - uses `kind` to set up local cluster. It is widely used by e2e testing of the provider. Provider and the node run as host services. All operators run as kubernetes deployments.
-- `single` - uses `kind` to set up local cluster. Main difference is both node and provider (and all operators) are running within k8s cluster as deployments. (at some point we will merge `single`
-  with `kube` and call it `kind`)
-- `minikube` - not in use for now
 - `ssh` - expects cluster to be up and running. mainly used to test sophisticated features like `GPU` or `IP leases`
 
 The only difference between environments above is how they set up. Once running, all commands are the same.
@@ -71,7 +67,7 @@ Each command is marked __t1__-__t3__ to indicate a suggested terminal number.
 If at any point something goes wrong and cluster needs to be run from the beginning:
 
 ```shell
-cd _run/<kube|single|ssh>
+cd _run/<kube|ssh>
 make kube-cluster-delete
 make clean
 ```
