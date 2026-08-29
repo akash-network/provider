@@ -147,16 +147,14 @@ func newInventoryService(
 	is.clients.inventory = cfromctx.ClientInventoryFromContext(ctx)
 	is.clients.ip = cfromctx.ClientIPFromContext(ctx)
 
-	is.teePlatform = client.DetectTEEPlatform(ctx)
-	if is.teePlatform != ctypes.TEEPlatformNone {
-		is.log.Info("detected TEE platform", "platform", is.teePlatform)
-	}
-
 	reservations := make([]*reservation, 0, len(deployments))
 	for _, d := range deployments {
 		res := newReservation(d.LeaseID().OrderID(), d.ManifestGroup())
 		res.SetClusterParams(d.ClusterParams())
-		res.teeType = teeTypeFromClusterParams(d.ClusterParams())
+		res.teeType, err = teeTypeFromClusterParams(d.ClusterParams())
+		if err != nil {
+			return nil, fmt.Errorf("restore reservation %s TEE type: %w", d.LeaseID(), err)
+		}
 
 		reservations = append(reservations, res)
 	}
@@ -479,7 +477,7 @@ func leasedIPStatus(state *inventoryServiceState) inventoryV1.ResourcePair {
 
 // teeTypeFromResourceGroup extracts the TEE type from the placement requirement
 // attributes of a resource group (e.g. tee/type=cpu-gpu).
-func teeTypeFromResourceGroup(rg dtypes.ResourceGroup) ctypes.TEEType {
+func teeTypeFromResourceGroup(rg dtypes.ResourceGroup) (ctypes.TEEType, error) {
 	var attrs atypes.Attributes
 	switch v := rg.(type) {
 	case dtypes.GroupSpec:
@@ -491,43 +489,63 @@ func teeTypeFromResourceGroup(rg dtypes.ResourceGroup) ctypes.TEEType {
 	case *dtypes.Group:
 		attrs = v.GroupSpec.Requirements.Attributes
 	default:
-		return ctypes.TEETypeNone
+		return ctypes.TEETypeNone, nil
 	}
+
+	var teeType ctypes.TEEType
+	found := false
 	for _, attr := range attrs {
-		if attr.Key == "tee/type" {
-			t, err := ctypes.ParseTEEType(attr.Value)
-			if err == nil {
-				return t
-			}
+		if attr.Key != "tee/type" {
+			continue
 		}
+		if found {
+			return ctypes.TEETypeNone, fmt.Errorf("duplicate tee/type placement attribute")
+		}
+		parsed, err := ctypes.ParseTEEType(attr.Value)
+		if err != nil {
+			return ctypes.TEETypeNone, fmt.Errorf("invalid tee/type placement attribute %q: %w", attr.Value, err)
+		}
+		teeType = parsed
+		found = true
 	}
-	return ctypes.TEETypeNone
+	return teeType, nil
 }
 
 // teeTypeFromClusterParams extracts the TEE type from stored cluster params
 // (used for existing reservations loaded at startup).
-func teeTypeFromClusterParams(cp interface{}) ctypes.TEEType {
+func teeTypeFromClusterParams(cp interface{}) (ctypes.TEEType, error) {
 	var sparams []*crd.SchedulerParams
 	switch v := cp.(type) {
 	case *crd.ClusterSettings:
 		if v == nil {
-			return ctypes.TEETypeNone
+			return ctypes.TEETypeNone, nil
 		}
 		sparams = v.SchedulerParams
 	case crd.ClusterSettings:
 		sparams = v.SchedulerParams
+	case crd.ReservationClusterSettings:
+		sparams = make([]*crd.SchedulerParams, 0, len(v))
+		for _, sp := range v {
+			sparams = append(sparams, sp)
+		}
 	default:
-		return ctypes.TEETypeNone
+		return ctypes.TEETypeNone, nil
 	}
+
+	teeType := ctypes.TEETypeNone
 	for _, sp := range sparams {
 		if sp != nil && sp.TEEType != "" && !sp.AttestationDisabled {
-			t, err := ctypes.ParseTEEType(sp.TEEType)
-			if err == nil {
-				return t
+			parsed, err := ctypes.ParseTEEType(sp.TEEType)
+			if err != nil {
+				return ctypes.TEETypeNone, fmt.Errorf("invalid stored TEE type %q: %w", sp.TEEType, err)
 			}
+			if teeType != ctypes.TEETypeNone && teeType != parsed {
+				return ctypes.TEETypeNone, fmt.Errorf("conflicting stored TEE types %q and %q", teeType, parsed)
+			}
+			teeType = parsed
 		}
 	}
-	return ctypes.TEETypeNone
+	return teeType, nil
 }
 
 func (is *inventoryService) adjustOpts(teeType ctypes.TEEType) []ctypes.InventoryOption {
@@ -539,6 +557,13 @@ func (is *inventoryService) adjustOpts(teeType ctypes.TEEType) []ctypes.Inventor
 }
 
 func (is *inventoryService) handleRequest(req inventoryRequest, state *inventoryServiceState) {
+	teeType, err := teeTypeFromResourceGroup(req.resources)
+	if err != nil {
+		inventoryRequestsCounter.WithLabelValues("reserve", "invalid-tee-type").Inc()
+		req.ch <- inventoryResponse{err: err}
+		return
+	}
+
 	// convert the resources to the committed amount
 	resourcesToCommit := is.resourcesToCommit(req.resources)
 	// create new registration if capacity available
@@ -567,8 +592,8 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
 
-	reservation.teeType = teeTypeFromResourceGroup(req.resources)
-	err := state.inventory.Adjust(reservation, is.adjustOpts(reservation.teeType)...)
+	reservation.teeType = teeType
+	err = state.inventory.Adjust(reservation, is.adjustOpts(reservation.teeType)...)
 	if err != nil {
 		is.log.Info("insufficient capacity for reservation", "order", req.order)
 		inventoryRequestsCounter.WithLabelValues("reserve", "insufficient-capacity").Inc()
@@ -600,6 +625,14 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 	if err != nil {
 		is.lc.ShutdownInitiated(err)
 		return
+	}
+
+	// Inventory discovery applies the akash.network=true label only after it
+	// has excluded unschedulable nodes. Detect the TEE platform after the
+	// operators are ready so startup ordering cannot leave it unresolved.
+	is.teePlatform = is.client.DetectTEEPlatform(ctx)
+	if is.teePlatform != ctypes.TEEPlatformNone {
+		is.log.Info("detected TEE platform", "platform", is.teePlatform)
 	}
 
 	var runch <-chan runner.Result
