@@ -287,7 +287,7 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.
 	nd := inv.Nodes[node].Dup()
 	sparams := &crd.SchedulerParams{}
 
-	if !tryAdjustCPU(&nd.Resources.CPU.Quantity, res.CPU) {
+	if !tryAdjustCPU(&nd.Resources.CPU, res.CPU) {
 		return nil, false, true
 	}
 
@@ -380,8 +380,28 @@ func (inv *inventory) tryAdjust(node int, res *rtypes.Resources, teeType ctypes.
 	return sparams, true, true
 }
 
-func tryAdjustCPU(rp *inventoryV1.ResourcePair, res *rtypes.CPU) bool {
-	return rp.SubMilliNLZ(res.Units)
+func tryAdjustCPU(rp *inventoryV1.CPU, res *rtypes.CPU) bool {
+	requestedArch := "amd64"
+
+	if len(res.Attributes) > 0 {
+		attrs, err := ParseCPUAttributes(res.Attributes)
+		if err != nil {
+			return false
+		}
+		if attrs.Arch != "" {
+			requestedArch = attrs.Arch
+		}
+	}
+
+	// if node has CPU info with arch set, validate it matches the request.
+	// nodes with no arch (pre-feature inventory) are treated as amd64 for backward compatibility.
+	if len(rp.Info) > 0 && rp.Info[0].Arch != "" {
+		if rp.Info[0].Arch != requestedArch {
+			return false
+		}
+	}
+
+	return rp.Quantity.SubMilliNLZ(res.Units)
 }
 
 func tryAdjustGPU(rp *inventoryV1.GPU, res *rtypes.GPU, sparams *crd.SchedulerParams, teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) bool {

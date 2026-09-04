@@ -124,6 +124,30 @@ func ParseGPUAttributes(attrs attrtypes.Attributes) (GPUAttributes, error) {
 	return res, nil
 }
 
+type CPUAttributes struct {
+	Arch string
+}
+
+func ParseCPUAttributes(attrs attrtypes.Attributes) (CPUAttributes, error) {
+	res := CPUAttributes{}
+
+	for _, attr := range attrs {
+		switch attr.Key {
+		case "arch":
+			switch attr.Value {
+			case "amd64", "arm64":
+				res.Arch = attr.Value
+			default:
+				return CPUAttributes{}, fmt.Errorf("unsupported CPU architecture (%s)", attr.Value) // nolint: err113
+			}
+		default:
+			return CPUAttributes{}, fmt.Errorf("unsupported CPU attribute (%s)", attr.Key) // nolint: err113
+		}
+	}
+
+	return res, nil
+}
+
 func ParseStorageAttributes(attrs attrtypes.Attributes) (StorageAttributes, error) {
 	attr := attrs.Find(sdl.StorageAttributePersistent)
 	persistent, _ := attr.AsBool()
