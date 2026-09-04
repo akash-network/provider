@@ -52,9 +52,9 @@ require (
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
-	pkg.akt.dev/go v0.4.4
+	pkg.akt.dev/go v0.4.5-rc0
 	pkg.akt.dev/go/cli v0.2.4
-	pkg.akt.dev/go/sdl v0.4.4
+	pkg.akt.dev/go/sdl v0.4.5-rc0
 	pkg.akt.dev/node v1.2.2
 	pkg.akt.dev/node/v2 v2.1.0
 	sigs.k8s.io/gateway-api v1.4.1
