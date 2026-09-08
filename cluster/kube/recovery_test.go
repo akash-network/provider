@@ -24,8 +24,8 @@ import (
 	akashfake "github.com/akash-network/provider/pkg/client/clientset/versioned/fake"
 )
 
-// Every deployment fixture, including future additions, gets the same recovery
-// contract. Compare complete pod templates, without an allowlist of fields or
+// Add valid feature fixtures to testdata/deployment; every YAML runs here.
+// Compare complete pod templates, without an allowlist of fields or
 // features. Fake clients let this run in normal CI for GPU/TEE/RDMA workloads;
 // recovery_integration_test.go separately checks API defaulting and live pods.
 func TestDeploymentRecoveryAcrossFeatures(t *testing.T) {
