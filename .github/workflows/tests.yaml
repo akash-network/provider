@@ -39,6 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Preserve annotated tags when checkout fetches the full history.
+          ref: ${{ startsWith(github.ref, 'refs/tags/') && github.ref || '' }}
           fetch-depth: 0
       - name: Setup environment
         uses: ./.github/actions/setup-ubuntu
