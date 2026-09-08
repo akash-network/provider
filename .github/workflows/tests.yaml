@@ -38,9 +38,16 @@ jobs:
     runs-on: [self-hosted, akash]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup environment
         uses: ./.github/actions/setup-ubuntu
       - run: make test-full
+      - name: Check workload recovery across provider upgrades
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        env:
+          RECOVERY_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: bash script/test-provider-recovery-upgrade.sh "$RECOVERY_BASE_REF"
 
   lint:
     runs-on: [self-hosted, akash]

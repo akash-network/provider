@@ -143,6 +143,17 @@ func TestDeploymentRecoveryKeepsPodsRunning(t *testing.T) {
 			}
 			assertStableRecovery()
 
+			// An external metadata edit advances the real API-server version but
+			// does not change the requested workload. Recovery must still keep
+			// every pod, including labels and annotations unrelated to this bug.
+			metadataOnly := readManifest()
+			metadataOnly.Annotations = map[string]string{"operator.example.com/note": "updated"}
+			metadataOnly, err = ac.AkashV2beta2().Manifests(ns.Name).Update(ctx, metadataOnly, metav1.UpdateOptions{})
+			require.NoError(t, err)
+			assertStableRecovery()
+			require.Equal(t, metadataOnly.Annotations, readManifest().Annotations)
+			require.Equal(t, before, readState(), "metadata-only changes must keep both pods")
+
 			// Follow the same input path as a tenant update after startup: use
 			// the recovered reservation settings with a newly received manifest.
 			deployments, err := c.Deployments(ctx)
