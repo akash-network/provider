@@ -274,7 +274,6 @@ dockers:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
   - dockerfile: Dockerfile
     ids:
       - provider-services-linux-arm64
@@ -297,7 +296,6 @@ dockers:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
   - dockerfile: Dockerfile.debug
     ids:
       - provider-services-linux-amd64-debug
@@ -317,7 +315,6 @@ dockers:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64-debug"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
   - dockerfile: Dockerfile.debug
     ids:
       - provider-services-linux-arm64-debug
@@ -337,7 +334,6 @@ dockers:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-arm64-debug"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
   - dockerfile: sidecar/attestation/Dockerfile
     ids:
       - attestation-sidecar-linux-amd64
@@ -360,7 +356,6 @@ dockers:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}-attestation-sidecar:{{ .ShortCommit }}"
       - "{{ .Env.DOCKER_IMAGE }}-attestation-sidecar:{{ .Version }}"
-      - "{{ .Env.DOCKER_IMAGE }}-attestation-sidecar:latest"
 docker_manifests:
   - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}"
     image_templates:
@@ -370,10 +365,6 @@ docker_manifests:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:latest"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64"
   - name_template: "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-debug"
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .ShortCommit }}-amd64-debug"
@@ -382,10 +373,6 @@ docker_manifests:
     image_templates:
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-amd64-debug"
       - "{{ .Env.DOCKER_IMAGE }}:{{ .Version }}-arm64-debug"
-  - name_template: "{{ .Env.DOCKER_IMAGE }}:latest-debug"
-    image_templates:
-      - "{{ .Env.DOCKER_IMAGE }}:latest-amd64-debug"
-      - "{{ .Env.DOCKER_IMAGE }}:latest-arm64-debug"
 
 
 nfpms:
@@ -420,4 +407,5 @@ release:
     name: provider
   prerelease: auto
   mode: replace
-  draft: false
+  draft: true
+  make_latest: false
