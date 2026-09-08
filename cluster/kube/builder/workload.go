@@ -566,6 +566,19 @@ func nodeSelectorsFromResources(res *crd.SchedulerResources) []corev1.NodeSelect
 	return selectors
 }
 
+func (b *Workload) podLabels(current map[string]string) map[string]string {
+	labels := b.labels()
+	// Resource versions track applied manifests on the workload object, not
+	// the pod template: metadata-only changes must not roll running pods.
+	delete(labels, AkashManifestResourceVersion)
+	// Older providers put this label on pod templates. Keep its existing
+	// value because deleting it during upgrade would itself trigger a rollout.
+	if version, exists := current[AkashManifestResourceVersion]; exists {
+		labels[AkashManifestResourceVersion] = version
+	}
+	return labels
+}
+
 func (b *Workload) labels() map[string]string {
 	obj := b.builder.labels()
 	svc := b.deployment.ManifestGroup().Services[b.serviceIdx]

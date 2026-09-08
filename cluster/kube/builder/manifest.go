@@ -34,7 +34,10 @@ func BuildManifest(log log.Logger, settings Settings, ns string, deployment IClu
 }
 
 func (b *manifest) labels() map[string]string {
-	return AppendLeaseLabels(b.deployment.LeaseID(), b.builder.labels())
+	labels := b.builder.labels()
+	// A Manifest must not track its own resource version in mutable metadata.
+	delete(labels, AkashManifestResourceVersion)
+	return AppendLeaseLabels(b.deployment.LeaseID(), labels)
 }
 
 func (b *manifest) Create() (*crd.Manifest, error) {
@@ -56,7 +59,8 @@ func (b *manifest) Update(obj *crd.Manifest) (*crd.Manifest, error) {
 	uobj := obj.DeepCopy()
 
 	uobj.Spec = m.Spec
-	uobj.Labels = b.labels()
+	// Lease identity is immutable. Preserve stored metadata, including legacy
+	// version labels, so recovery cannot advance resourceVersion on its own.
 
 	return uobj, nil
 }
