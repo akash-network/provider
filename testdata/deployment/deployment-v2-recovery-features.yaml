@@ -1,0 +1,84 @@
+---
+version: "2.1"
+services:
+  web:
+    image: registry.example.com/recovery-test:v1
+    command: ["/bin/sh"]
+    args: ["-c", "sleep 3600"]
+    env: ["FEATURE_TEST=enabled", "SECOND_VALUE=preserved"]
+    credentials:
+      host: "https://registry.example.com"
+      username: "fixture-only"
+      password: "fixture-only"
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+    params:
+      permissions:
+        read: ["logs", "events"]
+      storage:
+        data:
+          mount: /data
+          readOnly: true
+  worker:
+    image: registry.example.com/recovery-worker:v1
+    command: ["/bin/sh"]
+    args: ["-c", "sleep 3600"]
+    env: ["WORKER_TEST=enabled"]
+    credentials:
+      host: "https://registry.example.com"
+      username: "fixture-only"
+      password: "fixture-only"
+    params:
+      permissions:
+        read: ["logs"]
+      storage:
+        shm:
+          mount: /dev/shm
+profiles:
+  compute:
+    web:
+      resources:
+        cpu:
+          units: "1"
+        memory:
+          size: "1Gi"
+        storage:
+          - size: "512Mi"
+          - name: data
+            size: "128Mi"
+            attributes:
+              persistent: true
+              class: default
+    worker:
+      resources:
+        cpu:
+          units: "1"
+        memory:
+          size: "1Gi"
+        storage:
+          - size: "512Mi"
+          - name: shm
+            size: "64Mi"
+            attributes:
+              class: ram
+  placement:
+    global:
+      pricing:
+        web:
+          denom: uact
+          amount: 100
+        worker:
+          denom: uact
+          amount: 100
+deployment:
+  web:
+    global:
+      profile: web
+      count: 2
+  worker:
+    global:
+      profile: worker
+      count: 2
