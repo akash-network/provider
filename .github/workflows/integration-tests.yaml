@@ -14,6 +14,21 @@ defaults:
 
 jobs:
   crd-e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each suite runs the shared setup below on its own runner and kind
+        # cluster, in parallel. Parallel legs cannot share a live cluster, so
+        # the setup recipe is shared, not the environment.
+        suite:
+          - integration
+          - provider-gates
+    name: crd-e2e (${{ matrix.suite }})
+    # Test execution runs with a read-only token. Publishing the workload-health
+    # comment needs pull-requests: write, so it lives in a separate job (below) that
+    # runs no test code.
+    permissions:
+      contents: read
     env:
       KIND_NAME: kube
     runs-on: core-e2e
@@ -31,6 +46,8 @@ jobs:
         with:
           fetch-depth: 0
           set-safe-directory: true
+          # Do not leave a token in .git/config for test code to recover.
+          persist-credentials: false
           path: go/src/github.com/akash-network/provider
       - name: Install dependencies
         # Shell must explicitly specify the shell for each step. https://github.com/orgs/community/discussions/18597
@@ -64,6 +81,8 @@ jobs:
           repository: "akash-network/chain-sdk"
           fetch-depth: 0
           set-safe-directory: true
+          # Same as the provider checkout: no token left on disk for test code.
+          persist-credentials: false
           path: go/src/github.com/akash-network/chain-sdk
           ref: go/${{ env.AKASH_API_VERSION }}
       - name: Setup chain-sdk
@@ -142,9 +161,43 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: cat "$GITHUB_WORKSPACE/env_run.backup" > "$GITHUB_ENV"
       - name: Run E2E Tests
+        if: matrix.suite == 'integration'
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make test-e2e-integration
+      - name: Run provider disruption gates
+        if: matrix.suite == 'provider-gates'
+        # Non-blocking while it earns trust: a gate failure is surfaced but does not
+        # fail the job.
+        continue-on-error: true
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        env:
+          # Deploy with the PR's base version, recover with the candidate, so the
+          # upgrade gate is a genuine cross-version test. Empty on push/cron, where
+          # the gate falls back to HEAD (a same-code mechanism check).
+          PROVIDER_UPGRADE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          make test-e2e-provider-gates 2>&1 | tee "$RUNNER_TEMP/provider-gates.log"
+      - name: Render workload health summary
+        # Shown in the job summary (always, including push/cron with no PR) and handed
+        # to the publish job via an artifact so this read-only job never needs the
+        # write token.
+        if: always() && matrix.suite == 'provider-gates'
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          bash script/provider-gates-summary.sh "$RUNNER_TEMP/provider-gates.log" \
+            > "$RUNNER_TEMP/provider-gates-summary.md"
+          cat "$RUNNER_TEMP/provider-gates-summary.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload workload health summary
+        if: always() && matrix.suite == 'provider-gates' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-gates-summary
+          path: ${{ runner.temp }}/provider-gates-summary.md
+          retention-days: 1
+          # Immutable per run; allow "re-run failed jobs" to replace it instead of 409.
+          overwrite: true
       - name: Print operator inventory logs
         if: always()
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
@@ -156,6 +209,7 @@ jobs:
         run: |
           kubectl -n akash-services logs -l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-hardware-discovery,app.kubernetes.io/name=inventory
       - name: Run K8s Tests
+        if: matrix.suite == 'integration'
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make test-k8s-integration
@@ -163,3 +217,46 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           kubectl get ns,pods,ingress,svc -A
+
+  # Publishing the workload-health comment is the only step that needs a write-scoped
+  # token, so it runs in its own job that executes no test code, consuming the summary
+  # the test job produced as an artifact.
+  publish-gates-summary:
+    name: Publish workload health comment
+    needs: crd-e2e
+    # Same-repo PRs only: a fork PR's GITHUB_TOKEN is read-only regardless of the
+    # permissions block, so it cannot comment. Forks still see the table in the job
+    # summary; skipping here avoids a guaranteed 403 failure.
+    if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Download workload health summary
+        id: download
+        uses: actions/download-artifact@v4
+        with:
+          name: provider-gates-summary
+          path: gates-summary
+        continue-on-error: true
+      - name: Post workload impact to PR
+        # One sticky comment per PR, updated in place. gh api --paginate walks every
+        # comment page, so the marker is found even on long PRs (>100 comments).
+        if: hashFiles('gates-summary/provider-gates-summary.md') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          marker='<!-- provider-gates-summary -->'
+          body=$(printf '%s\n%s\n' "$marker" "$(cat gates-summary/provider-gates-summary.md)")
+          # `|| true` so head closing the pipe early does not SIGPIPE-fail gh under
+          # the workflow's `set -eo pipefail`.
+          id=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -n1 || true)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
