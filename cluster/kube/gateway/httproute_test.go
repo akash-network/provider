@@ -16,6 +16,7 @@ import (
 	clienttesting "k8s.io/client-go/testing"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 )
@@ -205,4 +206,88 @@ func TestCreateOrUpdateHTTPRouteNewRoutePlaceholderNotRoutable(t *testing.T) {
 	require.Empty(t, parentRefs, "placeholder must have no parentRefs (not attached to the gateway)")
 	rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")
 	require.Empty(t, rules, "placeholder must have no rules (backend not exposed)")
+}
+
+func TestListHTTPRouteConnectionsRecoversAfterExtensionFailure(t *testing.T) {
+	for _, defaultRules := range []bool{false, true} {
+		t.Run(fmt.Sprintf("defaultRules=%t", defaultRules), func(t *testing.T) {
+			ctx := context.Background()
+			dc := newFakeDC()
+			directive := routeDirective()
+			ns := builder.LidNS(directive.LeaseID)
+
+			if defaultRules {
+				// The API server defaults an omitted rules field to a path match with
+				// no backend. Dynamic fake clients do not apply CRD defaults.
+				dc.PrependReactor("create", "httproutes", func(action clienttesting.Action) (bool, runtime.Object, error) {
+					obj := action.(clienttesting.CreateAction).GetObject().(*unstructured.Unstructured)
+					if _, found, err := unstructured.NestedSlice(obj.Object, "spec", "rules"); !found {
+						require.NoError(t, err)
+						require.NoError(t, unstructured.SetNestedSlice(obj.Object, []interface{}{
+							map[string]interface{}{"matches": []interface{}{
+								map[string]interface{}{"path": map[string]interface{}{"type": "PathPrefix", "value": "/"}},
+							}},
+						}, "spec", "rules"))
+					}
+					return false, nil, nil
+				})
+			}
+
+			// A failed SnippetsFilter write leaves a detached route in Kubernetes.
+			failExtension := true
+			dc.PrependReactor("create", "snippetsfilters", func(clienttesting.Action) (bool, runtime.Object, error) {
+				if failExtension {
+					return true, nil, kerrors.NewForbidden(sfGVR.GroupResource(), directive.Hostname, fmt.Errorf("missing RBAC permission"))
+				}
+				return false, nil, nil
+			})
+			err := CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{})
+			require.True(t, kerrors.IsForbidden(err), "expected the SnippetsFilter permission failure, got %v", err)
+
+			// The operator scans connections before observing any ProviderHosts, both
+			// after an event failure and on restart. The placeholder must not stop it.
+			connections, err := ListHTTPRouteConnections(ctx, dc)
+			require.NoError(t, err)
+			require.Empty(t, connections)
+
+			failExtension = false
+			acceptSnippetsFilters(dc)
+			other := directive
+			other.Hostname = "other.example.com"
+			other.LeaseID.DSeq++
+			require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), other, NoopHTTPRouteObserver{}))
+			connections, err = ListHTTPRouteConnections(ctx, dc)
+			require.NoError(t, err)
+			require.Len(t, connections, 1, "a placeholder must not hide another lease's route")
+			require.Equal(t, other.Hostname, connections[0].GetHostname())
+
+			// Once the extension succeeds, retrying the original hostname completes it.
+			require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+			connections, err = ListHTTPRouteConnections(ctx, dc)
+			require.NoError(t, err)
+			require.Len(t, connections, 2)
+			route, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+			require.NoError(t, err)
+			require.Equal(t, directive.Hostname, extensionRefName(t, route))
+		})
+	}
+}
+
+func TestListHTTPRouteConnectionsRejectsAttachedRouteWithoutHostname(t *testing.T) {
+	ctx := context.Background()
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	directive := routeDirective()
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+
+	routes := dc.Resource(HTTPRouteGVR).Namespace(builder.LidNS(directive.LeaseID))
+	route, err := routes.Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	unstructured.RemoveNestedField(route.Object, "spec", "hostnames")
+	_, err = routes.Update(ctx, route, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	// An attached route is not a placeholder; keep reporting malformed connections.
+	_, err = ListHTTPRouteConnections(ctx, dc)
+	require.ErrorIs(t, err, kubeclienterrors.ErrInvalidHostnameConnection)
 }

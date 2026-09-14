@@ -325,6 +325,13 @@ func ListHTTPRouteConnections(
 			if err != nil {
 				return err
 			}
+			// A failed reconcile or restart can leave a detached placeholder from
+			// CreateOrUpdateHTTPRoute. It is not a connection yet; ProviderHost
+			// events will retry it once this startup scan completes. The API server
+			// may have defaulted rules, so identify it by its missing parent and host.
+			if len(route.Spec.ParentRefs) == 0 && len(route.Spec.Hostnames) == 0 {
+				return nil
+			}
 			if len(route.Spec.Hostnames) == 0 {
 				return fmt.Errorf("%w: no hostnames specified", kubeclienterrors.ErrInvalidHostnameConnection)
 			}
