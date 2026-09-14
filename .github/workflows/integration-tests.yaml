@@ -14,6 +14,19 @@ defaults:
 
 jobs:
   crd-e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        # Each suite runs the shared setup below on its own runner and kind
+        # cluster, in parallel. Parallel legs cannot share a live cluster, so
+        # the setup recipe is shared, not the environment.
+        suite:
+          - integration
+          - provider-gates
+    name: crd-e2e (${{ matrix.suite }})
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       KIND_NAME: kube
     runs-on: core-e2e
@@ -142,9 +155,58 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: cat "$GITHUB_WORKSPACE/env_run.backup" > "$GITHUB_ENV"
       - name: Run E2E Tests
+        if: matrix.suite == 'integration'
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make test-e2e-integration
+      - name: Run provider disruption gates
+        id: gates
+        if: matrix.suite == 'provider-gates'
+        # Non-blocking while it earns trust: a gate failure is surfaced but does not
+        # fail the job.
+        continue-on-error: true
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        env:
+          # Deploy with the PR's base version, recover with the candidate, so the
+          # upgrade gate is a genuine cross-version test. Empty on push/cron, where
+          # the gate falls back to HEAD (a same-code mechanism check).
+          PROVIDER_UPGRADE_BASE_REF: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -o pipefail
+          make test-e2e-provider-gates 2>&1 | tee "$RUNNER_TEMP/provider-gates.log"
+      - name: Workload health summary
+        # Always visible in the job summary, including push and cron runs that have
+        # no PR to comment on.
+        if: always() && matrix.suite == 'provider-gates'
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        run: |
+          bash script/provider-gates-summary.sh "$RUNNER_TEMP/provider-gates.log" \
+            "${{ steps.gates.outcome }}" >> "$GITHUB_STEP_SUMMARY"
+      - name: Post workload impact to PR
+        # Best-effort: a fork PR's read-only token cannot comment, so never fail
+        # the job on this. One sticky comment per PR, updated in place on re-runs.
+        if: always() && matrix.suite == 'provider-gates' && github.event_name == 'pull_request'
+        continue-on-error: true
+        working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          # The self-hosted runner has curl + jq but not the gh CLI.
+          marker='<!-- provider-gates-summary -->'
+          table=$(bash script/provider-gates-summary.sh "$RUNNER_TEMP/provider-gates.log" "${{ steps.gates.outcome }}")
+          body=$(printf '%s\n%s\n' "$marker" "$table")
+          payload=$(jq -n --arg b "$body" '{body: $b}')
+          api="https://api.github.com/repos/$REPO"
+          auth="Authorization: Bearer $GH_TOKEN"
+          id=$(curl -fsSL -H "$auth" "$api/issues/$PR/comments?per_page=100" \
+            | jq -r --arg m "$marker" 'map(select(.body | contains($m))) | .[0].id // empty')
+          if [ -n "$id" ]; then
+            curl -fsSL -X PATCH -H "$auth" "$api/issues/comments/$id" -d "$payload" >/dev/null
+          else
+            curl -fsSL -X POST -H "$auth" "$api/issues/$PR/comments" -d "$payload" >/dev/null
+          fi
       - name: Print operator inventory logs
         if: always()
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
@@ -156,6 +218,7 @@ jobs:
         run: |
           kubectl -n akash-services logs -l app.kubernetes.io/part-of=provider,app.kubernetes.io/component=operator,app.kubernetes.io/instance=inventory-hardware-discovery,app.kubernetes.io/name=inventory
       - name: Run K8s Tests
+        if: matrix.suite == 'integration'
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
           make test-k8s-integration

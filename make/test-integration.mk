@@ -27,6 +27,15 @@ test-e2e-integration:
 	# ```
 	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 3000s
 
+# Process-level workload-disruption gates (subprocess smoke, restart, cross-version
+# upgrade), run on an already-configured cluster. They pass when a provider restart or
+# upgrade leaves running workloads untouched and fail when it rolls them.
+# The -run patterns are regex prefixes, so TestProviderRestart also selects
+# TestProviderRestartTEESNP and TestProviderUpgrade also selects TestProviderUpgradeTEESNP.
+.PHONY: test-e2e-provider-gates
+test-e2e-provider-gates:
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -tags "e2e" -v ./integration/... -run 'TestProviderSubprocessSmoke|TestProviderRestart|TestProviderUpgrade' -timeout 1800s
+
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:
 	$(INTEGRATION_VARS) \

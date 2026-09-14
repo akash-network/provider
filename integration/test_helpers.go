@@ -33,6 +33,8 @@ attributes:
     value: false
   - key: capabilities/storage/3/class
     value: ram
+  - key: tee/type
+    value: cpu
 `
 )
 
