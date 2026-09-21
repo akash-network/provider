@@ -14,6 +14,14 @@ ifneq ($(wildcard $(CC_MARKER)),)
 CONFIDENTIAL_COMPUTE := true
 endif
 
+# Auto-detect Gateway API from cached cluster state (authoritative once set).
+# Mirrors the CC marker above; must be before includes so downstream
+# conditionals (KIND_CONFIG_FILE, provider-run --ingress-mode flag) observe it.
+GW_MARKER := $(AP_RUN_DIR)/.gateway-api
+ifneq ($(wildcard $(GW_MARKER)),)
+GATEWAY_API := true
+endif
+
 KUSTOMIZE_INSTALLS ?= \
 	akash-operator-hostname \
 	akash-operator-inventory \
@@ -22,6 +30,13 @@ KUSTOMIZE_INSTALLS ?= \
 ifeq ($(CONFIDENTIAL_COMPUTE),true)
 KUSTOMIZE_INSTALLS += confidential-compute
 endif
+
+# NOTE: Gateway API intentionally does NOT extend KUSTOMIZE_INSTALLS. Unlike the
+# CC RuntimeClasses (deployed via the generic client-side kustomize-deploy-%
+# pipeline in the services phase), nginx-gateway-fabric requires its CRDs applied
+# server-side and installed during the ingress phase (before provider services and
+# MetalLB). It is therefore wired through kube-setup-ingress via the
+# kube-setup-ingress-default -> kube-setup-ingress-gateway override below.
 
 include ../common.mk
 include ../common-commands.mk
@@ -115,15 +130,31 @@ endif
 .PHONY: clean-kube
 clean-kube:
 	rm -f $(CC_MARKER)
+	rm -f $(GW_MARKER)
 
 .PHONY: kube-deployments-rollout
 kube-deployments-rollout: #$(patsubst %, kube-deployment-rollout-%,$(KUSTOMIZE_INSTALLS))
 
-.PHONY: kube-setup-kube
+# Gateway API and confidential compute are orthogonal: append each mode's setup
+# as an independent prerequisite so both run when both flags are true.
+KUBE_SETUP_KUBE_DEPS :=
 ifeq ($(GATEWAY_API),true)
-kube-setup-kube: kube-setup-hostname-operator-gateway
-else ifeq ($(CONFIDENTIAL_COMPUTE),true)
-kube-setup-kube:
+KUBE_SETUP_KUBE_DEPS += kube-setup-gateway
+endif
+ifeq ($(CONFIDENTIAL_COMPUTE),true)
+KUBE_SETUP_KUBE_DEPS += kube-setup-confidential-compute
+endif
+
+.PHONY: kube-setup-kube
+kube-setup-kube: $(KUBE_SETUP_KUBE_DEPS)
+
+.PHONY: kube-setup-gateway
+kube-setup-gateway: kube-setup-hostname-operator-gateway
+	@echo "  [GW] Persisting Gateway API configuration to cache..."
+	@touch $(GW_MARKER)
+
+.PHONY: kube-setup-confidential-compute
+kube-setup-confidential-compute:
 	@echo "  [CC] Persisting CC configuration to cache..."
 	@touch $(CC_MARKER)
 	@echo "  [CC] Labeling nodes for confidential compute scheduling..."
@@ -136,9 +167,6 @@ kube-setup-kube:
 			--overwrite; \
 	done
 	@echo "  [CC] Dev cluster setup complete (RuntimeClasses + node labels + sidecar)."
-else
-kube-setup-kube:
-endif
 
 .PHONY: kube-setup-ingress-gateway
 kube-setup-ingress-gateway:
@@ -163,3 +191,4 @@ kube-cluster-delete: $(KIND)
 	$(KIND) delete cluster --name "$(KIND_NAME)"
 	rm -rf $(KUBE_CREATE)
 	rm -f $(CC_MARKER)
+	rm -f $(GW_MARKER)
