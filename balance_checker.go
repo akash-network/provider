@@ -15,6 +15,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
+	dv1 "pkg.akt.dev/go/node/deployment/v1"
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
@@ -38,6 +39,7 @@ const (
 	respStateNextCheck = iota
 	respStateOutOfFunds
 	respStateScheduledWithdraw
+	respStateLeaseClosed
 )
 
 type BalanceCheckerConfig struct {
@@ -149,6 +151,14 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	})
 
 	if resp.err != nil {
+		return resp
+	}
+
+	// Backstop for a missed EventLeaseClosed: if the deployment (and therefore this lease)
+	// is already closed on chain, publish the close ourselves so the normal teardown runs.
+	// The balance-checker already polls this deployment, so detecting it here adds no query.
+	if dResp.Deployment.State == dv1.DeploymentClosed {
+		resp.state = respStateLeaseClosed
 		return resp
 	}
 
@@ -293,6 +303,14 @@ loop:
 			withdraw := false
 
 			switch res.state {
+			case respStateLeaseClosed:
+				bc.log.Info("lease closed on chain, removing", "lease", res.lid)
+				if err := bc.bus.Publish(&mtypes.EventLeaseClosed{ID: res.lid, Reason: mtypes.LeaseClosedReasonUnspecified}); err != nil {
+					// Retry on the next check rather than latching; on success the lease is
+					// removed when the resulting LeaseRemoveFundsMonitor comes back.
+					bc.log.Error("unable to publish lease closed event", "err", err, "lease", res.lid)
+					lState.tm = bc.timerFunc(ctx, time.Minute, res.lid, false, leaseCheckCh)
+				}
 			case respStateOutOfFunds:
 				bc.log.Debug("lease is out of funds", "lease", res.lid)
 				// reschedule funds check. if lease not being topped up then network will close it
