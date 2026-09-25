@@ -34,23 +34,32 @@ var (
 	WithTDX = ctypes.WithTDX
 )
 
-// RuntimeClassForTEEType maps a TEE type ("cpu", "cpu-gpu") to the corresponding
-// Kata runtime class using the detected TEE platform ("tdx" or "snp").
-func RuntimeClassForTEEType(teeType string, teePlatform string) RuntimeClass {
-	isGPU := teeType == "cpu-gpu"
-	switch teePlatform {
-	case "tdx":
-		if isGPU {
-			return RuntimeClassKataQemuNvidiaGPUTDX
-		}
-		return RuntimeClassKataQemuTDX
-	case "snp":
-		if isGPU {
-			return RuntimeClassKataQemuNvidiaGPUSNP
-		}
-		return RuntimeClassKataQemuSNP
+// RuntimeClassForTEEType maps a validated TEE request and detected platform to
+// its Kata runtime class. Missing and unknown values are errors so confidential
+// workloads can never fall through to the default OCI runtime.
+func RuntimeClassForTEEType(teeType ctypes.TEEType, teePlatform ctypes.TEEPlatform) (RuntimeClass, error) {
+	var isGPU bool
+	switch teeType {
+	case ctypes.TEETypeCPU:
+	case ctypes.TEETypeCPUGPU:
+		isGPU = true
 	default:
-		return ""
+		return "", fmt.Errorf("unsupported TEE type %q", teeType)
+	}
+
+	switch teePlatform {
+	case ctypes.TEEPlatformTDX:
+		if isGPU {
+			return RuntimeClassKataQemuNvidiaGPUTDX, nil
+		}
+		return RuntimeClassKataQemuTDX, nil
+	case ctypes.TEEPlatformSNP:
+		if isGPU {
+			return RuntimeClassKataQemuNvidiaGPUSNP, nil
+		}
+		return RuntimeClassKataQemuSNP, nil
+	default:
+		return "", fmt.Errorf("unsupported TEE platform %q for TEE type %q", teePlatform, teeType)
 	}
 }
 
