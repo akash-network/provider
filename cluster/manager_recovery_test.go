@@ -25,6 +25,15 @@ import (
 )
 
 func TestDeploymentManagerCleansUpClosedLeaseOnRecovery(t *testing.T) {
+	testDeploymentManagerRecovery(t, false)
+}
+
+func TestDeploymentManagerRetriesFailedTeardown(t *testing.T) {
+	testDeploymentManagerRecovery(t, true)
+}
+
+func testDeploymentManagerRecovery(t *testing.T, failFirstTeardown bool) {
+	t.Helper()
 	lid := testutil.LeaseID(t)
 	bus := pubsub.NewBus()
 	defer bus.Close()
@@ -39,9 +48,16 @@ func TestDeploymentManagerCleansUpClosedLeaseOnRecovery(t *testing.T) {
 	market.On("Lease", mock.Anything, &mvbeta.QueryLeaseRequest{ID: lid}).Return(
 		&mvbeta.QueryLeaseResponse{Lease: mv1.Lease{ID: lid, State: mv1.LeaseClosed}}, nil).Once()
 	kube := cmocks.NewClient(t)
-	kube.On("TeardownLease", mock.Anything, lid).Return(nil).Once()
-	kube.On("PurgeDeclaredHostnames", mock.Anything, lid).Return(nil).Once()
-	kube.On("PurgeDeclaredIPs", mock.Anything, lid).Return(nil).Once()
+	attempts := 1
+	if failFirstTeardown {
+		attempts++
+		// Exhaust one cleanup attempt without waiting for its internal retries.
+		kube.On("TeardownLease", mock.Anything, lid).Return(context.DeadlineExceeded).Once()
+	}
+	tornDown := make(chan struct{})
+	kube.On("TeardownLease", mock.Anything, lid).Return(nil).Run(func(mock.Arguments) { close(tornDown) }).Once()
+	kube.On("PurgeDeclaredHostnames", mock.Anything, lid).Return(nil).Times(attempts)
+	kube.On("PurgeDeclaredIPs", mock.Anything, lid).Return(nil).Times(attempts)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	hostnames, err := newHostnameService(ctx, NewDefaultConfig(), nil)
@@ -56,8 +72,13 @@ func TestDeploymentManagerCleansUpClosedLeaseOnRecovery(t *testing.T) {
 	defer dm.lc.Shutdown(nil)
 	select {
 	case <-dm.lc.Done():
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("recovered closed lease kept its deployment manager instead of tearing down")
+	}
+	select {
+	case <-tornDown:
+	default:
+		t.Fatal("deployment manager retired before cleanup succeeded")
 	}
 	kube.AssertNotCalled(t, "Deploy", mock.Anything, mock.Anything)
 	require.Equal(t, dsTeardownComplete, dm.state)

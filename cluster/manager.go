@@ -162,6 +162,7 @@ func (dm *deploymentManager) run(ctx context.Context) {
 	}()
 
 	var teardownErr error
+	var retryTeardown <-chan time.Time
 
 loop:
 	for {
@@ -208,6 +209,12 @@ loop:
 				panic(fmt.Sprintf("INVALID STATE: runch read on %v", dm.state))
 			case dsTeardownActive:
 				teardownErr = result
+				if result != nil {
+					// Keep the manager and its reservation until cleanup succeeds.
+					// A later attempt can recover when the Kubernetes API returns.
+					retryTeardown = time.After(5 * time.Second)
+					break
+				}
 				dm.state = dsTeardownComplete
 				dm.log.Debug("teardown complete")
 				break loop
@@ -217,6 +224,10 @@ loop:
 			case dsTeardownComplete:
 				panic(fmt.Sprintf("INVALID STATE: runch read on %v", dm.state))
 			}
+
+		case <-retryTeardown:
+			retryTeardown = nil
+			runch = dm.startTeardown()
 
 		case <-dm.teardownch:
 			dm.log.Debug("teardown request")
