@@ -96,6 +96,13 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		currentHostnames:    make(map[string]struct{}),
 	}
 
+	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
+	if err != nil {
+		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lease", lid)
+	}
+
+	// Register monitoring before recovery can discover a closed lease and
+	// remove it again. This preserves event ordering even for fast teardown.
 	go dm.lc.WatchChannel(s.lc.ShuttingDown())
 	go dm.run(context.Background())
 
@@ -104,11 +111,6 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		dm.log.Debug("sending manager into channel")
 		s.managerch <- dm
 	}()
-
-	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
-	if err != nil {
-		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lease", lid)
-	}
 
 	return dm
 }
@@ -178,6 +180,10 @@ loop:
 			runch = nil
 			if result != nil {
 				dm.log.Error("execution error", "state", dm.state, "err", result)
+			}
+			if errors.Is(result, ErrLeaseInactive) {
+				runch = dm.startTeardown()
+				continue
 			}
 			switch dm.state {
 			case dsDeployActive:
@@ -311,6 +317,9 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 
 func (dm *deploymentManager) startTeardown() <-chan error {
 	dm.stopMonitor()
+	if err := dm.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: dm.deployment.LeaseID()}); err != nil {
+		dm.log.Error("removing lease funds monitor", "err", err)
+	}
 	dm.state = dsTeardownActive
 	return dm.do(func() error {
 		// Don't use a context tied to the lifecycle, as we don't want to cancel Kubernetes operations
@@ -575,12 +584,16 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 			ID: dm.deployment.LeaseID(),
 		})
 		//
-		if err != nil && !errorsmod.IsOf(err, mv1.ErrLeaseNotFound) {
+		if errorsmod.IsOf(err, mv1.ErrLeaseNotFound) {
+			return retry.Unrecoverable(err)
+		}
+		if err != nil {
 			dm.log.Error("lease query failed", "err", err)
 			return err
 		}
 		return nil
 	},
+		retry.Context(ctx),
 		retry.Attempts(50),
 		retry.Delay(100*time.Millisecond),
 		retry.MaxDelay(3000*time.Millisecond),
@@ -591,13 +604,18 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 		return err
 	}
 
-	leaseState := lease.GetLease().State
-	if leaseState != mv1.LeaseActive && leaseState != mv1.LeaseReclaiming {
+	if lease.GetLease().ID != dm.deployment.LeaseID() {
+		return fmt.Errorf("lease query returned a different ID: %s", lease.GetLease().ID)
+	}
+	switch lease.GetLease().State {
+	case mv1.LeaseActive, mv1.LeaseReclaiming:
+		return nil
+	case mv1.LeaseClosed, mv1.LeaseInsufficientFunds:
 		dm.log.Error("lease not active, not deploying")
 		return fmt.Errorf("%w: %s", ErrLeaseInactive, dm.deployment.LeaseID())
+	default:
+		return fmt.Errorf("unexpected lease state: %s", lease.GetLease().State)
 	}
-
-	return nil
 }
 
 func (dm *deploymentManager) do(fn func() error) <-chan error {
