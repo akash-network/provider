@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -67,6 +68,7 @@ type leaseCheckResponse struct {
 	checkAfter time.Duration
 	state      respState
 	err        error
+	closed     *mtypes.EventLeaseClosed
 }
 
 func newBalanceChecker(
@@ -137,6 +139,32 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 
 	if syncInfo.CatchingUp {
 		resp.err = aclient.ErrNodeNotSynced
+		return resp
+	}
+
+	// Reconcile this lease even if its closure event was missed or its
+	// persisted deployment was recovered after the lease closed.
+	lease, err := bc.aqc.Market().Lease(ctx, &mvbeta.QueryLeaseRequest{ID: lid})
+	if err != nil {
+		resp.err = err
+		return resp
+	}
+	if lease.Lease.ID != lid {
+		resp.err = fmt.Errorf("lease query returned a different ID: %s", lease.Lease.ID)
+		return resp
+	}
+	switch lease.Lease.State {
+	case mtypes.LeaseClosed, mtypes.LeaseInsufficientFunds:
+		resp.closed = &mtypes.EventLeaseClosed{ID: lid, Reason: lease.Lease.Reason}
+		return resp
+	case mtypes.LeaseReclaiming:
+		// The reclamation window still permits service and withdrawals.
+		// Its closure is decided by the chain, not the balance estimate.
+		resp.checkAfter = bc.cfg.LeaseFundsCheckInterval
+		return resp
+	case mtypes.LeaseActive:
+	default:
+		resp.err = fmt.Errorf("unexpected lease state: %s", lease.Lease.State)
 		return resp
 	}
 
@@ -235,6 +263,7 @@ func (bc *balanceChecker) run(startCh chan<- error) {
 	if err != nil {
 		return
 	}
+	defer subscriber.Close()
 
 	resultch = make(chan runner.Result, 1)
 
@@ -272,22 +301,27 @@ loop:
 					bc.runEscrowCheck(ctx, ev.LeaseID, false, leaseCheckCh)
 				}
 			case event.LeaseRemoveFundsMonitor:
-				lsState, exists := bc.leases[ev.LeaseID]
-				if !exists {
-					break
-				}
-
-				if lsState.tm != nil {
-					// AfterFunc timers have no channel to drain when already fired.
-					lsState.tm.Stop()
-				}
-
-				delete(bc.leases, ev.LeaseID)
+				bc.removeLease(ev.LeaseID)
 			}
 		case res := <-leaseCheckCh:
 			// we may have timer fired just a heart beat ahead of lease remove event.
 			lState, exists := bc.leases[res.lid]
 			if !exists {
+				continue loop
+			}
+
+			if res.closed != nil {
+				// Reuse the normal local teardown path. This does not send a
+				// transaction or change the on-chain lease.
+				res.err = bc.bus.Publish(res.closed)
+				if res.err == nil {
+					bc.removeLease(res.lid)
+					continue loop
+				}
+			}
+			if res.err != nil {
+				bc.log.Info("couldn't check lease balance. retrying in 1m", "leaseId", res.lid, "err", res.err)
+				lState.tm = bc.timerFunc(ctx, time.Minute, res.lid, res.state == respStateScheduledWithdraw, leaseCheckCh)
 				continue loop
 			}
 
@@ -311,10 +345,7 @@ loop:
 				timerPeriod := res.checkAfter
 				scheduledWithdraw := false
 
-				if res.err != nil {
-					bc.log.Info("couldn't check lease balance. retrying in 1m", "leaseId", res.lid, "err", res.err)
-					timerPeriod = time.Minute
-				} else if !withdraw && !lState.scheduledWithdrawAt.IsZero() {
+				if !withdraw && !lState.scheduledWithdrawAt.IsZero() {
 					withdrawIn := time.Until(lState.scheduledWithdrawAt)
 					if timerPeriod >= withdrawIn {
 						timerPeriod = withdrawIn
@@ -338,6 +369,16 @@ loop:
 				bc.log.Error("failed to do lease withdrawal", "err", err, "LeaseID", res.Value().(mtypes.LeaseID))
 			}
 		}
+	}
+}
+
+func (bc *balanceChecker) removeLease(lid mtypes.LeaseID) {
+	if state, exists := bc.leases[lid]; exists {
+		if state.tm != nil {
+			// AfterFunc timers have no channel to drain when already fired.
+			state.tm.Stop()
+		}
+		delete(bc.leases, lid)
 	}
 }
 
