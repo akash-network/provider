@@ -219,8 +219,8 @@ func (bc *balanceChecker) run(startCh chan<- error) {
 		bc.lc.ShutdownCompleted()
 
 		for _, lState := range bc.leases {
-			if lState.tm != nil && !lState.tm.Stop() {
-				<-lState.tm.C
+			if lState.tm != nil {
+				lState.tm.Stop()
 			}
 		}
 
@@ -277,8 +277,9 @@ loop:
 					break
 				}
 
-				if lsState.tm != nil && !lsState.tm.Stop() {
-					<-lsState.tm.C
+				if lsState.tm != nil {
+					// AfterFunc timers have no channel to drain when already fired.
+					lsState.tm.Stop()
 				}
 
 				delete(bc.leases, ev.LeaseID)
