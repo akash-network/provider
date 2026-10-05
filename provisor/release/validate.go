@@ -40,10 +40,10 @@ func Validate(m *Manifest, state InstalledState, now time.Time) Decision {
 	if now.After(m.ExpiresAt) {
 		return Expired
 	}
-	if m.Release.compare(state.Release) <= 0 {
+	if m.Release.Compare(state.Release) <= 0 {
 		return NotMonotonic
 	}
-	if state.Release.compare(m.MinUpgradableFrom) < 0 {
+	if state.Release.Compare(m.MinUpgradableFrom) < 0 {
 		return BelowUpgradeFloor
 	}
 	if m.SchemaVersion != CurrentSchemaVersion {
@@ -104,7 +104,7 @@ func registryAllowed(repository string, allowed []string) bool {
 	return false
 }
 
-// compare orders versions numerically component by component, so 0.16.10 is
+// Compare orders versions numerically component by component, so 0.16.10 is
 // greater than 0.16.9 even though the second component's string form sorts
 // the other way lexically. A missing trailing component compares as zero,
 // so "1.0" equals "1.0.0". A non-numeric component also compares as zero,
@@ -116,7 +116,7 @@ func registryAllowed(repository string, allowed []string) bool {
 // means the monotonic and floor checks cannot be defeated by appending a
 // pre-release tag; a release author who needs a pre-release ordered ahead of
 // its base release must mint a new numeric component instead.
-func (v Version) compare(other Version) int {
+func (v Version) Compare(other Version) int {
 	a, b := numericComponents(v), numericComponents(other)
 	for i := 0; i < len(a) || i < len(b); i++ {
 		var x, y int

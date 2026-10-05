@@ -208,8 +208,8 @@ func TestVersionCompare(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := tc.a.compare(tc.b); got != tc.want {
-				t.Fatalf("%q.compare(%q) = %d, want %d", tc.a, tc.b, got, tc.want)
+			if got := tc.a.Compare(tc.b); got != tc.want {
+				t.Fatalf("%q.Compare(%q) = %d, want %d", tc.a, tc.b, got, tc.want)
 			}
 		})
 	}

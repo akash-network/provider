@@ -67,9 +67,16 @@ type Component struct {
 // release manifests. It carries the same ExpiresAt and monotonic Version
 // fields as a Manifest, so an old key set naming a since-revoked key cannot
 // be replayed against a verifier that only checks the root signature.
+//
+// Threshold is the operational policy and is deliberately stated here rather
+// than inherited from the root key set that signed this document. The two
+// tiers are rotated independently, and a root set with more keys than the
+// operational set would otherwise impose a threshold the operational keys
+// could never satisfy.
 type KeySet struct {
 	Version   Version          `json:"version"`
 	ExpiresAt time.Time        `json:"expiresAt"`
+	Threshold int              `json:"threshold"`
 	Keys      []OperationalKey `json:"keys"`
 }
 
