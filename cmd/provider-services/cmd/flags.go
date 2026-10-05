@@ -246,6 +246,11 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Uint(FlagLeaseRecoveryConcurrency, 10, "max concurrent lease deployments during startup recovery. 0 disables the limit. defaults to 10")
+	if err := viper.BindPFlag(FlagLeaseRecoveryConcurrency, cmd.Flags().Lookup(FlagLeaseRecoveryConcurrency)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Duration(FlagMonitorRetryPeriod, 4*time.Second, "monitor status retry period. defaults to 4s (min value)")
 	if err := viper.BindPFlag(FlagMonitorRetryPeriod, cmd.Flags().Lookup(FlagMonitorRetryPeriod)); err != nil {
 		return err
