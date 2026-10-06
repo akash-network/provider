@@ -14,6 +14,12 @@ func runServe(args []string) error {
 	// gateway, so the default must not collide with the dev cluster this
 	// harness is meant to run beside.
 	addr := fs.String("addr", "127.0.0.1:8099", "address to listen on")
+	// addr is also the only address devkit has for itself, so it is the
+	// default for publicAddr too. The two diverge whenever the process
+	// binds a wildcard or pod-local address (0.0.0.0, a pod IP) but is
+	// reached by callers through a different name, e.g. a Kubernetes
+	// Service's DNS name.
+	publicAddr := fs.String("public-addr", "", "host:port embedded in served documents as the manifest's fetch URL (defaults to --addr)")
 
 	cfg := defaultFaultConfig()
 	fs.BoolVar(&cfg.Expired, "expired", cfg.Expired, "serve a manifest whose ExpiresAt is already in the past")
@@ -37,7 +43,10 @@ func runServe(args []string) error {
 		return fmt.Errorf("run `devkit keys` first: %w", err)
 	}
 
-	manifestURL := fmt.Sprintf("http://%s/manifest", *addr)
+	if *publicAddr == "" {
+		*publicAddr = *addr
+	}
+	manifestURL := fmt.Sprintf("http://%s/manifest", *publicAddr)
 	docs, err := buildDocuments(kb, cfg, manifestURL, time.Now())
 	if err != nil {
 		return err

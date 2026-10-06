@@ -5,26 +5,20 @@
 It signs the same three documents the pipeline will eventually produce and serves them over HTTP, so the verification chain can be exercised end to end without any real infrastructure.
 `provisor-fetch` runs that chain once against a running server and reports the outcome.
 
-## Dev loop
+## Compiled-in trust roots
 
 The compiled-in trust roots are embedded into the binary at compile time, via `go:embed` on `trust/roots/*.json`.
 Regenerating `trust/roots/dev.json` has no effect on an already-built `devkit` or `provisor-fetch` binary.
 Both must be rebuilt for a new dev root to take effect.
-The `serve` and `fetch` Makefile targets rebuild before they run, for exactly this reason.
-`devkeys` does not, since generating keys writes no binary.
 
-1. `make devkeys` generates two root keypairs and two operational keypairs under `.devkeys/`, and writes the root public keys to `trust/roots/dev.json`.
-   Re-running this refuses to overwrite existing keys.
-   Pass `make devkeys ARGS=--force` to regenerate anyway.
-2. `make serve` rebuilds `devkit` and starts it, serving a signed key-set, channel pointer, and manifest at `/keyset`, `/channel`, and `/manifest` on `127.0.0.1:8099`.
-3. In another terminal, `make fetch` rebuilds `provisor-fetch` and runs it against the running server, printing the accepted release or the single refusal reason.
+## Dev loop
 
-`devkit serve`'s defaults describe a plausible release `0.18.0`, superseding `0.17.5`, upgradable from `0.16.0` onward.
-`make fetch` passes `--installed-release=0.17.5`, which accepts that release as a clean upgrade.
+The dev loop (generating dev keys, running `devkit serve`, running `provisor-fetch` against it) runs inside the kind cluster managed by `_run/kube`, not as bare binaries on the host.
+See `_run/kube/README.md` for how to bring it up, why key generation must happen before the image is built, and how to read the fetch result.
 
 ## Fault injection
 
-Every flag to `devkit serve` breaks exactly one step of the chain, so each can be demonstrated on its own: pass the flag to `serve`, then run `fetch` against it and read the refusal reason it prints.
+Every flag to `devkit serve` breaks exactly one step of the chain, so each can be demonstrated on its own: pass the flag to `serve`, then run `provisor-fetch` against it and read the refusal reason it prints.
 
 | `devkit serve` flag | Refusal reason |
 | --- | --- |
@@ -39,8 +33,6 @@ Every flag to `devkit serve` breaks exactly one step of the chain, so each can b
 | `--keyset-expired` | `KeySetExpired` |
 | `--keyset-version=1` (at or below `--last-keyset-version`) | `KeySetReplayed` |
 | `--unknown-signer` | `UnknownSigningKey` |
-
-Pass the flag through `make serve ARGS=--expired`, or build once with `make serve` running in the background and invoke `./bin/devkit serve <flag>` directly.
 
 ## Commands
 
