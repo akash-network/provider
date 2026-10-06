@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/akash-network/provider/provisor/release"
+	"github.com/akash-network/provider/provisor/sign"
 	"github.com/akash-network/provider/provisor/trust"
 	"github.com/akash-network/provider/provisor/verify"
 )
@@ -89,24 +91,18 @@ func buildManifestEnvelope(kb keyBundle, cfg faultConfig, now time.Time) ([]byte
 		return nil, fmt.Errorf("marshaling manifest: %w", err)
 	}
 
-	var sigs []trust.Signature
+	signers := kb.Operational
 	if cfg.UnknownSigner {
-		sigs, err = ghostSignatures(payload, len(kb.Operational))
+		signers, err = ghostKeyPairs(len(kb.Operational))
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		count := cfg.ManifestSignatures
-		if count < 0 {
-			count = 0
-		}
-		if count > len(kb.Operational) {
-			count = len(kb.Operational)
-		}
-		sigs = sign(payload, kb.Operational[:count])
+		count := min(max(cfg.ManifestSignatures, 0), len(signers))
+		signers = signers[:count]
 	}
 
-	return marshalEnvelope(payload, sigs)
+	return signedEnvelope(payload, signers)
 }
 
 func defaultManifest(cfg faultConfig, now time.Time) release.Manifest {
@@ -176,7 +172,7 @@ func buildChannelEnvelope(kb keyBundle, manifestURL, manifestDigest string) ([]b
 	if err != nil {
 		return nil, fmt.Errorf("marshaling channel pointer: %w", err)
 	}
-	return marshalEnvelope(payload, sign(payload, kb.Operational))
+	return signedEnvelope(payload, kb.Operational)
 }
 
 func buildKeySetEnvelope(kb keyBundle, cfg faultConfig, now time.Time) ([]byte, error) {
@@ -200,35 +196,53 @@ func buildKeySetEnvelope(kb keyBundle, cfg faultConfig, now time.Time) ([]byte, 
 	if err != nil {
 		return nil, fmt.Errorf("marshaling key set: %w", err)
 	}
-	return marshalEnvelope(payload, sign(payload, kb.Roots))
+	return signedEnvelope(payload, kb.Roots)
 }
 
-func marshalEnvelope(payload []byte, sigs []trust.Signature) ([]byte, error) {
-	data, err := json.Marshal(trust.Envelope{Payload: payload, Signatures: sigs})
+// signedEnvelope goes through the same signing seam the real pipeline uses,
+// so devkit exercises it rather than reimplementing it. The empty case is the
+// exception: sign.Envelope rightly refuses to sign nothing, but
+// --manifest-signatures=0 exists precisely to serve a document no verifier
+// should accept, so that one is forged directly.
+func signedEnvelope(payload []byte, pairs []keyPair) ([]byte, error) {
+	if len(pairs) == 0 {
+		return marshalEnvelope(trust.Envelope{Payload: payload})
+	}
+
+	signers := make([]sign.Signer, 0, len(pairs))
+	for _, pair := range pairs {
+		signer, err := sign.NewKey(pair.ID, pair.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		signers = append(signers, signer)
+	}
+
+	envelope, err := sign.Envelope(context.Background(), payload, signers...)
+	if err != nil {
+		return nil, err
+	}
+	return marshalEnvelope(envelope)
+}
+
+func marshalEnvelope(envelope trust.Envelope) ([]byte, error) {
+	data, err := json.Marshal(envelope)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling envelope: %w", err)
 	}
 	return data, nil
 }
 
-func sign(payload []byte, signers []keyPair) []trust.Signature {
-	sigs := make([]trust.Signature, len(signers))
-	for i, k := range signers {
-		sigs[i] = trust.Signature{KeyID: k.ID, Signature: ed25519.Sign(k.PrivateKey, payload)}
-	}
-	return sigs
-}
-
-func ghostSignatures(payload []byte, n int) ([]trust.Signature, error) {
-	sigs := make([]trust.Signature, n)
-	for i := range sigs {
-		_, priv, err := ed25519.GenerateKey(nil)
+func ghostKeyPairs(n int) ([]keyPair, error) {
+	pairs := make([]keyPair, n)
+	for i := range pairs {
+		pub, priv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			return nil, fmt.Errorf("generating ghost signer %d: %w", i+1, err)
 		}
-		sigs[i] = trust.Signature{KeyID: fmt.Sprintf("ghost-%d", i+1), Signature: ed25519.Sign(priv, payload)}
+		pairs[i] = keyPair{ID: fmt.Sprintf("ghost-%d", i+1), PublicKey: pub, PrivateKey: priv}
 	}
-	return sigs, nil
+	return pairs, nil
 }
 
 func sha256Digest(data []byte) string {
