@@ -157,19 +157,15 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	case mtypes.LeaseClosed, mtypes.LeaseInsufficientFunds:
 		resp.closed = &mtypes.EventLeaseClosed{ID: lid, Reason: lease.Lease.Reason}
 		return resp
-	case mtypes.LeaseReclaiming:
-		// The reclamation window still permits service and withdrawals.
-		// Its closure is decided by the chain, not the balance estimate.
-		resp.checkAfter = bc.cfg.LeaseFundsCheckInterval
-		return resp
-	case mtypes.LeaseActive:
+	case mtypes.LeaseActive, mtypes.LeaseReclaiming:
+		// Both states still consume escrow funds. A low-funds withdrawal
+		// lets the chain settle the account and decide whether to close it.
 	default:
 		resp.err = fmt.Errorf("unexpected lease state: %s", lease.Lease.State)
 		return resp
 	}
 
 	var dResp *dtypes.QueryDeploymentResponse
-	var lResp *mvbeta.QueryLeasesResponse
 
 	// Fetch the balance of the escrow account
 	dResp, resp.err = bc.aqc.Deployment().Deployment(ctx, &dtypes.QueryDeploymentRequest{
@@ -180,21 +176,23 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 		return resp
 	}
 
-	lResp, resp.err = bc.aqc.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
-		Filters: mtypes.LeaseFilters{
-			Owner: lid.Owner,
-			DSeq:  lid.DSeq,
-			State: mtypes.LeaseActive.String(),
-		},
-	})
-
-	if resp.err != nil {
-		return resp
-	}
-
 	totalLeaseAmount := sdkmath.LegacyNewDec(0)
-	for _, lease := range lResp.Leases {
-		totalLeaseAmount = totalLeaseAmount.Add(lease.Lease.Price.Amount)
+	for _, state := range []mtypes.Lease_State{mtypes.LeaseActive, mtypes.LeaseReclaiming} {
+		var lResp *mvbeta.QueryLeasesResponse
+		lResp, resp.err = bc.aqc.Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
+			Filters: mtypes.LeaseFilters{
+				Owner: lid.Owner,
+				DSeq:  lid.DSeq,
+				State: state.String(),
+			},
+		})
+		if resp.err != nil {
+			return resp
+		}
+
+		for _, lease := range lResp.Leases {
+			totalLeaseAmount = totalLeaseAmount.Add(lease.Lease.Price.Amount)
+		}
 	}
 
 	var balance sdkmath.LegacyDec

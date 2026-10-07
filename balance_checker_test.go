@@ -67,15 +67,21 @@ func TestBalanceCheckerPreservesNonterminalAndUncertainLeases(t *testing.T) {
 				market.On("Lease", mock.Anything, &mvbeta.QueryLeaseRequest{ID: lid}).Return(
 					&mvbeta.QueryLeaseResponse{Lease: lease}, tc.queryErr).Once()
 			}
-			if tc.state == mtypes.LeaseActive {
+			if tc.state == mtypes.LeaseActive || tc.state == mtypes.LeaseReclaiming {
 				deployment := deploymentmocks.NewQueryClient(t)
 				query.On("Deployment").Return(deployment)
 				deployment.On("Deployment", mock.Anything, mock.Anything).Return(fundedDeployment(), nil)
-				market.On("Leases", mock.Anything, mock.Anything).Return(&mvbeta.QueryLeasesResponse{
-					Leases: []mvbeta.QueryLeaseResponse{{Lease: mtypes.Lease{
-						ID: lid, State: mtypes.LeaseActive, Price: sdk.NewDecCoin("uact", sdkmath.NewInt(1)),
-					}}},
-				}, nil)
+				for _, state := range []mtypes.Lease_State{mtypes.LeaseActive, mtypes.LeaseReclaiming} {
+					leases := &mvbeta.QueryLeasesResponse{}
+					if state == tc.state {
+						leases.Leases = []mvbeta.QueryLeaseResponse{{Lease: mtypes.Lease{
+							ID: lid, State: state, Price: sdk.NewDecCoin("uact", sdkmath.NewInt(1)),
+						}}}
+					}
+					market.On("Leases", mock.Anything, &mvbeta.QueryLeasesRequest{Filters: mtypes.LeaseFilters{
+						Owner: lid.Owner, DSeq: lid.DSeq, State: state.String(),
+					}}).Return(leases, nil).Once()
+				}
 			}
 			bc := &balanceChecker{
 				aqc: query, session: session.New(log.NewNopLogger(), client, nil, 0),
@@ -91,6 +97,72 @@ func TestBalanceCheckerPreservesNonterminalAndUncertainLeases(t *testing.T) {
 				require.Positive(t, res.checkAfter)
 			}
 			client.AssertNotCalled(t, "Tx")
+		})
+	}
+}
+
+func TestBalanceCheckerReclaimingLeaseFunds(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		balance           int64
+		activeSibling     bool
+		scheduledWithdraw bool
+		queryErr          error
+		wantState         respState
+	}{
+		{name: "funded", balance: 150, wantState: respStateNextCheck},
+		{name: "exhausted without periodic withdrawals", balance: 1, wantState: respStateOutOfFunds},
+		{name: "shared escrow exhausted", balance: 150, activeSibling: true, wantState: respStateOutOfFunds},
+		{name: "scheduled withdrawal", balance: 150, scheduledWithdraw: true, wantState: respStateScheduledWithdraw},
+		{name: "reclaiming query failed", queryErr: errors.New("RPC unavailable"), wantState: respStateNextCheck},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			lid := testutil.LeaseID(t)
+			lease := mtypes.Lease{ID: lid, State: mtypes.LeaseReclaiming, Price: sdk.NewDecCoin("uact", sdkmath.NewInt(1))}
+			client := clientmocks.NewClient(t)
+			node := clientmocks.NewNodeClient(t)
+			query := clientmocks.NewQueryClient(t)
+			market := marketmocks.NewQueryClient(t)
+			deployment := deploymentmocks.NewQueryClient(t)
+			client.On("Node").Return(node)
+			node.On("SyncInfo", mock.Anything).Return(&tmrpc.SyncInfo{LatestBlockHeight: 200}, nil)
+			query.On("Market").Return(market)
+			market.On("Lease", mock.Anything, &mvbeta.QueryLeaseRequest{ID: lid}).Return(
+				&mvbeta.QueryLeaseResponse{Lease: lease}, nil).Once()
+			query.On("Deployment").Return(deployment)
+			deployment.On("Deployment", mock.Anything, &dtypes.QueryDeploymentRequest{ID: lid.DeploymentID()}).Return(
+				&dtypes.QueryDeploymentResponse{EscrowAccount: etypes.Account{State: etypes.AccountState{
+					SettledAt: 100,
+					Funds:     []etypes.Balance{{Denom: "uact", Amount: sdkmath.LegacyNewDec(tc.balance)}},
+				}}}, nil).Once()
+			active := &mvbeta.QueryLeasesResponse{}
+			if tc.activeSibling {
+				sibling := lease
+				sibling.ID.GSeq++
+				sibling.ID.Provider = testutil.AccAddress(t).String()
+				sibling.State = mtypes.LeaseActive
+				active.Leases = []mvbeta.QueryLeaseResponse{{Lease: sibling}}
+			}
+			market.On("Leases", mock.Anything, &mvbeta.QueryLeasesRequest{Filters: mtypes.LeaseFilters{
+				Owner: lid.Owner, DSeq: lid.DSeq, State: mtypes.LeaseActive.String(),
+			}}).Return(active, nil).Once()
+			market.On("Leases", mock.Anything, &mvbeta.QueryLeasesRequest{Filters: mtypes.LeaseFilters{
+				Owner: lid.Owner, DSeq: lid.DSeq, State: mtypes.LeaseReclaiming.String(),
+			}}).Return(&mvbeta.QueryLeasesResponse{Leases: []mvbeta.QueryLeaseResponse{{Lease: lease}}}, tc.queryErr).Once()
+			bc := &balanceChecker{
+				aqc: query, session: session.New(log.NewNopLogger(), client, nil, 0),
+				cfg: BalanceCheckerConfig{LeaseFundsCheckInterval: time.Minute, WithdrawalPeriod: 0},
+			}
+
+			res := bc.doEscrowCheck(context.Background(), lid, tc.scheduledWithdraw)
+			require.Nil(t, res.closed, "only confirmed terminal chain state may request teardown")
+			require.Equal(t, tc.wantState, res.state)
+			if tc.queryErr != nil {
+				require.ErrorIs(t, res.err, tc.queryErr)
+			} else {
+				require.NoError(t, res.err)
+				require.Positive(t, res.checkAfter)
+			}
 		})
 	}
 }
