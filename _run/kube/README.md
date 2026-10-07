@@ -342,9 +342,10 @@ make provisor-fetch-logs
 ```
 A successful run prints `accepted release <version>`; a refusal prints the bare reason (for example `Expired`, `UnknownSigningKey`) and the Job exits non-zero.
 
-Every attempt is shown, prefixed by pod name, because the Job retries.
-A first attempt reporting `TransferFailed` followed by a later one succeeding is the feed losing a startup race, not a verification failure.
-Avoid `kubectl logs job/provisor-fetch`: it picks one pod arbitrarily and will happily show you the failed attempt.
+The Job is created suspended and does not retry, so cluster setup never runs a fetch against a feed that is not serving yet, and each run is exactly one attempt whose verdict is unambiguous.
+`make provisor-fetch-run` deletes the previous Job, recreates it and resumes it, which is the only way a fetch is ever started.
+
+`make provisor-fetch-logs` selects pods by job-name label rather than using `kubectl logs job/provisor-fetch`, which picks one pod arbitrarily and would misreport a run that left an earlier pod behind.
 
 To try a different `devkit serve` flag and see a different refusal, edit the `devkit` Deployment's args, then re-run the fetch:
 ```sh
