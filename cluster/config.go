@@ -26,6 +26,8 @@ type Config struct {
 	GatewayName                     string
 	GatewayNamespace                string
 	GatewayProvider                 string
+	ReclamationRPCTimeout           time.Duration
+	ReclamationCloseRetryInterval   time.Duration
 	ClusterSettings                 map[interface{}]interface{}
 }
 
@@ -40,5 +42,7 @@ func NewDefaultConfig() Config {
 		GatewayName:                     "akash-gateway",
 		GatewayNamespace:                "akash-gateway",
 		GatewayProvider:                 "nginx",
+		ReclamationRPCTimeout:           30 * time.Second,
+		ReclamationCloseRetryInterval:   time.Minute,
 	}
 }
