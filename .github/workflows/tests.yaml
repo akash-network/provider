@@ -115,6 +115,11 @@ jobs:
 
   integration-tests:
     uses: ./.github/workflows/integration-tests.yaml
+    # Cap the reusable workflow at least privilege: test jobs use contents:read; only
+    # its comment-publishing job consumes pull-requests:write.
+    permissions:
+      contents: read
+      pull-requests: write
 
   dispatch-release:
     runs-on: ubuntu-latest

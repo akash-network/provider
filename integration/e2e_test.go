@@ -42,6 +42,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	"pkg.akt.dev/go/cli"
+	cflags "pkg.akt.dev/go/cli/flags"
 	clitestutil "pkg.akt.dev/go/cli/testutil"
 	arpcclient "pkg.akt.dev/go/node/client"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
@@ -85,8 +86,10 @@ type IntegrationTestSuite struct {
 	sub                  pubsub.Subscriber
 	deploymentMinDeposit sdk.DecCoin
 
-	appHost string
-	appPort string
+	appHost           string
+	appPort           string
+	providerStatusURL string
+	ports             []int
 
 	ipMarketplace bool
 
@@ -95,6 +98,9 @@ type IntegrationTestSuite struct {
 	oracleClient      cclient.Client
 	priceFeedInterval time.Duration
 	gatewayAPIMode    bool
+
+	useProviderSubprocess bool
+	providerBinaryPath    string
 }
 
 const (
@@ -259,6 +265,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 	ports, err := testnet.GetFreePorts(numPorts)
 	s.Require().NoError(err)
+	s.ports = ports
 
 	// address for provider to listen on
 	provHost := fmt.Sprintf("localhost:%d", ports[0])
@@ -377,8 +384,36 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.Require().Equal(createdProvider, provider)
 
+	s.startProviderStack()
+
+	s.Require().NoError(s.network.WaitForNextBlock())
+}
+
+// startProviderStack brings up the provider stack on the ports from SetupSuite and
+// reassigns s.ctx/s.group/s.ctxCancel to a fresh context. Shared by SetupSuite and
+// restartProvider so a restart reuses identical wiring and the same on-chain host.
+func (s *IntegrationTestSuite) startProviderStack() {
+	cctx := s.cctx
+
+	provHost := fmt.Sprintf("localhost:%d", s.ports[0])
+	hostnameOperatorPort := s.ports[1]
+	hostnameOperatorHost := fmt.Sprintf("localhost:%d", hostnameOperatorPort)
+
+	var ipOperatorHost string
+	var ipOperatorPort int
+	if s.ipMarketplace {
+		ipOperatorPort = s.ports[2]
+		ipOperatorHost = fmt.Sprintf("localhost:%d", ipOperatorPort)
+	}
+
 	// Change the akash home directory for CLI to access the test keyring
 	cliHome := strings.Replace(s.cctx.HomeDir, "simd", "simcli", 1)
+
+	provURL := url.URL{
+		Host:   provHost,
+		Scheme: "https",
+	}
+	s.providerStatusURL = provURL.String()
 
 	// A context object to tie the lifetime of the provider & hostname operator to
 	ctx, cancel := context.WithCancel(context.Background())
@@ -408,14 +443,9 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.ctx = ctx
 	s.group = group
 
-	hostnameOperatorPort := ports[1]
-	hostnameOperatorHost := fmt.Sprintf("localhost:%d", hostnameOperatorPort)
-
-	var ipOperatorHost string
-	var ipOperatorPort int
-
-	// all commands use Viper which is meant for use by a single goroutine only
-	// so wait for the provider to start before running the hostname operator
+	// RunLocalProvider and RunLocalOperator each parse flags through Viper, which is
+	// not safe for concurrent use, so the stack is brought up one process at a time,
+	// waiting for each socket before starting the next.
 	pArgs := cli.TestFlags().
 		WithHome(cliHome).
 		WithFrom(s.addrProvider.String()).
@@ -430,9 +460,6 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		WithFlag(pcmd.FlagBidPricingStrategy, "randomRange")
 
 	if s.ipMarketplace {
-		ipOperatorPort = ports[2]
-		ipOperatorHost = fmt.Sprintf("localhost:%d", ipOperatorPort)
-
 		pArgs = pArgs.
 			WithFlag("ip-operator-endpoint", ipOperatorHost).
 			WithFlag("ip-operator", true)
@@ -466,7 +493,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		s.T().Logf("starting hostname operator for test on %s", hostnameOperatorHost)
 
 		_, err := ptestutil.RunLocalOperator(
-			s.ctx,
+			ctx,
 			cctx,
 			hostnameOperatorArgs...,
 		)
@@ -475,13 +502,13 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	})
 
 	s.T().Log("waiting for hostname operator")
-	waitForTCPSocket(s.ctx, dialer, hostnameOperatorHost, s.T())
+	waitForTCPSocket(ctx, dialer, hostnameOperatorHost, s.T())
 
 	if s.ipMarketplace {
 		s.group.Go(func() error {
 			s.T().Logf("starting ip operator for test on %v", ipOperatorHost)
 			_, err := ptestutil.RunLocalOperator(
-				s.ctx,
+				ctx,
 				cctx,
 				cli.TestFlags().
 					With("ip").
@@ -494,26 +521,46 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		})
 
 		s.T().Log("waiting for IP operator")
-		waitForTCPSocket(s.ctx, dialer, ipOperatorHost, s.T())
+		waitForTCPSocket(ctx, dialer, ipOperatorHost, s.T())
 	}
 
-	s.group.Go(func() error {
-		_, err := ptestutil.RunLocalProvider(
-			ctx,
-			cctx,
-			pArgs...,
-		)
-
-		if err != nil {
-			s.T().Logf("provider stopped with error: %v", err)
+	if s.useProviderSubprocess {
+		bin := s.providerBinaryPath
+		if bin == "" {
+			bin = providerBinary(s.T())
 		}
 
-		return err
-	})
+		// A subprocess cannot receive the client.Context the in-process path binds, so
+		// its connection settings are passed as explicit flags.
+		subprocArgs := pArgs.
+			WithFlag(cflags.FlagNode, s.validator.RPCAddress).
+			WithChainID(s.cfg.ChainID).
+			WithFlag(cflags.FlagKeyringBackend, "test").
+			WithFlag(providerflags.FlagKubeConfig, providerflags.KubeConfigDefaultPath)
+
+		// Start on the test goroutine so a spawn failure's require.NoError reports on
+		// it; only the blocking wait belongs in the errgroup.
+		p := startProviderProcess(ctx, s.T(), bin, subprocArgs)
+		s.group.Go(p.wait)
+	} else {
+		s.group.Go(func() error {
+			_, err := ptestutil.RunLocalProvider(
+				ctx,
+				cctx,
+				pArgs...,
+			)
+
+			if err != nil {
+				s.T().Logf("provider stopped with error: %v", err)
+			}
+
+			return err
+		})
+	}
 
 	// Wait for the provider gateway to be up and running
 	s.T().Log("waiting for provider gateway")
-	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
+	waitForTCPSocket(ctx, dialer, provHost, s.T())
 
 	// Create programmatic oracle client (bypasses CLI/Viper to avoid data races)
 	oracleCctx := cctx.WithFrom(s.addrOracle.String())
@@ -529,8 +576,31 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.group.Go(func() error {
 		return s.runPriceFeed(ctx)
 	})
+}
 
-	s.Require().NoError(s.network.WaitForNextBlock())
+// restartProvider stops the provider stack, waits for it to fully drain, then relaunches
+// it on the same ports. Draining first is what makes the restart faithful: two providers
+// reconciling the same cluster at once would show restart-mechanism churn, not a real
+// regression, and the drain also frees the listener so the same ports rebind.
+func (s *IntegrationTestSuite) restartProvider() {
+	old := s.group
+	s.ctxCancel()
+
+	if old != nil {
+		drained := make(chan struct{})
+		go func() {
+			_ = old.Wait()
+			close(drained)
+		}()
+
+		select {
+		case <-drained:
+		case <-time.After(60 * time.Second):
+			s.T().Fatal("timed out draining previous provider stack before restart")
+		}
+	}
+
+	s.startProviderStack()
 }
 
 func waitForTCPSocket(ctx context.Context, dialer net.Dialer, host string, t *testing.T) {
@@ -749,7 +819,8 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EAppNodePort))
 	suite.Run(t, new(E2EDeploymentUpdate))
 	suite.Run(t, new(E2EApp))
-	suite.Run(t, new(E2EPersistentStorageDefault))
+	// The restart and upgrade gates run as their own go test invocations, not in this
+	// suite, so a restart or version swap never disturbs the shared provider here.
 	suite.Run(t, new(E2EPersistentStorageDefault))
 	suite.Run(t, new(E2EPersistentStorageBeta2))
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
