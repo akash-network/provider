@@ -2,22 +2,20 @@ package gateway
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
-	"github.com/spf13/viper"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	"cosmossdk.io/log"
 
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
-	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 )
 
 const (
 	snippetsFilterAPIVersion = "gateway.nginx.org/v1alpha1"
-	snippetsFilterGroup      = "gateway.nginx.org"
 	snippetsFilterKind       = "SnippetsFilter"
 )
 
@@ -39,17 +37,17 @@ func (n *nginxGateway) Name() string {
 	return "nginx"
 }
 
-// BuildHTTPRouteSpec builds the HTTPRoute spec. When the directive carries any
-// http_options, the rule references a per-route SnippetsFilter (built by
-// BuildRouteExtensions) via an ExtensionRef filter so NGF injects the directives
-// into the location for this route.
+// BuildHTTPRouteSpec builds the HTTPRoute spec. The rule gains one ExtensionRef
+// filter per route extension (built by BuildRouteExtensions), derived from the
+// extension objects themselves so NGF injects each SnippetsFilter into the
+// location for this route.
 func (n *nginxGateway) BuildHTTPRouteSpec(
 	gatewayName string,
 	gatewayNamespace string,
 	hostname string,
 	serviceName string,
 	servicePort int32,
-	directive chostname.ConnectToDeploymentDirective,
+	extensions []*unstructured.Unstructured,
 ) gatewayv1.HTTPRouteSpec {
 	parentRefs := []gatewayv1.ParentReference{
 		{
@@ -64,17 +62,16 @@ func (n *nginxGateway) BuildHTTPRouteSpec(
 	backendPort := gatewayv1.PortNumber(servicePort)
 
 	var filters []gatewayv1.HTTPRouteFilter
-	if httpOptionsSnippet(directive, proxyBufferSize()) != "" {
-		filters = []gatewayv1.HTTPRouteFilter{
-			{
-				Type: gatewayv1.HTTPRouteFilterExtensionRef,
-				ExtensionRef: &gatewayv1.LocalObjectReference{
-					Group: gatewayv1.Group(snippetsFilterGroup),
-					Kind:  gatewayv1.Kind(snippetsFilterKind),
-					Name:  gatewayv1.ObjectName(hostname),
-				},
+	for _, ext := range extensions {
+		gvk := ext.GroupVersionKind()
+		filters = append(filters, gatewayv1.HTTPRouteFilter{
+			Type: gatewayv1.HTTPRouteFilterExtensionRef,
+			ExtensionRef: &gatewayv1.LocalObjectReference{
+				Group: gatewayv1.Group(gvk.Group),
+				Kind:  gatewayv1.Kind(gvk.Kind),
+				Name:  gatewayv1.ObjectName(ext.GetName()),
 			},
-		}
+		})
 	}
 
 	rules := []gatewayv1.HTTPRouteRule{
@@ -118,7 +115,7 @@ func (n *nginxGateway) BuildAnnotations(_ chostname.ConnectToDeploymentDirective
 // NGF that is a SnippetsFilter named after the route, carrying the http_options as
 // raw nginx directives at the location context. Returns nil when nothing is set.
 func (n *nginxGateway) BuildRouteExtensions(namespace, routeName string, directive chostname.ConnectToDeploymentDirective) []*unstructured.Unstructured {
-	snippet := httpOptionsSnippet(directive, proxyBufferSize())
+	snippet := httpOptionsSnippet(directive)
 	if snippet == "" {
 		return nil
 	}
@@ -143,18 +140,14 @@ func (n *nginxGateway) BuildRouteExtensions(namespace, routeName string, directi
 	return []*unstructured.Unstructured{sf}
 }
 
-// proxyBufferSize returns the provider-wide proxy buffer size (nginx size string,
-// e.g. "16k") from the --proxy-buffer-size flag, preserved from the previous
-// annotation-based plumbing.
-func proxyBufferSize() string {
-	return viper.GetString(providerflags.FlagProxyBufferSize)
-}
-
-// httpOptionsSnippet renders the directive's http_options (plus the provider-wide
-// proxyBufferSize) as nginx directives for the location context. Returns "" when
-// nothing is set. Timeouts are emitted in milliseconds to preserve the manifest's
-// precision (nginx accepts an ms suffix).
-func httpOptionsSnippet(d chostname.ConnectToDeploymentDirective, proxyBufferSize string) string {
+// httpOptionsSnippet renders the directive's http_options as nginx directives for
+// the location context. Returns "" when nothing is set. Read, send, and
+// next-upstream timeouts are emitted in milliseconds to preserve the manifest's
+// precision (nginx accepts an ms suffix); the connect timeout is rounded up to
+// whole seconds. The proxy buffer directives are emitted only as a complete,
+// nginx-consistent group (see proxyBufferLines); an inconsistent tenant set is
+// dropped so it can never break the shared gateway's configuration.
+func httpOptionsSnippet(d chostname.ConnectToDeploymentDirective) string {
 	var b strings.Builder
 	line := func(format string, args ...interface{}) {
 		fmt.Fprintf(&b, format+"\n", args...)
@@ -169,12 +162,15 @@ func httpOptionsSnippet(d chostname.ConnectToDeploymentDirective, proxyBufferSiz
 	if d.SendTimeout > 0 {
 		line("proxy_send_timeout %dms;", d.SendTimeout)
 	}
-	if proxyBufferSize != "" {
-		// proxy_buffer_size alone makes nginx's default proxy_busy_buffers_size
-		// (2x) exceed the default proxy_buffers pool, so the config is rejected on
-		// reload. Pair it with a matching proxy_buffers so it is valid for any size.
-		line("proxy_buffer_size %s;", proxyBufferSize)
-		line("proxy_buffers 8 %s;", proxyBufferSize)
+	if d.ProxyConnectTimeout > 0 {
+		line("proxy_connect_timeout %ds;", msToSec(d.ProxyConnectTimeout))
+	}
+	// Buffering is on by default, so only the explicit "off" needs a directive.
+	if d.ProxyBufferingDisable {
+		line("proxy_buffering off;")
+	}
+	for _, l := range proxyBufferLines(d) {
+		line("%s", l)
 	}
 	if d.NextTries > 0 {
 		line("proxy_next_upstream_tries %d;", d.NextTries)
@@ -195,6 +191,65 @@ func httpOptionsSnippet(d chostname.ConnectToDeploymentDirective, proxyBufferSiz
 	}
 
 	return b.String()
+}
+
+// proxyBufferLines renders proxy_buffer_size, proxy_buffers, and
+// proxy_busy_buffers_size as one complete, nginx-consistent group, or nothing.
+// These directives are interdependent: nginx rejects the whole config on reload
+// unless proxy_busy_buffers_size is within [max(proxy_buffer_size, one buffer),
+// (buffers-1)*buffer] and there are at least 2 buffers. A rejected reload freezes
+// config for every tenant on the shared gateway, so the provider must never emit a
+// combination it cannot prove valid. It fills any value the tenant left unset from
+// what they did set (so the emitted group never depends on nginx's platform default
+// buffer size) and drops the entire group if the explicit values cannot form a
+// valid set. All sizes are bytes.
+func proxyBufferLines(d chostname.ConnectToDeploymentDirective) []string {
+	bufferSize := d.ProxyBufferSize
+	poolNum := d.ProxyBuffersNumber
+	poolSize := d.ProxyBuffersSize
+	busy := d.ProxyBusyBuffersSize
+
+	if (poolNum == 0) != (poolSize == 0) {
+		return nil
+	}
+	if bufferSize == 0 && poolNum == 0 && busy == 0 {
+		return nil
+	}
+
+	if bufferSize == 0 {
+		bufferSize = poolSize
+	}
+	if poolSize == 0 {
+		poolSize = bufferSize
+	}
+	if poolNum == 0 {
+		poolNum = 8
+	}
+	if bufferSize == 0 || poolSize == 0 || poolNum < 2 {
+		return nil
+	}
+
+	minBusy := bufferSize
+	if poolSize > minBusy {
+		minBusy = poolSize
+	}
+	maxBusy := (poolNum - 1) * poolSize
+	if busy == 0 {
+		busy = minBusy
+	}
+	if busy < minBusy || busy > maxBusy {
+		return nil
+	}
+
+	return []string{
+		fmt.Sprintf("proxy_buffer_size %d;", bufferSize),
+		fmt.Sprintf("proxy_buffers %d %d;", poolNum, poolSize),
+		fmt.Sprintf("proxy_busy_buffers_size %d;", busy),
+	}
+}
+
+func msToSec(ms uint32) int {
+	return int(math.Ceil(float64(ms) / 1000.0))
 }
 
 // strPtr returns a pointer to the given string.

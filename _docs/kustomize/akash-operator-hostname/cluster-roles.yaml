@@ -54,6 +54,18 @@ rules:
       - list
       - watch
   - apiGroups:
+      - gateway.nginx.org
+    resources:
+      - snippetsfilters
+    verbs:
+      - get
+      - list
+      - create
+      - update
+      - delete
+      - deletecollection
+      - watch
+  - apiGroups:
       - ""
     resources:
       - namespaces

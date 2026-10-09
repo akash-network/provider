@@ -168,6 +168,17 @@ type ManifestServiceExposeHTTPOptions struct {
 	NextTries   uint32   `json:"next_tries,omitempty"`
 	NextTimeout uint32   `json:"next_timeout,omitempty"`
 	NextCases   []string `json:"next_cases,omitempty"`
+	// New nginx proxy options. All scalar + omitempty: absent on CRDs created by
+	// older providers (round-trips as zero value) and covered by the generated
+	// DeepCopyInto (*out = *in), so no controller-gen change is required.
+	// ProxyBufferingDisable mirrors the manifest's buffering_disabled: false leaves
+	// the nginx default (buffering on), true renders proxy_buffering off.
+	ProxyBufferingDisable bool   `json:"proxy_buffering_disable,omitempty"`
+	ProxyBufferSize       uint32 `json:"proxy_buffer_size,omitempty"`
+	ProxyBuffersNumber    uint32 `json:"proxy_buffers_number,omitempty"`
+	ProxyBuffersSize      uint32 `json:"proxy_buffers_size,omitempty"`
+	ProxyBusyBuffersSize  uint32 `json:"proxy_busy_buffers_size,omitempty"`
+	ProxyConnectTimeout   uint32 `json:"proxy_connect_timeout,omitempty"`
 }
 
 // NewManifest creates new manifest with provided details. Returns error in case of failure.
@@ -433,8 +444,31 @@ func (mse ManifestServiceExpose) toAkash() (mani.ServiceExpose, error) {
 			NextTries:   mse.HTTPOptions.NextTries,
 			NextTimeout: mse.HTTPOptions.NextTimeout,
 			NextCases:   mse.HTTPOptions.NextCases,
+			Proxy:       mse.HTTPOptions.proxyToAkash(),
 		},
 	}, nil
+}
+
+// proxyToAkash maps the flat CRD proxy fields to the manifest's nested ProxyOptions.
+// It returns nil when nothing is set so the manifest (and its version hash) stays
+// identical to one without proxy options.
+func (o ManifestServiceExposeHTTPOptions) proxyToAkash() *mani.ProxyOptions {
+	// ProxyBufferingDisable false is the nginx default (buffering on) and, like the
+	// zero sizes, means "unset" -> omit the whole object so the manifest hashes
+	// identically to one without proxy options.
+	if !o.ProxyBufferingDisable &&
+		o.ProxyBufferSize == 0 && o.ProxyBuffersNumber == 0 && o.ProxyBuffersSize == 0 &&
+		o.ProxyBusyBuffersSize == 0 && o.ProxyConnectTimeout == 0 {
+		return nil
+	}
+	return &mani.ProxyOptions{
+		BufferingDisable: o.ProxyBufferingDisable,
+		BufferSize:       o.ProxyBufferSize,
+		BuffersNumber:    o.ProxyBuffersNumber,
+		BuffersSize:      o.ProxyBuffersSize,
+		BusyBuffersSize:  o.ProxyBusyBuffersSize,
+		ConnectTimeout:   o.ProxyConnectTimeout,
+	}
 }
 
 func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
@@ -445,7 +479,7 @@ func (mse ManifestServiceExpose) DetermineExposedExternalPort() uint16 {
 }
 
 func manifestServiceExposeFromAkash(amse mani.ServiceExpose) ManifestServiceExpose {
-	return ManifestServiceExpose{
+	ms := ManifestServiceExpose{
 		Port:                   uint16(amse.Port),         // nolint: gosec
 		ExternalPort:           uint16(amse.ExternalPort), // nolint: gosec
 		Proto:                  amse.Proto.ToString(),
@@ -463,4 +497,16 @@ func manifestServiceExposeFromAkash(amse mani.ServiceExpose) ManifestServiceExpo
 			NextCases:   amse.HTTPOptions.NextCases,
 		},
 	}
+
+	// Flatten the manifest's nested ProxyOptions into the CRD's flat proxy fields.
+	if p := amse.HTTPOptions.Proxy; p != nil {
+		ms.HTTPOptions.ProxyBufferingDisable = p.BufferingDisable
+		ms.HTTPOptions.ProxyBufferSize = p.BufferSize
+		ms.HTTPOptions.ProxyBuffersNumber = p.BuffersNumber
+		ms.HTTPOptions.ProxyBuffersSize = p.BuffersSize
+		ms.HTTPOptions.ProxyBusyBuffersSize = p.BusyBuffersSize
+		ms.HTTPOptions.ProxyConnectTimeout = p.ConnectTimeout
+	}
+
+	return ms
 }

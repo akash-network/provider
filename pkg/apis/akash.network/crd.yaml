@@ -181,6 +181,18 @@ spec:
                                       type: array
                                       items:
                                         type: string
+                                    proxy_buffering_disable:
+                                      type: boolean
+                                    proxy_buffer_size:
+                                      type: integer
+                                    proxy_buffers_number:
+                                      type: integer
+                                    proxy_buffers_size:
+                                      type: integer
+                                    proxy_busy_buffers_size:
+                                      type: integer
+                                    proxy_connect_timeout:
+                                      type: integer
                                 hosts:
                                   type: array
                                   items:
@@ -378,6 +390,18 @@ spec:
                                       type: array
                                       items:
                                         type: string
+                                    proxy_buffering_disable:
+                                      type: boolean
+                                    proxy_buffer_size:
+                                      type: integer
+                                    proxy_buffers_number:
+                                      type: integer
+                                    proxy_buffers_size:
+                                      type: integer
+                                    proxy_busy_buffers_size:
+                                      type: integer
+                                    proxy_connect_timeout:
+                                      type: integer
                                 hosts:
                                   type: array
                                   items:

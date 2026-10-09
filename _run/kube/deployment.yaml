@@ -11,6 +11,13 @@ services:
           max_body_size: 2097152
           next_cases:
             - off
+          proxy:
+            buffering_disable: true
+            buffer_size: 12288
+            buffers_number: 6
+            buffers_size: 24576
+            busy_buffers_size: 49152
+            connect_timeout: 7000
         accept:
           - hello.localhost
         to:

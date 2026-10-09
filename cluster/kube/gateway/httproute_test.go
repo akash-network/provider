@@ -206,3 +206,38 @@ func TestCreateOrUpdateHTTPRouteNewRoutePlaceholderNotRoutable(t *testing.T) {
 	rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")
 	require.Empty(t, rules, "placeholder must have no rules (backend not exposed)")
 }
+
+// TestListHTTPRouteConnectionsSkipsPlaceholder asserts that a stranded detached
+// placeholder route (no hostnames) is skipped rather than aborting the whole
+// listing, so one incomplete route cannot poison the operator's reconcile loop.
+func TestListHTTPRouteConnectionsSkipsPlaceholder(t *testing.T) {
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	ctx := context.Background()
+
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), routeDirective(), NoopHTTPRouteObserver{}))
+
+	ns := builder.LidNS(mtypes.LeaseID{})
+	labels := builder.AppendLeaseLabels(mtypes.LeaseID{}, map[string]string{builder.AkashManagedLabelName: "true"})
+	lm := make(map[string]interface{}, len(labels))
+	for k, v := range labels {
+		lm[k] = v
+	}
+	placeholder := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": "gateway.networking.k8s.io/v1",
+		"kind":       "HTTPRoute",
+		"metadata": map[string]interface{}{
+			"name":      "placeholder.example.com",
+			"namespace": ns,
+			"labels":    lm,
+		},
+		"spec": map[string]interface{}{},
+	}}
+	_, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Create(ctx, placeholder, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	conns, err := ListHTTPRouteConnections(ctx, dc)
+	require.NoError(t, err, "a placeholder route must not abort listing")
+	require.Len(t, conns, 1)
+	require.Equal(t, routeDirective().Hostname, conns[0].GetHostname())
+}
