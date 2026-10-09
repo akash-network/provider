@@ -14,8 +14,10 @@ import (
 
 	errorsmod "cosmossdk.io/errors"
 	"cosmossdk.io/log"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	mani "pkg.akt.dev/go/manifest/v2beta3"
+	aclient "pkg.akt.dev/go/node/client/v1beta3"
 	mv1 "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 	"pkg.akt.dev/go/util/pubsub"
@@ -40,6 +42,14 @@ const (
 
 type deploymentState string
 
+// reclaimResult carries the outcome of an off-loop attemptReclaimClose back into
+// the manager's select loop: done true once the close is broadcast, otherwise wait
+// is the delay before the next retry.
+type reclaimResult struct {
+	done bool
+	wait time.Duration
+}
+
 var (
 	deploymentCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "provider_deployment",
@@ -62,6 +72,7 @@ type deploymentManager struct {
 	wg                  sync.WaitGroup
 	updatech            chan ctypes.IDeployment
 	teardownch          chan struct{}
+	reclaimch           chan int64
 	currentHostnames    map[string]struct{}
 	log                 log.Logger
 	lc                  lifecycle.Lifecycle
@@ -87,6 +98,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		wg:                  sync.WaitGroup{},
 		updatech:            make(chan ctypes.IDeployment),
 		teardownch:          make(chan struct{}),
+		reclaimch:           make(chan int64, 1),
 		log:                 logger,
 		lc:                  lifecycle.New(),
 		hostnameService:     s.HostnameService(),
@@ -96,6 +108,13 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		currentHostnames:    make(map[string]struct{}),
 	}
 
+	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
+	if err != nil {
+		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lease", lid)
+	}
+
+	// Register monitoring before recovery can discover a closed lease and
+	// remove it again. This preserves event ordering even for fast teardown.
 	go dm.lc.WatchChannel(s.lc.ShuttingDown())
 	go dm.run(context.Background())
 
@@ -104,11 +123,6 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		dm.log.Debug("sending manager into channel")
 		s.managerch <- dm
 	}()
-
-	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
-	if err != nil {
-		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lease", lid)
-	}
 
 	return dm
 }
@@ -128,6 +142,36 @@ func (dm *deploymentManager) teardown() error {
 		return nil
 	case <-dm.lc.ShuttingDown():
 		return ErrNotRunning
+	}
+}
+
+// reclaim hands a reclamation deadline to the manager loop. It never blocks the
+// caller: reclaimch is buffered (size 1) and the send falls through to the default
+// when a deadline is already queued. This matters because the shared service loop
+// calls reclaim inline; a blocking send into a manager busy broadcasting a close
+// would stall the whole provider's event dispatch. Dropping a duplicate is safe -
+// the queued deadline drives the same close, and retries re-check block time.
+func (dm *deploymentManager) reclaim(deadline int64) error {
+	select {
+	case dm.reclaimch <- deadline:
+		return nil
+	case <-dm.lc.ShuttingDown():
+		return ErrNotRunning
+	default:
+		return nil
+	}
+}
+
+// tearingDown reports whether the lease is closing. Teardown supersedes reclamation:
+// no close is broadcast once it starts, whichever path started it - a teardown request,
+// a lease the chain reports inactive, or a retry of failed cleanup. The teardown states
+// are terminal, so this never flips back.
+func (dm *deploymentManager) tearingDown() bool {
+	switch dm.state {
+	case dsTeardownPending, dsTeardownActive, dsTeardownComplete:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -160,6 +204,51 @@ func (dm *deploymentManager) run(ctx context.Context) {
 	}()
 
 	var teardownErr error
+	var retryTeardown <-chan time.Time
+
+	// reclaimC is nil until a reclamation deadline is armed, keeping its select case inert.
+	var reclaimTimer *time.Timer
+	var reclaimC <-chan time.Time
+	var reclaimDeadline int64
+
+	// attemptReclaimClose makes blocking chain RPC calls (up to ~2×reclamationRPCTimeout),
+	// so it runs off the loop: the select stays responsive to teardown/update/shutdown
+	// while a close is in flight, and the shared service loop that delivers reclaim events
+	// never stalls behind it. reclaiming gates to a single in-flight attempt; the buffered
+	// result channel lets that goroutine finish (and be waited on at shutdown) even if the
+	// loop has already exited.
+	reclaiming := false
+	reclaimResultCh := make(chan reclaimResult, 1)
+	startReclaimAttempt := func() {
+		if reclaiming || dm.tearingDown() {
+			return
+		}
+		reclaiming = true
+		deadline := reclaimDeadline
+		dm.wg.Add(1)
+		go func() {
+			defer dm.wg.Done()
+			done, wait := dm.attemptReclaimClose(ctx, deadline)
+			reclaimResultCh <- reclaimResult{done: done, wait: wait}
+		}()
+	}
+
+	// scheduleReclaim clears the timer once the close is broadcast, otherwise re-arms it
+	// for the delay attemptReclaimClose derived from block time. Scheduling off block time
+	// rather than wall clock keeps a lagging local clock from delaying an already-due close.
+	scheduleReclaim := func(done bool, wait time.Duration) {
+		if done {
+			reclaimC = nil
+			return
+		}
+		if reclaimTimer == nil {
+			reclaimTimer = time.NewTimer(wait)
+		} else {
+			reclaimTimer.Stop()
+			reclaimTimer.Reset(wait)
+		}
+		reclaimC = reclaimTimer.C
+	}
 
 loop:
 	for {
@@ -167,6 +256,16 @@ loop:
 		case shutdownErr = <-dm.lc.ShutdownRequest():
 			dm.log.Debug("received shutdown request", "err", shutdownErr)
 			break loop
+		case deadline := <-dm.reclaimch:
+			reclaimDeadline = deadline
+			startReclaimAttempt()
+		case <-reclaimC:
+			startReclaimAttempt()
+		case res := <-reclaimResultCh:
+			reclaiming = false
+			if !dm.tearingDown() {
+				scheduleReclaim(res.done, res.wait)
+			}
 		case deployment := <-dm.updatech:
 			dm.deployment = deployment
 			newch := dm.handleUpdate(ctx)
@@ -178,6 +277,10 @@ loop:
 			runch = nil
 			if result != nil {
 				dm.log.Error("execution error", "state", dm.state, "err", result)
+			}
+			if errors.Is(result, ErrLeaseInactive) {
+				runch = dm.startTeardown()
+				continue
 			}
 			switch dm.state {
 			case dsDeployActive:
@@ -194,7 +297,7 @@ loop:
 				}
 			case dsDeployPending:
 				if result != nil {
-					break loop
+					dm.log.Error("deploy error before applying queued update", "err", result)
 				}
 				// start update
 				runch = dm.startDeploy(ctx)
@@ -202,6 +305,12 @@ loop:
 				panic(fmt.Sprintf("INVALID STATE: runch read on %v", dm.state))
 			case dsTeardownActive:
 				teardownErr = result
+				if result != nil {
+					// Keep the manager and its reservation until cleanup succeeds.
+					// A later attempt can recover when the Kubernetes API returns.
+					retryTeardown = time.After(5 * time.Second)
+					break
+				}
 				dm.state = dsTeardownComplete
 				dm.log.Debug("teardown complete")
 				break loop
@@ -211,6 +320,10 @@ loop:
 			case dsTeardownComplete:
 				panic(fmt.Sprintf("INVALID STATE: runch read on %v", dm.state))
 			}
+
+		case <-retryTeardown:
+			retryTeardown = nil
+			runch = dm.startTeardown()
 
 		case <-dm.teardownch:
 			dm.log.Debug("teardown request")
@@ -226,6 +339,10 @@ loop:
 			case dsTeardownActive, dsTeardownPending, dsTeardownComplete:
 			}
 		}
+	}
+
+	if reclaimTimer != nil {
+		reclaimTimer.Stop()
 	}
 
 	dm.log.Debug("shutting down")
@@ -311,6 +428,9 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 
 func (dm *deploymentManager) startTeardown() <-chan error {
 	dm.stopMonitor()
+	if err := dm.bus.Publish(event.LeaseRemoveFundsMonitor{LeaseID: dm.deployment.LeaseID()}); err != nil {
+		dm.log.Error("removing lease funds monitor", "err", err)
+	}
 	dm.state = dsTeardownActive
 	return dm.do(func() error {
 		// Don't use a context tied to the lifecycle, as we don't want to cancel Kubernetes operations
@@ -566,6 +686,61 @@ func (dm *deploymentManager) doTeardown(ctx context.Context) error {
 	return firstError
 }
 
+// attemptReclaimClose broadcasts MsgCloseBid when the reclamation deadline has
+// elapsed in chain block time. It returns done=true once the close is broadcast
+// (the chain emits EventLeaseClosed, which drives teardown). While not done it
+// returns the delay after which the caller should retry: the remaining block-time
+// gap when the deadline has not yet passed, or a fixed interval on a transient
+// failure. All scheduling is off block time so a lagging local clock cannot delay
+// an already-due close.
+func (dm *deploymentManager) attemptReclaimClose(ctx context.Context, deadline int64) (bool, time.Duration) {
+	// run() carries a background context, so tie the broadcast to service shutdown to
+	// keep a firing close from blocking the manager loop past a shutdown request.
+	ctx, cancelWatch := context.WithCancel(ctx)
+	defer cancelWatch()
+	go func() {
+		select {
+		case <-dm.serviceShuttingDown:
+			cancelWatch()
+		case <-ctx.Done():
+		}
+	}()
+
+	sctx, cancel := context.WithTimeout(ctx, dm.config.ReclamationRPCTimeout)
+	defer cancel()
+
+	syncInfo, err := dm.session.Client().Node().SyncInfo(sctx)
+	if err != nil {
+		dm.log.Info("reclaim close sync info", "lease", dm.deployment.LeaseID(), "err", err)
+		return false, dm.config.ReclamationCloseRetryInterval
+	}
+	// The chain gates the close on block time, which lags wall-clock while the node is
+	// catching up. Closing now would broadcast a msg the chain rejects and still charges
+	// fees for, so wait until the node is synced (e.g. right after a restart).
+	if syncInfo.CatchingUp {
+		return false, dm.config.ReclamationCloseRetryInterval
+	}
+	if remaining := deadline - syncInfo.LatestBlockTime.Unix(); remaining > 0 {
+		return false, time.Duration(remaining) * time.Second
+	}
+
+	msg := &mvbeta.MsgCloseBid{
+		ID:     dm.deployment.LeaseID().BidID(),
+		Reason: mv1.LeaseClosedReasonDecommissioned,
+	}
+
+	bctx, cancel := context.WithTimeout(ctx, dm.config.ReclamationRPCTimeout)
+	defer cancel()
+
+	if _, err := dm.session.Client().Tx().BroadcastMsgs(bctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()); err != nil {
+		dm.log.Info("reclaimed lease close rejected", "lease", dm.deployment.LeaseID(), "err", err)
+		return false, dm.config.ReclamationCloseRetryInterval
+	}
+
+	dm.log.Info("closed reclaimed lease", "lease", dm.deployment.LeaseID())
+	return true, 0
+}
+
 func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 	var lease *mvbeta.QueryLeaseResponse
 
@@ -575,12 +750,16 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 			ID: dm.deployment.LeaseID(),
 		})
 		//
-		if err != nil && !errorsmod.IsOf(err, mv1.ErrLeaseNotFound) {
+		if errorsmod.IsOf(err, mv1.ErrLeaseNotFound) {
+			return retry.Unrecoverable(err)
+		}
+		if err != nil {
 			dm.log.Error("lease query failed", "err", err)
 			return err
 		}
 		return nil
 	},
+		retry.Context(ctx),
 		retry.Attempts(50),
 		retry.Delay(100*time.Millisecond),
 		retry.MaxDelay(3000*time.Millisecond),
@@ -591,13 +770,28 @@ func (dm *deploymentManager) checkLeaseActive(ctx context.Context) error {
 		return err
 	}
 
-	leaseState := lease.GetLease().State
-	if leaseState != mv1.LeaseActive && leaseState != mv1.LeaseReclaiming {
+	if lease.GetLease().ID != dm.deployment.LeaseID() {
+		return fmt.Errorf("lease query returned a different ID: %s", lease.GetLease().ID)
+	}
+	switch lease.GetLease().State {
+	case mv1.LeaseActive:
+		return nil
+	case mv1.LeaseReclaiming:
+		// Re-arm the reclamation close for a lease found already reclaiming across a
+		// restart; its workloads keep running through the window, so the manager still
+		// owns it.
+		if reclamation := lease.GetLease().Reclamation; reclamation != nil {
+			if err := dm.reclaim(reclamation.Deadline); err != nil {
+				dm.log.Debug("unable to arm reclamation close", "err", err)
+			}
+		}
+		return nil
+	case mv1.LeaseClosed, mv1.LeaseInsufficientFunds:
 		dm.log.Error("lease not active, not deploying")
 		return fmt.Errorf("%w: %s", ErrLeaseInactive, dm.deployment.LeaseID())
+	default:
+		return fmt.Errorf("unexpected lease state: %s", lease.GetLease().State)
 	}
-
-	return nil
 }
 
 func (dm *deploymentManager) do(fn func() error) <-chan error {

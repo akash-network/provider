@@ -3,6 +3,7 @@ package kube
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -908,9 +909,12 @@ func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
 
 	if err != nil {
 		c.log.Error("teardown lease: unable to delete manifest", "ns", builder.LidNS(lid), "err", err)
+		if kerrors.IsNotFound(err) {
+			err = nil
+		}
 	}
 
-	return result
+	return errors.Join(result, err)
 }
 
 func kubeSelectorForLease(dst *strings.Builder, lID mtypes.LeaseID) {
