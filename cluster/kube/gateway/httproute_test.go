@@ -18,6 +18,7 @@ import (
 	"github.com/akash-network/provider/cluster/kube/builder"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 	mtypes "pkg.akt.dev/go/node/market/v1"
+	"pkg.akt.dev/go/testutil"
 )
 
 var sfGVR = schema.GroupVersionResource{Group: "gateway.nginx.org", Version: "v1alpha1", Resource: "snippetsfilters"}
@@ -205,4 +206,35 @@ func TestCreateOrUpdateHTTPRouteNewRoutePlaceholderNotRoutable(t *testing.T) {
 	require.Empty(t, parentRefs, "placeholder must have no parentRefs (not attached to the gateway)")
 	rules, _, _ := unstructured.NestedSlice(route.Object, "spec", "rules")
 	require.Empty(t, rules, "placeholder must have no rules (backend not exposed)")
+}
+
+// TestListHTTPRouteConnectionsSkipsPlaceholder asserts that a detached placeholder
+// left behind by a failed reconcile does not abort listing. The hostname operator
+// lists connections before it starts observing, so failing the whole list on one
+// placeholder wedges the operator and no new hostname is ever routed.
+func TestListHTTPRouteConnectionsSkipsPlaceholder(t *testing.T) {
+	ctx := context.Background()
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+
+	healthy := routeDirective()
+	healthy.LeaseID = testutil.LeaseID(t)
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), healthy, NoopHTTPRouteObserver{}))
+
+	// A brand-new route whose SnippetsFilter cannot be applied leaves a placeholder.
+	dc.PrependReactor("create", "snippetsfilters", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, fmt.Errorf("boom")
+	})
+	stuck := routeDirective()
+	stuck.Hostname = "stuck.example.com"
+	stuck.LeaseID = testutil.LeaseID(t)
+	require.Error(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), stuck, NoopHTTPRouteObserver{}))
+
+	conns, err := ListHTTPRouteConnections(ctx, dc)
+	require.NoError(t, err, "a placeholder route must not abort listing")
+	require.Len(t, conns, 1, "only the fully reconciled route is a connection")
+	require.Equal(t, healthy.Hostname, conns[0].GetHostname())
+	require.Equal(t, healthy.LeaseID, conns[0].GetLeaseID())
+	require.Equal(t, healthy.ServiceName, conns[0].GetServiceName())
+	require.Equal(t, healthy.ServicePort, conns[0].GetExternalPort())
 }

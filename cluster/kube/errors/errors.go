@@ -40,5 +40,4 @@ func IsKubeAPIUnreachable(err error) bool {
 		strings.TrimSpace(msg) == "starting" ||
 		strings.Contains(msg, "connection refused") || // fallback for syscall.ECONNREFUSED
 		strings.Contains(msg, "connection reset") // fallback for syscall.ECONNRESET
-
 }

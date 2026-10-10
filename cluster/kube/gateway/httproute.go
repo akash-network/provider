@@ -326,7 +326,12 @@ func ListHTTPRouteConnections(
 				return err
 			}
 			if len(route.Spec.Hostnames) == 0 {
-				return fmt.Errorf("%w: no hostnames specified", kubeclienterrors.ErrInvalidHostnameConnection)
+				// Detached placeholder from CreateOrUpdateHTTPRoute whose routable spec
+				// was never published (e.g. its SnippetsFilter was not accepted). It is
+				// not a connection yet; failing here would abort the whole list and
+				// wedge the hostname operator for every lease. Skip it: the operator
+				// replays all ProviderHosts on restart, which completes the route.
+				return nil
 			}
 			if len(route.Spec.Rules) == 0 {
 				return fmt.Errorf("%w: no rules specified", kubeclienterrors.ErrInvalidHostnameConnection)
