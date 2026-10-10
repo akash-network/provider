@@ -1,0 +1,34 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: provisor-fetch
+  labels:
+    app.kubernetes.io/name: provisor-fetch
+    app.kubernetes.io/instance: provisor-fetch
+    app.kubernetes.io/component: fetch
+    app.kubernetes.io/part-of: provisor
+spec:
+  # Created suspended, so cluster setup does not run a fetch against a feed
+  # that may not be serving yet. `make provisor-fetch-run` resumes it once,
+  # which is the only way a fetch is ever started.
+  suspend: true
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: provisor-fetch
+        app.kubernetes.io/instance: provisor-fetch
+        app.kubernetes.io/component: fetch
+        app.kubernetes.io/part-of: provisor
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: provisor-fetch
+          image: ghcr.io/akash-network/provisor:stable
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/bin/provisor-fetch"]
+          args:
+            - --keyset-url=http://devkit.akash-provisor.svc.cluster.local:8099/keyset
+            - --channel-url=http://devkit.akash-provisor.svc.cluster.local:8099/channel
+            - --installed-release=0.17.5

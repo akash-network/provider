@@ -118,6 +118,7 @@ const (
 	FlagEnableIPOperator                 = "ip-operator"
 	FlagTxBroadcastTimeout               = "tx-broadcast-timeout"
 	FlagMonitorMaxRetries                = "monitor-max-retries"
+	FlagLeaseRecoveryConcurrency         = "lease-recovery-concurrency"
 	FlagMonitorRetryPeriod               = "monitor-retry-period"
 	FlagMonitorRetryPeriodJitter         = "monitor-retry-period-jitter"
 	FlagPersistentConfigBackend          = "persistent-config-backend"
@@ -507,6 +508,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	rpcQueryTimeout := viper.GetDuration(FlagRPCQueryTimeout)
 	enableIPOperator := viper.GetBool(FlagEnableIPOperator)
 	monitorMaxRetries := viper.GetUint(FlagMonitorMaxRetries)
+	leaseRecoveryConcurrency := viper.GetUint(FlagLeaseRecoveryConcurrency)
 	monitorRetryPeriod := viper.GetDuration(FlagMonitorRetryPeriod)
 	monitorRetryPeriodJitter := viper.GetDuration(FlagMonitorRetryPeriodJitter)
 
@@ -690,6 +692,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		config.ReclamationCloseRetryInterval = reclamationCloseRetryInterval
 	}
 	config.MonitorMaxRetries = monitorMaxRetries
+	config.LeaseRecoveryConcurrency = leaseRecoveryConcurrency
 	config.MonitorRetryPeriod = monitorRetryPeriod
 	config.MonitorRetryPeriodJitter = monitorRetryPeriodJitter
 

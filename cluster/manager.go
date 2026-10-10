@@ -80,6 +80,7 @@ type deploymentManager struct {
 	config              Config
 	isNewLease          bool
 	serviceShuttingDown <-chan struct{}
+	recoveryDeploySlots chan struct{}
 	messages            []string
 }
 
@@ -88,6 +89,11 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 	mgroup := deployment.ManifestGroup()
 
 	logger := s.log.With("cmp", "deployment-manager", "lease", lid, "manifest-group", mgroup.GetName())
+
+	var recoveryDeploySlots chan struct{}
+	if !isNewLease {
+		recoveryDeploySlots = s.recoveryDeploySlots
+	}
 
 	dm := &deploymentManager{
 		bus:                 s.bus,
@@ -105,6 +111,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 		config:              s.config,
 		serviceShuttingDown: s.lc.ShuttingDown(),
 		isNewLease:          isNewLease,
+		recoveryDeploySlots: recoveryDeploySlots,
 		currentHostnames:    make(map[string]struct{}),
 	}
 
@@ -181,7 +188,7 @@ func (dm *deploymentManager) handleUpdate(ctx context.Context) <-chan error {
 		dm.state = dsDeployPending
 	case dsDeployComplete:
 		// start update
-		return dm.startDeploy(ctx)
+		return dm.startDeploy(ctx, nil)
 	case dsDeployPending, dsTeardownActive, dsTeardownPending, dsTeardownComplete:
 		// do nothing
 	}
@@ -193,7 +200,7 @@ func (dm *deploymentManager) run(ctx context.Context) {
 	defer dm.lc.ShutdownCompleted()
 	var shutdownErr error
 
-	runch := dm.startDeploy(ctx)
+	runch := dm.startDeploy(ctx, dm.recoveryDeploySlots)
 
 	defer func() {
 		err := dm.hostnameService.ReleaseHostnames(dm.deployment.LeaseID())
@@ -300,7 +307,7 @@ loop:
 					dm.log.Error("deploy error before applying queued update", "err", result)
 				}
 				// start update
-				runch = dm.startDeploy(ctx)
+				runch = dm.startDeploy(ctx, nil)
 			case dsDeployComplete:
 				panic(fmt.Sprintf("INVALID STATE: runch read on %v", dm.state))
 			case dsTeardownActive:
@@ -386,13 +393,23 @@ func (dm *deploymentManager) stopMonitor() {
 	}
 }
 
-func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
+func (dm *deploymentManager) startDeploy(ctx context.Context, recoverySlots chan struct{}) <-chan error {
 	dm.stopMonitor()
 	dm.state = dsDeployActive
 
 	chErr := make(chan error, 1)
 
 	go func() {
+		if recoverySlots != nil {
+			select {
+			case recoverySlots <- struct{}{}:
+				defer func() { <-recoverySlots }()
+			case <-dm.serviceShuttingDown:
+				chErr <- ErrNotRunning
+				return
+			}
+		}
+
 		hostnames, endpoints, err := dm.doDeploy(ctx)
 		if err != nil {
 			chErr <- err

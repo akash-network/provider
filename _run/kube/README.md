@@ -328,6 +328,37 @@ To remove the cluster (works for both NGINX Ingress and Gateway API):
 make kube-cluster-delete
 ```
 
+## Provisor dev loop
+
+`PROVISOR=true make kube-cluster-setup` brings up the provisor release feed (`devkit serve`) and a one-shot fetch `Job` (`provisor-fetch`) in a dedicated `akash-provisor` namespace, alongside the rest of the dev cluster.
+
+Building the provisor image depends on dev signing keys already existing, because `provisor/trust/roots/dev.json` is embedded into the binary via `go:embed` at compile time.
+`make kube-prepare-image-provisor` depends on `provisor-devkeys`, which generates those keys exactly once and is a no-op on every later run.
+Getting this order backwards (building the image, then generating keys) produces a feed and fetcher that silently reject every document from each other with `UnknownSigningKey`, since the binary only has the old (or no) dev root compiled in.
+
+Read the fetch result with:
+```sh
+make provisor-fetch-logs
+```
+A successful run prints `accepted release <version>`; a refusal prints the bare reason (for example `Expired`, `UnknownSigningKey`) and the Job exits non-zero.
+
+The Job is created suspended and does not retry, so cluster setup never runs a fetch against a feed that is not serving yet, and each run is exactly one attempt whose verdict is unambiguous.
+`make provisor-fetch-run` deletes the previous Job, recreates it and resumes it, which is the only way a fetch is ever started.
+
+`make provisor-fetch-logs` selects pods by job-name label rather than using `kubectl logs job/provisor-fetch`, which picks one pod arbitrarily and would misreport a run that left an earlier pod behind.
+
+To try a different `devkit serve` flag and see a different refusal, edit the `devkit` Deployment's args, then re-run the fetch:
+```sh
+kubectl -n akash-provisor edit deployment/devkit
+make provisor-fetch-run
+make provisor-fetch-logs
+```
+See `provisor/README.md` for the full table of `devkit serve` flags and the refusal reason each one produces.
+
+The `provisor-dev` image bakes the generated dev signing private keys in, because `devkit` has to sign with them.
+It is built locally and loaded straight into kind, and its tag is deliberately not registry-qualified so it cannot be pushed by habit.
+Dev keys are disposable: delete `provisor/.devkeys/` and `provisor/trust/roots/dev.json` to force a fresh set on the next build.
+
 ## Terminate lease
 
 There are a number of ways that a lease can be terminated.

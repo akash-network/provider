@@ -61,6 +61,10 @@ shellcheck:
 	koalaman/shellcheck-alpine:stable \
 	-x /shellcheck/script/shellcheck.sh
 
+.PHONY: test-provisor
+test-provisor:
+	$(MAKE) -C provisor test
+
 .PHONY: test
 test: $(AP_DEVCACHE) wasmvm-libs
 	$(GO_TEST) -v $(BUILD_FLAGS) -timeout 300s $(TEST_MODULES)
@@ -70,7 +74,7 @@ test-nocache: $(AP_DEVCACHE) wasmvm-libs
 	$(GO_TEST) $(BUILD_FLAGS) -count=1 $(TEST_MODULES)
 
 .PHONY: test-full
-test-full: $(AP_DEVCACHE) wasmvm-libs
+test-full: $(AP_DEVCACHE) wasmvm-libs test-provisor
 	$(GO_TEST) -v $(BUILD_FLAGS) $(TEST_MODULES)
 
 .PHONY: test-coverage
