@@ -15,13 +15,11 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/pager"
 
 	"cosmossdk.io/log"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
 
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
@@ -45,23 +43,23 @@ var (
 )
 
 type hostnameOperator struct {
-	ctx                context.Context
-	hostnames          map[string]managedHostname
-	leasesIgnored      common.IgnoreList
-	ns                 string
-	log                log.Logger
-	kc                 kubernetes.Interface
-	ac                 akashclientset.Interface
-	dc                 dynamic.Interface
-	cfg                common.OperatorConfig
-	server             common.OperatorHTTP
-	flagHostnamesData  common.PrepareFlagFn
-	flagIgnoreListData common.PrepareFlagFn
-	ingressConfig      kube.IngressConfig
-	gatewayImpl        gateway.GatewayProvider
+	ctx               context.Context
+	hostnames         map[string]managedHostname
+	pending           map[hostnameWorkKey]pendingHostname
+	ns                string
+	log               log.Logger
+	kc                kubernetes.Interface
+	ac                akashclientset.Interface
+	dc                dynamic.Interface
+	cfg               common.OperatorConfig
+	server            common.OperatorHTTP
+	flagHostnamesData common.PrepareFlagFn
+	flagPendingData   common.PrepareFlagFn
+	ingressConfig     kube.IngressConfig
+	gatewayImpl       gateway.GatewayProvider
 }
 
-func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, config common.OperatorConfig, ilc common.IgnoreListConfig) (*hostnameOperator, error) {
+func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, config common.OperatorConfig) (*hostnameOperator, error) {
 	kc, err := fromctx.KubeClientFromCtx(ctx)
 	if err != nil {
 		return nil, err
@@ -109,16 +107,16 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		"gateway-provider", gwCfg.Provider)
 
 	op := &hostnameOperator{
-		ctx:           ctx,
-		hostnames:     make(map[string]managedHostname),
-		ns:            ns,
-		log:           logger,
-		kc:            kc,
-		ac:            ac,
-		dc:            dc,
-		cfg:           config,
-		server:        opHTTP,
-		leasesIgnored: common.NewIgnoreList(ilc),
+		ctx:       ctx,
+		hostnames: make(map[string]managedHostname),
+		ns:        ns,
+		log:       logger,
+		kc:        kc,
+		ac:        ac,
+		dc:        dc,
+		cfg:       config,
+		server:    opHTTP,
+		pending:   make(map[hostnameWorkKey]pendingHostname),
 		ingressConfig: kube.IngressConfig{
 			IngressMode:      ingressMode,
 			GatewayName:      gwCfg.Name,
@@ -127,7 +125,7 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		gatewayImpl: gatewayImpl,
 	}
 
-	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)
+	op.flagPendingData = op.server.AddPreparedEndpoint("/pending-hostnames", op.preparePendingData)
 	op.flagHostnamesData = op.server.AddPreparedEndpoint("/managed-hostnames", op.prepareHostnamesData)
 
 	return op, nil
@@ -184,6 +182,12 @@ func (op *hostnameOperator) monitorUntilError() error {
 		}
 
 		op.hostnames[hostname] = entry
+		// Recheck actual connections against current desired state, including
+		// deletions missed while the watch was disconnected.
+		op.queueHostname(hostnameResourceEvent{
+			eventType: ctypes.ProviderResourceUpdate, hostname: hostname, leaseID: leaseID,
+			serviceName: conn.GetServiceName(), externalPort: uint32(conn.GetExternalPort()), // nolint: gosec
+		})
 		op.log.Debug("identified existing hostname connection",
 			"hostname", hostname,
 			"lease", entry.presentLease,
@@ -197,47 +201,41 @@ func (op *hostnameOperator) monitorUntilError() error {
 		return err
 	}
 
-	pruneTicker := time.NewTicker(op.cfg.PruneInterval)
-	defer pruneTicker.Stop()
+	resyncTicker := time.NewTicker(op.cfg.PruneInterval)
+	defer resyncTicker.Stop()
 	prepareTicker := time.NewTicker(op.cfg.WebRefreshInterval)
 	defer prepareTicker.Stop()
+	retryTimer := time.NewTimer(time.Hour)
+	defer retryTimer.Stop()
 
-	var exitError error
-loop:
 	for {
+		var retryCh <-chan time.Time
+		if delay, pending := op.nextHostnameRetry(); pending {
+			retryTimer.Reset(delay)
+			retryCh = retryTimer.C
+		}
 		select {
 		case <-ctx.Done():
-			exitError = ctx.Err()
-			break loop
+			return ctx.Err()
 		case ev, ok := <-events:
 			if !ok {
-				exitError = common.ErrObservationStopped
-				break loop
+				return common.ErrObservationStopped
 			}
-			err = op.applyEvent(ctx, ev)
-			if err != nil {
-				op.log.Error("failed applying event", "err", err)
-				exitError = err
-				break loop
+			op.queueHostname(ev)
+		case <-retryCh:
+			op.retryHostname(ctx)
+		case <-resyncTicker.C:
+			// Queue the complete snapshot without restarting the watch. Restarting
+			// during replay can repeatedly discard its tail on a busy provider.
+			if err := op.refreshHostnames(ctx); err != nil {
+				op.log.Error("unable to refresh hostnames; will retry", "err", err)
 			}
-		case <-pruneTicker.C:
-			op.prune()
 		case <-prepareTicker.C:
 			if err := op.server.PrepareAll(); err != nil {
 				op.log.Error("preparing web data failed", "err", err)
 			}
-
 		}
 	}
-
-	op.log.Debug("hostname operator done")
-
-	return exitError
-}
-
-func (op *hostnameOperator) prepareIgnoreListData(pd common.PreparedResult) error {
-	op.log.Debug("preparing ignore-list")
-	return op.leasesIgnored.Prepare(pd)
 }
 
 func (op *hostnameOperator) prepareHostnamesData(pd common.PreparedResult) error {
@@ -272,80 +270,15 @@ func (op *hostnameOperator) prepareHostnamesData(pd common.PreparedResult) error
 	return nil
 }
 
-func (op *hostnameOperator) prune() {
-	if op.leasesIgnored.Prune() {
-		op.flagIgnoreListData()
-	}
-}
-
-func errorIsKubernetesResourceNotFound(failure error) bool {
-	// check the error, only consider errors that are obviously
-	// indicating a missing resource
-	// otherwise simple errors like network issues could wind up with all CRDs
-	// being ignored
-
-	if kerrors.IsNotFound(failure) {
-		return true
-	}
-
-	if errors.Is(failure, errExpectedResourceNotFound) {
-		return true
-	}
-
-	errStr := failure.Error()
-	// unless the error indicates a resource was not found, no action
-	return strings.Contains(errStr, "not found")
-}
-
-func (op *hostnameOperator) recordEventError(ev chostname.ResourceEvent, failure error) {
-	// no error, no action
-	if failure == nil {
-		return
-	}
-
-	mark := errorIsKubernetesResourceNotFound(failure)
-
-	if !mark {
-		return
-	}
-
-	op.log.Info("recording error for", "lease", ev.GetLeaseID().String(), "err", failure)
-
-	op.leasesIgnored.AddError(ev.GetLeaseID(), failure, ev.GetHostname())
-	op.flagIgnoreListData()
-}
-
-func (op *hostnameOperator) isEventIgnored(ev chostname.ResourceEvent) bool {
-	return op.leasesIgnored.IsFlagged(ev.GetLeaseID())
-}
-
-func (op *hostnameOperator) applyEvent(ctx context.Context, ev chostname.ResourceEvent) error {
-	op.log.Debug("apply event", "event-type", ev.GetEventType(), "hostname", ev.GetHostname())
-	switch ev.GetEventType() {
-	case ctypes.ProviderResourceDelete:
-		// note that on delete the resource might be gone anyways because the namespace is deleted
-		return op.applyDeleteEvent(ctx, ev)
-	case ctypes.ProviderResourceAdd, ctypes.ProviderResourceUpdate:
-		if op.isEventIgnored(ev) {
-			op.log.Info("ignoring event for", "lease", ev.GetLeaseID().String())
-			return nil
-		}
-		err := op.applyAddOrUpdateEvent(ctx, ev)
-		op.recordEventError(ev, err)
-		return err
-	default:
-		return fmt.Errorf("%w: unknown event type %v", common.ErrObservationStopped, ev.GetEventType())
-	}
-
-}
-
 func (op *hostnameOperator) applyDeleteEvent(ctx context.Context, ev chostname.ResourceEvent) error {
 	leaseID := ev.GetLeaseID()
 	err := op.removeHostnameFromDeployment(ctx, ev.GetHostname(), leaseID, true)
 
 	if err == nil {
-		delete(op.hostnames, ev.GetHostname())
-		op.flagHostnamesData()
+		if entry, exists := op.hostnames[ev.GetHostname()]; exists && entry.presentLease.Equals(leaseID) {
+			delete(op.hostnames, ev.GetHostname())
+			op.flagHostnamesData()
+		}
 	}
 
 	return err
@@ -479,7 +412,7 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 	} else {
 		op.log.Debug("Swapping ingress to new deployment")
 		//  Delete the ingress in one namespace and recreate it in the correct one
-		err = op.removeHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, false)
+		err = op.removeHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, true)
 		if err == nil {
 			// Remove the current entry, if the next action succeeds then it gets inserted below
 			delete(op.hostnames, ev.GetHostname())
@@ -542,124 +475,6 @@ func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context
 	}
 
 	return results, nil
-}
-
-func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error) {
-	phpager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		resources, err := op.ac.AkashV2beta2().ProviderHosts(op.ns).List(ctx, opts)
-		return resources, err
-	})
-
-	data := make([]crd.ProviderHost, 0, 128)
-	err := phpager.EachListItem(ctx, metav1.ListOptions{}, func(obj runtime.Object) error {
-		ph := obj.(*crd.ProviderHost)
-		data = append(data, *ph)
-		return nil
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	op.log.Info("starting hostname watch")
-	watcher, err := op.ac.AkashV2beta2().ProviderHosts(op.ns).Watch(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, err
-	}
-
-	evData := make([]hostnameResourceEvent, len(data))
-	for i, v := range data {
-		ownerAddr, err := sdktypes.AccAddressFromBech32(v.Spec.Owner)
-		if err != nil {
-			return nil, err
-		}
-		providerAddr, err := sdktypes.AccAddressFromBech32(v.Spec.Provider)
-		if err != nil {
-			return nil, err
-		}
-		ev := hostnameResourceEvent{
-			eventType:    ctypes.ProviderResourceAdd,
-			hostname:     v.Spec.Hostname,
-			oseq:         v.Spec.Oseq,
-			gseq:         v.Spec.Gseq,
-			dseq:         v.Spec.Dseq,
-			owner:        ownerAddr,
-			provider:     providerAddr,
-			serviceName:  v.Spec.ServiceName,
-			externalPort: v.Spec.ExternalPort,
-		}
-		evData[i] = ev
-	}
-
-	data = nil
-
-	output := make(chan chostname.ResourceEvent)
-
-	go func() {
-		defer func() {
-			close(output)
-			watcher.Stop()
-		}()
-
-		for _, v := range evData {
-			output <- v
-		}
-		evData = nil // do not hold the reference
-
-		results := watcher.ResultChan()
-		for {
-			select {
-			case result, ok := <-results:
-				if !ok { // Channel closed when an error happens
-					return
-				}
-				ph := result.Object.(*crd.ProviderHost)
-				ownerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Owner)
-				if err != nil {
-					op.log.Error("invalid owner address in provider host", "addr", ph.Spec.Owner, "err", err)
-					continue // Ignore event
-				}
-				providerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Provider)
-				if err != nil {
-					op.log.Error("invalid provider address in provider host", "addr", ph.Spec.Provider, "err", err)
-					continue // Ignore event
-				}
-				ev := hostnameResourceEvent{
-					hostname:     ph.Spec.Hostname,
-					dseq:         ph.Spec.Dseq,
-					oseq:         ph.Spec.Oseq,
-					gseq:         ph.Spec.Gseq,
-					owner:        ownerAddr,
-					provider:     providerAddr,
-					serviceName:  ph.Spec.ServiceName,
-					externalPort: ph.Spec.ExternalPort,
-				}
-				switch result.Type {
-
-				case watch.Added:
-					ev.eventType = ctypes.ProviderResourceAdd
-				case watch.Modified:
-					ev.eventType = ctypes.ProviderResourceUpdate
-				case watch.Deleted:
-					ev.eventType = ctypes.ProviderResourceDelete
-
-				case watch.Error:
-					// Based on examination of the implementation code, this is basically never called anyways
-					op.log.Error("watch error", "err", result.Object)
-
-				default:
-
-					continue
-				}
-
-				output <- ev
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return output, nil
 }
 
 func (op *hostnameOperator) getManifestGroup(ctx context.Context, lID mtypes.LeaseID) (bool, crd.ManifestGroup, error) {
