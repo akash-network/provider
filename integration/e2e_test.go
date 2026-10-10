@@ -10,7 +10,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"path"
 	"reflect"
 	"strings"
 	"testing"
@@ -25,9 +24,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/flowcontrol"
-	"k8s.io/client-go/util/homedir"
 	atypes "pkg.akt.dev/go/node/audit/v1"
 	aclient "pkg.akt.dev/go/node/client/discovery"
 	cltypes "pkg.akt.dev/go/node/client/types"
@@ -95,6 +92,7 @@ type IntegrationTestSuite struct {
 	oracleClient      cclient.Client
 	priceFeedInterval time.Duration
 	gatewayAPIMode    bool
+	kubeConfigPath    string
 }
 
 const (
@@ -115,6 +113,22 @@ var cliFlags = cli.TestFlags().
 
 func (s *IntegrationTestSuite) SetupSuite() {
 	s.appHost, s.appPort = appEnv(s.T())
+	s.kubeConfigPath = os.Getenv("AKASH_E2E_KUBECONFIG")
+	if s.gatewayAPIMode {
+		s.Require().NotEmpty(s.kubeConfigPath, "gateway E2E requires AKASH_E2E_KUBECONFIG pointing to a disposable cluster")
+		cfg, err := clientcommon.OpenKubeConfig(s.kubeConfigPath, testutil.Logger(s.T()))
+		s.Require().NoError(err)
+		kc, err := kubernetes.NewForConfig(cfg)
+		s.Require().NoError(err)
+		checkCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		ns, err := kc.CoreV1().Namespaces().Get(checkCtx, "kube-system", metav1.GetOptions{})
+		s.Require().NoError(err)
+		s.Require().Equal("true", ns.Labels["akash.network/local-validation"], "gateway E2E requires a disposable cluster marked for local validation")
+	}
+	if s.kubeConfigPath == "" {
+		s.kubeConfigPath = providerflags.KubeConfigDefaultPath
+	}
 
 	encCfg := sdkutil.MakeEncodingConfig()
 	app.ModuleBasics().RegisterInterfaces(encCfg.InterfaceRegistry)
@@ -186,9 +200,13 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	// Send coins value
+	fundingMultiplier := int64(4)
+	if s.gatewayAPIMode {
+		fundingMultiplier = 32 // Several simultaneous deployments in the local gateway matrix.
+	}
 	sendTokens := sdk.Coins{
-		sdk.NewCoin(s.cfg.BondDenom, mvbeta.DefaultBidMinDeposit.Amount.MulRaw(4)),
-		sdk.NewCoin(sdkutil.DenomUact, sdkmath.NewInt(uactMinDepositAmount*4)),
+		sdk.NewCoin(s.cfg.BondDenom, mvbeta.DefaultBidMinDeposit.Amount.MulRaw(fundingMultiplier)),
+		sdk.NewCoin(sdkutil.DenomUact, sdkmath.NewInt(uactMinDepositAmount*fundingMultiplier)),
 	}
 
 	// Setup a Provider key
@@ -387,7 +405,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	group, ctx := errgroup.WithContext(ctx)
 	ctx = context.WithValue(ctx, fromctx.CtxKeyErrGroup, group)
 
-	kubecfg, err := clientcommon.OpenKubeConfig(providerflags.KubeConfigDefaultPath, testutil.Logger(s.T()))
+	kubecfg, err := clientcommon.OpenKubeConfig(s.kubeConfigPath, testutil.Logger(s.T()))
 	require.NoError(s.T(), err)
 	require.NotNil(s.T(), kubecfg)
 
@@ -418,6 +436,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// so wait for the provider to start before running the hostname operator
 	pArgs := cli.TestFlags().
 		WithHome(cliHome).
+		WithFlag(providerflags.FlagKubeConfig, s.kubeConfigPath).
 		WithFrom(s.addrProvider.String()).
 		WithGasAuto().
 		WithFlag(pcmd.FlagClusterK8s, true).
@@ -442,7 +461,9 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		pArgs = pArgs.
 			WithFlag(pcmd.FlagIngressMode, "gateway-api").
 			WithFlag(pcmd.FlagGatewayName, "akash-gateway").
-			WithFlag(pcmd.FlagGatewayNamespace, "akash-gateway")
+			WithFlag(pcmd.FlagGatewayNamespace, "akash-gateway").
+			WithFlag(pcmd.FlagDeploymentIngressStaticHosts, true).
+			WithFlag(pcmd.FlagDeploymentIngressDomain, "localtest.me")
 	}
 
 	dialer := net.Dialer{
@@ -452,6 +473,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	// --- Start hostname operator
 	hostnameOperatorArgs := cli.TestFlags().
 		With("hostname").
+		WithFlag(providerflags.FlagKubeConfig, s.kubeConfigPath).
 		WithFlag(operatorcommon.FlagRESTAddress, "127.0.0.1").
 		WithFlag(operatorcommon.FlagRESTPort, hostnameOperatorPort)
 
@@ -459,7 +481,8 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		hostnameOperatorArgs = hostnameOperatorArgs.
 			WithFlag("ingress-mode", "gateway-api").
 			WithFlag("gateway-name", "akash-gateway").
-			WithFlag("gateway-namespace", "akash-gateway")
+			WithFlag("gateway-namespace", "akash-gateway").
+			WithFlag(providerflags.FlagPruneInterval, 5*time.Second)
 	}
 
 	s.group.Go(func() error {
@@ -516,7 +539,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	waitForTCPSocket(s.ctx, dialer, provHost, s.T())
 
 	// Create programmatic oracle client (bypasses CLI/Viper to avoid data races)
-	oracleCctx := cctx.WithFrom(s.addrOracle.String())
+	oracleCctx := cctx.WithFrom(s.addrOracle.String()).WithFromAddress(s.addrOracle).WithFromName("keyOracle")
 	oracleCl, err := aclient.DiscoverClient(ctx, oracleCctx,
 		cltypes.WithGas(cltypes.GasSetting{Simulate: true}),
 		cltypes.WithGasAdjustment(1.4),
@@ -683,14 +706,8 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 
 	s.network.Cleanup()
 
-	// remove all entries of the provider host CRD
-	cfgPath := path.Join(homedir.HomeDir(), ".kube", "config")
-
-	restConfig, err := clientcmd.BuildConfigFromFlags("", cfgPath)
-	s.Require().NoError(err)
-
-	ac, err := akashclient.NewForConfig(restConfig)
-	s.Require().NoError(err)
+	// Reuse the suite's explicit cluster client for cleanup as well as setup.
+	ac := s.ctx.Value(fromctx.CtxKeyAkashClientSet).(akashclient.Interface)
 	const ns = "lease"
 	propagation := metav1.DeletePropagationForeground
 	err = ac.AkashV2beta2().ProviderHosts(ns).DeleteCollection(s.ctx, metav1.DeleteOptions{

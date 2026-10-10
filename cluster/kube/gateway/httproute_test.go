@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"cosmossdk.io/log"
 	"github.com/stretchr/testify/require"
@@ -222,13 +223,29 @@ func TestListHTTPRouteConnectionsSkipsPlaceholder(t *testing.T) {
 	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), healthy, NoopHTTPRouteObserver{}))
 
 	// A brand-new route whose SnippetsFilter cannot be applied leaves a placeholder.
+	failFilterCreate := true
 	dc.PrependReactor("create", "snippetsfilters", func(clienttesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("boom")
+		if failFilterCreate {
+			return true, nil, fmt.Errorf("boom")
+		}
+		return false, nil, nil
 	})
 	stuck := routeDirective()
 	stuck.Hostname = "stuck.example.com"
 	stuck.LeaseID = testutil.LeaseID(t)
 	require.Error(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), stuck, NoopHTTPRouteObserver{}))
+	// The API server can default rules even though the placeholder has no
+	// hostname or parent. These defaults must not turn it into a connection.
+	stuckNS := builder.LidNS(stuck.LeaseID)
+	placeholder, err := dc.Resource(HTTPRouteGVR).Namespace(stuckNS).Get(ctx, stuck.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NoError(t, unstructured.SetNestedSlice(placeholder.Object, []interface{}{
+		map[string]interface{}{"matches": []interface{}{
+			map[string]interface{}{"path": map[string]interface{}{"type": "PathPrefix", "value": "/"}},
+		}},
+	}, "spec", "rules"))
+	_, err = dc.Resource(HTTPRouteGVR).Namespace(stuckNS).Update(ctx, placeholder, metav1.UpdateOptions{})
+	require.NoError(t, err)
 
 	conns, err := ListHTTPRouteConnections(ctx, dc)
 	require.NoError(t, err, "a placeholder route must not abort listing")
@@ -237,4 +254,303 @@ func TestListHTTPRouteConnectionsSkipsPlaceholder(t *testing.T) {
 	require.Equal(t, healthy.LeaseID, conns[0].GetLeaseID())
 	require.Equal(t, healthy.ServiceName, conns[0].GetServiceName())
 	require.Equal(t, healthy.ServicePort, conns[0].GetExternalPort())
+
+	failFilterCreate = false
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), stuck, NoopHTTPRouteObserver{}))
+	conns, err = ListHTTPRouteConnections(ctx, dc)
+	require.NoError(t, err)
+	require.Len(t, conns, 2, "retry must complete the existing placeholder after the failure clears")
+	route, err := dc.Resource(HTTPRouteGVR).Namespace(stuckNS).Get(ctx, stuck.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, stuck.Hostname, extensionRefName(t, route))
+}
+
+func TestCreateOrUpdateHTTPRoutePreservesUnchangedExtension(t *testing.T) {
+	ctx := context.Background()
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	directive := routeDirective()
+	ns := builder.LidNS(directive.LeaseID)
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+	before, err := dc.Resource(sfGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	dc.ClearActions()
+
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+	for _, action := range dc.Actions() {
+		require.False(t, action.Matches("update", "snippetsfilters"), "replaying an unchanged route must retain the accepted extension")
+	}
+	after, err := dc.Resource(sfGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+}
+
+func TestCreateOrUpdateHTTPRouteRetriesExtensionStatusConflict(t *testing.T) {
+	ctx := context.Background()
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	directive := routeDirective()
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+	updates := 0
+	dc.PrependReactor("update", "snippetsfilters", func(clienttesting.Action) (bool, runtime.Object, error) {
+		updates++
+		if updates == 1 {
+			return true, nil, kerrors.NewConflict(sfGVR.GroupResource(), directive.Hostname, fmt.Errorf("controller updated status"))
+		}
+		return false, nil, nil
+	})
+	directive.MaxBodySize *= 2
+
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+	require.Equal(t, 2, updates)
+}
+
+func TestCreateOrUpdateHTTPRouteDefersAcceptanceAndRecovers(t *testing.T) {
+	dc := newFakeDC()
+	directive := routeDirective()
+	directive.LeaseID = testutil.LeaseID(t)
+	ns := builder.LidNS(directive.LeaseID)
+	config := routeConfig()
+	config.DeferExtensionAcceptance = true
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	err := CreateOrUpdateHTTPRoute(ctx, dc, config, directive, NoopHTTPRouteObserver{})
+	require.ErrorIs(t, err, ErrRouteExtensionPending)
+	require.NoError(t, ctx.Err(), "operator reconciliation must return without waiting for controller acceptance")
+	route, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	parents, _, err := unstructured.NestedSlice(route.Object, "spec", "parentRefs")
+	require.NoError(t, err)
+	require.Empty(t, parents)
+	require.Empty(t, extensionRefName(t, route), "unaccepted options must not be exposed")
+
+	filter, err := dc.Resource(sfGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.NoError(t, unstructured.SetNestedSlice(filter.Object, []interface{}{
+		map[string]interface{}{"conditions": []interface{}{
+			map[string]interface{}{"type": "Accepted", "status": "True", "observedGeneration": filter.GetGeneration()},
+		}},
+	}, "status", "controllers"))
+	_, err = dc.Resource(sfGVR).Namespace(ns).UpdateStatus(ctx, filter, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	dc.ClearActions()
+
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, config, directive, NoopHTTPRouteObserver{}))
+	for _, action := range dc.Actions() {
+		require.False(t, action.Matches("update", "snippetsfilters"), "acceptance must survive retry")
+	}
+	conns, err := ListHTTPRouteConnections(ctx, dc)
+	require.NoError(t, err)
+	require.Len(t, conns, 1)
+	require.Equal(t, directive.Hostname, conns[0].GetHostname())
+}
+
+func TestCreateOrUpdateHTTPRouteRetainsRouteWhileChangedExtensionIsPending(t *testing.T) {
+	ctx := context.Background()
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	directive := routeDirective()
+	ns := builder.LidNS(directive.LeaseID)
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+	before, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	dc.PrependReactor("update", "snippetsfilters", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		filter := action.(clienttesting.UpdateAction).GetObject().(*unstructured.Unstructured)
+		filter.SetGeneration(2)
+		unstructured.RemoveNestedField(filter.Object, "status")
+		err := dc.Tracker().Update(sfGVR, filter, ns)
+		return true, filter, err
+	})
+	directive.MaxBodySize *= 2
+	directive.ServiceName = "new-backend"
+	config := routeConfig()
+	config.DeferExtensionAcceptance = true
+
+	require.ErrorIs(t, CreateOrUpdateHTTPRoute(ctx, dc, config, directive, NoopHTTPRouteObserver{}), ErrRouteExtensionPending)
+	after, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, before.Object["spec"], after.Object["spec"], "the current backend must remain until the desired filter is accepted")
+}
+
+func TestRouteExtensionRejectionIncludesDetails(t *testing.T) {
+	filter := &unstructured.Unstructured{Object: map[string]interface{}{}}
+	require.NoError(t, unstructured.SetNestedSlice(filter.Object, []interface{}{
+		map[string]interface{}{"conditions": []interface{}{
+			map[string]interface{}{
+				"type": "Accepted", "status": "False", "observedGeneration": int64(4),
+				"reason": "Invalid", "message": "snippets are disabled",
+			},
+		}},
+	}, "status", "controllers"))
+	err := extensionAcceptanceError(filter, 4)
+	require.ErrorIs(t, err, ErrRouteExtensionRejected)
+	require.NotErrorIs(t, err, ErrRouteExtensionPending, "a rejected generation must use error backoff, not rapid readiness polling")
+	require.ErrorContains(t, err, "reason=Invalid")
+	require.ErrorContains(t, err, "snippets are disabled")
+	require.ErrorContains(t, err, "observedGeneration=4 desiredGeneration=4")
+
+	err = extensionAcceptanceError(filter, 5)
+	require.ErrorIs(t, err, ErrRouteExtensionPending, "a stale rejection does not describe the new generation")
+	require.NotErrorIs(t, err, ErrRouteExtensionRejected)
+}
+
+func TestListHTTPRouteConnectionsSkipsDetachedRoutes(t *testing.T) {
+	for _, field := range []string{"parentRefs", "hostnames"} {
+		t.Run(field, func(t *testing.T) {
+			ctx := context.Background()
+			dc := newFakeDC()
+			acceptSnippetsFilters(dc)
+			directive := routeDirective()
+			directive.LeaseID = testutil.LeaseID(t)
+			ns := builder.LidNS(directive.LeaseID)
+			require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+			route, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+			require.NoError(t, err)
+			unstructured.RemoveNestedField(route.Object, "spec", field)
+			_, err = dc.Resource(HTTPRouteGVR).Namespace(ns).Update(ctx, route, metav1.UpdateOptions{})
+			require.NoError(t, err)
+
+			conns, err := ListHTTPRouteConnections(ctx, dc)
+			require.NoError(t, err)
+			require.Empty(t, conns)
+		})
+	}
+}
+
+func TestListHTTPRouteConnectionsSkipsMalformedRoutes(t *testing.T) {
+	cases := map[string]func(*testing.T, *unstructured.Unstructured){
+		"lease labels": func(_ *testing.T, route *unstructured.Unstructured) {
+			route.SetLabels(map[string]string{builder.AkashManagedLabelName: "true"})
+		},
+		"lease namespace": func(t *testing.T, route *unstructured.Unstructured) {
+			labels := route.GetLabels()
+			builder.AppendLeaseLabels(testutil.LeaseID(t), labels)
+			route.SetLabels(labels)
+		},
+		"rules": func(_ *testing.T, route *unstructured.Unstructured) {
+			unstructured.RemoveNestedField(route.Object, "spec", "rules")
+		},
+		"backend references": func(t *testing.T, route *unstructured.Unstructured) {
+			require.NoError(t, unstructured.SetNestedSlice(route.Object, []interface{}{map[string]interface{}{}}, "spec", "rules"))
+		},
+		"backend port": func(t *testing.T, route *unstructured.Unstructured) {
+			require.NoError(t, unstructured.SetNestedSlice(route.Object, []interface{}{
+				map[string]interface{}{"backendRefs": []interface{}{map[string]interface{}{"name": "web"}}},
+			}, "spec", "rules"))
+		},
+	}
+	for name, corrupt := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			dc := newFakeDC()
+			acceptSnippetsFilters(dc)
+			healthy := routeDirective()
+			healthy.LeaseID = testutil.LeaseID(t)
+			require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), healthy, NoopHTTPRouteObserver{}))
+			broken := healthy
+			broken.Hostname = "broken.example.com"
+			ns := builder.LidNS(broken.LeaseID)
+			require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), broken, NoopHTTPRouteObserver{}))
+			route, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, broken.Hostname, metav1.GetOptions{})
+			require.NoError(t, err)
+			corrupt(t, route)
+			_, err = dc.Resource(HTTPRouteGVR).Namespace(ns).Update(ctx, route, metav1.UpdateOptions{})
+			require.NoError(t, err)
+
+			conns, err := ListHTTPRouteConnections(ctx, dc)
+			require.NoError(t, err, "one incomplete route must not prevent recovery for every hostname")
+			require.Len(t, conns, 1)
+			require.Equal(t, healthy.Hostname, conns[0].GetHostname())
+		})
+	}
+}
+
+func TestCreateOrUpdateHTTPRouteWaitsForAcceptanceByDefault(t *testing.T) {
+	ctx := context.Background()
+	dc := newFakeDC()
+	directive := routeDirective()
+	ns := builder.LidNS(directive.LeaseID)
+	reads := 0
+	dc.PrependReactor("get", "snippetsfilters", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		reads++
+		if reads == 1 {
+			return false, nil, nil
+		}
+		obj, err := dc.Tracker().Get(sfGVR, ns, action.(clienttesting.GetAction).GetName())
+		require.NoError(t, err)
+		filter := obj.(*unstructured.Unstructured)
+		require.NoError(t, unstructured.SetNestedSlice(filter.Object, []interface{}{
+			map[string]interface{}{"conditions": []interface{}{
+				map[string]interface{}{"type": "Accepted", "status": "True", "observedGeneration": filter.GetGeneration()},
+			}},
+		}, "status", "controllers"))
+		return true, filter, nil
+	})
+
+	require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+	require.Equal(t, 2, reads, "the synchronous caller must observe acceptance after creating its filter")
+	route, err := dc.Resource(HTTPRouteGVR).Namespace(ns).Get(ctx, directive.Hostname, metav1.GetOptions{})
+	require.NoError(t, err)
+	require.Equal(t, directive.Hostname, extensionRefName(t, route))
+}
+
+func TestCreateOrUpdateHTTPRouteReturnsCanceledExtensionRequest(t *testing.T) {
+	for _, failure := range []error{context.Canceled, context.DeadlineExceeded} {
+		for _, verb := range []string{"get", "create", "update"} {
+			t.Run(failure.Error()+"/"+verb, func(t *testing.T) {
+				ctx := context.Background()
+				dc := newFakeDC()
+				directive := routeDirective()
+				if verb == "update" {
+					acceptSnippetsFilters(dc)
+					require.NoError(t, CreateOrUpdateHTTPRoute(ctx, dc, routeConfig(), directive, NoopHTTPRouteObserver{}))
+					directive.MaxBodySize *= 2
+				}
+				dc.PrependReactor(verb, "snippetsfilters", func(clienttesting.Action) (bool, runtime.Object, error) {
+					return true, nil, failure
+				})
+				config := routeConfig()
+				config.DeferExtensionAcceptance = true
+
+				require.ErrorIs(t, CreateOrUpdateHTTPRoute(ctx, dc, config, directive, NoopHTTPRouteObserver{}), failure)
+			})
+		}
+	}
+}
+
+func TestCreateOrUpdateHTTPRouteReturnsCanceledPublish(t *testing.T) {
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	dc.PrependReactor("update", "httproutes", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, context.Canceled
+	})
+	require.ErrorIs(t, CreateOrUpdateHTTPRoute(context.Background(), dc, routeConfig(), routeDirective(), NoopHTTPRouteObserver{}), context.Canceled)
+}
+
+func TestCreateOrUpdateHTTPRoutePreservesCancellationAfterConflict(t *testing.T) {
+	dc := newFakeDC()
+	acceptSnippetsFilters(dc)
+	directive := routeDirective()
+	attempts := 0
+	dc.PrependReactor("update", "httproutes", func(clienttesting.Action) (bool, runtime.Object, error) {
+		attempts++
+		if attempts == 1 {
+			return true, nil, kerrors.NewConflict(HTTPRouteGVR.GroupResource(), directive.Hostname, fmt.Errorf("controller updated status"))
+		}
+		return true, nil, context.Canceled
+	})
+	require.ErrorIs(t, CreateOrUpdateHTTPRoute(context.Background(), dc, routeConfig(), directive, NoopHTTPRouteObserver{}), context.Canceled)
+	require.Equal(t, 2, attempts)
+}
+
+func TestListHTTPRouteConnectionsReturnsAPIFailure(t *testing.T) {
+	dc := newFakeDC()
+	failure := kerrors.NewForbidden(HTTPRouteGVR.GroupResource(), "", fmt.Errorf("permission denied"))
+	dc.PrependReactor("list", "httproutes", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, failure
+	})
+
+	_, err := ListHTTPRouteConnections(context.Background(), dc)
+	require.ErrorIs(t, err, failure)
 }
