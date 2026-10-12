@@ -99,14 +99,14 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		}
 		gatewayImpl = impl
 		logger.Info("initialized gateway provider",
-			"provider", impl.Name())
+			"gateway_provider", impl.Name())
 	}
 
 	logger.Info("initializing hostname operator",
-		"ingress-mode", gwCfg.IngressMode,
-		"gateway-name", gwCfg.Name,
-		"gateway-namespace", gwCfg.Namespace,
-		"gateway-provider", gwCfg.Provider)
+		"ingress_mode", gwCfg.IngressMode,
+		"gateway_name", gwCfg.Name,
+		"gateway_namespace", gwCfg.Namespace,
+		"gateway_provider", gwCfg.Provider)
 
 	op := &hostnameOperator{
 		ctx:           ctx,
@@ -169,7 +169,7 @@ func (op *hostnameOperator) monitorUntilError() error {
 
 	connections, err := op.getHostnameDeploymentConnections(ctx)
 	if err != nil {
-		op.log.Error("unable to get connections", "err", err.Error())
+		op.log.Error("unable to get connections", "err", err)
 		return err
 	}
 
@@ -186,7 +186,7 @@ func (op *hostnameOperator) monitorUntilError() error {
 		op.hostnames[hostname] = entry
 		op.log.Debug("identified existing hostname connection",
 			"hostname", hostname,
-			"lease", entry.presentLease,
+			"lid", entry.presentLease,
 			"service", entry.presentServiceName,
 			"port", entry.presentExternalPort)
 	}
@@ -216,7 +216,7 @@ loop:
 			}
 			err = op.applyEvent(ctx, ev)
 			if err != nil {
-				op.log.Error("failed applying event", "err", err)
+				op.log.Error("failed applying event", "lid", ev.GetLeaseID(), "err", err)
 				exitError = err
 				break loop
 			}
@@ -309,7 +309,7 @@ func (op *hostnameOperator) recordEventError(ev chostname.ResourceEvent, failure
 		return
 	}
 
-	op.log.Info("recording error for", "lease", ev.GetLeaseID().String(), "err", failure)
+	op.log.Info("recording error for", "lid", ev.GetLeaseID(), "err", failure)
 
 	op.leasesIgnored.AddError(ev.GetLeaseID(), failure, ev.GetHostname())
 	op.flagIgnoreListData()
@@ -320,14 +320,16 @@ func (op *hostnameOperator) isEventIgnored(ev chostname.ResourceEvent) bool {
 }
 
 func (op *hostnameOperator) applyEvent(ctx context.Context, ev chostname.ResourceEvent) error {
-	op.log.Debug("apply event", "event-type", ev.GetEventType(), "hostname", ev.GetHostname())
+	log := op.log.With("lid", ev.GetLeaseID())
+
+	log.Debug("apply event", "event_type", ev.GetEventType(), "hostname", ev.GetHostname())
 	switch ev.GetEventType() {
 	case ctypes.ProviderResourceDelete:
 		// note that on delete the resource might be gone anyways because the namespace is deleted
 		return op.applyDeleteEvent(ctx, ev)
 	case ctypes.ProviderResourceAdd, ctypes.ProviderResourceUpdate:
 		if op.isEventIgnored(ev) {
-			op.log.Info("ignoring event for", "lease", ev.GetLeaseID().String())
+			log.Info("ignoring event")
 			return nil
 		}
 		err := op.applyAddOrUpdateEvent(ctx, ev)
@@ -448,12 +450,12 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 	}
 
 	leaseID := ev.GetLeaseID()
+	log := op.log.With("lid", leaseID)
 
-	op.log.Debug("connecting",
+	log.Debug("connecting",
 		"hostname", ev.GetHostname(),
-		"lease", leaseID,
 		"service", ev.GetServiceName(),
-		"externalPort", ev.GetExternalPort())
+		"external_port", ev.GetExternalPort())
 	entry, exists := op.hostnames[ev.GetHostname()]
 
 	isSameLease := false
@@ -470,20 +472,20 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 
 		if !exists {
 			// shouldConnect = true
-			op.log.Debug("hostname target is new, applying")
+			log.Debug("hostname target is new, applying")
 			// Check to see if port or service name is different
 		} else if entry.presentExternalPort != ev.GetExternalPort() || entry.presentServiceName != ev.GetServiceName() {
 			// shouldConnect = true
-			op.log.Debug("hostname target has changed, applying")
+			log.Debug("hostname target has changed, applying")
 		}
 
 		// if shouldConnect {
-		op.log.Debug("Updating ingress")
+		log.Debug("Updating ingress")
 		// Update or create the existing ingress
 		err = op.connectHostnameToDeployment(ctx, directive)
 		// }
 	} else {
-		op.log.Debug("Swapping ingress to new deployment")
+		log.Debug("Swapping ingress to new deployment")
 		//  Delete the ingress in one namespace and recreate it in the correct one
 		err = op.removeHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, false)
 		if err == nil {
@@ -622,12 +624,12 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 				ph := result.Object.(*crd.ProviderHost)
 				ownerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Owner)
 				if err != nil {
-					op.log.Error("invalid owner address in provider host", "addr", ph.Spec.Owner, "err", err)
+					op.log.Error("invalid owner address in provider host", "owner", ph.Spec.Owner, "err", err)
 					continue // Ignore event
 				}
 				providerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Provider)
 				if err != nil {
-					op.log.Error("invalid provider address in provider host", "addr", ph.Spec.Provider, "err", err)
+					op.log.Error("invalid provider address in provider host", "provider", ph.Spec.Provider, "err", err)
 					continue // Ignore event
 				}
 				ev := hostnameResourceEvent{
@@ -651,6 +653,7 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 
 				case watch.Error:
 					// Based on examination of the implementation code, this is basically never called anyways
+					// logaudit:ignore watch errors concern the watch stream, not a single lease
 					op.log.Error("watch error", "err", result.Object)
 
 				default:
@@ -669,13 +672,15 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 }
 
 func (op *hostnameOperator) getManifestGroup(ctx context.Context, lID mtypes.LeaseID) (bool, crd.ManifestGroup, error) {
+	log := op.log.With("lid", lID)
+
 	leaseNamespace := builder.LidNS(lID)
 
 	obj, err := op.ac.AkashV2beta2().Manifests(op.ns).Get(ctx, leaseNamespace, metav1.GetOptions{})
 
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			op.log.Info("CRD manifest not found", "lease-ns", leaseNamespace)
+			log.Info("CRD manifest not found", "ns", leaseNamespace)
 			return false, crd.ManifestGroup{}, nil
 		}
 
@@ -720,16 +725,18 @@ func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, ho
 }
 
 func (op *hostnameOperator) connectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
-	op.log.Info("hostname operator connecting hostname to deployment",
+	log := op.log.With("lid", directive.LeaseID)
+
+	log.Info("hostname operator connecting hostname to deployment",
 		"hostname", directive.Hostname,
-		"ingress-mode", op.ingressConfig.IngressMode)
+		"ingress_mode", op.ingressConfig.IngressMode)
 
 	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
-		op.log.Info("hostname operator using Gateway API mode")
+		log.Info("hostname operator using Gateway API mode")
 		return op.connectHostnameToDeploymentGateway(ctx, directive)
 	}
 
-	op.log.Info("hostname operator using NGINX Ingress mode")
+	log.Info("hostname operator using NGINX Ingress mode")
 	ingressName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)

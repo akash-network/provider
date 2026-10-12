@@ -46,7 +46,7 @@ func (c *ConfigfsTSM) detectProvider() {
 	}
 
 	provider := strings.TrimSpace(string(data))
-	fmt.Fprintf(os.Stderr, "configfs-tsm provider: %s\n", provider)
+	logger().Info("configfs-tsm provider detected", "tsm_provider", provider)
 
 	switch provider {
 	case "tdx_guest":
@@ -82,21 +82,21 @@ func (c *ConfigfsTSM) GetQuote(_ context.Context, reportData [64]byte) (*QuoteRe
 	// Log available attributes for debugging
 	entries, _ := os.ReadDir(dir)
 	for _, e := range entries {
-		fmt.Fprintf(os.Stderr, "configfs-tsm entry attr: %s\n", e.Name())
+		logger().Debug("configfs-tsm entry attribute", "name", e.Name())
 	}
 
 	// Single write to inblob — kernel requires single sized write
 	if err := os.WriteFile(filepath.Join(dir, "inblob"), reportData[:], 0600); err != nil {
 		return nil, fmt.Errorf("configfs write inblob: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "configfs-tsm: wrote %d bytes to inblob\n", len(reportData))
+	logger().Debug("configfs-tsm wrote inblob", "bytes", len(reportData))
 
 	// Read outblob — sysfs size lies, ReadFile reads to EOF
 	report, err := os.ReadFile(filepath.Join(dir, "outblob"))
 	if err != nil {
 		return nil, fmt.Errorf("configfs read outblob: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "configfs-tsm: read %d bytes from outblob\n", len(report))
+	logger().Debug("configfs-tsm read outblob", "bytes", len(report))
 
 	// Read auxblob — expected empty on NVIDIA-patched kernel
 	auxblob, _ := os.ReadFile(filepath.Join(dir, "auxblob"))

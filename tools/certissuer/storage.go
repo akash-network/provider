@@ -204,7 +204,7 @@ func NewStorage(log log.Logger, cfg StorageConfig) (Storage, error) {
 	st := &storage{
 		StorageConfig: cfg,
 		rootUserPath:  rootUserPath,
-		log:           log.With("component", "storage"),
+		log:           log.With("module", "cert-issuer-storage"),
 	}
 
 	if err = st.ensureDirStructure(); err != nil {

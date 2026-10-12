@@ -12,6 +12,7 @@ import (
 	tpubsub "github.com/troian/pubsub"
 	"pkg.akt.dev/go/sdkutil"
 
+	"cosmossdk.io/log"
 	sdkmath "cosmossdk.io/math"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -37,6 +38,7 @@ import (
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/logging/logtest"
 )
 
 type orderTestScaffold struct {
@@ -172,6 +174,18 @@ func makeOrderForTest(
 	callerConfig *Config,
 	sessionHeight int64,
 ) (*order, orderTestScaffold, <-chan int) {
+	return makeOrderForTestWithLogger(t, testutil.Logger(t), checkForExistingBid, bidState, pricing, callerConfig, sessionHeight)
+}
+
+func makeOrderForTestWithLogger(
+	t *testing.T,
+	myLog log.Logger,
+	checkForExistingBid bool,
+	bidState mvbeta.Bid_State,
+	pricing BidPricingStrategy,
+	callerConfig *Config,
+	sessionHeight int64,
+) (*order, orderTestScaffold, <-chan int) {
 	if pricing == nil {
 		pricing = testBidPricingStrategy(1)
 		require.NotNil(t, pricing)
@@ -181,8 +195,6 @@ func makeOrderForTest(
 	scaffold.deploymentID = testutil.DeploymentID(t)
 	scaffold.groupID = dtypes.MakeGroupID(scaffold.deploymentID, 2)
 	scaffold.orderID = mtypes.MakeOrderID(scaffold.groupID, 1356326)
-
-	myLog := testutil.Logger(t)
 
 	makeMocks(&scaffold)
 
@@ -556,6 +568,55 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 	scaffold.txClient.AssertCalled(t, "BroadcastMsgs", mock.Anything, expMsgs, mock.Anything)
 }
 
+func Test_BidInUnexpectedStateLogsBidID(t *testing.T) {
+	rec := logtest.New()
+	order, scaffold, _ := makeOrderForTestWithLogger(t, rec, true, mvbeta.BidClosed, nil, nil, testBidCreatedAt)
+
+	testutil.ChannelWaitForClose(t, order.lc.Done())
+
+	require.NotNil(t, scaffold.bidID)
+
+	var found bool
+	for _, e := range rec.Entries() {
+		if e.Msg != "bid in unexpected state" {
+			continue
+		}
+		found = true
+		require.Equal(t, "error", e.Level)
+		require.Equal(t, *scaffold.bidID, e.KV["bid"])
+		require.Equal(t, scaffold.orderID, e.KV["oid"])
+		require.Equal(t, mvbeta.BidClosed, e.KV["bid_state"])
+	}
+	require.True(t, found, "unexpected bid state was not logged")
+}
+
+func Test_BidCloseLogsBidID(t *testing.T) {
+	pricing, err := MakeRandomRangePricing()
+	require.NoError(t, err)
+	cfg := Config{
+		PricingStrategy: pricing,
+		Deposit:         sdk.NewInt64Coin(sdkutil.DenomUakt, 1),
+		BidTimeout:      time.Second,
+	}
+
+	rec := logtest.New()
+	order, scaffold, _ := makeOrderForTestWithLogger(t, rec, true, mvbeta.BidOpen, nil, &cfg, 1)
+
+	testutil.ChannelWaitForClose(t, order.lc.Done())
+
+	bidID := mtypes.MakeBidID(order.orderID, scaffold.testAddr)
+	logged := map[string]bool{}
+	for _, e := range rec.Entries() {
+		if e.Msg == "closing bid" || e.Msg == "bid closed" {
+			logged[e.Msg] = true
+			require.Equal(t, bidID, e.KV["bid"], e.Msg)
+			require.Equal(t, order.orderID, e.KV["oid"], e.Msg)
+		}
+	}
+	require.True(t, logged["closing bid"], "closing bid not logged")
+	require.True(t, logged["bid closed"], "bid closed not logged")
+}
+
 func Test_ShouldExitWhenAlreadySetAndLost(t *testing.T) {
 	pricing, err := MakeRandomRangePricing()
 	require.NoError(t, err)
@@ -705,6 +766,27 @@ func Test_BidOrderFailsAndAborts(t *testing.T) {
 
 	// Should have called unreserve once, nothing happened after the bid
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
+}
+
+func Test_BidOrderPricingFailureLogsUnderlyingError(t *testing.T) {
+	pricing := alwaysFailsBidPricingStrategy{failure: errBidPricingAlwaysFails}
+	rec := logtest.New()
+	order, _, _ := makeOrderForTestWithLogger(t, rec, false, mvbeta.BidStateInvalid, pricing, nil, testBidCreatedAt)
+
+	<-order.lc.Done()
+
+	var found bool
+	for _, e := range rec.Entries() {
+		if e.Msg != "error calculating price" {
+			continue
+		}
+		found = true
+		require.Equal(t, "error", e.Level)
+		err, ok := e.KV["err"].(error)
+		require.True(t, ok, "err must hold the error, got %T", e.KV["err"])
+		require.ErrorIs(t, err, errBidPricingAlwaysFails)
+	}
+	require.True(t, found, "pricing failure was not logged")
 }
 
 func Test_ShouldntBidIfOrderAttrsDontMatch(t *testing.T) {

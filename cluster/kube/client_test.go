@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -789,6 +790,9 @@ func TestServiceStatusStatefulSetDetection(t *testing.T) {
 			m, err := crd.NewManifest(testKubeClientNs, lid, mg, cparams)
 			require.NoError(t, err)
 
+			require.LessOrEqual(t, tc.services[0].Count, uint32(math.MaxInt32))
+			count := int32(tc.services[0].Count) // nolint: gosec // bounds checked above
+
 			// Create the deployment or statefulset
 			var kobjs []runtime.Object
 			kobjs = append(kobjs, lns)
@@ -814,8 +818,8 @@ func TestServiceStatusStatefulSetDetection(t *testing.T) {
 					},
 					Spec: appsv1.DeploymentSpec{},
 					Status: appsv1.DeploymentStatus{
-						AvailableReplicas: int32(tc.services[0].Count),
-						Replicas:          int32(tc.services[0].Count),
+						AvailableReplicas: count,
+						Replicas:          count,
 					},
 				}
 				kobjs = append(kobjs, depl)
@@ -834,8 +838,8 @@ func TestServiceStatusStatefulSetDetection(t *testing.T) {
 				require.Equal(t, int32(1), status.Available)
 				require.Equal(t, int32(1), status.Total)
 			} else {
-				require.Equal(t, int32(tc.services[0].Count), status.Available)
-				require.Equal(t, int32(tc.services[0].Count), status.Total)
+				require.Equal(t, count, status.Available)
+				require.Equal(t, count, status.Total)
 			}
 		})
 	}

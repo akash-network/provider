@@ -42,7 +42,7 @@ func NewServiceDiscoveryAgent(ctx context.Context, logger log.Logger, portName, 
 		requests:        make(chan serviceDiscoveryRequest),
 		pendingRequests: nil,
 		result:          nil,
-		log:             logger.With("cmp", "service-discovery-agent"),
+		log:             logger.With("module", "service-discovery-agent"),
 	}
 	go sda.run()
 
@@ -115,7 +115,7 @@ func (sda *serviceDiscoveryAgent) handleRequest(req serviceDiscoveryRequest) {
 }
 
 func (sda *serviceDiscoveryAgent) setResult(factory clientFactory, err error) {
-	sda.log.Debug("satisfying pending requests", "qty", len(sda.pendingRequests))
+	sda.log.Debug("satisfying pending requests", "count", len(sda.pendingRequests))
 
 	for _, pendingRequest := range sda.pendingRequests {
 		if err == nil {
@@ -228,7 +228,7 @@ func (sda *serviceDiscoveryAgent) discoverDNS() (clientFactory, error) {
 	// FUTURE - try and find a 3rd party API that allows timeouts to be put on this request
 	_, addrs, err := net.LookupSRV(sda.portName, "TCP", fmt.Sprintf("%s.%s.svc.cluster.local", sda.serviceName, sda.namespace))
 	if err != nil {
-		sda.log.Error("dns discovery failed", "err", err, "portName", sda.portName, "service-name", sda.serviceName, "namespace", sda.namespace)
+		sda.log.Error("dns discovery failed", "err", err, "port_name", sda.portName, "service", sda.serviceName, "ns", sda.namespace)
 		return nil, err
 	}
 
@@ -237,7 +237,7 @@ func (sda *serviceDiscoveryAgent) discoverDNS() (clientFactory, error) {
 	for i, addr := range addrs {
 		result[i] = *addr
 	}
-	sda.log.Info("dns discovery success", "addrs", result, "portName", sda.portName, "service-name", sda.serviceName, "namespace", sda.namespace)
+	sda.log.Info("dns discovery success", "addrs", result, "port_name", sda.portName, "service", sda.serviceName, "ns", sda.namespace)
 	// Ignore priority & weight, just make a random selection. This generally has a length of 1
 	// nolint:gosec
 	addrI := rand.Int31n(int32(len(addrs)))

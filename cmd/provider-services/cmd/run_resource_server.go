@@ -74,7 +74,7 @@ var (
 // 	}
 //
 // 	group, ctx := errgroup.WithContext(ctx)
-// 	log := cmdutil.OpenLogger()
+// 	log := ctxlog.LogcFromCtx(ctx)
 //
 // 	resourceServer, err := gwrest.NewResourceServer(ctx, log, gwAddr, cctx.FromAddress, pubkey, lokiGwAddr)
 // 	if err != nil {

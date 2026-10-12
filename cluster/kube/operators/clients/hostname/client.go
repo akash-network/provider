@@ -41,7 +41,7 @@ func NewClient(ctx context.Context, logger log.Logger, endpoint *net.SRV) (chost
 	}
 
 	return &client{
-		log: logger.With("operator", "hostname"),
+		log: logger.With("module", "operator-hostname-client"),
 		sda: sda,
 		l:   &sync.Mutex{},
 	}, nil

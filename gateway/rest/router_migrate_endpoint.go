@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"cosmossdk.io/log"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
 
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 
@@ -47,6 +48,7 @@ func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, clie
 		}
 
 		owner := requestOwner(req)
+		gid := dtypes.GroupID{Owner: owner.String(), DSeq: body.DestinationDSeq, GSeq: body.DestinationGSeq}
 
 		found, leaseID, mgroup, err := clusterService.FindActiveLease(req.Context(),
 			owner,
@@ -54,16 +56,18 @@ func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, clie
 			body.DestinationGSeq)
 
 		if err != nil {
-			log.Error("failed checking if destination deployment exists", "err", err)
+			log.Error("failed checking if destination deployment exists", "gid", gid, "err", err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		if !found {
-			log.Info("destination deployment does not exist", "dseq", body.DestinationDSeq)
+			log.Info("destination deployment does not exist", "gid", gid)
 			http.Error(rw, "destination deployment does not exist", http.StatusBadRequest)
 			return
 		}
+
+		log := log.With("lid", leaseID)
 
 		neededEndpoints := make(map[string]struct{})
 		for _, name := range body.EndpointsToMigrate {
@@ -121,7 +125,7 @@ func migrateEndpointHandler(log log.Logger, clusterService cluster.Service, clie
 				true)
 
 			if err != nil {
-				log.Error("could not re-declare IP as part of endpoint migration", "lease", leaseID, "err", err)
+				log.Error("could not re-declare IP as part of endpoint migration", "err", err)
 				writeClusterError(rw, err)
 				return
 			}

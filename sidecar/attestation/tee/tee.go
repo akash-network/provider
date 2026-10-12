@@ -113,10 +113,10 @@ func maybeWrapWithGPU(cpu Provider) Provider {
 	gpu := &NvidiaGPUAttestor{}
 	info, err := gpu.Probe()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "gpu attestation not available: %v\n", err)
+		logger().Info("gpu attestation not available", "err", err)
 		return cpu
 	}
-	fmt.Fprintf(os.Stderr, "gpu attestation available: %s\n", info)
+	logger().Info("gpu attestation available", "info", info)
 	return &GPUCompositeProvider{CPU: cpu, GPU: gpu}
 }
 

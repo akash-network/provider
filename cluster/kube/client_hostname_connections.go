@@ -83,7 +83,7 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 			ExternalPort: externalPort,
 		}
 	}
-	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)
+	c.log.Info("declaring hostname", "lid", lID, "service", serviceName, "external_port", externalPort, "hostname", host)
 
 	if obj.Annotations == nil {
 		obj.Annotations = make(map[string]string)
@@ -172,7 +172,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 		return nil, err
 	}
 
-	c.log.Info("starting hostname watch", "resourceVersion", lastResourceVersion)
+	c.log.Info("starting hostname watch", "resource_version", lastResourceVersion)
 	watcher, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).Watch(ctx, metav1.ListOptions{
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
@@ -234,12 +234,12 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 				ph := result.Object.(*crd.ProviderHost)
 				ownerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Owner)
 				if err != nil {
-					c.log.Error("invalid owner address in provider host", "addr", ph.Spec.Owner, "err", err)
+					c.log.Error("invalid owner address in provider host", "owner", ph.Spec.Owner, "err", err)
 					continue // Ignore event
 				}
 				providerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Provider)
 				if err != nil {
-					c.log.Error("invalid provider address in provider host", "addr", ph.Spec.Provider, "err", err)
+					c.log.Error("invalid provider address in provider host", "provider", ph.Spec.Provider, "err", err)
 					continue // Ignore event
 				}
 				ev := hostnameResourceEvent{
@@ -263,6 +263,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 
 				case watch.Error:
 					// Based on examination of the implementation code, this is basically never called anyways
+					// logaudit:ignore watch errors concern the watch stream, not a single lease
 					c.log.Error("watch error", "err", result.Object)
 
 				default:
@@ -300,12 +301,12 @@ func (c *client) AllHostnames(ctx context.Context) ([]chostname.ActiveHostname, 
 
 		owner, ok := ph.Labels[builder.AkashLeaseOwnerLabelName]
 		if !ok || len(owner) == 0 {
-			c.log.Error("providerhost missing owner label", "host", hostname)
+			c.log.Error("providerhost missing owner label", "hostname", hostname)
 			return nil
 		}
 		provider, ok := ph.Labels[builder.AkashLeaseProviderLabelName]
 		if !ok || len(provider) == 0 {
-			c.log.Error("providerhost missing provider label", "host", hostname)
+			c.log.Error("providerhost missing provider label", "hostname", hostname)
 			return nil
 		}
 

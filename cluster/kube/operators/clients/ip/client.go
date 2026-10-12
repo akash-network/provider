@@ -49,7 +49,7 @@ func NewClient(ctx context.Context, logger log.Logger, endpoint *net.SRV) (cip.C
 
 	return &client{
 		sda: sda,
-		log: logger.With("operator", "ip"),
+		log: logger.With("module", "operator-ip-client"),
 		l:   &sync.Mutex{},
 	}, nil
 }
@@ -95,18 +95,20 @@ func (ipoc *client) newRequest(ctx context.Context, method string, path string, 
 }
 
 func (ipoc *client) GetIPAddressStatus(ctx context.Context, orderID mtypes.OrderID) ([]cip.LeaseIPStatus, error) {
+	log := ipoc.log.With("oid", orderID)
+
 	path := fmt.Sprintf("ip-lease-status/%s/%d/%d/%d", orderID.GetOwner(), orderID.GetDSeq(), orderID.GetGSeq(), orderID.GetOSeq())
 	req, err := ipoc.newRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	ipoc.log.Debug("asking for IP address status", "method", req.Method, "url", req.URL)
+	log.Debug("asking for IP address status", "method", req.Method, "url", req.URL)
 	response, err := ipoc.client.DoRequest(req)
 	if err != nil {
 		return nil, err
 	}
-	ipoc.log.Debug("ip address status request result", "status", response.StatusCode)
+	log.Debug("ip address status request result", "status", response.StatusCode)
 
 	if response.StatusCode == http.StatusNoContent {
 		return nil, nil // No data for this lease

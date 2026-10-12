@@ -138,7 +138,7 @@ func newInventoryService(
 		reservech:              make(chan inventoryRequest),
 		unreservech:            make(chan inventoryRequest),
 		readych:                make(chan struct{}),
-		log:                    log.With("cmp", "inventory-service"),
+		log:                    log.With("module", "inventory-service"),
 		lc:                     lifecycle.New(),
 		availableExternalPorts: config.InventoryExternalPortQuantity,
 		waiter:                 waiter,
@@ -217,7 +217,7 @@ func (is *inventoryService) reserve(order mtypes.OrderID, resources dtypes.Resou
 		response := <-ch
 		if response.err == nil {
 			cnt := atomic.AddInt64(&is.reservationCount, 1)
-			is.log.Debug("reservation count", "cnt", cnt)
+			is.log.Debug("reservation count", "oid", order, "count", cnt)
 		}
 		return response.value, response.err
 	case <-is.lc.ShuttingDown():
@@ -237,7 +237,7 @@ func (is *inventoryService) unreserve(order mtypes.OrderID) error { // nolint: u
 		response := <-ch
 		if response.err == nil {
 			cnt := atomic.AddInt64(&is.reservationCount, -1)
-			is.log.Debug("reservation count", "cnt", cnt)
+			is.log.Debug("reservation count", "oid", order, "count", cnt)
 		}
 		return response.err
 	case <-is.lc.ShuttingDown():
@@ -539,6 +539,8 @@ func (is *inventoryService) adjustOpts(teeType ctypes.TEEType) []ctypes.Inventor
 }
 
 func (is *inventoryService) handleRequest(req inventoryRequest, state *inventoryServiceState) {
+	log := is.log.With("oid", req.order)
+
 	// convert the resources to the committed amount
 	resourcesToCommit := is.resourcesToCommit(req.resources)
 	// create new registration if capacity available
@@ -546,7 +548,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 
 	{
 		jReservation, _ := json.Marshal(req.resources.GetResourceUnits())
-		is.log.Debug(fmt.Sprintf("reservation requested. order=%s, resources=%s", req.order, jReservation))
+		log.Debug("reservation requested", "resources", string(jReservation))
 	}
 
 	if reservation.endpointQuantity != 0 {
@@ -557,12 +559,12 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 		reserved := countReservedIPs(state)
 		available := availableLeasedIPs(state.ipAddrUsage.Available, state.ipAddrUsage.InUse, reserved)
 		if reservation.endpointQuantity > available {
-			is.log.Info("insufficient number of IP addresses available", "order", req.order)
+			log.Info("insufficient number of IP addresses available")
 			req.ch <- inventoryResponse{err: fmt.Errorf("%w: unable to reserve %d", errInsufficientIPs, reservation.endpointQuantity)}
 			return
 		}
 
-		is.log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in-use", state.ipAddrUsage.InUse, "reserved", reserved, "remaining", available)
+		log.Info("reservation used leased IPs", "used", reservation.endpointQuantity, "available", state.ipAddrUsage.Available, "in_use", state.ipAddrUsage.InUse, "reserved", reserved, "remaining", available)
 	} else {
 		reservation.ipsConfirmed = true // No IPs, just mark it as confirmed implicitly
 	}
@@ -570,7 +572,7 @@ func (is *inventoryService) handleRequest(req inventoryRequest, state *inventory
 	reservation.teeType = teeTypeFromResourceGroup(req.resources)
 	err := state.inventory.Adjust(reservation, is.adjustOpts(reservation.teeType)...)
 	if err != nil {
-		is.log.Info("insufficient capacity for reservation", "order", req.order)
+		log.Info("insufficient capacity for reservation")
 		inventoryRequestsCounter.WithLabelValues("reserve", "insufficient-capacity").Inc()
 		req.ch <- inventoryResponse{err: err}
 		return
@@ -593,7 +595,7 @@ func (is *inventoryService) run(ctx context.Context, reservationsArg []*reservat
 		inventory:    nil,
 		reservations: reservationsArg,
 	}
-	is.log.Info("starting with existing reservations", "qty", len(state.reservations))
+	is.log.Info("starting with existing reservations", "count", len(state.reservations))
 
 	// wait on the operators to be ready
 	err := is.waiter.WaitForAll(ctx)
@@ -642,7 +644,7 @@ loop:
 	for {
 		select {
 		case err := <-is.lc.ShutdownRequest():
-			is.log.Debug("received shutdown request", "error", err)
+			is.log.Debug("received shutdown request", "err", err)
 			is.lc.ShutdownInitiated(err)
 			break loop
 		case ev := <-is.sub.Events():
@@ -669,8 +671,8 @@ loop:
 						}
 
 						is.log.Debug("reservation status update",
-							"order", res.OrderID(),
-							"resource-group", res.Resources().GetName(),
+							"oid", res.OrderID(),
+							"group_name", res.Resources().GetName(),
 							"allocated", res.allocated)
 
 						if currinv != nil {
@@ -707,17 +709,17 @@ loop:
 			inventoryRequestsCounter.WithLabelValues("lookup", "not-found").Inc()
 			req.ch <- inventoryResponse{err: errReservationNotFound}
 		case req := <-is.unreservech:
-			is.log.Debug("unreserving capacity", "order", req.order)
+			is.log.Debug("unreserving capacity", "oid", req.order)
 			// remove reservation
 
-			is.log.Info("attempting to removing reservation", "order", req.order)
+			is.log.Info("attempting to removing reservation", "oid", req.order)
 
 			for idx, res := range state.reservations {
 				if !res.OrderID().Equals(req.order) {
 					continue
 				}
 
-				is.log.Info("removing reservation", "order", res.OrderID())
+				is.log.Info("removing reservation", "oid", res.OrderID())
 
 				state.reservations = append(state.reservations[:idx], state.reservations[idx+1:]...)
 				// reclaim availableExternalPorts if unreserving allocated resources
@@ -726,7 +728,7 @@ loop:
 				}
 
 				req.ch <- inventoryResponse{value: res}
-				is.log.Info("unreserve capacity complete", "order", req.order)
+				is.log.Info("unreserve capacity complete", "oid", req.order)
 				inventoryRequestsCounter.WithLabelValues("unreserve", "destroyed").Inc()
 				continue loop
 			}
@@ -779,14 +781,14 @@ loop:
 			if err == nil {
 				is.log.Debug(fmt.Sprintf("cluster resources dump=%s", string(data)))
 			} else {
-				is.log.Error("unable to dump cluster inventory", "error", err.Error())
+				is.log.Error("unable to dump cluster inventory", "err", err)
 			}
 
 			// readjust inventory accordingly with pending leases
 			for _, r := range state.reservations {
 				if !r.allocated {
 					if err := state.inventory.Adjust(r, is.adjustOpts(r.teeType)...); err != nil {
-						is.log.Error("adjust inventory for pending reservation", "error", err.Error())
+						is.log.Error("adjust inventory for pending reservation", "oid", r.OrderID(), "err", err)
 					}
 				}
 			}
@@ -804,13 +806,13 @@ loop:
 					for i, entry := range state.reservations {
 						if entry.order.Equals(confirmedOrderID) {
 							state.reservations[i].ipsConfirmed = true
-							is.log.Info("confirmed IP allocation", "orderID", confirmedOrderID)
+							is.log.Info("confirmed IP allocation", "oid", confirmedOrderID)
 							break
 						}
 					}
 				}
 			} else {
-				is.log.Error("checking IP addresses", "error", err)
+				is.log.Error("checking IP addresses", "err", err)
 			}
 
 			resumeProcessingReservations()
@@ -884,7 +886,7 @@ func (is *inventoryService) runCheck(ctx context.Context, state *inventoryServic
 			if err != nil {
 				// This error is not really fatal, so don't bail on this entirely. The other results
 				// retrieved in this code are still valid
-				is.log.Error("failed checking IP address usage", "orderID", confirmItem.orderID, "error", err)
+				is.log.Error("failed checking IP address usage", "oid", confirmItem.orderID, "err", err)
 				continue
 			}
 

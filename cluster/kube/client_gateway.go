@@ -29,14 +29,16 @@ func (httpRouteMetricsObserver) OnDelete(err error) {
 var _ gateway.HTTPRouteObserver = httpRouteMetricsObserver{}
 
 func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
+	log := c.log.With("lid", directive.LeaseID)
+
 	routeName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 
-	c.log.Info("creating HTTPRoute via Gateway API",
-		"route-name", routeName,
-		"namespace", ns,
-		"gateway-name", c.gatewayName,
-		"gateway-namespace", c.gatewayNamespace,
+	log.Info("creating HTTPRoute via Gateway API",
+		"route_name", routeName,
+		"ns", ns,
+		"gateway_name", c.gatewayName,
+		"gateway_namespace", c.gatewayNamespace,
 		"implementation", c.gatewayImpl.Name())
 
 	config := gateway.HTTPRouteConfig{

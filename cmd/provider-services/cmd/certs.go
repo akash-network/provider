@@ -387,7 +387,7 @@ func (c *accountQuerier) run() error {
 			if err == nil {
 				cert, err := tls.LoadX509KeyPair(c.cOpts.tlsCertFile, c.cOpts.tlsKeyFile)
 				if err != nil {
-					c.log.Error("loading cert/key pair", "err", err.Error())
+					c.log.Error("loading cert/key pair", "err", err)
 					continue
 				}
 
@@ -409,7 +409,7 @@ func (c *accountQuerier) run() error {
 			if !watching {
 				err = c.watcher.Add(dir)
 				if err != nil {
-					c.log.Error("watching cert dir", "err", err.Error())
+					c.log.Error("watching cert dir", "err", err)
 				}
 			}
 		case evt := <-eventsch:
@@ -417,7 +417,7 @@ func (c *accountQuerier) run() error {
 			case event.LeaseWon:
 				owner, err := sdk.AccAddressFromBech32(ev.LeaseID.Owner)
 				if err != nil {
-					c.log.Error("invalid lease owner address", "owner", ev.LeaseID.Owner, "err", err)
+					c.log.Error("invalid lease owner address", "lid", ev.LeaseID, "err", err)
 					continue
 				}
 				c.accCh <- accReq{
@@ -593,14 +593,14 @@ func (c *accountQuerier) accountQuerier() error {
 				var res *authtypes.QueryAccountResponse
 				res, err = c.qc.Query().Auth().Account(c.ctx, &authtypes.QueryAccountRequest{Address: req.acc.String()})
 				if err != nil {
-					c.log.Error("fetching account info", "err", err.Error(), "account", req.acc.String())
+					c.log.Error("fetching account info", "err", err, "account", req.acc.String())
 				}
 
 				var acc sdk.AccountI
 				if err == nil {
 					err = cctx.InterfaceRegistry.UnpackAny(res.Account, &acc)
 					if err != nil {
-						c.log.Error("unpacking account info", "err", err.Error(), "account", req.acc.String())
+						c.log.Error("unpacking account info", "err", err, "account", req.acc.String())
 					}
 
 					if err == nil {
@@ -669,7 +669,7 @@ loop:
 		for _, lease := range resp.Leases {
 			owner, err := sdk.AccAddressFromBech32(lease.Lease.ID.Owner)
 			if err != nil {
-				c.log.Error("invalid lease owner address", "owner", lease.Lease.ID.Owner, "err", err)
+				c.log.Error("invalid lease owner address", "lid", lease.Lease.ID, "err", err)
 				continue
 			}
 

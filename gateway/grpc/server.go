@@ -146,7 +146,7 @@ func authInterceptor(serverCtx context.Context) grpc.UnaryServerInterceptor {
 		// application-level values that are not present in the per-request gRPC ctx.
 		claims, err := gwutils.AuthProcess(serverCtx, peerCerts, tokString)
 		if err != nil {
-			log.Error("grpc auth failed", "method", info.FullMethod, "error", err)
+			log.Error("grpc auth failed", "method", info.FullMethod, "err", err)
 			return nil, err
 		}
 

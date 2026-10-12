@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/boz/go-lifecycle"
-	"github.com/go-logr/logr"
 	"github.com/spf13/cobra"
 	"github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
@@ -47,11 +46,6 @@ var (
 
 func CmdSetContextValue(cmd *cobra.Command, key, val interface{}) {
 	cmd.SetContext(context.WithValue(cmd.Context(), key, val))
-}
-
-func LogrFromCtx(ctx context.Context) logr.Logger {
-	lg, _ := logr.FromContext(ctx)
-	return lg
 }
 
 func StartupChFromCtx(ctx context.Context) (chan<- struct{}, error) {
