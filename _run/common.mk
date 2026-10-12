@@ -1,6 +1,6 @@
 OPTIONS ?=
 
-SKIP_BUILD := false
+SKIP_BUILD ?= false
 
 # check for nostrip option
 ifneq (,$(findstring nobuild,$(OPTIONS)))

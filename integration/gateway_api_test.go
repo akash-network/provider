@@ -3,10 +3,13 @@
 package integration
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +45,12 @@ var snippetsFilterGVR = schema.GroupVersionResource{
 	Group:    "gateway.nginx.org",
 	Version:  "v1alpha1",
 	Resource: "snippetsfilters",
+}
+
+var gatewayGVR = schema.GroupVersionResource{
+	Group:    "gateway.networking.k8s.io",
+	Version:  "v1",
+	Resource: "gateways",
 }
 
 // E2EGatewayAPI is the test suite for Gateway API integration tests.
@@ -172,6 +181,24 @@ func (s *E2EGatewayAPI) TestE2EGatewayAPIHTTPRouteCreation() {
 
 	s.T().Run("HTTPRoute references SnippetsFilter with http_options", func(t *testing.T) {
 		s.verifyHTTPRouteSnippet(ns, "gateway-test.localhost")
+	})
+
+	s.T().Run("SnippetsFilter accepted by NGF", func(t *testing.T) {
+		s.waitConditionTrue(snippetsFilterGVR, ns, "gateway-test.localhost", "Accepted", ngfControllerConditions)
+	})
+
+	s.T().Run("HTTPRoute accepted and refs resolved", func(t *testing.T) {
+		routeConds := routeParentConditions("akash-gateway", "akash-gateway")
+		s.waitConditionTrue(httpRouteGVR, ns, "gateway-test.localhost", "Accepted", routeConds)
+		s.waitConditionTrue(httpRouteGVR, ns, "gateway-test.localhost", "ResolvedRefs", routeConds)
+	})
+
+	s.T().Run("Gateway programmed", func(t *testing.T) {
+		s.waitConditionTrue(gatewayGVR, "akash-gateway", "akash-gateway", "Programmed", gatewayConditions)
+	})
+
+	s.T().Run("body-size limit enforced end-to-end", func(t *testing.T) {
+		s.verifyBodySizeLimit("gateway-test.localhost", 2097152)
 	})
 
 	// Verify provider status
@@ -473,6 +500,130 @@ func (s *E2EGatewayAPI) verifyHTTPRouteSnippet(namespace, routeName string) {
 	} {
 		assert.Contains(s.T(), value, want, "snippet should contain %q", want)
 	}
+}
+
+// waitConditionTrue polls the resource until the status entry selected by conds
+// reports a condition of the given type with status True. conds scopes the check
+// to the owning entry: Gateway resource-level conditions (not listener-level),
+// the HTTPRoute status parent for a specific parentRef, or the SnippetsFilter
+// status entry of the controller that wrote it.
+func (s *E2EGatewayAPI) waitConditionTrue(gvr schema.GroupVersionResource, namespace, name, condType string, conds func(status map[string]interface{}) []interface{}) {
+	if s.dc == nil {
+		s.T().Skip("dynamic client not available")
+		return
+	}
+	require.Eventually(s.T(), func() bool {
+		obj, err := s.dc.Resource(gvr).Namespace(namespace).Get(s.ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return false
+		}
+		status, ok := obj.Object["status"].(map[string]interface{})
+		if !ok {
+			return false
+		}
+		return conditionsTrue(conds(status), condType)
+	}, 90*time.Second, 2*time.Second, "%s %q should report %s=True", gvr.Resource, name, condType)
+}
+
+// gatewayConditions returns a Gateway's resource-level conditions, ignoring
+// listener-level conditions.
+func gatewayConditions(status map[string]interface{}) []interface{} {
+	conds, _ := status["conditions"].([]interface{})
+	return conds
+}
+
+// routeParentConditions returns the conditions of the HTTPRoute status parent
+// bound to the given Gateway.
+func routeParentConditions(gatewayName, gatewayNamespace string) func(status map[string]interface{}) []interface{} {
+	return func(status map[string]interface{}) []interface{} {
+		parents, _ := status["parents"].([]interface{})
+		for _, p := range parents {
+			pm, ok := p.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			ref, _ := pm["parentRef"].(map[string]interface{})
+			if name, _ := ref["name"].(string); name != gatewayName {
+				continue
+			}
+			if ns, _ := ref["namespace"].(string); ns != gatewayNamespace {
+				continue
+			}
+			conds, _ := pm["conditions"].([]interface{})
+			return conds
+		}
+		return nil
+	}
+}
+
+// ngfControllerConditions returns the conditions a SnippetsFilter carries for
+// the NGF controller, matched by its controllerName.
+func ngfControllerConditions(status map[string]interface{}) []interface{} {
+	controllers, _ := status["controllers"].([]interface{})
+	for _, c := range controllers {
+		cm, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if name, _ := cm["controllerName"].(string); strings.HasPrefix(name, "gateway.nginx.org") {
+			conds, _ := cm["conditions"].([]interface{})
+			return conds
+		}
+	}
+	return nil
+}
+
+// conditionsTrue reports whether conds contains a condition of condType with
+// status True.
+func conditionsTrue(conds []interface{}, condType string) bool {
+	for _, c := range conds {
+		cm, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if ct, _ := cm["type"].(string); ct == condType {
+			if cs, _ := cm["status"].(string); cs == "True" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// verifyBodySizeLimit drives the deployed route through the gateway data plane and
+// asserts client_max_body_size is enforced: a request body over the limit is
+// rejected with 413 while the route otherwise serves 200. This exercises a real
+// http_option end to end, not just the rendered directive.
+func (s *E2EGatewayAPI) verifyBodySizeLimit(hostname string, maxBodySize int) {
+	host, port := appEnv(s.T())
+	appURL := fmt.Sprintf("http://%s:%s/", host, port)
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// Wait for the data plane to program the route and serve it.
+	require.Eventually(s.T(), func() bool {
+		req, err := http.NewRequest(http.MethodGet, appURL, nil)
+		if err != nil {
+			return false
+		}
+		req.Host = hostname
+		resp, err := client.Do(req)
+		if err != nil {
+			return false
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode == http.StatusOK
+	}, 120*time.Second, 2*time.Second, "route %s should serve 200 through the gateway", hostname)
+
+	// A body over max_body_size must be rejected by nginx before it reaches the backend.
+	oversized := bytes.Repeat([]byte("a"), maxBodySize+1024)
+	req, err := http.NewRequest(http.MethodPost, appURL, bytes.NewReader(oversized))
+	require.NoError(s.T(), err)
+	req.Host = hostname
+	resp, err := client.Do(req)
+	require.NoError(s.T(), err)
+	defer resp.Body.Close()
+	assert.Equal(s.T(), http.StatusRequestEntityTooLarge, resp.StatusCode,
+		"a body over max_body_size (%d) must be rejected with 413", maxBodySize)
 }
 
 // TestGatewayAPISuite runs the Gateway API e2e test suite
