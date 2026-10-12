@@ -24,7 +24,7 @@ func BuildStatefulSet(workload *Workload) StatefulSet {
 		Workload: workload,
 	}
 
-	ss.log = ss.log.With("object", "statefulset", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "statefulset", "service", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }

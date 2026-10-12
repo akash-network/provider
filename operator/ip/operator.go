@@ -64,7 +64,7 @@ type ipOperator struct {
 }
 
 func (op *ipOperator) monitorUntilError(ctx context.Context) error {
-	op.log.Info("associated provider ", "addr", op.cfg.ProviderAddress)
+	op.log.Info("associated provider ", "provider", op.cfg.ProviderAddress)
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -210,7 +210,7 @@ func (op *ipOperator) updateCounts(parentCtx context.Context) error {
 	op.available = available
 
 	op.flagUsage()
-	op.log.Info("ip address inventory", "in-use", op.inUse, "available", op.available)
+	op.log.Info("ip address inventory", "in_use", op.inUse, "available", op.available)
 	return nil
 }
 
@@ -226,20 +226,20 @@ func (op *ipOperator) recordEventError(ev cip.ResourceEvent, failure error) {
 		return
 	}
 
-	op.log.Info("recording error for", "lease", ev.GetLeaseID().String(), "err", failure)
+	op.log.Info("recording error for", "lid", ev.GetLeaseID(), "err", failure)
 	op.leasesIgnored.AddError(ev.GetLeaseID(), failure, ev.GetSharingKey())
 	op.flagIgnoredLeases()
 }
 
 func (op *ipOperator) applyEvent(ctx context.Context, ev cip.ResourceEvent) error {
-	op.log.Debug("apply event", "event-type", ev.GetEventType(), "lease", ev.GetLeaseID())
+	op.log.Debug("apply event", "event_type", ev.GetEventType(), "lid", ev.GetLeaseID())
 	switch ev.GetEventType() {
 	case ctypes.ProviderResourceDelete:
 		// note that on delete the resource might be gone anyway because the namespace is deleted
 		return op.applyDeleteEvent(ctx, ev)
 	case ctypes.ProviderResourceAdd, ctypes.ProviderResourceUpdate:
 		if op.leasesIgnored.IsFlagged(ev.GetLeaseID()) {
-			op.log.Info("ignoring event for", "lease", ev.GetLeaseID().String())
+			op.log.Info("ignoring event for", "lid", ev.GetLeaseID())
 			return nil
 		}
 		err := op.applyAddOrUpdateEvent(ctx, ev)
@@ -292,9 +292,9 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev cip.Resource
 	uid := getStateKey(ev.GetLeaseID(), ev.GetSharingKey(), ev.GetExternalPort())
 
 	op.log.Info("connecting",
-		"lease", leaseID,
+		"lid", leaseID,
 		"service", ev.GetServiceName(),
-		"externalPort", ev.GetExternalPort())
+		"external_port", ev.GetExternalPort())
 	entry, exists := op.state[uid]
 
 	isSameLease := true
@@ -310,7 +310,7 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev cip.Resource
 	if isSameLease {
 		if !exists {
 			shouldConnect = true
-			op.log.Debug("ip passthrough is new, applying", "lease", leaseID)
+			op.log.Debug("ip passthrough is new, applying", "lid", leaseID)
 			// Check to see if port or service name is different
 		} else {
 			hasChanged := entry.presentServiceName != ev.GetServiceName() ||
@@ -320,12 +320,12 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev cip.Resource
 				entry.presentProtocol != ev.GetProtocol()
 			if hasChanged {
 				shouldConnect = true
-				op.log.Debug("ip passthrough has changed, applying", "lease", leaseID)
+				op.log.Debug("ip passthrough has changed, applying", "lid", leaseID)
 			}
 		}
 
 		if shouldConnect {
-			op.log.Debug("Updating ip passthrough", "lease", leaseID)
+			op.log.Debug("Updating ip passthrough", "lid", leaseID)
 			err = op.mllbc.CreateIPPassthrough(ctx, directive)
 		}
 	} else {
@@ -369,7 +369,7 @@ func (op *ipOperator) applyAddOrUpdateEvent(ctx context.Context, ev cip.Resource
 	op.state[uid] = entry
 	op.flagState()
 
-	op.log.Info("update complete", "lease", leaseID)
+	op.log.Info("update complete", "lid", leaseID)
 
 	return nil
 }
@@ -556,18 +556,18 @@ func handleIPLeaseStatusGet(op *ipOperator, rw http.ResponseWriter, req *http.Re
 
 	ipStatus, err := op.mllbc.GetIPAddressStatusForLease(req.Context(), leaseID)
 	if err != nil {
-		op.log.Error("Could not get IP address status", "lease-id", leaseID, "err", err)
+		op.log.Error("Could not get IP address status", "lid", leaseID, "err", err)
 		handleHTTPError(op, rw, req, err, http.StatusInternalServerError)
 		return
 	}
 
 	if len(ipStatus) == 0 {
-		op.log.Debug("no IP address to status for lease", "lease-id", leaseID)
+		op.log.Debug("no IP address to status for lease", "lid", leaseID)
 		rw.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	op.log.Debug("retrieved IP address status for lease", "lease-id", leaseID, "quantity", len(ipStatus))
+	op.log.Debug("retrieved IP address status for lease", "lid", leaseID, "count", len(ipStatus))
 
 	rw.WriteHeader(http.StatusOK)
 	encoder := json.NewEncoder(rw)
@@ -660,7 +660,7 @@ func (op *ipOperator) DeclareIP(ctx context.Context, lID mtypes.LeaseID, service
 	// case it is the bech32 address, or a derivative thereof
 	resourceName := strings.ToLower(fmt.Sprintf("%s-%s-%d", sharingKey, proto.ToString(), externalPort))
 
-	op.log.Debug("checking for resource", "resource-name", resourceName)
+	op.log.Debug("checking for resource", "resource_name", resourceName)
 	foundEntry, err := op.ac.AkashV2beta2().ProviderLeasedIPs(op.ns).Get(ctx, resourceName, metav1.GetOptions{})
 	exists := true
 	if err != nil {
@@ -697,11 +697,11 @@ func (op *ipOperator) DeclareIP(ctx context.Context, lID mtypes.LeaseID, service
 		},
 	}
 
-	op.log.Info("declaring leased ip", "lease", lID,
-		"service-name", serviceName,
+	op.log.Info("declaring leased ip", "lid", lID,
+		"service", serviceName,
 		"port", port,
-		"external-port", externalPort,
-		"sharing-key", sharingKey,
+		"external_port", externalPort,
+		"sharing_key", sharingKey,
 		"exists", exists)
 	// Create or update the entry
 	if exists {
@@ -753,7 +753,7 @@ func (op *ipOperator) DetectPoolChanges(ctx context.Context) (<-chan struct{}, e
 					return
 				}
 				// Do not log the whole event, it is too verbose
-				op.log.Debug("metal LB config change event", "event-type", ev.Type)
+				op.log.Debug("metal LB config change event", "event_type", ev.Type)
 				output <- struct{}{}
 			}
 		}
@@ -784,7 +784,7 @@ func (op *ipOperator) observeIPState(ctx context.Context) (<-chan cip.ResourceEv
 		return nil, err
 	}
 
-	op.log.Info("starting ip passthrough watch", "resourceVersion", lastResourceVersion)
+	op.log.Info("starting ip passthrough watch", "resource_version", lastResourceVersion)
 	watcher, err := op.ac.AkashV2beta2().ProviderLeasedIPs(op.ns).Watch(ctx, metav1.ListOptions{
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
@@ -857,12 +857,12 @@ func (op *ipOperator) observeIPState(ctx context.Context) (<-chan cip.ResourceEv
 				plip := result.Object.(*akashtypes.ProviderLeasedIP)
 				ownerAddr, err := sdktypes.AccAddressFromBech32(plip.Spec.LeaseID.Owner)
 				if err != nil {
-					op.log.Error("invalid owner address in provider host", "addr", plip.Spec.LeaseID.Owner, "err", err)
+					op.log.Error("invalid owner address in provider host", "owner", plip.Spec.LeaseID.Owner, "err", err)
 					continue // Ignore event
 				}
 				providerAddr, err := sdktypes.AccAddressFromBech32(plip.Spec.LeaseID.Provider)
 				if err != nil {
-					op.log.Error("invalid provider address in provider host", "addr", plip.Spec.LeaseID.Provider, "err", err)
+					op.log.Error("invalid provider address in provider host", "provider", plip.Spec.LeaseID.Provider, "err", err)
 					continue // Ignore event
 				}
 				leaseID, err := plip.Spec.LeaseID.FromCRD()

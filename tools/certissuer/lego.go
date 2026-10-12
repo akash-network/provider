@@ -252,7 +252,7 @@ func (ci *certIssuer) run() error {
 	var err error
 	defer func() {
 		if err != nil {
-			ci.log.Error("finished with error", "err", err.Error())
+			ci.log.Error("finished with error", "err", err)
 		}
 	}()
 
@@ -273,7 +273,7 @@ func (ci *certIssuer) run() error {
 					break
 				}
 				if err != nil {
-					ci.log.Error(fmt.Sprintf("failed to obtain certificate for %s", domain), "err", err.Error())
+					ci.log.Error(fmt.Sprintf("failed to obtain certificate for %s", domain), "err", err)
 
 					select {
 					case <-ci.ctx.Done():
@@ -303,7 +303,7 @@ func (ci *certIssuer) run() error {
 				cert:     cert,
 			})
 		} else {
-			ci.log.Error(fmt.Sprintf("unable to obtain certificate for %s after 5 retries. giving up. provider will not check this certificate until next restart", domain), "err", err.Error())
+			ci.log.Error(fmt.Sprintf("unable to obtain certificate for %s after 5 retries. giving up. provider will not check this certificate until next restart", domain), "err", err)
 		}
 	}
 

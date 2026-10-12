@@ -207,7 +207,7 @@ func (c *client) GetIPAddressUsage(ctx context.Context) (uint, uint, error) {
 		if len(poolsFound) == 0 {
 			c.log.Debug("no pools configured on Metal LB")
 		} else {
-			c.log.Debug("pools configured on Metal LB, but none matching", "configured-pool-name", c.poolName, "quantity-configured", len(poolsFound))
+			c.log.Debug("pools configured on Metal LB, but none matching", "configured_pool_name", c.poolName, "count_configured", len(poolsFound))
 		}
 	}
 
@@ -272,7 +272,7 @@ func (c *client) GetIPAddressStatusForLease(ctx context.Context, leaseID mtypes.
 
 			loadBalancerIngress := service.Status.LoadBalancer.Ingress
 			// Logs something like this : │ load balancer status                         cmp=provider client=kube service=web-ip-80-tcp lb-ingress="[{IP:24.0.0.1 Hostname: Ports:[]}]"
-			c.log.Debug("load balancer status", "service", service.Name, "lb-ingress", loadBalancerIngress)
+			c.log.Debug("load balancer status", "service", service.Name, "lb_ingress", loadBalancerIngress)
 
 			// There is no mechanism that would assign more than one IP to a single service entry
 			if len(loadBalancerIngress) != 1 {
@@ -397,8 +397,8 @@ func (c *client) CreateIPPassthrough(ctx context.Context, directive cip.ClusterI
 	c.log.Debug("creating metal-lb service",
 		"service", directive.ServiceName,
 		"port", directive.Port,
-		"external-port", directive.ExternalPort,
-		"sharing-key", directive.SharingKey,
+		"external_port", directive.ExternalPort,
+		"sharing_key", directive.SharingKey,
 		"exists", exists)
 	if exists {
 		svc.ResourceVersion = foundEntry.ResourceVersion
@@ -514,7 +514,7 @@ func (c *client) DetectPoolChanges(ctx context.Context) (<-chan struct{}, error)
 					return
 				}
 				// Do not log the whole event, it is too verbose
-				c.log.Debug("metal LB config change event", "event-type", ev.Type)
+				c.log.Debug("metal LB config change event", "event_type", ev.Type)
 				output <- struct{}{}
 			}
 		}

@@ -2,15 +2,10 @@ package operator
 
 import (
 	"context"
-	"time"
 
-	"github.com/go-logr/logr"
-	"github.com/go-logr/zapr"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/troian/pubsub"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/client-go/kubernetes"
 
@@ -22,6 +17,7 @@ import (
 	"github.com/akash-network/provider/operator/ip"
 	akashclientset "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/logging"
 )
 
 func OperatorsCmd() *cobra.Command {
@@ -30,16 +26,15 @@ func OperatorsCmd() *cobra.Command {
 		Short:        "kubernetes operators control",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			zconf := zap.NewDevelopmentConfig()
-			zconf.DisableCaller = true
-			zconf.DisableStacktrace = true
-			zconf.EncoderConfig.EncodeTime = func(time.Time, zapcore.PrimitiveArrayEncoder) {}
+			if _, err := logging.Setup(cmd); err != nil {
+				return err
+			}
 
-			zapLog, _ := zconf.Build()
+			// cancelled by withLifecycle when the operator subcommand returns
+			rctx, rcancel := context.WithCancel(cmd.Context())
+			group, ctx := errgroup.WithContext(rctx)
 
-			group, ctx := errgroup.WithContext(cmd.Context())
-
-			cmd.SetContext(logr.NewContext(ctx, zapr.NewLogger(zapLog)))
+			cmd.SetContext(context.WithValue(ctx, runCancelKey{}, rcancel))
 
 			kubecfg, err := fromctx.KubeConfigFromCtx(cmd.Context())
 			if err != nil {
@@ -111,9 +106,9 @@ func OperatorsCmd() *cobra.Command {
 		panic(err)
 	}
 
-	cmd.AddCommand(inventory.Cmd())
-	cmd.AddCommand(ip.Cmd())
-	cmd.AddCommand(hostname.Cmd())
+	cmd.AddCommand(withLifecycle(inventory.Cmd()))
+	cmd.AddCommand(withLifecycle(ip.Cmd()))
+	cmd.AddCommand(withLifecycle(hostname.Cmd()))
 
 	return cmd
 }

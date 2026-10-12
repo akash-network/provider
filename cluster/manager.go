@@ -87,7 +87,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 	lid := deployment.LeaseID()
 	mgroup := deployment.ManifestGroup()
 
-	logger := s.log.With("cmp", "deployment-manager", "lease", lid, "manifest-group", mgroup.GetName())
+	logger := s.log.With("module", "deployment-manager", "lid", lid, "group_name", mgroup.GetName())
 
 	dm := &deploymentManager{
 		bus:                 s.bus,
@@ -110,7 +110,7 @@ func newDeploymentManager(s *service, deployment ctypes.IDeployment, isNewLease 
 
 	err := s.bus.Publish(event.LeaseAddFundsMonitor{LeaseID: lid, IsNewLease: isNewLease})
 	if err != nil {
-		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lease", lid)
+		s.log.Error("unable to publish LeaseAddFundsMonitor event", "err", err, "lid", lid)
 	}
 
 	// Register monitoring before recovery can discover a closed lease and
@@ -401,12 +401,12 @@ func (dm *deploymentManager) startDeploy(ctx context.Context) <-chan error {
 
 		if len(hostnames) != 0 {
 			// Some hostnames have been withheld
-			dm.log.Info("hostnames withheld from deployment", "cnt", len(hostnames), "lease", dm.deployment.LeaseID())
+			dm.log.Info("hostnames withheld from deployment", "count", len(hostnames), "lid", dm.deployment.LeaseID())
 		}
 
 		if len(endpoints) != 0 {
 			// Some endpoints have been withheld
-			dm.log.Info("endpoints withheld from deployment", "cnt", len(endpoints), "lease", dm.deployment.LeaseID())
+			dm.log.Info("endpoints withheld from deployment", "count", len(endpoints), "lid", dm.deployment.LeaseID())
 		}
 
 		groupCopy := *dm.deployment.ManifestGroup()
@@ -484,7 +484,7 @@ func (dm *deploymentManager) doDeploy(pctx context.Context) ([]string, []string,
 	}
 	deploymentCounter.WithLabelValues("reserve-hostnames", "success").Inc()
 
-	dm.log.Info("hostnames withheld", "cnt", len(withheldHostnames))
+	dm.log.Info("hostnames withheld", "count", len(withheldHostnames))
 
 	hostnamesInThisRequest := make(map[string]struct{})
 	for _, hostname := range allHostnames {
@@ -509,7 +509,7 @@ func (dm *deploymentManager) doDeploy(pctx context.Context) ([]string, []string,
 	}
 	deploymentCounter.WithLabelValues("deploy", label).Inc()
 	if err != nil {
-		dm.log.Error("deploying workload", "err", err.Error())
+		dm.log.Error("deploying workload", "err", err)
 		return nil, nil, err
 	}
 
@@ -711,7 +711,7 @@ func (dm *deploymentManager) attemptReclaimClose(ctx context.Context, deadline i
 
 	syncInfo, err := dm.session.Client().Node().SyncInfo(sctx)
 	if err != nil {
-		dm.log.Info("reclaim close sync info", "lease", dm.deployment.LeaseID(), "err", err)
+		dm.log.Info("reclaim close sync info", "lid", dm.deployment.LeaseID(), "err", err)
 		return false, dm.config.ReclamationCloseRetryInterval
 	}
 	// The chain gates the close on block time, which lags wall-clock while the node is
@@ -733,11 +733,11 @@ func (dm *deploymentManager) attemptReclaimClose(ctx context.Context, deadline i
 	defer cancel()
 
 	if _, err := dm.session.Client().Tx().BroadcastMsgs(bctx, []sdk.Msg{msg}, aclient.WithResultCodeAsError()); err != nil {
-		dm.log.Info("reclaimed lease close rejected", "lease", dm.deployment.LeaseID(), "err", err)
+		dm.log.Info("reclaimed lease close rejected", "lid", dm.deployment.LeaseID(), "err", err)
 		return false, dm.config.ReclamationCloseRetryInterval
 	}
 
-	dm.log.Info("closed reclaimed lease", "lease", dm.deployment.LeaseID())
+	dm.log.Info("closed reclaimed lease", "lid", dm.deployment.LeaseID())
 	return true, 0
 }
 

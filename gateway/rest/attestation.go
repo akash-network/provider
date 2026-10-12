@@ -37,7 +37,7 @@ func createAttestationQuoteHandler(log log.Logger, cclient cluster.Client) http.
 			podIndex = uint(idx)
 		}
 
-		log.Debug("attestation quote request", "lease", leaseID.String(), "service", service, "podIndex", podIndex)
+		log.Debug("attestation quote request", "lid", leaseID, "service", service, "pod_index", podIndex)
 
 		body, err := io.ReadAll(io.LimitReader(r.Body, 4096))
 		if err != nil {
@@ -47,7 +47,7 @@ func createAttestationQuoteHandler(log log.Logger, cclient cluster.Client) http.
 
 		respBody, statusCode, err := cclient.AttestationQuote(r.Context(), leaseID, service, podIndex, body)
 		if err != nil {
-			log.Error("attestation quote failed", "err", err, "lease", leaseID.String())
+			log.Error("attestation quote failed", "err", err, "lid", leaseID)
 			http.Error(w, fmt.Sprintf("attestation quote failed: %v", err), statusCode)
 			return
 		}

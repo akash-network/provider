@@ -36,6 +36,11 @@ configMapGenerator:
   - name: provider-config
     literals:
       - AP_CLUSTER_K8S=true
+      # logging, see _docs/logging.md
+      # - AP_LOG_FORMAT=json
+      # - AP_LOG_LEVEL=info
+      # - AP_LOG_COLOR=false
+      # - AP_LOG_TIMESTAMP=rfc3339
       # - AP_INGRESS_STATIC_HOSTS=false
       # - AP_INGRESS_DOMAIN=
       # - AP_INGRESS_EXPOSE_LB_HOSTS=false

@@ -59,6 +59,6 @@ func GetServiceEndpointFlagValue(logger log.Logger, serviceName string) (*net.SR
 		Weight:   0,
 	}
 
-	logger.Debug("using manually configured endpoint", "service", serviceName, "host", result.Target, "port", result.Port)
+	logger.Debug("using manually configured endpoint", "service", serviceName, "hostname", result.Target, "port", result.Port)
 	return &result, nil
 }

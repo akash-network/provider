@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -28,7 +29,7 @@ func Cmd() *cobra.Command {
 
 			config := common.GetOperatorConfigFromViper()
 
-			logger := common.OpenLogger().With("op", "hostname")
+			logger := ctxlog.LogcFromCtx(ctx).With("module", "operator-hostname")
 
 			ctx, err := withGatewayApi(ctx)
 			if err != nil {
@@ -37,10 +38,10 @@ func Cmd() *cobra.Command {
 
 			gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
 			logger.Info("hostname operator configuration",
-				"ingress-mode", gwCfg.IngressMode,
-				"gateway-name", gwCfg.Name,
-				"gateway-namespace", gwCfg.Namespace,
-				"gateway-provider", gwCfg.Provider)
+				"ingress_mode", gwCfg.IngressMode,
+				"gateway_name", gwCfg.Name,
+				"gateway_namespace", gwCfg.Namespace,
+				"gateway_provider", gwCfg.Provider)
 
 			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {
@@ -62,8 +63,8 @@ func Cmd() *cobra.Command {
 			srv := http.Server{Addr: restAddr, Handler: router}
 
 			group.Go(func() error {
-				logger.Info("HTTP listening", "address", restAddr)
-				return srv.ListenAndServe()
+				logger.Info("HTTP listening", "listen_addr", restAddr)
+				return common.ListenAndServe(&srv)
 			})
 
 			group.Go(func() error {

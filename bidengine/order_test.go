@@ -12,6 +12,7 @@ import (
 	tpubsub "github.com/troian/pubsub"
 	"pkg.akt.dev/go/sdkutil"
 
+	"cosmossdk.io/log"
 	sdkmath "cosmossdk.io/math"
 	sdkclient "github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -37,6 +38,7 @@ import (
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/logging/logtest"
 )
 
 type orderTestScaffold struct {
@@ -172,6 +174,18 @@ func makeOrderForTest(
 	callerConfig *Config,
 	sessionHeight int64,
 ) (*order, orderTestScaffold, <-chan int) {
+	return makeOrderForTestWithLogger(t, testutil.Logger(t), checkForExistingBid, bidState, pricing, callerConfig, sessionHeight)
+}
+
+func makeOrderForTestWithLogger(
+	t *testing.T,
+	myLog log.Logger,
+	checkForExistingBid bool,
+	bidState mvbeta.Bid_State,
+	pricing BidPricingStrategy,
+	callerConfig *Config,
+	sessionHeight int64,
+) (*order, orderTestScaffold, <-chan int) {
 	if pricing == nil {
 		pricing = testBidPricingStrategy(1)
 		require.NotNil(t, pricing)
@@ -181,8 +195,6 @@ func makeOrderForTest(
 	scaffold.deploymentID = testutil.DeploymentID(t)
 	scaffold.groupID = dtypes.MakeGroupID(scaffold.deploymentID, 2)
 	scaffold.orderID = mtypes.MakeOrderID(scaffold.groupID, 1356326)
-
-	myLog := testutil.Logger(t)
 
 	makeMocks(&scaffold)
 
@@ -705,6 +717,27 @@ func Test_BidOrderFailsAndAborts(t *testing.T) {
 
 	// Should have called unreserve once, nothing happened after the bid
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
+}
+
+func Test_BidOrderPricingFailureLogsUnderlyingError(t *testing.T) {
+	pricing := alwaysFailsBidPricingStrategy{failure: errBidPricingAlwaysFails}
+	rec := logtest.New()
+	order, _, _ := makeOrderForTestWithLogger(t, rec, false, mvbeta.BidStateInvalid, pricing, nil, testBidCreatedAt)
+
+	<-order.lc.Done()
+
+	var found bool
+	for _, e := range rec.Entries() {
+		if e.Msg != "error calculating price" {
+			continue
+		}
+		found = true
+		require.Equal(t, "error", e.Level)
+		err, ok := e.KV["err"].(error)
+		require.True(t, ok, "err must hold the error, got %T", e.KV["err"])
+		require.ErrorIs(t, err, errBidPricingAlwaysFails)
+	}
+	require.True(t, found, "pricing failure was not logged")
 }
 
 func Test_ShouldntBidIfOrderAttrsDontMatch(t *testing.T) {

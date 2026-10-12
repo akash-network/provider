@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/go-logr/logr"
+	"cosmossdk.io/log"
 	"github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )
@@ -36,7 +37,7 @@ type clusterNodes struct {
 	querierNodes
 	ctx        context.Context
 	group      *errgroup.Group
-	log        logr.Logger
+	log        log.Logger
 	kc         kubernetes.Interface
 	signaldone chan string
 	image      string
@@ -46,14 +47,14 @@ type clusterNodes struct {
 func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes {
 	kc := fromctx.MustKubeClientFromCtx(ctx)
 
-	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.nodes")
 
 	group, ctx := errgroup.WithContext(ctx)
 
 	fd := &clusterNodes{
 		querierNodes: newQuerierNodes(),
 		log:          log,
-		ctx:          logr.NewContext(ctx, log),
+		ctx:          ctxlog.WithLogger(ctx, log),
 		group:        group,
 		kc:           kc,
 		signaldone:   make(chan string, 1),
@@ -79,7 +80,7 @@ func newClusterNodes(ctx context.Context, image, namespace string) *clusterNodes
 }
 
 func (cl *clusterNodes) Wait() error {
-	log := fromctx.LogrFromCtx(cl.ctx).WithName("nodes")
+	log := ctxlog.LogcFromCtx(cl.ctx).With("module", "operator-inventory.nodes")
 
 	log.Info("waiting for nodes to finish")
 	err := cl.group.Wait()
@@ -91,7 +92,7 @@ func (cl *clusterNodes) Wait() error {
 func (cl *clusterNodes) connector() error {
 	ctx := cl.ctx
 	bus := fromctx.MustPubSubFromCtx(ctx)
-	log := fromctx.LogrFromCtx(ctx).WithName("nodes")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.nodes")
 
 	events := bus.Sub(topicKubeNodes)
 	nodes := make(map[string]*nodeDiscovery)
@@ -137,7 +138,7 @@ func (cl *clusterNodes) connector() error {
 
 				err := node.shutdown()
 				if err != nil && !errors.Is(err, context.Canceled) {
-					log.Error(err, fmt.Sprintf("\"%s\" exited with error. attempting restart", name))
+					log.Error(fmt.Sprintf("\"%s\" exited with error. attempting restart", name), "err", err)
 				}
 			}
 			nodes[name] = newNodeDiscovery(nctx, name, cl.namespace, cl.image, cl.signaldone)

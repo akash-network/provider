@@ -64,6 +64,7 @@ import (
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/certissuer"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/logging"
 	"github.com/akash-network/provider/tools/pconfig"
 	"github.com/akash-network/provider/tools/pconfig/bbolt"
 	"github.com/akash-network/provider/tools/pconfig/memory"
@@ -257,7 +258,7 @@ func RunCmd() *cobra.Command {
 					return err
 				}
 			default:
-				return fmt.Errorf("unsupport persistent-config backend \"%s\"", pconfigBackend)
+				return fmt.Errorf("unsupported persistent-config backend \"%s\"", pconfigBackend)
 			}
 
 			if err := clientcommon.SetKubeConfigToCmd(cmd); err != nil {
@@ -281,9 +282,9 @@ func RunCmd() *cobra.Command {
 				return err
 			}
 
-			logger := log.NewLogger(os.Stderr)
+			logger := ctxlog.LogcFromCtx(cmd.Context())
 
-			kubeLog := logger.With("component", "k8s")
+			kubeLog := logger.With("module", "k8s")
 
 			// ideally following instantiation shall be placed within init function.
 			// however, the goal here to log under provider's context
@@ -293,7 +294,7 @@ func RunCmd() *cobra.Command {
 						return
 					}
 
-					kubeLog.Error(msg, "err", err, keysAndValues)
+					kubeLog.Error(msg, append([]any{"err", err}, keysAndValues...)...)
 				},
 			}
 
@@ -345,7 +346,6 @@ func RunCmd() *cobra.Command {
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyStartupCh, (chan<- struct{})(startupch))
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyErrGroup, group)
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyLogc, logger)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyAkashClientSet, ac)
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyPersistentConfig, pstorage)
@@ -617,10 +617,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	logger.Info("provider ingress configuration",
-		"ingress-mode", ingressMode,
-		"gateway-name", gatewayName,
-		"gateway-namespace", gatewayNamespace,
-		"gateway-provider", gatewayProvider)
+		"ingress_mode", ingressMode,
+		"gateway_name", gatewayName,
+		"gateway_namespace", gatewayNamespace,
+		"gateway_provider", gatewayProvider)
 
 	if ingressMode == builder.IngressModeGateway {
 		if gatewayName == "" {
@@ -892,13 +892,17 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 		webhookLog := logger.With("module", "attestation-webhook")
 
-		var sidecarEnv []corev1.EnvVar
-		if viper.GetBool(FlagAttestationMockMode) {
+		mockMode := viper.GetBool(FlagAttestationMockMode)
+		if mockMode {
 			webhookLog.Info("attestation mock mode enabled — sidecar will produce synthetic reports")
-			sidecarEnv = append(sidecarEnv, corev1.EnvVar{
-				Name: "ATTESTATION_MOCK", Value: "true",
-			})
 		}
+
+		logCfg, ok := logging.ConfigFromCtx(cmd.Context())
+		if !ok {
+			logCfg = logging.DefaultConfig()
+		}
+
+		sidecarEnv := attestationSidecarEnv(logCfg, mockMode)
 
 		webhookSrv := attestwebhook.NewServer(attestwebhook.Config{
 			SidecarImage: sidecarImage,
@@ -937,7 +941,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		}
 
 		group.Go(func() error {
-			logger.Info("starting attestation webhook", "addr", webhookAddr)
+			logger.Info("starting attestation webhook", "listen_addr", webhookAddr)
 			return webhookSrv.ListenAndServeTLS()
 		})
 
@@ -987,6 +991,23 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+// attestationSidecarEnv returns the environment injected into attestation sidecars:
+// the provider's logging configuration and, in mock mode, ATTESTATION_MOCK.
+func attestationSidecarEnv(logCfg logging.Config, mock bool) []corev1.EnvVar {
+	logEnv := logCfg.Env("ATTESTATION_")
+
+	env := make([]corev1.EnvVar, 0, len(logEnv)+1)
+	for _, e := range logEnv {
+		env = append(env, corev1.EnvVar{Name: e.Name, Value: e.Value})
+	}
+
+	if mock {
+		env = append(env, corev1.EnvVar{Name: "ATTESTATION_MOCK", Value: "true"})
+	}
+
+	return env
 }
 
 func runMigrationsOnStartup(ctx context.Context, cmd *cobra.Command, logger log.Logger) error {

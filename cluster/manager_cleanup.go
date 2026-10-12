@@ -51,7 +51,7 @@ func (dch *deployCleanupHelper) purgeAll(ctx context.Context) {
 		err := dch.client.PurgeDeclaredHostname(ctx, dch.lease, hostname)
 		if err != nil {
 			dch.log.Error("could not purge hostname",
-				"lease", dch.lease, "hostname", hostname, "err", err)
+				"lid", dch.lease, "hostname", hostname, "err", err)
 		}
 	}
 
@@ -59,8 +59,8 @@ func (dch *deployCleanupHelper) purgeAll(ctx context.Context) {
 		err := dch.client.PurgeDeclaredIP(ctx, dch.lease, ipEntry.serviceName, ipEntry.port, ipEntry.proto)
 		if err != nil {
 			dch.log.Error("could not purge IP",
-				"lease", dch.lease,
-				"serviceName", ipEntry.serviceName,
+				"lid", dch.lease,
+				"service", ipEntry.serviceName,
 				"port", ipEntry.port,
 				"proto", ipEntry.proto,
 				"err", err)

@@ -139,7 +139,7 @@ loop:
 		return nil, fmt.Errorf("%w: failed getting REST client", err)
 	}
 
-	c.log.Info("Opening container shell", "namespace", namespace, "pod", podName, "container", containerName)
+	c.log.Info("Opening container shell", "ns", namespace, "pod", podName, "container", containerName)
 	if tty {
 		// disable stderr if running as a TTY, results come back over stdout
 		stderr = nil

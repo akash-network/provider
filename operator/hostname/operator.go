@@ -99,14 +99,14 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 		}
 		gatewayImpl = impl
 		logger.Info("initialized gateway provider",
-			"provider", impl.Name())
+			"gateway_provider", impl.Name())
 	}
 
 	logger.Info("initializing hostname operator",
-		"ingress-mode", gwCfg.IngressMode,
-		"gateway-name", gwCfg.Name,
-		"gateway-namespace", gwCfg.Namespace,
-		"gateway-provider", gwCfg.Provider)
+		"ingress_mode", gwCfg.IngressMode,
+		"gateway_name", gwCfg.Name,
+		"gateway_namespace", gwCfg.Namespace,
+		"gateway_provider", gwCfg.Provider)
 
 	op := &hostnameOperator{
 		ctx:           ctx,
@@ -169,7 +169,7 @@ func (op *hostnameOperator) monitorUntilError() error {
 
 	connections, err := op.getHostnameDeploymentConnections(ctx)
 	if err != nil {
-		op.log.Error("unable to get connections", "err", err.Error())
+		op.log.Error("unable to get connections", "err", err)
 		return err
 	}
 
@@ -186,7 +186,7 @@ func (op *hostnameOperator) monitorUntilError() error {
 		op.hostnames[hostname] = entry
 		op.log.Debug("identified existing hostname connection",
 			"hostname", hostname,
-			"lease", entry.presentLease,
+			"lid", entry.presentLease,
 			"service", entry.presentServiceName,
 			"port", entry.presentExternalPort)
 	}
@@ -309,7 +309,7 @@ func (op *hostnameOperator) recordEventError(ev chostname.ResourceEvent, failure
 		return
 	}
 
-	op.log.Info("recording error for", "lease", ev.GetLeaseID().String(), "err", failure)
+	op.log.Info("recording error for", "lid", ev.GetLeaseID(), "err", failure)
 
 	op.leasesIgnored.AddError(ev.GetLeaseID(), failure, ev.GetHostname())
 	op.flagIgnoreListData()
@@ -320,14 +320,14 @@ func (op *hostnameOperator) isEventIgnored(ev chostname.ResourceEvent) bool {
 }
 
 func (op *hostnameOperator) applyEvent(ctx context.Context, ev chostname.ResourceEvent) error {
-	op.log.Debug("apply event", "event-type", ev.GetEventType(), "hostname", ev.GetHostname())
+	op.log.Debug("apply event", "event_type", ev.GetEventType(), "hostname", ev.GetHostname())
 	switch ev.GetEventType() {
 	case ctypes.ProviderResourceDelete:
 		// note that on delete the resource might be gone anyways because the namespace is deleted
 		return op.applyDeleteEvent(ctx, ev)
 	case ctypes.ProviderResourceAdd, ctypes.ProviderResourceUpdate:
 		if op.isEventIgnored(ev) {
-			op.log.Info("ignoring event for", "lease", ev.GetLeaseID().String())
+			op.log.Info("ignoring event for", "lid", ev.GetLeaseID())
 			return nil
 		}
 		err := op.applyAddOrUpdateEvent(ctx, ev)
@@ -451,9 +451,9 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 
 	op.log.Debug("connecting",
 		"hostname", ev.GetHostname(),
-		"lease", leaseID,
+		"lid", leaseID,
 		"service", ev.GetServiceName(),
-		"externalPort", ev.GetExternalPort())
+		"external_port", ev.GetExternalPort())
 	entry, exists := op.hostnames[ev.GetHostname()]
 
 	isSameLease := false
@@ -622,12 +622,12 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 				ph := result.Object.(*crd.ProviderHost)
 				ownerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Owner)
 				if err != nil {
-					op.log.Error("invalid owner address in provider host", "addr", ph.Spec.Owner, "err", err)
+					op.log.Error("invalid owner address in provider host", "owner", ph.Spec.Owner, "err", err)
 					continue // Ignore event
 				}
 				providerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Provider)
 				if err != nil {
-					op.log.Error("invalid provider address in provider host", "addr", ph.Spec.Provider, "err", err)
+					op.log.Error("invalid provider address in provider host", "provider", ph.Spec.Provider, "err", err)
 					continue // Ignore event
 				}
 				ev := hostnameResourceEvent{
@@ -675,7 +675,7 @@ func (op *hostnameOperator) getManifestGroup(ctx context.Context, lID mtypes.Lea
 
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			op.log.Info("CRD manifest not found", "lease-ns", leaseNamespace)
+			op.log.Info("CRD manifest not found", "ns", leaseNamespace)
 			return false, crd.ManifestGroup{}, nil
 		}
 
@@ -722,7 +722,7 @@ func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, ho
 func (op *hostnameOperator) connectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
 	op.log.Info("hostname operator connecting hostname to deployment",
 		"hostname", directive.Hostname,
-		"ingress-mode", op.ingressConfig.IngressMode)
+		"ingress_mode", op.ingressConfig.IngressMode)
 
 	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
 		op.log.Info("hostname operator using Gateway API mode")

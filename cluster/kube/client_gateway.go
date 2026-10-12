@@ -33,10 +33,10 @@ func (c *client) connectHostnameToDeploymentGateway(ctx context.Context, directi
 	ns := builder.LidNS(directive.LeaseID)
 
 	c.log.Info("creating HTTPRoute via Gateway API",
-		"route-name", routeName,
-		"namespace", ns,
-		"gateway-name", c.gatewayName,
-		"gateway-namespace", c.gatewayNamespace,
+		"route_name", routeName,
+		"ns", ns,
+		"gateway_name", c.gatewayName,
+		"gateway_namespace", c.gatewayNamespace,
 		"implementation", c.gatewayImpl.Name())
 
 	config := gateway.HTTPRouteConfig{

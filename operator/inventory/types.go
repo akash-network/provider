@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	inventory "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )
@@ -209,7 +210,7 @@ func InformKubeObjects(ctx context.Context, pub pubsub.Publisher, informer cache
 		})
 
 		if err != nil {
-			fromctx.LogrFromCtx(ctx).Error(err, "couldn't register event handlers")
+			ctxlog.LogcFromCtx(ctx).Error("couldn't register event handlers", "err", err)
 			return nil
 		}
 

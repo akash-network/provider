@@ -31,6 +31,7 @@ import (
 
 	"pkg.akt.dev/go/grpc/gogoreflection"
 	inventory "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	kutil "github.com/akash-network/provider/cluster/kube/util"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
@@ -68,7 +69,7 @@ func Cmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx := cmd.Context()
 
-			log := fromctx.LogrFromCtx(cmd.Context())
+			log := ctxlog.LogcFromCtx(cmd.Context()).With("module", "operator-inventory")
 			bus := fromctx.MustPubSubFromCtx(ctx)
 			group := fromctx.MustErrGroupFromCtx(ctx)
 
@@ -177,7 +178,7 @@ func Cmd() *cobra.Command {
 			group.Go(func() error {
 				log.Info(fmt.Sprintf("rest listening on \"%s\"", restEndpoint))
 
-				return restSrv.ListenAndServe()
+				return common.ListenAndServe(restSrv)
 			})
 
 			group.Go(func() error {
@@ -297,7 +298,7 @@ func Cmd() *cobra.Command {
 }
 
 func configWatcher(ctx context.Context, file string) error {
-	log := fromctx.LogrFromCtx(ctx).WithName("watcher.config")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.watcher.config")
 
 	defer func() {
 		log.Info("stopped")
@@ -357,21 +358,32 @@ func configWatcher(ctx context.Context, file string) error {
 }
 
 // this function is piece of sh*t. refactor it!
+// registryQueryTimeout bounds each request to the GPU registry and pci.ids database.
+var registryQueryTimeout = 30 * time.Second
+
 func registryLoader(ctx context.Context) error {
-	log := fromctx.LogrFromCtx(ctx).WithName("watcher.registry")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.watcher.registry")
 	bus, err := fromctx.PubSubFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
-	tlsConfig := http.DefaultTransport.(*http.Transport).TLSClientConfig
+	tlsDialer := &tls.Dialer{Config: http.DefaultTransport.(*http.Transport).TLSClientConfig}
 
 	cl := &http.Client{
+		Timeout: registryQueryTimeout,
 		Transport: &http.Transport{
-			DialTLSContext: func(_ context.Context, network, addr string) (net.Conn, error) {
-				return tls.Dial(network, addr, tlsConfig)
-			},
+			DialTLSContext: tlsDialer.DialContext,
 		},
+	}
+
+	get := func(url string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		return cl.Do(req)
 	}
 
 	urlGPU := fmt.Sprintf("%s/devices/gpus", strings.TrimSuffix(viper.GetString(FlagProviderConfigsURL), "/"))
@@ -383,9 +395,9 @@ func registryLoader(ctx context.Context) error {
 	gpuIDs := make(RegistryGPUVendors)
 
 	queryGPUs := func() bool {
-		res, err := cl.Get(urlGPU)
+		res, err := get(urlGPU)
 		if err != nil {
-			log.Error(err, "couldn't query inventory registry")
+			log.Error("couldn't query inventory registry", "err", err)
 			return false
 		}
 
@@ -418,9 +430,9 @@ func registryLoader(ctx context.Context) error {
 	}
 
 	queryPCI := func() bool {
-		res, err := cl.Get(urlPcieDB)
+		res, err := get(urlPcieDB)
 		if err != nil {
-			log.Error(err, "couldn't query pci.ids")
+			log.Error("couldn't query pci.ids", "err", err)
 			return false
 		}
 
@@ -483,7 +495,7 @@ func registryLoader(ctx context.Context) error {
 }
 
 func scWatcher(ctx context.Context) error {
-	log := fromctx.LogrFromCtx(ctx).WithName("watcher.storageclasses")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.watcher.storageclasses")
 
 	defer func() {
 		log.Info("stopped")

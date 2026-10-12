@@ -85,7 +85,7 @@ func migrateHandler(log log.Logger, hostnameService clustertypes.HostnameService
 		}
 
 		// Tell the hostname service to move the hostnames to the new deployment, unconditionally
-		log.Debug("preparing migration of hostnames", "cnt", len(body.HostnamesToMigrate))
+		log.Debug("preparing migration of hostnames", "count", len(body.HostnamesToMigrate))
 		if err = hostnameService.PrepareHostnamesForTransfer(req.Context(), body.HostnamesToMigrate, leaseID); err != nil {
 			if errors.Is(err, cluster.ErrHostnameNotAllowed) {
 				log.Info("hostname not allowed", "err", err)
@@ -99,7 +99,7 @@ func migrateHandler(log log.Logger, hostnameService clustertypes.HostnameService
 		}
 
 		// Update the CRDs now
-		log.Debug("transferring hostnames", "cnt", len(body.HostnamesToMigrate))
+		log.Debug("transferring hostnames", "count", len(body.HostnamesToMigrate))
 
 		// Migrate the hostnames
 		for _, hostname := range body.HostnamesToMigrate {

@@ -139,14 +139,14 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		}
 		gatewayImpl = impl
 		log.Info("initialized gateway provider",
-			"provider", impl.Name())
+			"gateway_provider", impl.Name())
 	}
 
 	log.Info("initializing kube client",
-		"ingress-mode", gwCfg.IngressMode,
-		"gateway-name", gwCfg.Name,
-		"gateway-namespace", gwCfg.Namespace,
-		"gateway-provider", gwCfg.Provider)
+		"ingress_mode", gwCfg.IngressMode,
+		"gateway_name", gwCfg.Name,
+		"gateway_namespace", gwCfg.Namespace,
+		"gateway_provider", gwCfg.Provider)
 
 	cl := &client{
 		ctx:               ctx,
@@ -209,7 +209,7 @@ func (c *client) GetManifestGroup(ctx context.Context, lID mtypes.LeaseID) (bool
 
 	if err != nil {
 		if kerrors.IsNotFound(err) {
-			c.log.Info("CRD manifest not found", "lease-ns", leaseNamespace)
+			c.log.Info("CRD manifest not found", "ns", leaseNamespace)
 			return false, crd.ManifestGroup{}, nil
 		}
 
@@ -512,7 +512,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 	// namespace is the explicit opt-out.
 	if deploymentNeedsRoCENetworks(cdeployment) {
 		if settings.InterconnectRoCENetworksNamespace == "" {
-			c.log.Info("RoCE rail network attachment disabled (empty namespace); interconnect pods will not reach the rail fabric", "lease", lid)
+			c.log.Info("RoCE rail network attachment disabled (empty namespace); interconnect pods will not reach the rail fabric", "lid", lid)
 		} else {
 			networks, nerr := c.interconnectRoCENetworks(ctx, settings.InterconnectRoCENetworksNamespace)
 			if nerr != nil {
@@ -611,7 +611,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		}
 
 		if err != nil {
-			c.log.Error("applying manifest", "err", err, "lease", lid)
+			c.log.Error("applying manifest", "err", err, "lid", lid)
 			return err
 		}
 	}
@@ -666,19 +666,19 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 		// Create ServiceAccount, Role, and RoleBinding if permissions are defined
 		if workload.HasPermissions() {
-			c.log.Info("creating ServiceAccount, Role, and RoleBinding for service", "lease", lid, "service", service.Name, "permissions", workload.GetPermissions())
+			c.log.Info("creating ServiceAccount, Role, and RoleBinding for service", "lid", lid, "service", service.Name, "permissions", workload.GetPermissions())
 			svc.serviceAccount = builder.BuildServiceAccount(workload)
 			svc.role = builder.BuildRole(workload)
 			svc.roleBinding = builder.BuildRoleBinding(workload)
 			servicesWithPermissions = append(servicesWithPermissions, service.Name)
 		} else {
-			c.log.Debug("skipping ServiceAccount creation - no permissions defined", "lease", lid, "service", service.Name)
+			c.log.Debug("skipping ServiceAccount creation - no permissions defined", "lid", lid, "service", service.Name)
 		}
 
 		applies.services = append(applies.services, svc)
 
 		if len(service.Expose) == 0 {
-			c.log.Debug("lease does not have services (no expose configuration provided)", "lease", lid, "service", service.Name)
+			c.log.Debug("lease does not have services (no expose configuration provided)", "lid", lid, "service", service.Name)
 			continue
 		}
 
@@ -688,18 +688,18 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 
 	po.nns, po.uns, po.ons, err = applyNS(ctx, c.kc, applies.ns)
 	if err != nil {
-		c.log.Error("applying namespace", "err", err, "lease", lid)
+		c.log.Error("applying namespace", "err", err, "lid", lid)
 		return err
 	}
 
 	po.nNetPolicies, po.uNetPolicies, po.oNetPolicies, err = applyNetPolicies(ctx, c.kc, applies.netPol)
 	if err != nil {
-		c.log.Error("applying namespace network policies", "err", err, "lease", lid)
+		c.log.Error("applying namespace network policies", "err", err, "lid", lid)
 		return err
 	}
 
 	if err = cleanupStaleResources(ctx, c.kc, lid, group, servicesWithPermissions); err != nil {
-		c.log.Error("cleaning stale resources", "err", err, "lease", lid)
+		c.log.Error("cleaning stale resources", "err", err, "lid", lid)
 		return err
 	}
 
@@ -745,7 +745,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if applyObjs.serviceAccount != nil {
 			nobj, uobj, oobj, err := applyServiceAccount(ctx, c.kc, applyObjs.serviceAccount)
 			if err != nil {
-				c.log.Error("applying service account", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying service account", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -763,7 +763,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if applyObjs.role != nil {
 			nobj, uobj, oobj, err := applyRole(ctx, c.kc, applyObjs.role)
 			if err != nil {
-				c.log.Error("applying role", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying role", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -781,7 +781,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if applyObjs.roleBinding != nil {
 			nobj, uobj, oobj, err := applyRoleBinding(ctx, c.kc, applyObjs.roleBinding)
 			if err != nil {
-				c.log.Error("applying role binding", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying role binding", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -799,7 +799,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if applyObjs.credentials != nil {
 			nobj, uobj, obj, err := applyServiceCredentials(ctx, c.kc, applyObjs.credentials)
 			if err != nil {
-				c.log.Error("applying credentials", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying credentials", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -817,7 +817,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if applyObjs.statefulSet != nil {
 			nobj, uobj, oobj, err := applyStatefulSet(ctx, c.kc, applyObjs.statefulSet)
 			if err != nil {
-				c.log.Error("applying statefulSet", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying statefulSet", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -835,7 +835,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if applyObjs.deployment != nil {
 			nobj, uobj, oobj, err := applyDeployment(ctx, c.kc, applyObjs.deployment)
 			if err != nil {
-				c.log.Error("applying deployment", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying deployment", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -853,7 +853,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if lsvc := applyObjs.localService; lsvc != nil && lsvc.Any() {
 			nobj, uobj, oobj, err := applyService(ctx, c.kc, lsvc)
 			if err != nil {
-				c.log.Error("applying local service", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying local service", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -871,7 +871,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		if gsvc := applyObjs.globalService; gsvc != nil && gsvc.Any() {
 			nobj, uobj, oobj, err := applyService(ctx, c.kc, gsvc)
 			if err != nil {
-				c.log.Error("applying global service", "err", err, "lease", lid, "service", service.Name)
+				c.log.Error("applying global service", "err", err, "lid", lid, "service", service.Name)
 				return err
 			}
 
@@ -891,7 +891,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 }
 
 func (c *client) TeardownLease(ctx context.Context, lid mtypes.LeaseID) error {
-	c.log.Info("tearing down lease", "lease", lid)
+	c.log.Info("tearing down lease", "lid", lid)
 
 	_, result := wrapKubeCall("namespaces-delete", func() (interface{}, error) {
 		return nil, c.kc.CoreV1().Namespaces().Delete(ctx, builder.LidNS(lid), metav1.DeleteOptions{})
@@ -1017,7 +1017,7 @@ func (c *client) LeaseLogs(ctx context.Context, lid mtypes.LeaseID,
 		listOpts.LabelSelector = fmt.Sprintf(builder.AkashManifestServiceLabelName+" in (%s)", services)
 	}
 
-	c.log.Info("filtering pods", "labelSelector", listOpts.LabelSelector)
+	c.log.Info("filtering pods", "label_selector", listOpts.LabelSelector)
 
 	pods, err := wrapKubeCall("pods-list", func() (*corev1.PodList, error) {
 		return c.kc.CoreV1().Pods(builder.LidNS(lid)).List(ctx, listOpts)
@@ -1159,7 +1159,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 	})
 
 	if err != nil {
-		c.log.Error("CRD manifest not found", "lease-ns", builder.LidNS(lid), "name", name)
+		c.log.Error("CRD manifest not found", "ns", builder.LidNS(lid), "name", name)
 		return nil, kubeclienterrors.ErrNoManifestForLease
 	}
 
@@ -1191,7 +1191,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 	}
 
 	if isDeployment {
-		c.log.Debug("get deployment", "lease-ns", builder.LidNS(lid), "name", name)
+		c.log.Debug("get deployment", "ns", builder.LidNS(lid), "name", name)
 		deployment, err := wrapKubeCall("deployments-get", func() (*appsv1.Deployment, error) {
 			return c.kc.AppsV1().Deployments(builder.LidNS(lid)).Get(ctx, name, metav1.GetOptions{})
 		})
@@ -1216,7 +1216,7 @@ func (c *client) ServiceStatus(ctx context.Context, lid mtypes.LeaseID, name str
 			AvailableReplicas:  deployment.Status.AvailableReplicas,
 		}
 	} else {
-		c.log.Debug("get statefulsets", "lease-ns", builder.LidNS(lid), "name", name)
+		c.log.Debug("get statefulsets", "ns", builder.LidNS(lid), "name", name)
 		statefulset, err := wrapKubeCall("statefulsets-get", func() (*appsv1.StatefulSet, error) {
 			return c.kc.AppsV1().StatefulSets(builder.LidNS(lid)).Get(ctx, name, metav1.GetOptions{})
 		})
@@ -1274,7 +1274,7 @@ exposeCheckLoop:
 		return nil, fmt.Errorf("%w: service %q", kubeclienterrors.ErrNoServiceForLease, name)
 	}
 
-	c.log.Debug("service result", "lease-ns", builder.LidNS(lid), "has-hostnames", hasHostnames)
+	c.log.Debug("service result", "ns", builder.LidNS(lid), "has_hostnames", hasHostnames)
 
 	if hasHostnames {
 		labelSelector := &strings.Builder{}
@@ -1375,7 +1375,7 @@ func (c *client) deploymentsForLease(ctx context.Context, lid mtypes.LeaseID) (m
 	}
 
 	if len(serviceStatus) == 0 {
-		c.log.Info("No deployments found for", "lease namespace", builder.LidNS(lid))
+		c.log.Info("No deployments found for", "ns", builder.LidNS(lid))
 		return nil, kubeclienterrors.ErrNoDeploymentForLease
 	}
 

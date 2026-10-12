@@ -10,9 +10,9 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 
 	"cosmossdk.io/log"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	cmdutil "github.com/akash-network/provider/cmd/provider-services/cmd/util"
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
@@ -50,7 +50,7 @@ func OpenKubeConfig(cfgPath string, log log.Logger) (*rest.Config, error) {
 func SetKubeConfigToCmd(c *cobra.Command) error {
 	configPath, _ := c.Flags().GetString(providerflags.FlagKubeConfig)
 
-	config, err := OpenKubeConfig(configPath, cmdutil.OpenLogger().With("cmp", "provider"))
+	config, err := OpenKubeConfig(configPath, ctxlog.LogcFromCtx(c.Context()).With("module", "kubeconfig"))
 	if err != nil {
 		return err
 	}

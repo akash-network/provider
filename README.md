@@ -10,6 +10,10 @@ This folder contains the Akash Provider Daemon. This piece of software listens t
 
 [This doc](https://github.com/akash-network/node/blob/master/_docs/development-environment.md) guides through setting up local development environment 
 
+## Logging
+
+Logging options, defaults and the log key dictionary are described in [_docs/logging.md](./_docs/logging.md).
+
 ## Structure
 
 ### [`bidengine`](./bidengine)

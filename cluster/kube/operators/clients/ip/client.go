@@ -49,7 +49,7 @@ func NewClient(ctx context.Context, logger log.Logger, endpoint *net.SRV) (cip.C
 
 	return &client{
 		sda: sda,
-		log: logger.With("operator", "ip"),
+		log: logger.With("module", "operator-ip-client"),
 		l:   &sync.Mutex{},
 	}, nil
 }

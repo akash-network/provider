@@ -31,7 +31,7 @@ func BuildService(workload *Workload, requireNodePort bool) Service {
 		requireNodePort: requireNodePort,
 	}
 
-	ss.log = ss.log.With("object", "service", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "service", "service", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }
@@ -163,7 +163,7 @@ func (b *service) ports() ([]corev1.ServicePort, error) {
 	}
 
 	if len(ports) == 0 {
-		b.log.Debug("provider/cluster/kube/builder: created 0 ports", "requireNodePort", b.requireNodePort, "serviceExpose", service.Expose)
+		b.log.Debug("provider/cluster/kube/builder: created 0 ports", "require_node_port", b.requireNodePort, "service_expose", service.Expose)
 		return nil, errInvalidServiceBuilder
 	}
 
