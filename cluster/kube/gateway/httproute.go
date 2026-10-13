@@ -2,10 +2,12 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -20,7 +22,6 @@ import (
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
-	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
@@ -31,11 +32,22 @@ var HTTPRouteGVR = schema.GroupVersionResource{
 	Resource: "httproutes",
 }
 
+// ErrRouteExtensionPending means the gateway has not accepted the desired route
+// extension yet. The caller must retry reconciliation; the route is not ready.
+var ErrRouteExtensionPending = errors.New("route extension acceptance pending")
+
+// ErrRouteExtensionRejected means the gateway rejected the desired generation.
+// Reconciliation must still retry, with error backoff rather than readiness polling.
+var ErrRouteExtensionRejected = errors.New("route extension rejected")
+
 // HTTPRouteConfig contains configuration for HTTPRoute operations.
 type HTTPRouteConfig struct {
 	GatewayName      string
 	GatewayNamespace string
 	Provider         GatewayProvider
+	// DeferExtensionAcceptance returns ErrRouteExtensionPending instead of
+	// waiting for the controller, so an operator can reconcile other hostnames.
+	DeferExtensionAcceptance bool
 }
 
 // HTTPRouteObserver allows callers to observe HTTPRoute operations for metrics or logging.
@@ -139,7 +151,7 @@ func CreateOrUpdateHTTPRoute(
 		createdPlaceholder = true
 	}
 
-	if err := applyRouteExtensions(ctx, dc, ns, routeName, ownerUID, exts); err != nil {
+	if err := applyRouteExtensions(ctx, dc, ns, routeName, ownerUID, exts, config.DeferExtensionAcceptance); err != nil {
 		return err
 	}
 
@@ -159,7 +171,7 @@ func CreateOrUpdateHTTPRoute(
 	// spec, re-reading the resourceVersion on each attempt: NGF writes route status
 	// between our earlier reads and this update, so a cached resourceVersion can be
 	// stale and 409, which would otherwise leave the route without its filter.
-	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+	err = retryOnConflict(func() error {
 		current, gErr := routes.Get(ctx, routeName, metav1.GetOptions{})
 		if gErr != nil {
 			return gErr
@@ -176,9 +188,24 @@ func CreateOrUpdateHTTPRoute(
 	return err
 }
 
+// retryOnConflict preserves request cancellation errors. client-go v0.34's
+// RetryOnConflict can replace these with the last conflict, or nil when there
+// was no conflict, even though the request did not succeed.
+func retryOnConflict(fn func() error) error {
+	var lastErr error
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		lastErr = fn()
+		return lastErr
+	})
+	if lastErr != nil {
+		return lastErr
+	}
+	return err
+}
+
 // applyRouteExtensions upserts auxiliary CRD objects (e.g. an NGF SnippetsFilter)
 // owner-referenced to the HTTPRoute so they are garbage-collected with it.
-func applyRouteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeName string, ownerUID types.UID, exts []*unstructured.Unstructured) error {
+func applyRouteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeName string, ownerUID types.UID, exts []*unstructured.Unstructured, deferAcceptance bool) error {
 	controller := true
 	for _, ext := range exts {
 		ext.SetOwnerReferences([]metav1.OwnerReference{{
@@ -196,15 +223,26 @@ func applyRouteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeNa
 			Resource: strings.ToLower(gvk.Kind) + "s",
 		}
 
-		existing, err := dc.Resource(gvr).Namespace(ns).Get(ctx, ext.GetName(), metav1.GetOptions{})
+		resources := dc.Resource(gvr).Namespace(ns)
 		var applied *unstructured.Unstructured
-		switch {
-		case err == nil:
-			ext.SetResourceVersion(existing.GetResourceVersion())
-			applied, err = dc.Resource(gvr).Namespace(ns).Update(ctx, ext, metav1.UpdateOptions{})
-		case kerrors.IsNotFound(err):
-			applied, err = dc.Resource(gvr).Namespace(ns).Create(ctx, ext, metav1.CreateOptions{})
-		}
+		err := retryOnConflict(func() error {
+			existing, err := resources.Get(ctx, ext.GetName(), metav1.GetOptions{})
+			switch {
+			case err == nil:
+				if apiequality.Semantic.DeepEqual(existing.Object["spec"], ext.Object["spec"]) &&
+					apiequality.Semantic.DeepEqual(existing.GetOwnerReferences(), ext.GetOwnerReferences()) {
+					applied = existing
+					return nil
+				}
+				updated := existing.DeepCopy()
+				updated.Object["spec"] = ext.Object["spec"]
+				updated.SetOwnerReferences(ext.GetOwnerReferences())
+				applied, err = resources.Update(ctx, updated, metav1.UpdateOptions{})
+			case kerrors.IsNotFound(err):
+				applied, err = resources.Create(ctx, ext, metav1.CreateOptions{})
+			}
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("failed to apply route extension %s %q: %w", gvk.Kind, ext.GetName(), err)
 		}
@@ -214,10 +252,14 @@ func applyRouteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeNa
 		// SnippetsFilters through independent caches, so publishing the reference
 		// first lets NGF reconcile the route before it observes the filter, set
 		// ResolvedRefs=False, and serve HTTP 500 until the caches converge. Blocking
-		// here keeps an existing route on its previous working config until the
-		// filter is ready; if the controller never accepts, the caller retries and
-		// the route stays filter-less rather than serving 500.
-		if err := waitForExtensionAccepted(ctx, dc, gvr, ns, ext.GetName(), applied.GetGeneration()); err != nil {
+		// here keeps the previous route spec until the filter is ready. Operators
+		// can check once and retry later so this wait does not block other hosts.
+		if deferAcceptance {
+			err = extensionAcceptanceError(applied, applied.GetGeneration())
+		} else {
+			err = waitForExtensionAccepted(ctx, dc, gvr, ns, ext.GetName(), applied.GetGeneration())
+		}
+		if err != nil {
 			return fmt.Errorf("route extension %s %q not accepted by the gateway: %w", gvk.Kind, ext.GetName(), err)
 		}
 	}
@@ -235,13 +277,59 @@ var (
 // waitForExtensionAccepted polls the extension until the gateway controller
 // reports Accepted=True at or beyond the applied generation.
 func waitForExtensionAccepted(ctx context.Context, dc dynamic.Interface, gvr schema.GroupVersionResource, ns, name string, generation int64) error {
-	return wait.PollUntilContextTimeout(ctx, routeExtensionPollInterval, routeExtensionAcceptTimeout, true, func(ctx context.Context) (bool, error) {
+	var acceptanceErr error
+	err := wait.PollUntilContextTimeout(ctx, routeExtensionPollInterval, routeExtensionAcceptTimeout, true, func(ctx context.Context) (bool, error) {
 		obj, err := dc.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
-		return extensionAccepted(obj, generation), nil
+		acceptanceErr = extensionAcceptanceError(obj, generation)
+		return acceptanceErr == nil, nil
 	})
+	if err != nil && acceptanceErr != nil {
+		return fmt.Errorf("%w: %w", err, acceptanceErr)
+	}
+	return err
+}
+
+func extensionAcceptanceError(obj *unstructured.Unstructured, generation int64) error {
+	if extensionAccepted(obj, generation) {
+		return nil
+	}
+	pending := fmt.Errorf("%w: gateway has not reported Accepted=True for generation %d", ErrRouteExtensionPending, generation)
+	controllers, _, _ := unstructured.NestedSlice(obj.Object, "status", "controllers")
+	for _, controller := range controllers {
+		cm, ok := controller.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		conditions, _, _ := unstructured.NestedSlice(cm, "conditions")
+		for _, condition := range conditions {
+			cond, ok := condition.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			typ, _, _ := unstructured.NestedString(cond, "type")
+			if typ != "Accepted" {
+				continue
+			}
+			status, _, _ := unstructured.NestedString(cond, "status")
+			reason, _, _ := unstructured.NestedString(cond, "reason")
+			message, _, _ := unstructured.NestedString(cond, "message")
+			observed, _, _ := unstructured.NestedInt64(cond, "observedGeneration")
+			classification := ErrRouteExtensionPending
+			if status == "False" && observed >= generation {
+				classification = ErrRouteExtensionRejected
+			}
+			detail := fmt.Errorf("%w: Accepted=%s reason=%s message=%q observedGeneration=%d desiredGeneration=%d",
+				classification, status, reason, message, observed, generation)
+			if classification == ErrRouteExtensionRejected {
+				return detail
+			}
+			pending = detail
+		}
+	}
+	return pending
 }
 
 // extensionAccepted reports whether the gateway controller has set Accepted=True
@@ -323,26 +411,24 @@ func ListHTTPRouteConnections(
 			route := obj.(*gatewayv1.HTTPRoute)
 			routeLeaseID, err := clientcommon.RecoverLeaseIDFromLabels(route.Labels)
 			if err != nil {
-				return err
-			}
-			if len(route.Spec.Hostnames) == 0 {
-				// Detached placeholder from CreateOrUpdateHTTPRoute whose routable spec
-				// was never published (e.g. its SnippetsFilter was not accepted). It is
-				// not a connection yet; failing here would abort the whole list and
-				// wedge the hostname operator for every lease. Skip it: the operator
-				// replays all ProviderHosts on restart, which completes the route.
 				return nil
 			}
-			if len(route.Spec.Rules) == 0 {
-				return fmt.Errorf("%w: no rules specified", kubeclienterrors.ErrInvalidHostnameConnection)
+			if routeLeaseID.Validate() != nil || route.Namespace != builder.LidNS(routeLeaseID) {
+				return nil
+			}
+			// Incomplete routes are not current connections. ProviderHosts retain
+			// the desired state and reconciliation repairs them. One incomplete
+			// object must not prevent the operator from observing every hostname.
+			if len(route.Spec.Hostnames) == 0 || len(route.Spec.ParentRefs) == 0 || len(route.Spec.Rules) == 0 {
+				return nil
 			}
 			rule := route.Spec.Rules[0]
 			if len(rule.BackendRefs) == 0 {
-				return fmt.Errorf("%w: no backend refs", kubeclienterrors.ErrInvalidHostnameConnection)
+				return nil
 			}
 			backendRef := rule.BackendRefs[0]
 			if backendRef.Port == nil {
-				return fmt.Errorf("%w: backend ref has no port", kubeclienterrors.ErrInvalidHostnameConnection)
+				return nil
 			}
 
 			results = append(results, chostname.LeaseIDHostnameConnection{

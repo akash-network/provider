@@ -3,8 +3,6 @@ package hostname
 import (
 	"time"
 
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
 	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -25,26 +23,15 @@ type managedHostname struct {
 }
 
 type hostnameResourceEvent struct {
-	eventType ctypes.ProviderResourceEvent
-	hostname  string
-
-	owner        sdktypes.Address
-	dseq         uint64
-	oseq         uint32
-	gseq         uint32
-	provider     sdktypes.Address
+	eventType    ctypes.ProviderResourceEvent
+	hostname     string
+	leaseID      mtypes.LeaseID
 	serviceName  string
 	externalPort uint32
 }
 
 func (ev hostnameResourceEvent) GetLeaseID() mtypes.LeaseID {
-	return mtypes.LeaseID{
-		Owner:    ev.owner.String(),
-		DSeq:     ev.dseq,
-		GSeq:     ev.gseq,
-		OSeq:     ev.oseq,
-		Provider: ev.provider.String(),
-	}
+	return ev.leaseID
 }
 
 func (ev hostnameResourceEvent) GetHostname() string {

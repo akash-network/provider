@@ -54,7 +54,7 @@ func Cmd() *cobra.Command {
 			listenAddress := viper.GetString(common.FlagRESTAddress)
 			restAddr := fmt.Sprintf("%s:%d", listenAddress, restPort)
 
-			op, err := newHostnameOperator(ctx, logger, ns, config, common.IgnoreListConfigFromViper())
+			op, err := newHostnameOperator(ctx, logger, ns, config)
 			if err != nil {
 				return err
 			}
@@ -93,7 +93,14 @@ func Cmd() *cobra.Command {
 	}
 
 	common.AddOperatorFlags(cmd)
+	// Accept existing deployment arguments, but hostname failures are now retried
+	// until desired state is reached instead of permanently ignoring a lease.
 	common.AddIgnoreListFlags(cmd)
+	for _, name := range []string{common.FlagIgnoreListEntryLimit, common.FlagIgnoreListAgeLimit, common.FlagEventFailureLimit} {
+		if err := cmd.Flags().MarkDeprecated(name, "hostname failures are retried until resolved"); err != nil {
+			panic(err)
+		}
+	}
 
 	addGatewayApiFlags(cmd)
 
