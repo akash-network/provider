@@ -3,6 +3,7 @@ package bidengine
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/boz/go-lifecycle"
 	"github.com/prometheus/client_golang/prometheus"
@@ -33,6 +34,9 @@ var ordersCounter = promauto.NewCounterVec(prometheus.CounterOpts{
 
 // ErrNotRunning declares new error with message "not running"
 var ErrNotRunning = errors.New("not running")
+
+// ordersFetchRetryPeriod is the delay before retrying a failed open orders query
+const ordersFetchRetryPeriod = 5 * time.Second
 
 // StatusClient interface predefined with Status method
 type StatusClient interface {
@@ -184,18 +188,18 @@ func (s *service) updateOrderManagerGauge() {
 }
 
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	var nextKey []byte
-
 	pcfg, err := fromctx.PersistentConfigFromCtx(ctx)
 	if err != nil {
 		return err
 	}
 
-	nextKey, _ = pcfg.BidEngine().GetOrdersNextKey(ctx)
+	bcfg := pcfg.BidEngine()
 
-	defer func() {
-		_ = pcfg.BidEngine().SetOrdersNextKey(context.Background(), nextKey)
-	}()
+	nextKey, err := bcfg.GetOrdersNextKey(ctx)
+	if err != nil {
+		s.session.Log().Error("loading orders pagination key, traversing open orders from the beginning", "err", err)
+		nextKey = nil
+	}
 
 	limit := cap(s.ordersch)
 
@@ -213,17 +217,31 @@ loop:
 			Pagination: preq,
 		})
 		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				break
+			// check the context rather than the error: gRPC reports cancellation as a status
+			// error which does not match context.Canceled
+			if ctx.Err() != nil {
+				break loop
+			}
+
+			s.session.Log().Error("querying open orders", "err", err)
+
+			select {
+			case <-ctx.Done():
+				break loop
+			case <-time.After(ordersFetchRetryPeriod):
 			}
 
 			continue
 		}
 
-		var orders []mtypes.OrderID
+		orders := make([]mtypes.OrderID, 0, len(resp.Orders))
 
 		for _, order := range resp.Orders {
 			orders = append(orders, order.ID)
+		}
+
+		if ctx.Err() != nil {
+			break loop
 		}
 
 		select {
@@ -241,13 +259,30 @@ loop:
 		}
 
 		nextKey = resp.Pagination.NextKey
+
+		// persist progress after every page so any restart, including a non-graceful one,
+		// resumes from here instead of traversing all open orders again
+		if err := bcfg.SetOrdersNextKey(ctx, nextKey); err != nil {
+			s.session.Log().Error("persisting orders pagination key", "err", err)
+		}
 	}
 
 	return ctx.Err()
 }
 
+// stopOrdersFetcher cancels the orders fetcher and waits for it to return, so it does not
+// outlive the service and race with the persistent config storage being closed.
+func (s *service) stopOrdersFetcher() {
+	s.cancel()
+
+	if err := s.group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+		s.session.Log().Error("orders fetcher", "err", err)
+	}
+}
+
 func (s *service) run(ctx context.Context) {
 	defer s.lc.ShutdownCompleted()
+	defer s.stopOrdersFetcher()
 	defer s.sub.Close()
 	s.updateOrderManagerGauge()
 
@@ -329,6 +364,9 @@ loop:
 		}
 		s.updateOrderManagerGauge()
 	}
+
+	// stop queueing catch-up orders that will not be processed
+	s.cancel()
 
 	s.pass.lc.ShutdownAsync(nil)
 
