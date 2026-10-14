@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	tpubsub "github.com/troian/pubsub"
+	"google.golang.org/grpc"
 	"pkg.akt.dev/go/sdkutil"
 
 	sdkmath "cosmossdk.io/math"
@@ -55,6 +57,7 @@ type orderTestScaffold struct {
 	cluster           *cmocks.Cluster
 	broadcasts        chan []sdk.Msg
 	reserveCallNotify chan int
+	leasesOnChain     *atomic.Pointer[mvbeta.QueryLeasesResponse]
 }
 
 type testBidPricingStrategy int64
@@ -111,6 +114,15 @@ func makeMocks(s *orderTestScaffold) {
 
 	deplMocks.On("Group", mock.Anything, mock.Anything).Return(groupResult, nil)
 	marketMocks.On("Orders", mock.Anything, mock.Anything).Return(&mvbeta.QueryOrdersResponse{}, nil)
+
+	s.leasesOnChain = new(atomic.Pointer[mvbeta.QueryLeasesResponse])
+	marketMocks.On("Leases", mock.Anything, mock.Anything).Return(
+		func(_ context.Context, _ *mvbeta.QueryLeasesRequest, _ ...grpc.CallOption) (*mvbeta.QueryLeasesResponse, error) {
+			if resp := s.leasesOnChain.Load(); resp != nil {
+				return resp, nil
+			}
+			return &mvbeta.QueryLeasesResponse{}, nil
+		})
 	providerMocks.On("Provider", mock.Anything, mock.Anything).Return(&ptypes.QueryProviderResponse{}, nil)
 
 	queryMocks.On("ClientContext").Return(sdkclient.Context{HomeDir: homeDir}, nil)
@@ -314,6 +326,38 @@ func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
 
 	// Should have called unreserve once
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
+}
+
+func Test_BidTimeoutDoesNotCloseBidWhenLeaseIsActive(t *testing.T) {
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
+		BidTimeout: 5 * time.Second,
+	}, testBidCreatedAt)
+
+	leaseID := mtypes.MakeLeaseID(mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr))
+	scaffold.leasesOnChain.Store(&mvbeta.QueryLeasesResponse{
+		Leases: []mvbeta.QueryLeaseResponse{
+			{
+				Lease: mtypes.Lease{
+					ID:    leaseID,
+					State: mtypes.LeaseActive,
+					Price: sdk.NewInt64DecCoin(sdkutil.DenomUact, 23),
+				},
+			},
+		},
+	})
+
+	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
+	_ = requireMsgType[*mvbeta.MsgCreateBid](t, broadcast)
+
+	select {
+	case msgs := <-scaffold.broadcasts:
+		t.Fatalf("bid timeout broadcast %T while the lease is active on chain", msgs[0])
+	case <-order.lc.Done():
+	case <-time.After(30 * time.Second):
+		t.Fatal("timed out waiting for order to shut down")
+	}
+
+	scaffold.cluster.AssertNotCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
 }
 
 func Test_BidOrderPriceTooHigh(t *testing.T) {
