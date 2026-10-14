@@ -55,6 +55,9 @@ Filtering happens before an entry is encoded, so suppressed entries cost almost 
 ## Keys
 
 All keys are `snake_case`. A unit test (`tools/logging/keys_guard_test.go`) fails on non-canonical keys.
+Another (`tools/logging/entity_ids_test.go`) fails when an ID is logged under a key other than its own,
+an ID key carries a value of another type, or an ID key is already bound by the logger's `With`.
+Logging an ID is never required.
 
 | Key           | Meaning                                                         |
 |---------------|-----------------------------------------------------------------|

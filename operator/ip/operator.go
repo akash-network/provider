@@ -869,7 +869,6 @@ func (op *ipOperator) observeIPState(ctx context.Context) (<-chan cip.ResourceEv
 				}
 				leaseID, err := plip.Spec.LeaseID.FromCRD()
 				if err != nil {
-					// logaudit:ignore the lease ID failed to parse
 					op.log.Error("invalid lease ID", "err", err)
 					continue // Ignore event
 				}
@@ -900,7 +899,6 @@ func (op *ipOperator) observeIPState(ctx context.Context) (<-chan cip.ResourceEv
 
 				case watch.Error:
 					// Based on examination of the implementation code, this is basically never called anyways
-					// logaudit:ignore watch errors concern the watch stream, not a single lease
 					op.log.Error("watch error", "err", result.Object)
 
 				default:
