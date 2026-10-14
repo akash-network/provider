@@ -21,8 +21,6 @@ import (
 	"k8s.io/client-go/tools/pager"
 
 	"cosmossdk.io/log"
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 
@@ -577,22 +575,16 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 
 	evData := make([]hostnameResourceEvent, len(data))
 	for i, v := range data {
-		ownerAddr, err := sdktypes.AccAddressFromBech32(v.Spec.Owner)
+		lid, err := v.Spec.LeaseID()
 		if err != nil {
-			return nil, err
+			op.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+			continue
 		}
-		providerAddr, err := sdktypes.AccAddressFromBech32(v.Spec.Provider)
-		if err != nil {
-			return nil, err
-		}
+
 		ev := hostnameResourceEvent{
+			lid:          lid,
 			eventType:    ctypes.ProviderResourceAdd,
 			hostname:     v.Spec.Hostname,
-			oseq:         v.Spec.Oseq,
-			gseq:         v.Spec.Gseq,
-			dseq:         v.Spec.Dseq,
-			owner:        ownerAddr,
-			provider:     providerAddr,
 			serviceName:  v.Spec.ServiceName,
 			externalPort: v.Spec.ExternalPort,
 		}
@@ -622,23 +614,15 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 					return
 				}
 				ph := result.Object.(*crd.ProviderHost)
-				ownerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Owner)
+				lid, err := ph.Spec.LeaseID()
 				if err != nil {
-					op.log.Error("invalid owner address in provider host", "owner", ph.Spec.Owner, "err", err)
-					continue // Ignore event
+					op.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+					continue
 				}
-				providerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Provider)
-				if err != nil {
-					op.log.Error("invalid provider address in provider host", "provider", ph.Spec.Provider, "err", err)
-					continue // Ignore event
-				}
+
 				ev := hostnameResourceEvent{
+					lid:          lid,
 					hostname:     ph.Spec.Hostname,
-					dseq:         ph.Spec.Dseq,
-					oseq:         ph.Spec.Oseq,
-					gseq:         ph.Spec.Gseq,
-					owner:        ownerAddr,
-					provider:     providerAddr,
 					serviceName:  ph.Spec.ServiceName,
 					externalPort: ph.Spec.ExternalPort,
 				}
@@ -653,7 +637,6 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 
 				case watch.Error:
 					// Based on examination of the implementation code, this is basically never called anyways
-					// logaudit:ignore watch errors concern the watch stream, not a single lease
 					op.log.Error("watch error", "err", result.Object)
 
 				default:

@@ -44,6 +44,7 @@ var (
 	}
 
 	logMethods = map[string]bool{"Debug": true, "Info": true, "Warn": true, "Error": true}
+	withMethod = "With"
 
 	guardSkipDirs = map[string]bool{
 		".git": true, ".cache": true, ".idea": true, ".superpowers": true, "dist": true,
@@ -171,7 +172,7 @@ func TestLogKeysAreCanonical(t *testing.T) {
 			}
 
 			switch {
-			case sel.Sel.Name == "With":
+			case sel.Sel.Name == withMethod:
 				if lit, ok := call.Args[0].(*ast.BasicLit); ok && lit.Kind == token.STRING {
 					violations = append(violations, checkKeyVals(fset, call, call.Args, true)...)
 				}

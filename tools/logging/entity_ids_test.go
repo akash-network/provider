@@ -22,23 +22,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestLogsCarryEntityIDs fails when a log call is made while an entity ID (lease,
-// order, deployment, group or bid) is in lexical scope, but neither the call nor
-// the logger's known With(...) chain carries an ID key (lid, oid, did, gid, bid).
-// It also fails when a call repeats a key the logger already carries, which would
-// emit the key twice.
+// TestLogEntityIDKeys audits the key/value pairs of log and With calls that carry
+// an entity ID (lease, order, deployment, group or bid). It fails when
+//   - an ID value is logged under a key other than its own (lid, oid, did, gid, bid),
+//   - an ID key carries a value that is not of its ID type,
+//   - an ID key is already bound by the logger's known With(...) chain, which
+//     would emit it twice.
 //
-// An ID is in scope when a variable declared before the call, in an enclosing
-// block of the same function (parameters and receiver included), is an ID, or is
-// a struct with an ID field, or has a no-argument method returning an ID.
-//
-// Calls where the ID is in scope but must not be logged (e.g. it is known to be
-// invalid) are exempted with a "logaudit:ignore <reason>" comment on the call
-// line or the line above.
-func TestLogsCarryEntityIDs(t *testing.T) {
+// Entries without ID keys or values are not audited: logging an ID is never required.
+func TestLogEntityIDKeys(t *testing.T) {
 	root := repoRoot(t)
 
-	pkgs, err := loadAuditPackages(root)
+	pkgs, err := loadAuditPackages(root, "./...")
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
@@ -52,12 +47,62 @@ func TestLogsCarryEntityIDs(t *testing.T) {
 	}
 	sort.Strings(violations)
 
-	require.Empty(t, violations, "log calls without an entity ID key while one is in scope:\n%s", strings.Join(violations, "\n"))
+	require.Empty(t, violations, "misused entity ID log keys:\n%s", strings.Join(violations, "\n"))
+}
+
+func TestEntityIDAuditFixture(t *testing.T) {
+	checkAuditFixture(t, "./tools/logging/testdata/entityids", func(p *auditPackage) []string {
+		return newEntityAudit(p).run()
+	})
+}
+
+// checkAuditFixture runs audit on the fixture package in dir, where every line
+// that must be reported carries a `// want` comment quoting part of the violation.
+func checkAuditFixture(t *testing.T, dir string, audit func(*auditPackage) []string) {
+	t.Helper()
+
+	pkgs, err := loadAuditPackages(repoRoot(t), dir)
+	require.NoError(t, err)
+	require.Len(t, pkgs, 1)
+	p := pkgs[0]
+
+	want := map[string]string{}
+	for _, f := range p.Syntax {
+		for _, cg := range f.Comments {
+			for _, c := range cg.List {
+				if s, ok := strings.CutPrefix(c.Text, "// want "); ok {
+					w, err := strconv.Unquote(s)
+					require.NoError(t, err, c.Text)
+					pos := p.Fset.Position(c.Pos())
+					want[fmt.Sprintf("%s:%d", pos.Filename, pos.Line)] = w
+				}
+			}
+		}
+	}
+	require.NotEmpty(t, want)
+
+	for _, v := range audit(p) {
+		loc, _, _ := strings.Cut(v, ": ")
+		w, ok := want[loc]
+		if !ok {
+			t.Errorf("unexpected violation: %s", v)
+			continue
+		}
+		delete(want, loc)
+		if !strings.Contains(v, w) {
+			t.Errorf("violation %q does not contain %q", v, w)
+		}
+	}
+
+	for loc, w := range want {
+		t.Errorf("%s: violation %q not reported", loc, w)
+	}
 }
 
 var (
+	// entityIDTypes maps an ID type name to its key; entityIDKeys is the reverse.
 	entityIDTypes = map[string]string{"LeaseID": KeyLeaseID, "OrderID": KeyOrderID, "DeploymentID": KeyDeploymentID, "GroupID": KeyGroupID, "BidID": KeyBidID}
-	entityIDKeys  = map[string]bool{KeyLeaseID: true, KeyOrderID: true, KeyDeploymentID: true, KeyGroupID: true, KeyBidID: true}
+	entityIDKeys  = map[string]string{KeyLeaseID: "LeaseID", KeyOrderID: "OrderID", KeyDeploymentID: "DeploymentID", KeyGroupID: "GroupID", KeyBidID: "BidID"}
 )
 
 // auditPackage is a provider package type-checked from source; its dependencies
@@ -79,9 +124,9 @@ type listedPackage struct {
 	Error           *struct{ Err string }
 }
 
-// loadAuditPackages type-checks every package of the main module in root.
-func loadAuditPackages(root string) ([]*auditPackage, error) {
-	cmd := exec.Command("go", "list", "-e", "-export", "-compiled", "-deps", "-json", "./...")
+// loadAuditPackages type-checks the main module packages in root matching pattern.
+func loadAuditPackages(root, pattern string) ([]*auditPackage, error) {
+	cmd := exec.Command("go", "list", "-e", "-export", "-compiled", "-deps", "-json", pattern) // nolint: gosec
 	cmd.Dir = root
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -188,53 +233,6 @@ func idKind(t types.Type) string {
 	return entityIDTypes[n.Obj().Name()]
 }
 
-// carriesID reports which entity ID a value of type t gives access to: t is an
-// ID, has an ID field (directly or one struct level down), or has a no-argument
-// method returning an ID.
-func carriesID(t types.Type) string {
-	return carriesIDDepth(t, 2)
-}
-
-func carriesIDDepth(t types.Type, depth int) string {
-	if k := idKind(t); k != "" {
-		return k
-	}
-
-	base := t
-	if p, ok := base.(*types.Pointer); ok {
-		base = p.Elem()
-	}
-
-	if st, ok := base.Underlying().(*types.Struct); ok && depth > 0 {
-		for i := 0; i < st.NumFields(); i++ {
-			ft := st.Field(i).Type()
-			if k := idKind(ft); k != "" {
-				return k
-			}
-			if _, isStruct := ft.Underlying().(*types.Struct); isStruct && depth > 1 {
-				if k := carriesIDDepth(ft, depth-1); k != "" {
-					return k
-				}
-			}
-		}
-	}
-
-	ms := types.NewMethodSet(types.NewPointer(base))
-	if types.IsInterface(base) {
-		ms = types.NewMethodSet(base)
-	}
-	for i := 0; i < ms.Len(); i++ {
-		sig, ok := ms.At(i).Type().(*types.Signature)
-		if ok && sig.Params().Len() == 0 && sig.Results().Len() == 1 {
-			if k := idKind(sig.Results().At(0).Type()); k != "" {
-				return k
-			}
-		}
-	}
-
-	return ""
-}
-
 func isLoggerType(t types.Type) bool {
 	return t != nil && types.TypeString(t, nil) == "cosmossdk.io/log.Logger"
 }
@@ -264,7 +262,7 @@ func (a *entityAudit) boundKeys(e ast.Expr) map[string]bool {
 	case *ast.ParenExpr:
 		return a.boundKeys(x.X)
 	case *ast.CallExpr:
-		if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "With" {
+		if sel, ok := x.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == withMethod {
 			for k := range literalKeys(x.Args) {
 				res[k] = true
 			}
@@ -355,101 +353,62 @@ func (a *entityAudit) collectLoggerAssignments() {
 	}
 }
 
-// idsInScope returns the entity-ID-bearing variables visible at pos inside fn.
-func (a *entityAudit) idsInScope(fn *ast.FuncDecl, pos token.Pos) []string {
-	scope := a.pkg.Types.Scope().Innermost(pos)
-	fnScope := a.pkg.TypesInfo.Scopes[fn.Type]
-
-	var res []string
-	for s := scope; s != nil; s = s.Parent() {
-		for _, name := range s.Names() {
-			v, ok := s.Lookup(name).(*types.Var)
-			if !ok || v.Pos() >= pos || name == "_" {
-				continue
-			}
-			if k := carriesID(v.Type()); k != "" {
-				res = append(res, k+"="+name)
-			}
-		}
-		if s == fnScope {
-			break
-		}
-	}
-	sort.Strings(res)
-
-	return res
-}
-
+// run returns a "file:line: key "k": rule" violation for every misused ID key/value pair.
 func (a *entityAudit) run() []string {
 	var res []string
 	info := a.pkg.TypesInfo
+	pkgName := func(p *types.Package) string { return p.Name() }
 
 	for _, f := range a.pkg.Syntax {
-		ignored := map[int]bool{}
-		for _, cg := range f.Comments {
-			for _, c := range cg.List {
-				if strings.Contains(c.Text, "logaudit:ignore") {
-					ignored[a.pkg.Fset.Position(c.Pos()).Line] = true
-				}
-			}
-		}
-
-		for _, decl := range f.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
-				continue
-			}
-
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok || len(call.Args) == 0 {
-					return true
-				}
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok || !logMethods[sel.Sel.Name] || !isLoggerType(info.TypeOf(sel.X)) {
-					return true
-				}
-
-				pos := a.pkg.Fset.Position(call.Pos())
-				if ignored[pos.Line] || ignored[pos.Line-1] {
-					return true
-				}
-
-				keys := literalKeys(call.Args[1:])
-				bound := a.boundKeys(sel.X)
-
-				var dups []string
-				for k := range keys {
-					if bound[k] && k != KeyModule {
-						dups = append(dups, k)
-					}
-				}
-				if len(dups) > 0 {
-					sort.Strings(dups)
-					res = append(res, fmt.Sprintf("%s:%d: %s %s: key(s) %s already bound by the logger's With",
-						pos.Filename, pos.Line, fn.Name.Name, types.ExprString(call.Args[0]), strings.Join(dups, ",")))
-				}
-
-				for k := range bound {
-					keys[k] = true
-				}
-				for k := range keys {
-					if entityIDKeys[k] {
-						return true
-					}
-				}
-
-				ids := a.idsInScope(fn, call.Pos())
-				if len(ids) == 0 {
-					return true
-				}
-
-				res = append(res, fmt.Sprintf("%s:%d: %s %s: in scope [%s], logged without lid/oid/did/gid/bid",
-					pos.Filename, pos.Line, fn.Name.Name, types.ExprString(call.Args[0]), strings.Join(ids, " ")))
-
+		ast.Inspect(f, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) == 0 {
 				return true
-			})
-		}
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || !isLoggerType(info.TypeOf(sel.X)) {
+				return true
+			}
+
+			kv := call.Args
+			switch {
+			case sel.Sel.Name == withMethod:
+			case logMethods[sel.Sel.Name]:
+				kv = call.Args[1:]
+			default:
+				return true
+			}
+
+			pos := a.pkg.Fset.Position(call.Pos())
+			report := func(key, rule string) {
+				res = append(res, fmt.Sprintf("%s:%d: key %q: %s", pos.Filename, pos.Line, key, rule))
+			}
+
+			bound := a.boundKeys(sel.X)
+			for i := 0; i+1 < len(kv); i += 2 {
+				lit, ok := kv[i].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					continue
+				}
+				key, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					continue
+				}
+
+				vt := info.TypeOf(kv[i+1])
+				vkey := idKind(vt)
+				switch {
+				case vkey != "" && vkey != key:
+					report(key, fmt.Sprintf("%s value must use key %q", entityIDKeys[vkey], vkey))
+				case entityIDKeys[key] != "" && vkey != key:
+					report(key, fmt.Sprintf("must carry a %s, got %s", entityIDKeys[key], types.TypeString(vt, pkgName)))
+				case entityIDKeys[key] != "" && bound[key]:
+					report(key, "already bound by the logger's With")
+				}
+			}
+
+			return true
+		})
 	}
 
 	return res

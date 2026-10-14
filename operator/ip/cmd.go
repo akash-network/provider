@@ -41,7 +41,7 @@ func Cmd() *cobra.Command {
 				return fmt.Errorf("%w: provider address must valid bech32", err)
 			}
 
-			client, err := clusterClient.NewClient(cmd.Context(), logger, ns)
+			client, err := clusterClient.NewClient(cmd.Context(), logger.With("module", "operator-ip.kube-client"), ns)
 			if err != nil {
 				return err
 			}
@@ -56,7 +56,7 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-ip", "rest")
+			restPort, err := common.DetectPort(ctx, logger, cmd.Flags(), common.FlagRESTPort, "operator-ip", "rest")
 			if err != nil {
 				return err
 			}

@@ -43,7 +43,7 @@ func Cmd() *cobra.Command {
 				"gateway_namespace", gwCfg.Namespace,
 				"gateway_provider", gwCfg.Provider)
 
-			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
+			restPort, err := common.DetectPort(ctx, logger, cmd.Flags(), common.FlagRESTPort, "operator-hostname", "rest")
 			if err != nil {
 				return err
 			}

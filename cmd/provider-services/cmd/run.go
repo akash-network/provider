@@ -515,7 +515,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	logger := ctxlog.LogcFromCtx(cmd.Context())
+	logger := ctxlog.LogcFromCtx(cmd.Context()).With("module", "provider")
 
 	runMigrations := viper.GetBool(FlagMigrationsEnabled)
 	if runMigrations {
@@ -1038,7 +1038,7 @@ func createClusterClient(ctx context.Context, log log.Logger, _ *cobra.Command) 
 		return nil, fmt.Errorf("%w: --%s required", errInvalidConfig, providerflags.FlagK8sManifestNS)
 	}
 
-	return kube.NewClient(ctx, log, ns)
+	return kube.NewClient(ctx, log.With("module", "kube-client"), ns)
 }
 
 func showErrorToUser(err error) error {

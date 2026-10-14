@@ -36,7 +36,7 @@ const (
 	DefaultLevel     = "info"
 	DefaultFormat    = FormatPlain
 	DefaultColor     = true
-	DefaultTimestamp = TimestampRFC3339
+	DefaultTimestamp = TimestampRFC3339Nano
 	DefaultTrace     = false
 )
 

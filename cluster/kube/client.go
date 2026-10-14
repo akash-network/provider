@@ -154,7 +154,7 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		ac:                ac,
 		dc:                dc,
 		ns:                ns,
-		log:               log.With("client", "kube"),
+		log:               log,
 		kubeContentConfig: kubecfg,
 		ingressMode:       ingressMode,
 		gatewayName:       gwCfg.Name,
@@ -538,17 +538,7 @@ func (c *client) Deploy(ctx context.Context, deployment ctypes.IDeployment) (err
 		}
 
 		if tmpErr != nil || err != nil {
-			var dArgs []any
-			var dMsg string
-
-			applyMsgLog := func(msg string, arg any) {
-				dMsg += msg
-				dArgs = append(dArgs, arg)
-			}
-
-			applyMsgLog("unable to deploy lid=%s. last known state:\n", lid)
-
-			log.Error(fmt.Sprintf(dMsg, dArgs...))
+			log.Error("unable to deploy", "err", err)
 
 			log.Info("attempting recover objects to previous state")
 			po.recover(ctx, c.kc, c.ac)

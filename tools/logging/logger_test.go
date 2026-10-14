@@ -37,6 +37,20 @@ func jsonLines(t *testing.T, buf *bytes.Buffer) []map[string]any {
 	return res
 }
 
+// Entries logged within the same second must stay ordered by their time field.
+func TestDefaultTimestampIsSubSecond(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Format = FormatJSON
+	cfg.Color = false
+
+	buf := &bytes.Buffer{}
+	New(buf, cfg).Info("hello")
+
+	lines := jsonLines(t, buf)
+	require.Len(t, lines, 1)
+	require.Regexp(t, `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+`, lines[0][keyTime])
+}
+
 func TestPlainColor(t *testing.T) {
 	buf := &bytes.Buffer{}
 	New(buf, mustConfig(t, "info", "plain", true, "rfc3339", false)).Info("hello", "k", "v")

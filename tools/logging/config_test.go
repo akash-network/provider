@@ -14,7 +14,7 @@ func TestParseConfigDefaults(t *testing.T) {
 		Level:     zapcore.InfoLevel,
 		Format:    "plain",
 		Color:     true,
-		Timestamp: "rfc3339",
+		Timestamp: "rfc3339nano",
 		Trace:     false,
 	}, DefaultConfig())
 }
@@ -109,7 +109,7 @@ func TestConfigEnv(t *testing.T) {
 		{Name: "ATTESTATION_LOG_LEVEL", Value: "info"},
 		{Name: "ATTESTATION_LOG_FORMAT", Value: "plain"},
 		{Name: "ATTESTATION_LOG_COLOR", Value: "true"},
-		{Name: "ATTESTATION_LOG_TIMESTAMP", Value: "rfc3339"},
+		{Name: "ATTESTATION_LOG_TIMESTAMP", Value: "rfc3339nano"},
 		{Name: "ATTESTATION_TRACE", Value: "false"},
 	}, DefaultConfig().Env("ATTESTATION_"))
 }

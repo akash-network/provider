@@ -210,7 +210,7 @@ func InformKubeObjects(ctx context.Context, pub pubsub.Publisher, informer cache
 		})
 
 		if err != nil {
-			ctxlog.LogcFromCtx(ctx).Error("couldn't register event handlers", "err", err)
+			ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory").Error("couldn't register event handlers", "err", err)
 			return nil
 		}
 

@@ -31,7 +31,7 @@ func TestConfigFromEnvDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	want := Config{LevelSpec: "info", Level: zapcore.InfoLevel, Format: "plain", Color: true, Timestamp: "rfc3339"}
+	want := Config{LevelSpec: "info", Level: zapcore.InfoLevel, Format: "plain", Color: true, Timestamp: "rfc3339nano"}
 	if cfg.LevelSpec != want.LevelSpec || cfg.Level != want.Level || cfg.Format != want.Format ||
 		cfg.Color != want.Color || cfg.Timestamp != want.Timestamp || cfg.Trace != want.Trace || cfg.Modules != nil {
 		t.Fatalf("defaults: got %+v want %+v", cfg, want)

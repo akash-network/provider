@@ -29,7 +29,7 @@ func TestDiscoveryPodEnvPropagatesLogging(t *testing.T) {
 		{Name: "AP_LOG_LEVEL", Value: "psutil:debug,*:warn"},
 		{Name: "AP_LOG_FORMAT", Value: "json"},
 		{Name: "AP_LOG_COLOR", Value: "false"},
-		{Name: "AP_LOG_TIMESTAMP", Value: "rfc3339"},
+		{Name: "AP_LOG_TIMESTAMP", Value: "rfc3339nano"},
 		{Name: "AP_TRACE", Value: "false"},
 	}, discoveryPodEnv(cmd.Context()))
 }

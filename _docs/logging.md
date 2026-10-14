@@ -7,13 +7,13 @@ attestation sidecar use the same logger (`tools/logging`, backed by zap). All lo
 
 Each option can be set as a flag, an environment variable (`AP_` or `AKASH_` prefix) or a config file key.
 
-| Flag              | Environment        | Values                                                        | Default   |
-|-------------------|--------------------|---------------------------------------------------------------|-----------|
-| `--log_level`     | `AP_LOG_LEVEL`     | `trace\|debug\|info\|warn\|error\|fatal\|panic` or a module filter | `info`    |
-| `--log_format`    | `AP_LOG_FORMAT`    | `plain\|json`                                                  | `plain`   |
-| `--log_color`     | `AP_LOG_COLOR`     | `true\|false`                                                  | `true`    |
-| `--log_timestamp` | `AP_LOG_TIMESTAMP` | `off\|rfc3339\|rfc3339nano\|kitchen` (empty value = `off`)     | `rfc3339` |
-| `--trace`         | `AP_TRACE`         | `true\|false` — stack traces on error entries                 | `false`   |
+| Flag              | Environment        | Values                                                        | Default       |
+|-------------------|--------------------|---------------------------------------------------------------|---------------|
+| `--log_level`     | `AP_LOG_LEVEL`     | `trace\|debug\|info\|warn\|error\|fatal\|panic` or a module filter | `info`        |
+| `--log_format`    | `AP_LOG_FORMAT`    | `plain\|json`                                                  | `plain`       |
+| `--log_color`     | `AP_LOG_COLOR`     | `true\|false`                                                  | `true`        |
+| `--log_timestamp` | `AP_LOG_TIMESTAMP` | `off\|rfc3339\|rfc3339nano\|kitchen` (empty value = `off`)     | `rfc3339nano` |
+| `--trace`         | `AP_TRACE`         | `true\|false` — stack traces on error entries                 | `false`       |
 
 - `log_format=json` always disables colors, whatever `log_color` says.
 - `trace` and `debug` are the same level.
@@ -55,6 +55,11 @@ Filtering happens before an entry is encoded, so suppressed entries cost almost 
 ## Keys
 
 All keys are `snake_case`. A unit test (`tools/logging/keys_guard_test.go`) fails on non-canonical keys.
+`tools/logging/module_audit_test.go` fails when a log call goes through a logger taken from the context
+(`ctxlog.LogcFromCtx`) or created by `logging.New` without a `module` bound by `With`.
+Another (`tools/logging/entity_ids_test.go`) fails when an ID is logged under a key other than its own,
+an ID key carries a value of another type, or an ID key is already bound by the logger's `With`.
+Logging an ID is never required.
 
 | Key           | Meaning                                                         |
 |---------------|-----------------------------------------------------------------|
@@ -110,6 +115,9 @@ Module names changed where a different key was used before:
 | operator clients in `run`      | `operator-inventory-client`, `operator-ip-client`, `operator-hostname-client` |
 | `migrate run`                  | `migrations`                                                   |
 | hardware discovery pods (`tools psutil serve`) | `psutil`                                       |
+| `client=kube` (kube client)    | `kube-client` in `run`, `operator-ip.kube-client` in `operator ip` |
+| none (`run` itself)            | `provider`                                                     |
+| none (REST / gRPC gateway)     | `gateway-rest`, `gateway-grpc`                                 |
 
 ## Hardware discovery pods
 
@@ -127,7 +135,8 @@ so logging is configured once on the provider.
 ## Behavior changes
 
 - `run` logs moved from stderr to stdout. CLI errors printed by cobra still go to stderr.
-- Colors and RFC3339 timestamps are on by default. Set `AP_LOG_FORMAT=json` or `AP_LOG_COLOR=false`
+- Colors and RFC3339 timestamps with nanoseconds (`rfc3339nano`) are on by default, so entries logged
+  within the same second keep their order. Set `AP_LOG_FORMAT=json` or `AP_LOG_COLOR=false`
   to keep ANSI codes out of `kubectl logs`.
 - Default level of `operator ip|hostname` and `migrate run` is now `info` (previously everything was logged);
   `operator inventory` changed from `debug` to `info`.

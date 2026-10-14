@@ -87,12 +87,12 @@ func Cmd() *cobra.Command {
 			discoveryImage := viper.GetString(FlagDiscoveryImage)
 			namespace := viper.GetString(FlagPodNamespace)
 
-			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-inventory", "rest")
+			restPort, err := common.DetectPort(ctx, log, cmd.Flags(), common.FlagRESTPort, "operator-inventory", "rest")
 			if err != nil {
 				return err
 			}
 
-			grpcPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagGRPCPort, "operator-inventory", "grpc")
+			grpcPort, err := common.DetectPort(ctx, log, cmd.Flags(), common.FlagGRPCPort, "operator-inventory", "grpc")
 			if err != nil {
 				return err
 			}

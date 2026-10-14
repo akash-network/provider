@@ -36,7 +36,7 @@ func AuthHeaderTokenExtractor(r *http.Request) (string, error) {
 func DefaultErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
 	var logger log.Logger
 	if r != nil {
-		logger = ctxlog.LogcFromCtx(r.Context())
+		logger = ctxlog.LogcFromCtx(r.Context()).With("module", "gateway-rest")
 	} else {
 		logger = log.NewNopLogger()
 	}
