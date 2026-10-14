@@ -4,6 +4,12 @@ name: Integration tests
 # yamllint disable-line rule:truthy
 on:
   workflow_call:
+    inputs:
+      e2e_target:
+        description: 'Make target for E2E tests'
+        required: false
+        default: 'test-e2e-integration'
+        type: string
 
 env:
   KUBE_SSH_NODES: kind
@@ -144,7 +150,7 @@ jobs:
       - name: Run E2E Tests
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider
         run: |
-          make test-e2e-integration
+          make ${{ inputs.e2e_target }}
       - name: Print operator inventory logs
         if: always()
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
