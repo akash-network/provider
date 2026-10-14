@@ -123,23 +123,37 @@ func (c *client) findAttestationSidecarPod(ctx context.Context, namespace string
 	return candidates[podIndex].Name, nil
 }
 
-// DetectTEEPlatform scans K8s nodes to determine the TEE platform available.
-// Returns TEEPlatformTDX if any node has the TDX label, TEEPlatformSNP for SNP,
-// or TEEPlatformNone if no CC-capable nodes are found.
+// DetectTEEPlatform scans schedulable nodes managed by the Akash inventory
+// operator. A mixed or unavailable result stays unresolved so TEE inventory
+// adjustment rejects the workload instead of falling back to the OCI runtime.
 func (c *client) DetectTEEPlatform(ctx context.Context) ctypes.TEEPlatform {
-	nodes, err := c.kc.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	nodes, err := c.kc.CoreV1().Nodes().List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("%s=%s", builder.AkashManagedLabelName, builder.ValTrue),
+	})
 	if err != nil {
+		c.log.Error("TEE platform detection failed; TEE workloads will be rejected", "error", err)
 		return ctypes.TEEPlatformNone
 	}
 
+	var hasTDX, hasSNP bool
 	for _, node := range nodes.Items {
 		if node.Labels[intelTDXLabelKey] == builder.ValTrue {
-			return ctypes.TEEPlatformTDX
+			hasTDX = true
 		}
 		if node.Labels[amdSNPLabelKey] == builder.ValTrue {
-			return ctypes.TEEPlatformSNP
+			hasSNP = true
 		}
 	}
 
+	if hasTDX && hasSNP {
+		c.log.Error("TEE platform detection found both TDX and SNP; TEE workloads will be rejected")
+		return ctypes.TEEPlatformNone
+	}
+	if hasTDX {
+		return ctypes.TEEPlatformTDX
+	}
+	if hasSNP {
+		return ctypes.TEEPlatformSNP
+	}
 	return ctypes.TEEPlatformNone
 }
