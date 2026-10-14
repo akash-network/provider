@@ -31,7 +31,9 @@ ifeq ($(AKASHD_BUILD_FROM_SRC), true)
 	AKASH_BUILD_LOCAL_IMAGE   := true
 else
 	AKASH_BUILD_LOCAL_IMAGE   := false
-	AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:$(AKASHD_VERSION)-$(KUBE_DOCKER_IMAGE_ARCH)
+	# TEMPORARY: AKASHD_VERSION resolves to 2.1.0 (Go module v2 path) which has no
+	# published node image; pin to latest until a 2.x image is released. Remove after.
+	AKASH_DOCKER_IMAGE        ?= ghcr.io/akash-network/node:latest-$(KUBE_DOCKER_IMAGE_ARCH)
 	AKASH_DOCKER_IMAGE_EXISTS := $(shell docker inspect --type=image $(AKASH_DOCKER_IMAGE) >/dev/null 2>&1 && echo true || echo false)
 	ifeq ($(shell $(AKASH_DOCKER_IMAGE_EXISTS)), false)
 		AKASH_DOCKER_IMAGE      := $(AKASH_LOCAL_DOCKER_IMAGE)

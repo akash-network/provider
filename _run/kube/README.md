@@ -82,9 +82,15 @@ there may be a problem.
 
 As an alternative to NGINX Ingress, you can use Kubernetes Gateway API. NGINX Ingress will be EOL by March 2026, so Gateway API is the recommended approach for new deployments.
 
-| Option                                   | __t1 Step: 1 (Gateway API)__     | Explanation                                                                                      |
-|------------------------------------------|----------------------------------|--------------------------------------------------------------------------------------------------|
-| Gateway API with NGINX Gateway Fabric    | `make kube-cluster-setup-gateway`| Creates kind cluster with Gateway API support, installs NGINX Gateway Fabric, and sets up all resources. Configures hostname operator for Gateway API mode. Maps ports 8080 (HTTP) and 8443 (HTTPS). |
+| Option                                   | __t1 Step: 1 (Gateway API)__              | Explanation                                                                                      |
+|------------------------------------------|-------------------------------------------|--------------------------------------------------------------------------------------------------|
+| Gateway API with NGINX Gateway Fabric    | `GATEWAY_API=true make kube-cluster-setup`| Creates kind cluster with Gateway API support, installs NGINX Gateway Fabric, and sets up all resources. Configures hostname operator for Gateway API mode. Maps ports 8080 (HTTP) and 8443 (HTTPS). |
+
+Passing `GATEWAY_API=true` records the choice in the cluster's dev cache
+(`.gateway-api` marker under `$AP_RUN_DIR`), mirroring how `CONFIDENTIAL_COMPUTE=true`
+works. Once set, subsequent `make` commands in this directory (e.g. `make provider-run`)
+auto-detect Gateway API mode from the marker — you do NOT need to re-pass
+`GATEWAY_API=true`. The marker is removed by `make clean-kube` and `make kube-cluster-delete`.
 
 This comprehensive setup target:
 - Creates a kind cluster with port mappings for HTTP (8080) and HTTPS (8443)
@@ -169,8 +175,12 @@ make provider-run
 
 **With Gateway API:**
 ```sh
-make provider-run-gateway
+make provider-run
 ```
+
+If the cluster was set up with `GATEWAY_API=true`, the `.gateway-api` cache marker is
+already present, so a plain `make provider-run` automatically runs in Gateway API mode.
+(To force it on a cluster set up without the marker, use `GATEWAY_API=true make provider-run`.)
 
 The Gateway API mode uses the following flags:
 - `--ingress-mode=gateway-api` - Enable Gateway API instead of NGINX Ingress
