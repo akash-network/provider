@@ -144,6 +144,13 @@ func newOrderInternal(svc *service, oid mtypes.OrderID, cfg Config, pass Provide
 
 var matchBidNotFound = regexp.MustCompile("^.+bid not found.+$")
 
+const (
+	leaseCheckTimeout = 30 * time.Second
+	// A close broadcast would not land either while the chain is unreachable, so the bid
+	// stays open and the lookup retries rather than closing blind.
+	leaseCheckRetryInterval = 30 * time.Second
+)
+
 func (o *order) bidTimeoutEnabled() bool {
 	return o.cfg.BidTimeout > time.Duration(0)
 }
@@ -192,6 +199,8 @@ func (o *order) run(checkForExistingBid bool) {
 		shouldBidCh <-chan runner.Result
 		// Channel that triggers when bid timeout is reached.
 		bidTimeout <-chan time.Time
+		// Channel for receiving the on-chain lease lookup done before a timed-out bid is closed.
+		leaseCheckCh <-chan runner.Result
 
 		group       *dtypes.Group
 		reservation ctypes.Reservation
@@ -456,7 +465,32 @@ loop:
 
 			bidTimeout = o.getBidTimeout()
 		case <-bidTimeout:
-			// The bid was not acted upon (e.g. lease created or deployment closed) so close it now
+			bidTimeout = nil
+
+			// A block whose events the provider failed to ingest is never replayed, so a
+			// timeout is not evidence that the order went unmatched, and closing a bid that
+			// already carries a lease tears down the tenant's running workload.
+			o.log.Info("bid timeout, checking chain for lease")
+			leaseCheckCh = runner.Do(func() runner.Result {
+				return runner.NewResult(o.queryLease(ctx))
+			})
+
+		case result := <-leaseCheckCh:
+			leaseCheckCh = nil
+
+			if result.Error() != nil {
+				o.log.Error("checking chain for lease", "err", result.Error(), "retry-in", leaseCheckRetryInterval)
+				bidTimeout = time.After(leaseCheckRetryInterval)
+				break
+			}
+
+			if lease, _ := result.Value().(*mtypes.Lease); lease != nil {
+				orderCompleteCounter.WithLabelValues("lease-won-missed-event").Inc()
+				o.log.Info("bid timeout, but lease is live on chain; keeping it", "lease", lease.ID, "lease-state", lease.State)
+				won = true
+				break loop
+			}
+
 			o.log.Info("bid timeout, closing bid")
 			orderCompleteCounter.WithLabelValues("bid-timeout").Inc()
 			break loop
@@ -519,6 +553,37 @@ loop:
 	if pricech != nil {
 		<-pricech
 	}
+}
+
+// queryLease returns a lease this provider holds for the order. Leases in any state other
+// than closed count: the workload is running and the tenant is paying for it.
+func (o *order) queryLease(ctx context.Context) (*mtypes.Lease, error) {
+	ctx, cancel := context.WithTimeout(ctx, leaseCheckTimeout)
+	defer cancel()
+
+	resp, err := o.session.Client().Query().Market().Leases(ctx, &mvbeta.QueryLeasesRequest{
+		Filters: mtypes.LeaseFilters{
+			Owner:    o.orderID.Owner,
+			DSeq:     o.orderID.DSeq,
+			GSeq:     o.orderID.GSeq,
+			OSeq:     o.orderID.OSeq,
+			Provider: o.session.Provider().Address().String(),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range resp.Leases {
+		lease := entry.GetLease()
+		if lease.State == mtypes.LeaseClosed {
+			continue
+		}
+
+		return &lease, nil
+	}
+
+	return nil, nil
 }
 
 func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
