@@ -15,10 +15,17 @@ const (
 	NameTDXGPU = "tdx-gpu"
 )
 
-// GPUDeviceReport holds attestation evidence for a single GPU.
+// GPUDeviceReport holds the separately framed attestation evidence for one GPU.
+// Report retains the legacy concatenated representation for protocol clients
+// that have not migrated to the explicit fields.
 type GPUDeviceReport struct {
-	DeviceIndex uint32 `json:"device_index"`
-	Report      []byte `json:"report"`
+	DeviceIndex       uint32 `json:"device_index"`
+	Architecture      string `json:"architecture"`
+	UUID              string `json:"uuid"`
+	Report            []byte `json:"report"`
+	AttestationReport []byte `json:"attestation_report"`
+	CECReport         []byte `json:"cec_report,omitempty"`
+	CertificateChain  []byte `json:"certificate_chain,omitempty"`
 }
 
 // QuoteResult holds the raw hardware-signed attestation evidence.
