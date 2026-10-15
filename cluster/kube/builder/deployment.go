@@ -24,7 +24,7 @@ func NewDeployment(workload *Workload) Deployment {
 		Workload: workload,
 	}
 
-	ss.log = ss.log.With("object", "deployment", "service-name", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
+	ss.log = ss.log.With("object", "deployment", "service", ss.deployment.ManifestGroup().Services[ss.serviceIdx].Name)
 
 	return ss
 }

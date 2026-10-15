@@ -12,8 +12,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/pager"
 
-	sdktypes "github.com/cosmos/cosmos-sdk/types"
-
 	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -23,14 +21,9 @@ import (
 )
 
 type hostnameResourceEvent struct {
-	eventType ctypes.ProviderResourceEvent
-	hostname  string
-
-	owner        sdktypes.Address
-	dseq         uint64
-	oseq         uint32
-	gseq         uint32
-	provider     sdktypes.Address
+	eventType    ctypes.ProviderResourceEvent
+	hostname     string
+	lid          mtypes.LeaseID
 	serviceName  string
 	externalPort uint32
 }
@@ -83,7 +76,7 @@ func (c *client) DeclareHostname(ctx context.Context, lID mtypes.LeaseID, host s
 			ExternalPort: externalPort,
 		}
 	}
-	c.log.Info("declaring hostname", "lease", lID, "service-name", serviceName, "external-port", externalPort, "host", host)
+	c.log.Info("declaring hostname", "lid", lID, "service", serviceName, "external_port", externalPort, "hostname", host)
 
 	if obj.Annotations == nil {
 		obj.Annotations = make(map[string]string)
@@ -125,13 +118,7 @@ func (c *client) PurgeDeclaredHostnames(ctx context.Context, lID mtypes.LeaseID)
 }
 
 func (ev hostnameResourceEvent) GetLeaseID() mtypes.LeaseID {
-	return mtypes.LeaseID{
-		Owner:    ev.owner.String(),
-		DSeq:     ev.dseq,
-		GSeq:     ev.gseq,
-		OSeq:     ev.oseq,
-		Provider: ev.provider.String(),
-	}
+	return ev.lid
 }
 
 func (ev hostnameResourceEvent) GetHostname() string {
@@ -172,7 +159,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 		return nil, err
 	}
 
-	c.log.Info("starting hostname watch", "resourceVersion", lastResourceVersion)
+	c.log.Info("starting hostname watch", "resource_version", lastResourceVersion)
 	watcher, err := c.ac.AkashV2beta2().ProviderHosts(c.ns).Watch(ctx, metav1.ListOptions{
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
@@ -191,22 +178,16 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 
 	evData := make([]hostnameResourceEvent, len(data))
 	for i, v := range data {
-		ownerAddr, err := sdktypes.AccAddressFromBech32(v.Spec.Owner)
+		lid, err := v.Spec.LeaseID()
 		if err != nil {
-			return nil, err
+			c.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+			continue
 		}
-		providerAddr, err := sdktypes.AccAddressFromBech32(v.Spec.Provider)
-		if err != nil {
-			return nil, err
-		}
+
 		ev := hostnameResourceEvent{
 			eventType:    ctypes.ProviderResourceAdd,
+			lid:          lid,
 			hostname:     v.Spec.Hostname,
-			oseq:         v.Spec.Oseq,
-			gseq:         v.Spec.Gseq,
-			dseq:         v.Spec.Dseq,
-			owner:        ownerAddr,
-			provider:     providerAddr,
 			serviceName:  v.Spec.ServiceName,
 			externalPort: v.Spec.ExternalPort,
 		}
@@ -232,23 +213,16 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 					return
 				}
 				ph := result.Object.(*crd.ProviderHost)
-				ownerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Owner)
+
+				lid, err := ph.Spec.LeaseID()
 				if err != nil {
-					c.log.Error("invalid owner address in provider host", "addr", ph.Spec.Owner, "err", err)
-					continue // Ignore event
+					c.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+					continue
 				}
-				providerAddr, err := sdktypes.AccAddressFromBech32(ph.Spec.Provider)
-				if err != nil {
-					c.log.Error("invalid provider address in provider host", "addr", ph.Spec.Provider, "err", err)
-					continue // Ignore event
-				}
+
 				ev := hostnameResourceEvent{
 					hostname:     ph.Spec.Hostname,
-					dseq:         ph.Spec.Dseq,
-					oseq:         ph.Spec.Oseq,
-					gseq:         ph.Spec.Gseq,
-					owner:        ownerAddr,
-					provider:     providerAddr,
+					lid:          lid,
 					serviceName:  ph.Spec.ServiceName,
 					externalPort: ph.Spec.ExternalPort,
 				}
@@ -263,7 +237,7 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 
 				case watch.Error:
 					// Based on examination of the implementation code, this is basically never called anyways
-					c.log.Error("watch error", "err", result.Object)
+					c.log.Error("watch` error", "err", result.Object)
 
 				default:
 
@@ -294,31 +268,15 @@ func (c *client) AllHostnames(ctx context.Context) ([]chostname.ActiveHostname, 
 	err := ingressPager.EachListItem(ctx, listOptions, func(obj runtime.Object) error {
 		ph := obj.(*crd.ProviderHost)
 		hostname := ph.Spec.Hostname
-		dseq := ph.Spec.Dseq
-		gseq := ph.Spec.Gseq
-		oseq := ph.Spec.Oseq
 
-		owner, ok := ph.Labels[builder.AkashLeaseOwnerLabelName]
-		if !ok || len(owner) == 0 {
-			c.log.Error("providerhost missing owner label", "host", hostname)
-			return nil
-		}
-		provider, ok := ph.Labels[builder.AkashLeaseProviderLabelName]
-		if !ok || len(provider) == 0 {
-			c.log.Error("providerhost missing provider label", "host", hostname)
-			return nil
-		}
-
-		leaseID := mtypes.LeaseID{
-			Owner:    owner,
-			DSeq:     dseq,
-			GSeq:     gseq,
-			OSeq:     oseq,
-			Provider: provider,
+		lid, err := ph.Spec.LeaseID()
+		if err != nil {
+			c.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+			return err
 		}
 
 		result = append(result, chostname.ActiveHostname{
-			ID:       leaseID,
+			ID:       lid,
 			Hostname: hostname,
 		})
 		return nil

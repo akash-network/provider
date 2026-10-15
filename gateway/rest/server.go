@@ -27,6 +27,8 @@ func NewServer(
 	pid sdk.Address,
 	clusterConfig map[interface{}]interface{},
 ) (*http.Server, error) {
+	log = log.With("module", "gateway-rest")
+
 	restMiddleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gcontext.Set(r, fromctx.CtxKeyKubeConfig, fromctx.MustKubeConfigFromCtx(ctx))

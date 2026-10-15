@@ -15,8 +15,7 @@ import (
 	"pkg.akt.dev/node/v2/app"
 
 	"github.com/akash-network/provider/operator"
-	"github.com/akash-network/provider/operator/hostname"
-	"github.com/akash-network/provider/operator/ip"
+	"github.com/akash-network/provider/tools/logging"
 	"github.com/akash-network/provider/version"
 )
 
@@ -24,11 +23,27 @@ func NewRootCmd() *cobra.Command {
 	encodingConfig := sdkutil.MakeEncodingConfig()
 	app.ModuleBasics().RegisterInterfaces(encodingConfig.InterfaceRegistry)
 
+	envPrefixes := []string{"AP", "AKASH"}
+	upstreamPreRunE := cli.GetPersistentPreRunE(encodingConfig, envPrefixes, cli.DefaultHome)
+
 	cmd := &cobra.Command{
-		Use:               "provider-services",
-		Short:             "Provider services commands",
-		SilenceUsage:      true,
-		PersistentPreRunE: cli.GetPersistentPreRunE(encodingConfig, []string{"AP", "AKASH"}, cli.DefaultHome),
+		Use:          "provider-services",
+		Short:        "Provider services commands",
+		SilenceUsage: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// upstream pre-run rejects log_timestamp=off
+			if err := logging.NormalizeTimestampForUpstream(cmd, envPrefixes...); err != nil {
+				return err
+			}
+
+			if err := upstreamPreRunE(cmd, args); err != nil {
+				return err
+			}
+
+			_, err := logging.Setup(cmd)
+
+			return err
+		},
 	}
 
 	cmd.PersistentFlags().String(cflags.FlagNode, "http://localhost:26657", "The node address")
@@ -45,8 +60,6 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(serviceStatusCmd())
 	cmd.AddCommand(RunCmd())
 	cmd.AddCommand(LeaseShellCmd())
-	cmd.AddCommand(hostname.Cmd())
-	cmd.AddCommand(ip.Cmd())
 	cmd.AddCommand(clusterNSCmd())
 	cmd.AddCommand(migrate())
 	cmd.AddCommand(SDL2ManifestCmd())

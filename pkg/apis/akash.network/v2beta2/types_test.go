@@ -1,6 +1,7 @@
 package v2beta2
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +11,38 @@ import (
 
 	mtestutil "github.com/akash-network/provider/testutil/manifest/v2beta2"
 )
+
+// ProviderHost objects stored in clusters, and the CRD schema, encode dseq as a
+// JSON number; the spec must keep reading and writing that format.
+func Test_ProviderHostSpec_wire_format(t *testing.T) {
+	const stored = `{"owner":"akash1owner","provider":"akash1provider","hostname":"example.com","dseq":42,"gseq":1,"oseq":2,"service_name":"web","external_port":80}`
+
+	var spec ProviderHostSpec
+	require.NoError(t, json.Unmarshal([]byte(stored), &spec))
+
+	out, err := json.Marshal(spec)
+	require.NoError(t, err)
+	require.JSONEq(t, stored, string(out))
+}
+
+func Test_ProviderHostSpec_LeaseID(t *testing.T) {
+	lid := atestutil.LeaseID(t)
+	spec := ProviderHostSpec{Owner: lid.Owner, Provider: lid.Provider, Dseq: lid.DSeq, Gseq: lid.GSeq, Oseq: lid.OSeq}
+
+	got, err := spec.LeaseID()
+	require.NoError(t, err)
+	require.Equal(t, lid, got)
+
+	invalidOwner := spec
+	invalidOwner.Owner = "invalid"
+	_, err = invalidOwner.LeaseID()
+	require.Error(t, err)
+
+	invalidProvider := spec
+	invalidProvider.Provider = "invalid"
+	_, err = invalidProvider.LeaseID()
+	require.Error(t, err)
+}
 
 func Test_Manifest_encoding(t *testing.T) {
 	for _, spec := range mtestutil.Generators {

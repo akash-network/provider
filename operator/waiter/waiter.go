@@ -36,7 +36,7 @@ type operatorWaiter struct {
 func NewOperatorWaiter(ctx context.Context, logger log.Logger, waitOn ...Waitable) OperatorWaiter {
 	waiter := &operatorWaiter{
 		waitables:   waitOn,
-		log:         logger.With("cmp", "waiter"),
+		log:         logger.With("module", "waiter"),
 		delayPeriod: 2 * time.Second,
 		allReady:    make(chan struct{}),
 	}

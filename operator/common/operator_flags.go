@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"cosmossdk.io/log"
 	"github.com/spf13/cobra"
 	flag "github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -52,10 +53,10 @@ func AddProviderFlag(cmd *cobra.Command) {
 	}
 }
 
-func DetectPort(ctx context.Context, flags *flag.FlagSet, flag string, container, portName string) (int, error) {
+// DetectPort returns the port of the container's named port, falling back to the flag's value.
+// logger is the calling operator's logger.
+func DetectPort(ctx context.Context, logger log.Logger, flags *flag.FlagSet, flag string, container, portName string) (int, error) {
 	var port uint16
-
-	log := fromctx.LogrFromCtx(ctx)
 
 	if flags.Changed(flag) || !kutil.IsInsideKubernetes() {
 		var err error
@@ -95,7 +96,7 @@ func DetectPort(ctx context.Context, flags *flag.FlagSet, flag string, container
 	}
 
 	if port == 0 {
-		log.Info("unable to detect rest port from pod. falling back to default \"\". default might differ from what service expects!")
+		logger.Info("unable to detect rest port from pod. falling back to default \"\". default might differ from what service expects!")
 		var err error
 		port, err = flags.GetUint16(flag)
 		if err != nil {

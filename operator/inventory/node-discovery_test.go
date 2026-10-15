@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -13,65 +12,8 @@ import (
 	v1 "pkg.akt.dev/go/inventory/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/tools/logging/logtest"
 )
-
-type capturedLogEntry struct {
-	err    error
-	msg    string
-	values []interface{}
-}
-
-type captureSink struct {
-	entries *[]capturedLogEntry
-	values  []interface{}
-}
-
-func (s *captureSink) Init(logr.RuntimeInfo) {}
-
-func (s *captureSink) Enabled(int) bool {
-	return true
-}
-
-func (s *captureSink) Info(int, string, ...interface{}) {}
-
-func (s *captureSink) Error(err error, msg string, keysAndValues ...interface{}) {
-	values := append([]interface{}{}, s.values...)
-	values = append(values, keysAndValues...)
-	*s.entries = append(*s.entries, capturedLogEntry{
-		err:    err,
-		msg:    msg,
-		values: values,
-	})
-}
-
-func (s *captureSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
-	values := append([]interface{}{}, s.values...)
-	values = append(values, keysAndValues...)
-
-	return &captureSink{
-		entries: s.entries,
-		values:  values,
-	}
-}
-
-func (s *captureSink) WithName(string) logr.LogSink {
-	return &captureSink{
-		entries: s.entries,
-		values:  append([]interface{}{}, s.values...),
-	}
-}
-
-func logValues(values []interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-	for i := 0; i+1 < len(values); i += 2 {
-		key, ok := values[i].(string)
-		if !ok {
-			continue
-		}
-		result[key] = values[i+1]
-	}
-	return result
-}
 
 func TestSubPodAllocatedResourcesLogsAndKeepsNegative(t *testing.T) {
 	tests := []struct {
@@ -172,16 +114,17 @@ func TestSubPodAllocatedResourcesLogsAndKeepsNegative(t *testing.T) {
 					},
 				},
 			}
-			entries := make([]capturedLogEntry, 0, 1)
-			log := logr.New(&captureSink{entries: &entries})
+			log := logtest.New()
 
 			subPodAllocatedResources(log, node, pod)
 
 			require.Negative(t, tt.allocated(node))
+			entries := log.Entries()
 			require.Len(t, entries, 1)
-			require.ErrorIs(t, entries[0].err, errNegativeAllocatedResource)
+			require.Equal(t, "error", entries[0].Level)
+			require.ErrorIs(t, entries[0].KV["err"].(error), errNegativeAllocatedResource)
 
-			values := logValues(entries[0].values)
+			values := entries[0].KV
 			require.Equal(t, "node1", values["node"])
 			require.Equal(t, "lease-ns/web-0", values["pod"])
 			require.Equal(t, "pod-uid", values["pod_id"])

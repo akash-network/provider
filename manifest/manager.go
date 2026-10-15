@@ -52,7 +52,7 @@ func newManager(h *service, daddr dtypes.DeploymentID) *manager {
 		rmleasech:       make(chan mtypes.LeaseID),
 		manifestch:      make(chan manifestRequest),
 		updatech:        make(chan []byte),
-		log:             session.Log().With("deployment", daddr),
+		log:             session.Log().With("did", daddr),
 		lc:              lifecycle.New(),
 		config:          h.config,
 		hostnameService: h.hostnameService,
@@ -102,7 +102,7 @@ func (m *manager) handleLease(ev event.LeaseWon) {
 	select {
 	case m.leasech <- ev:
 	case <-m.lc.ShuttingDown():
-		m.log.Error("not running: handle manifest", "lease", ev.LeaseID)
+		m.log.Error("not running: handle manifest", "lid", ev.LeaseID)
 	}
 }
 
@@ -110,7 +110,7 @@ func (m *manager) removeLease(id mtypes.LeaseID) {
 	select {
 	case m.rmleasech <- id:
 	case <-m.lc.ShuttingDown():
-		m.log.Error("not running: remove lease", "lease", id)
+		m.log.Error("not running: remove lease", "lid", id)
 	}
 }
 
@@ -164,7 +164,7 @@ loop:
 			break loop
 
 		case ev := <-m.leasech:
-			m.log.Info("new lease", "lease", ev.LeaseID)
+			m.log.Info("new lease", "lid", ev.LeaseID)
 
 			// fetch owner's public key
 			m.clearFetched()
@@ -172,7 +172,7 @@ loop:
 
 			runch = m.maybeFetchData(ctx, runch)
 		case id := <-m.rmleasech:
-			m.log.Info("lease removed", "lease", id)
+			m.log.Info("lease removed", "lid", id)
 			m.clearFetched()
 			m.maybeScheduleStop()
 		case req := <-m.manifestch:
@@ -348,18 +348,18 @@ func (m *manager) emitReceivedEvents() {
 	}
 
 	latestManifest := m.manifests[len(m.manifests)-1]
-	m.log.Debug("publishing manifest received", "num-leases", len(m.localLeases))
+	m.log.Debug("publishing manifest received", "num_leases", len(m.localLeases))
 	copyOfData := new(dvbeta.QueryDeploymentResponse)
 	*copyOfData = m.data
 	for _, lease := range m.localLeases {
-		m.log.Debug("publishing manifest received for lease", "lease_id", lease.LeaseID)
+		m.log.Debug("publishing manifest received for lease", "lid", lease.LeaseID)
 		if err := m.bus.Publish(event.ManifestReceived{
 			LeaseID:    lease.LeaseID,
 			Group:      lease.Group,
 			Manifest:   latestManifest,
 			Deployment: copyOfData,
 		}); err != nil {
-			m.log.Error("publishing event", "err", err, "lease", lease.LeaseID)
+			m.log.Error("publishing event", "err", err, "lid", lease.LeaseID)
 		}
 	}
 
@@ -396,7 +396,7 @@ func (m *manager) validateRequests() {
 
 	m.requests = nil // all requests processed at this time
 
-	m.log.Debug("requests valid", "num-requests", len(manifests))
+	m.log.Debug("requests valid", "num_requests", len(manifests))
 
 	if len(manifests) > 0 {
 		// XXX: only one version means only one valid manifest

@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/resource"
 	inventoryV1 "pkg.akt.dev/go/inventory/v1"
+
+	"github.com/akash-network/provider/tools/logging/logtest"
 )
 
 func TestSubStorageAllocatedResourceLogsAndKeepsNegative(t *testing.T) {
@@ -18,16 +19,17 @@ func TestSubStorageAllocatedResourceLogsAndKeepsNegative(t *testing.T) {
 		"allocated": "1",
 	}
 
-	entries := make([]capturedLogEntry, 0, 1)
-	log := logr.New(&captureSink{entries: &entries})
+	log := logtest.New()
 
 	subStorageAllocatedResource(log, "rancher", "local-path", "pv-1", "pv-uid", &allocated, subtracted, inventoryBefore)
 
 	require.Negative(t, allocated.Value())
+	entries := log.Entries()
 	require.Len(t, entries, 1)
-	require.ErrorIs(t, entries[0].err, errNegativeAllocatedResource)
+	require.Equal(t, "error", entries[0].Level)
+	require.ErrorIs(t, entries[0].KV["err"].(error), errNegativeAllocatedResource)
 
-	values := logValues(entries[0].values)
+	values := entries[0].KV
 	require.Equal(t, "rancher", values["driver"])
 	require.Equal(t, "local-path", values["storage_class"])
 	require.Equal(t, "pv-1", values["persistent_volume"])
@@ -75,15 +77,16 @@ func TestLogNegativeClusterInventory(t *testing.T) {
 		},
 	}
 
-	entries := make([]capturedLogEntry, 0, 1)
-	log := logr.New(&captureSink{entries: &entries})
+	log := logtest.New()
 
 	logNegativeClusterInventory(log, &cluster, "unit-test")
 
+	entries := log.Entries()
 	require.Len(t, entries, 1)
-	require.ErrorIs(t, entries[0].err, errNegativeInventoryResource)
+	require.Equal(t, "error", entries[0].Level)
+	require.ErrorIs(t, entries[0].KV["err"].(error), errNegativeInventoryResource)
 
-	values := logValues(entries[0].values)
+	values := entries[0].KV
 	require.Equal(t, "unit-test", values["source"])
 
 	var loggedCluster inventoryV1.Cluster

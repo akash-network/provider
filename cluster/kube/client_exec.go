@@ -52,6 +52,8 @@ func (c *client) Exec(ctx context.Context, leaseID mtypes.LeaseID, serviceName s
 	stdout io.Writer,
 	stderr io.Writer, tty bool,
 	tsq remotecommand.TerminalSizeQueue) (ctypes.ExecResult, error) {
+	log := c.log.With("lid", leaseID)
+
 	namespace := builder.LidNS(leaseID)
 
 	mani, err := c.ac.AkashV2beta2().Manifests(c.ns).Get(ctx, namespace, metav1.GetOptions{})
@@ -139,7 +141,7 @@ loop:
 		return nil, fmt.Errorf("%w: failed getting REST client", err)
 	}
 
-	c.log.Info("Opening container shell", "namespace", namespace, "pod", podName, "container", containerName)
+	log.Info("Opening container shell", "ns", namespace, "pod", podName, "container", containerName)
 	if tty {
 		// disable stderr if running as a TTY, results come back over stdout
 		stderr = nil
@@ -192,7 +194,7 @@ loop:
 		}
 		// Don't send the full text of unknown errors back to the user
 		// Log the error here so this can be tracked down somehow in the provider logs at least
-		c.log.Error("command execution failed", "err", err)
+		log.Error("command execution failed", "err", err)
 		return nil, cluster.ErrExecCommandExecutionFailed
 	}
 

@@ -206,7 +206,7 @@ func (n *NvidiaGPUAttestor) ensureMount() error {
 		if fileExists(nvmlHelperPath) {
 			tmpDir := guestMountDir + "/tmp"
 			if err := mountTmpfsAndCopyHelper(tmpDir, nvmlHelperPath); err != nil {
-				fmt.Fprintf(os.Stderr, "nvidia-gpu: setup helper: %v\n", err)
+				logger().Warn("nvidia-gpu helper setup failed", "err", err)
 			}
 		}
 	})

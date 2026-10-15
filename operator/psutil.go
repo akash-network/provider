@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/sync/errgroup"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	invoperator "github.com/akash-network/provider/operator/inventory"
 )
@@ -69,6 +70,7 @@ func cmdPsutilServe() *cobra.Command {
 			port := viper.GetUint16(flagAPIPort)
 
 			group, ctx := errgroup.WithContext(cmd.Context())
+			logger := ctxlog.LogcFromCtx(ctx).With("module", "psutil")
 
 			endpoint := fmt.Sprintf(":%d", port)
 
@@ -82,7 +84,7 @@ func cmdPsutilServe() *cobra.Command {
 			}
 
 			group.Go(func() error {
-				fmt.Printf("listening on %s\n", endpoint)
+				logger.Info("listening", "listen_addr", endpoint)
 
 				return srv.ListenAndServe()
 			})
@@ -90,7 +92,7 @@ func cmdPsutilServe() *cobra.Command {
 			group.Go(func() error {
 				<-ctx.Done()
 
-				fmt.Printf("received shutdown signal\n")
+				logger.Info("shutting down")
 
 				_ = srv.Shutdown(context.Background())
 				return ctx.Err()

@@ -61,7 +61,7 @@ func (n *nginxGateway) BuildHTTPRouteSpec(
 	pathType := gatewayv1.PathMatchPathPrefix
 	backendPort := gatewayv1.PortNumber(servicePort)
 
-	var filters []gatewayv1.HTTPRouteFilter
+	filters := make([]gatewayv1.HTTPRouteFilter, 0, len(extensions))
 	for _, ext := range extensions {
 		gvk := ext.GroupVersionKind()
 		filters = append(filters, gatewayv1.HTTPRouteFilter{

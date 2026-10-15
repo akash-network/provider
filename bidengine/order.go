@@ -112,7 +112,7 @@ func newOrderInternal(svc *service, oid mtypes.OrderID, cfg Config, pass Provide
 
 	session := svc.session.ForModule("bidengine-order")
 
-	log := session.Log().With("order", oid)
+	log := session.Log().With("oid", oid)
 
 	order := &order{
 		cfg:                        cfg,
@@ -154,6 +154,11 @@ func (o *order) getBidTimeout() <-chan time.Time {
 	}
 
 	return nil
+}
+
+// bidID returns the ID of this provider's bid on the order.
+func (o *order) bidID() mtypes.BidID {
+	return mtypes.MakeBidID(o.orderID, o.session.Provider().Address())
 }
 
 func (o *order) isStaleBid(bid mvbeta.Bid) bool {
@@ -212,7 +217,7 @@ func (o *order) run(checkForExistingBid bool) {
 			return runner.NewResult(o.session.Client().Query().Market().Bid(
 				ctx,
 				&mvbeta.QueryBidRequest{
-					ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+					ID: o.bidID(),
 				},
 			))
 		})
@@ -229,6 +234,7 @@ loop:
 			break loop
 
 		case queryBid := <-queryBidCh:
+			blog := o.log.With("bid", o.bidID())
 			err := queryBid.Error()
 			bidFound := true
 			if err != nil {
@@ -236,24 +242,24 @@ loop:
 				if matchBidNotFound.MatchString(err.Error()) {
 					bidFound = false
 				} else {
-					o.session.Log().Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
+					blog.Error("could not get existing bid", "err", err, "errtype", fmt.Sprintf("%T", err))
 					break loop
 				}
 			}
 
 			if bidFound {
-				o.session.Log().Info("found existing bid")
+				blog.Info("found existing bid")
 				bidResponse := queryBid.Value().(*mvbeta.QueryBidResponse)
 				bid := bidResponse.GetBid()
 				bidState := bid.GetState()
 				if bidState != mvbeta.BidOpen {
-					o.session.Log().Error("bid in unexpected state", "bid-state", bidState)
+					blog.Error("bid in unexpected state", "bid_state", bidState)
 					break loop
 				}
 				bidPlaced = true
 
 				if o.isStaleBid(bid) {
-					o.session.Log().Info("found expired bid", "block-height", bid.GetCreatedAt())
+					blog.Info("found expired bid", "block_height", bid.GetCreatedAt())
 					break loop
 				}
 
@@ -267,14 +273,14 @@ loop:
 			case *mtypes.EventLeaseCreated:
 				// different group
 				if !o.orderID.GroupID().Equals(ev.ID.GroupID()) {
-					o.log.Debug("ignoring group", "group", ev.ID.GroupID())
+					o.log.Debug("ignoring group", "gid", ev.ID.GroupID())
 					break
 				}
 
 				// check winning provider
 				if ev.ID.Provider != o.session.Provider().Address().String() {
 					orderCompleteCounter.WithLabelValues("lease-lost").Inc()
-					o.log.Info("lease lost", "lease", ev.ID)
+					o.log.Info("lease lost", "lid", ev.ID)
 					// Ensure cleanup runs MsgCloseBid: we may have already set bidPlaced, or have a
 					// bid tx in flight (bidch != nil) that could land on chain; network does not auto-close
 					if bidch != nil {
@@ -285,14 +291,14 @@ loop:
 				orderCompleteCounter.WithLabelValues("lease-won").Inc()
 
 				// TODO: sanity check (price, state, etc...)
-				o.log.Info("lease won", "lease", ev.ID)
+				o.log.Info("lease won", "lid", ev.ID)
 
 				if err := o.bus.Publish(event.LeaseWon{
 					LeaseID: ev.ID,
 					Group:   group,
 					Price:   ev.Price,
 				}); err != nil {
-					o.log.Error("failed to publish to event queue", err)
+					o.log.Error("failed to publish to event queue", "err", err)
 				}
 				won = true
 
@@ -333,8 +339,8 @@ loop:
 			groupch = nil
 			o.log.Info("group fetched")
 
-			if result.Error() != nil {
-				o.log.Error("fetching group", "err", result.Error())
+			if err := result.Error(); err != nil {
+				o.log.Error("fetching group", "err", err)
 				break loop
 			}
 
@@ -348,9 +354,9 @@ loop:
 		case result := <-shouldBidCh:
 			shouldBidCh = nil
 
-			if result.Error() != nil {
+			if err := result.Error(); err != nil {
 				shouldBidCounter.WithLabelValues(metricsutils.FailLabel).Inc()
-				o.log.Error("failure during checking should bid", "err", result.Error())
+				o.log.Error("failure during checking should bid", "err", err)
 				break loop
 			}
 
@@ -371,9 +377,9 @@ loop:
 		case result := <-clusterch:
 			clusterch = nil
 
-			if result.Error() != nil {
+			if err := result.Error(); err != nil {
 				reservationCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
-				o.log.Error("reserving resources", "err", result.Error())
+				o.log.Error("reserving resources", "err", err)
 				break loop
 			}
 
@@ -408,8 +414,8 @@ loop:
 			}, pricingDuration))
 		case result := <-pricech:
 			pricech = nil
-			if result.Error() != nil {
-				o.log.Error("error calculating price", "err", result.Error())
+			if err := result.Error(); err != nil {
+				o.log.Error("error calculating price", "err", err)
 				break loop
 			}
 
@@ -417,12 +423,12 @@ loop:
 			maxPrice := group.GroupSpec.Price()
 
 			if maxPrice.GetDenom() != price.GetDenom() {
-				o.log.Error("Unsupported Denomination", "calculated", price.String(), "max-price", maxPrice.String())
+				o.log.Error("Unsupported Denomination", "calculated", price.String(), "max_price", maxPrice.String())
 				break loop
 			}
 
 			if maxPrice.IsLT(price) {
-				o.log.Info("Price too high, not bidding", "price", price.String(), "max-price", maxPrice.String())
+				o.log.Info("Price too high, not bidding", "price", price.String(), "max_price", maxPrice.String())
 				break loop
 			}
 
@@ -431,7 +437,7 @@ loop:
 			offer := mvbeta.ResourceOfferFromRU(reservation.GetAllocatedResources())
 
 			// Begin submitting fulfillment
-			msg = mvbeta.NewMsgCreateBid(mtypes.MakeBidID(o.orderID, o.session.Provider().Address()), price, deposit.Deposit{
+			msg = mvbeta.NewMsgCreateBid(o.bidID(), price, deposit.Deposit{
 				Amount:  o.cfg.Deposit,
 				Sources: deposit.Sources{deposit.SourceBalance},
 			}, offer)
@@ -442,9 +448,9 @@ loop:
 
 		case result := <-bidch:
 			bidch = nil
-			if result.Error() != nil {
+			if err := result.Error(); err != nil {
 				bidCounter.WithLabelValues(metricsutils.OpenLabel, metricsutils.FailLabel).Inc()
-				o.log.Error("bid failed", "err", result.Error())
+				o.log.Error("bid failed", "err", err)
 				break loop
 			}
 
@@ -487,10 +493,10 @@ loop:
 		}
 
 		if bidPlaced {
-			o.log.Debug("closing bid", "order-id", o.orderID)
+			o.log.Debug("closing bid", "bid", o.bidID())
 
 			msg := &mvbeta.MsgCloseBid{
-				ID:     mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				ID:     o.bidID(),
 				Reason: mtypes.LeaseClosedReasonUnspecified,
 			}
 
@@ -499,7 +505,7 @@ loop:
 				o.log.Error("closing bid", "err", err)
 				bidCounter.WithLabelValues("close", metricsutils.FailLabel).Inc()
 			} else {
-				o.log.Info("bid closed", "order-id", o.orderID)
+				o.log.Info("bid closed", "bid", o.bidID())
 				bidCounter.WithLabelValues("close", metricsutils.SuccessLabel).Inc()
 			}
 		}

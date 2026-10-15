@@ -51,7 +51,7 @@ func newDeploymentMonitor(dm *deploymentManager) *deploymentMonitor {
 		session:    dm.session,
 		client:     dm.client,
 		deployment: dm.deployment,
-		log:        dm.log.With("cmp", "deployment-monitor"),
+		log:        dm.log.With("module", "deployment-monitor"),
 		lc:         lifecycle.New(),
 		config:     dm.config,
 	}

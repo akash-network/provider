@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/go-logr/logr"
+	"cosmossdk.io/log"
 	"k8s.io/apimachinery/pkg/api/resource"
 	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 )
@@ -57,7 +57,7 @@ func jsonLogValue(value interface{}) string {
 }
 
 func subStorageAllocatedResource(
-	log logr.Logger,
+	log log.Logger,
 	driver string,
 	class string,
 	persistentVolume string,
@@ -81,7 +81,7 @@ func subStorageAllocatedResource(
 			AllocatedAfter:     after.String(),
 		}
 
-		log.Error(errNegativeAllocatedResource, "inventory storage allocated resource went negative",
+		log.Error("inventory storage allocated resource went negative", "err", errNegativeAllocatedResource,
 			"driver", driver,
 			"storage_class", class,
 			"persistent_volume", persistentVolume,
@@ -93,13 +93,13 @@ func subStorageAllocatedResource(
 	*allocated = after
 }
 
-func logNegativeClusterInventory(log logr.Logger, cluster *inventoryV1.Cluster, source string) {
+func logNegativeClusterInventory(log log.Logger, cluster *inventoryV1.Cluster, source string) {
 	negatives := negativeInventoryResources(cluster)
 	if len(negatives) == 0 {
 		return
 	}
 
-	log.Error(errNegativeInventoryResource, "inventory contains negative resource quantity",
+	log.Error("inventory contains negative resource quantity", "err", errNegativeInventoryResource,
 		"source", source,
 		"inventory", jsonLogValue(cluster),
 		"negative_resources", jsonLogValue(negatives))

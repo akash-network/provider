@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
+	"cosmossdk.io/log"
 	rookv1 "github.com/rook/rook/pkg/apis/ceph.rook.io/v1"
 	rookclientset "github.com/rook/rook/pkg/client/clientset/versioned"
 	rookifactory "github.com/rook/rook/pkg/client/informers/externalversions"
@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	inventory "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -149,10 +150,10 @@ func NewCeph(ctx context.Context) (QuerierStorage, error) {
 	return c, nil
 }
 
-func (c *ceph) crdInstalled(log logr.Logger, rc *rookclientset.Clientset) bool {
+func (c *ceph) crdInstalled(log log.Logger, rc *rookclientset.Clientset) bool {
 	groups, err := rc.Discovery().ServerGroups()
 	if err != nil {
-		log.Error(err, "discover server groups")
+		log.Error("discover server groups", "err", err)
 		return false
 	}
 
@@ -172,7 +173,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 
 	defer bus.Unsub(events)
 
-	log := fromctx.LogrFromCtx(c.ctx).WithName("rook-ceph")
+	log := ctxlog.LogcFromCtx(c.ctx).With("module", "operator-inventory.rook-ceph")
 
 	clusters := make(cephClusters)
 	scs := make(cephStorageClasses)
@@ -262,11 +263,11 @@ func (c *ceph) run(startch chan<- struct{}) error {
 
 						if sc.isCeph {
 							if sc.pool == "" {
-								log.Info("StorageClass does not have \"pool\" parameter set", "StorageClass", obj.Name)
+								log.Info("StorageClass does not have \"pool\" parameter set", "storage_class", obj.Name)
 							}
 
 							if sc.clusterID == "" {
-								log.Info("StorageClass does not have \"clusterID\" parameter set", "StorageClass", obj.Name)
+								log.Info("StorageClass does not have \"clusterID\" parameter set", "storage_class", obj.Name)
 							}
 						}
 
@@ -338,7 +339,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 
 						sc, exists := scs[obj.Spec.StorageClassName]
 						if !exists {
-							log.Error(fmt.Errorf("storage class %q is not tracked", obj.Spec.StorageClassName), "persistent volume delete event references untracked storage class", "driver", "ceph", "storage_class", obj.Spec.StorageClassName, "persistent_volume", obj.Name, "persistent_volume_id", string(obj.UID))
+							log.Error("persistent volume delete event references untracked storage class", "err", fmt.Errorf("storage class %q is not tracked", obj.Spec.StorageClassName), "driver", "ceph", "storage_class", obj.Spec.StorageClassName, "persistent_volume", obj.Name, "persistent_volume_id", string(obj.UID))
 							break
 						}
 
@@ -398,7 +399,7 @@ func (c *ceph) run(startch chan<- struct{}) error {
 }
 
 func (c *ceph) scraper() error {
-	log := fromctx.LogrFromCtx(c.ctx).WithName("rook-ceph")
+	log := ctxlog.LogcFromCtx(c.ctx).With("module", "operator-inventory.rook-ceph")
 
 	for {
 		select {
@@ -409,7 +410,7 @@ func (c *ceph) scraper() error {
 			for clusterID, ns := range req.clusters {
 				stdout, _, err := c.exe.ExecCommandInContainerWithFullOutputWithTimeout(c.ctx, "rook-ceph-tools", "rook-ceph-tools", ns, "ceph", "df", "--format", "json")
 				if err != nil {
-					log.Error(err, "unable to scrape ceph metrics")
+					log.Error("unable to scrape ceph metrics", "err", err)
 				}
 
 				rsp := dfResp{}

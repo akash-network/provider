@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"cosmossdk.io/log"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
 
 	"github.com/akash-network/provider/cluster"
 	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -41,21 +42,24 @@ func migrateHandler(log log.Logger, hostnameService clustertypes.HostnameService
 		}
 
 		owner := requestOwner(req)
+		gid := dtypes.GroupID{Owner: owner.String(), DSeq: body.DestinationDSeq, GSeq: body.DestinationGSeq}
 
 		// Make sure this hostname can be taken
 		// make sure destination deployment actually exists
 		found, leaseID, mgroup, err := clusterService.FindActiveLease(req.Context(), owner, body.DestinationDSeq, body.DestinationGSeq)
 		if err != nil {
-			log.Error("failed checking if destination deployment exists", "err", err)
+			log.Error("failed checking if destination deployment exists", "gid", gid, "err", err)
 			rw.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		if !found {
-			log.Info("destination deployment does not exist", "dseq", body.DestinationDSeq)
+			log.Info("destination deployment does not exist", "gid", gid)
 			http.Error(rw, "destination deployment does not exist", http.StatusBadRequest)
 			return
 		}
+
+		log := log.With("lid", leaseID)
 
 		hostnameToServiceName := make(map[string]string)
 		hostnameToExternalPort := make(map[string]uint32)
@@ -85,7 +89,7 @@ func migrateHandler(log log.Logger, hostnameService clustertypes.HostnameService
 		}
 
 		// Tell the hostname service to move the hostnames to the new deployment, unconditionally
-		log.Debug("preparing migration of hostnames", "cnt", len(body.HostnamesToMigrate))
+		log.Debug("preparing migration of hostnames", "count", len(body.HostnamesToMigrate))
 		if err = hostnameService.PrepareHostnamesForTransfer(req.Context(), body.HostnamesToMigrate, leaseID); err != nil {
 			if errors.Is(err, cluster.ErrHostnameNotAllowed) {
 				log.Info("hostname not allowed", "err", err)
@@ -99,7 +103,7 @@ func migrateHandler(log log.Logger, hostnameService clustertypes.HostnameService
 		}
 
 		// Update the CRDs now
-		log.Debug("transferring hostnames", "cnt", len(body.HostnamesToMigrate))
+		log.Debug("transferring hostnames", "count", len(body.HostnamesToMigrate))
 
 		// Migrate the hostnames
 		for _, hostname := range body.HostnamesToMigrate {

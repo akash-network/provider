@@ -6,6 +6,7 @@ import (
 	"github.com/troian/pubsub"
 
 	inventory "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/tools/fromctx"
 )
@@ -30,7 +31,7 @@ func (s *clusterState) run() error {
 
 	defer bus.Unsub(datach)
 
-	log := fromctx.LogrFromCtx(s.ctx).WithName("cluster-state")
+	log := ctxlog.LogcFromCtx(s.ctx).With("module", "operator-inventory.cluster-state")
 
 	var cfg Config
 
