@@ -144,6 +144,11 @@ func newOrderInternal(svc *service, oid mtypes.OrderID, cfg Config, pass Provide
 
 var matchBidNotFound = regexp.MustCompile("^.+bid not found.+$")
 
+const (
+	bidTimeoutQueryTimeout  = 30 * time.Second
+	bidTimeoutRetryInterval = 5 * time.Second
+)
+
 func (o *order) bidTimeoutEnabled() bool {
 	return o.cfg.BidTimeout > time.Duration(0)
 }
@@ -188,6 +193,8 @@ func (o *order) run(checkForExistingBid bool) {
 		pricech <-chan runner.Result
 		// Channel for receiving existing bid query result.
 		queryBidCh <-chan runner.Result
+		// Channel for checking chain state before expiring a bid.
+		timeoutBidCh <-chan runner.Result
 		// Channel for receiving result of bid eligibility check.
 		shouldBidCh <-chan runner.Result
 		// Channel that triggers when bid timeout is reached.
@@ -196,8 +203,9 @@ func (o *order) run(checkForExistingBid bool) {
 		group       *dtypes.Group
 		reservation ctypes.Reservation
 
-		won bool
-		msg *mvbeta.MsgCreateBid
+		won               bool
+		bidStateUncertain bool
+		msg               *mvbeta.MsgCreateBid
 	)
 
 	// Begin fetching group details immediately.
@@ -273,6 +281,7 @@ loop:
 
 				// check winning provider
 				if ev.ID.Provider != o.session.Provider().Address().String() {
+					bidStateUncertain = false
 					orderCompleteCounter.WithLabelValues("lease-lost").Inc()
 					o.log.Info("lease lost", "lease", ev.ID)
 					// Ensure cleanup runs MsgCloseBid: we may have already set bidPlaced, or have a
@@ -304,6 +313,7 @@ loop:
 				}
 
 				o.log.Info("order closed")
+				bidStateUncertain = false
 				orderCompleteCounter.WithLabelValues("order-closed").Inc()
 				break loop
 			case *mtypes.EventBidClosed:
@@ -323,6 +333,7 @@ loop:
 				}
 
 				// Bid has been closed (possibly by someone manually closing it on the CLI)
+				bidStateUncertain = false
 				bidPlaced = false // bid already not on the blockchain
 				orderCompleteCounter.WithLabelValues("bid-closed-external").Inc()
 				break loop
@@ -456,10 +467,47 @@ loop:
 
 			bidTimeout = o.getBidTimeout()
 		case <-bidTimeout:
-			// The bid was not acted upon (e.g. lease created or deployment closed) so close it now
-			o.log.Info("bid timeout, closing bid")
-			orderCompleteCounter.WithLabelValues("bid-timeout").Inc()
-			break loop
+			bidTimeout = nil
+			bidStateUncertain = true
+			// A missed lease-created event must not cause us to close an active lease.
+			timeoutBidCh = runner.Do(func() runner.Result {
+				queryCtx, queryCancel := context.WithTimeout(ctx, bidTimeoutQueryTimeout)
+				defer queryCancel()
+				return runner.NewResult(o.session.Client().Query().Market().Bid(queryCtx, &mvbeta.QueryBidRequest{
+					ID: mtypes.MakeBidID(o.orderID, o.session.Provider().Address()),
+				}))
+			})
+		case result := <-timeoutBidCh:
+			timeoutBidCh = nil
+			if err := result.Error(); err != nil {
+				o.log.Error("checking bid before timeout, retrying", "err", err)
+				bidTimeout = time.After(bidTimeoutRetryInterval)
+				break
+			}
+
+			bid := result.Value().(*mvbeta.QueryBidResponse).GetBid()
+			switch bid.State {
+			case mvbeta.BidOpen:
+				bidStateUncertain = false
+				o.log.Info("bid timeout, closing bid")
+				orderCompleteCounter.WithLabelValues("bid-timeout").Inc()
+				break loop
+			case mvbeta.BidActive:
+				won = true
+				o.log.Info("bid already active, preserving lease")
+				orderCompleteCounter.WithLabelValues("lease-won").Inc()
+				// The manifest service discovers leases independently. Replaying LeaseWon
+				// would start a new manifest watchdog even if the manifest already arrived.
+				break loop
+			case mvbeta.BidLost, mvbeta.BidClosed:
+				bidStateUncertain = false
+				bidPlaced = false
+				o.log.Info("bid no longer open", "bid-state", bid.State)
+				break loop
+			default:
+				o.log.Error("unexpected bid state at timeout, retrying", "bid-state", bid.State)
+				bidTimeout = time.After(bidTimeoutRetryInterval)
+			}
 		}
 	}
 
@@ -467,8 +515,8 @@ loop:
 	o.lc.ShutdownInitiated(nil)
 	o.sub.Close()
 
-	// cancel reservation
-	if !won {
+	// Preserve the bid and reservation on shutdown if reconciliation is still pending.
+	if !won && !bidStateUncertain {
 		if clusterch != nil {
 			result := <-clusterch
 			clusterch = nil
@@ -507,6 +555,9 @@ loop:
 	cancel()
 
 	// Wait for all runners to complete.
+	if timeoutBidCh != nil {
+		<-timeoutBidCh
+	}
 	if groupch != nil {
 		<-groupch
 	}

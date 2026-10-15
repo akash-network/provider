@@ -32,6 +32,7 @@ import (
 	"pkg.akt.dev/go/testutil"
 	"pkg.akt.dev/go/util/pubsub"
 
+	"github.com/akash-network/provider/event"
 	cmocks "github.com/akash-network/provider/mocks/cluster"
 	clmocks "github.com/akash-network/provider/mocks/cluster/types"
 	"github.com/akash-network/provider/operator/waiter"
@@ -281,6 +282,9 @@ func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
 	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
 		BidTimeout: 5 * time.Second,
 	}, testBidCreatedAt)
+	scaffold.marketMocks.On("Bid", mock.Anything, &mvbeta.QueryBidRequest{
+		ID: mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr),
+	}).Return(&mvbeta.QueryBidResponse{Bid: mvbeta.Bid{State: mvbeta.BidOpen}}, nil)
 
 	broadcast := testutil.ChannelWaitForValue(t, scaffold.broadcasts)
 	// Should have called reserve once
@@ -314,6 +318,118 @@ func Test_BidOrderAndUnreserveOnTimeout(t *testing.T) {
 
 	// Should have called unreserve once
 	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID, mock.Anything)
+}
+
+func Test_BidTimeoutPreservesActiveLease(t *testing.T) {
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
+		BidTimeout: 100 * time.Millisecond,
+	}, testBidCreatedAt)
+	defer order.lc.Shutdown(nil)
+
+	bidID := mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr)
+	scaffold.marketMocks.On("Bid", mock.Anything, &mvbeta.QueryBidRequest{ID: bidID}).
+		Return(&mvbeta.QueryBidResponse{Bid: mvbeta.Bid{ID: bidID, State: mvbeta.BidActive}}, nil).Once()
+
+	requireMsgType[*mvbeta.MsgCreateBid](t, testutil.ChannelWaitForValue(t, scaffold.broadcasts))
+	// The manifest manager can discover the lease even when its creation event was missed.
+	require.NoError(t, scaffold.testBus.Publish(event.ManifestReceived{LeaseID: mtypes.MakeLeaseID(bidID)}))
+	testutil.ChannelWaitForClose(t, order.lc.Done())
+
+	scaffold.cluster.AssertNotCalled(t, "Unreserve", mock.Anything, mock.Anything)
+	require.Empty(t, scaffold.broadcasts, "an active lease must not receive MsgCloseBid")
+	scaffold.marketMocks.AssertNumberOfCalls(t, "Bid", 1)
+}
+
+func Test_BidTimeoutRetriesQueryFailure(t *testing.T) {
+	for _, state := range []mvbeta.Bid_State{mvbeta.BidActive, mvbeta.BidOpen} {
+		t.Run(state.String(), func(t *testing.T) {
+			order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
+				BidTimeout: 100 * time.Millisecond,
+			}, testBidCreatedAt)
+			defer order.lc.Shutdown(nil)
+
+			bidID := mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr)
+			request := &mvbeta.QueryBidRequest{ID: bidID}
+			scaffold.marketMocks.On("Bid", mock.Anything, request).
+				Return(nil, errors.New("RPC unavailable")).Once()
+			scaffold.marketMocks.On("Bid", mock.Anything, request).
+				Return(&mvbeta.QueryBidResponse{Bid: mvbeta.Bid{ID: bidID, State: state}}, nil).Once()
+
+			requireMsgType[*mvbeta.MsgCreateBid](t, testutil.ChannelWaitForValue(t, scaffold.broadcasts))
+			testutil.ChannelWaitForClose(t, order.lc.Done())
+
+			if state == mvbeta.BidActive {
+				scaffold.cluster.AssertNotCalled(t, "Unreserve", mock.Anything, mock.Anything)
+				require.Empty(t, scaffold.broadcasts)
+			} else {
+				scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID)
+				closeBid := requireMsgType[*mvbeta.MsgCloseBid](t, testutil.ChannelWaitForValue(t, scaffold.broadcasts))
+				require.Equal(t, bidID, closeBid.ID)
+			}
+			scaffold.marketMocks.AssertNumberOfCalls(t, "Bid", 2)
+		})
+	}
+}
+
+func Test_BidTimeoutQueryDoesNotBlockEventsOrShutdown(t *testing.T) {
+	for _, shutdown := range []bool{false, true} {
+		name := "lease created"
+		if shutdown {
+			name = "shutdown"
+		}
+		t.Run(name, func(t *testing.T) {
+			order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
+				BidTimeout: 100 * time.Millisecond,
+			}, testBidCreatedAt)
+			defer order.lc.Shutdown(nil)
+
+			queryStarted := make(chan context.Context, 1)
+			bidID := mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr)
+			scaffold.marketMocks.On("Bid", mock.Anything, &mvbeta.QueryBidRequest{ID: bidID}).
+				Run(func(args mock.Arguments) {
+					ctx := args.Get(0).(context.Context)
+					queryStarted <- ctx
+					<-ctx.Done()
+				}).Return(nil, context.Canceled).Once()
+
+			requireMsgType[*mvbeta.MsgCreateBid](t, testutil.ChannelWaitForValue(t, scaffold.broadcasts))
+			queryCtx := testutil.ChannelWaitForValue(t, queryStarted).(context.Context)
+			_, hasDeadline := queryCtx.Deadline()
+			require.True(t, hasDeadline, "the reconciliation RPC must have a deadline")
+			if shutdown {
+				order.lc.ShutdownAsync(nil)
+			} else {
+				require.NoError(t, scaffold.testBus.Publish(&mtypes.EventLeaseCreated{
+					ID:    mtypes.MakeLeaseID(bidID),
+					Price: testutil.AkashDecCoin(t, 1),
+				}))
+			}
+			testutil.ChannelWaitForCloseUpTo(t, order.lc.Done(), time.Second)
+
+			require.ErrorIs(t, queryCtx.Err(), context.Canceled)
+			scaffold.cluster.AssertNotCalled(t, "Unreserve", mock.Anything, mock.Anything)
+			require.Empty(t, scaffold.broadcasts)
+			scaffold.marketMocks.AssertNumberOfCalls(t, "Bid", 1)
+		})
+	}
+}
+
+func Test_BidTimeoutReleasesClosedBid(t *testing.T) {
+	order, scaffold, _ := makeOrderForTest(t, false, mvbeta.BidStateInvalid, nil, &Config{
+		BidTimeout: 100 * time.Millisecond,
+	}, testBidCreatedAt)
+	defer order.lc.Shutdown(nil)
+
+	bidID := mtypes.MakeBidID(scaffold.orderID, scaffold.testAddr)
+	scaffold.marketMocks.On("Bid", mock.Anything, &mvbeta.QueryBidRequest{ID: bidID}).
+		Return(&mvbeta.QueryBidResponse{Bid: mvbeta.Bid{ID: bidID, State: mvbeta.BidClosed}}, nil).Once()
+
+	requireMsgType[*mvbeta.MsgCreateBid](t, testutil.ChannelWaitForValue(t, scaffold.broadcasts))
+	testutil.ChannelWaitForClose(t, order.lc.Done())
+
+	scaffold.cluster.AssertCalled(t, "Unreserve", scaffold.orderID)
+	require.Empty(t, scaffold.broadcasts, "an already closed bid must not receive MsgCloseBid")
+	scaffold.marketMocks.AssertNumberOfCalls(t, "Bid", 1)
 }
 
 func Test_BidOrderPriceTooHigh(t *testing.T) {
