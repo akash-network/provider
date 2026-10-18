@@ -2,13 +2,20 @@ package manifest
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/http"
 	"testing"
 
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
 	maniv2beta2 "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/utils/httperror"
 )
 
@@ -468,4 +475,108 @@ func TestValidateRequestWrapsManifestError(t *testing.T) {
 	require.ErrorIs(t, err, maniv2beta2.ErrInvalidManifest)
 	require.Equal(t, http.StatusUnprocessableEntity,
 		httperror.StatusCodeFrom(ManifestSubmitErrorToHTTP(err)))
+}
+
+// TestValidateRequestVersion ensures a pushed manifest is accepted when it matches
+// either the hash read from the chain or the last DeploymentUpdated event the manager
+// received, so a missed update event no longer refuses every later manifest
+// (see akash-network/support#662).
+func TestValidateRequestVersion(t *testing.T) {
+	sdlObj, err := sdl.ReadFile("../testdata/sdl/simple.yaml")
+	require.NoError(t, err)
+
+	mani, err := sdlObj.Manifest()
+	require.NoError(t, err)
+
+	version, err := mani.Version()
+	require.NoError(t, err)
+
+	staleVersion := sha256.Sum256([]byte("stale version"))
+	otherVersion := sha256.Sum256([]byte("other version"))
+
+	tests := []struct {
+		name        string
+		chainHash   []byte
+		versions    [][]byte
+		expectedErr error
+	}{
+		{
+			name:      "accepts the chain hash when no update event was received",
+			chainHash: version,
+		},
+		{
+			name:      "accepts the chain hash when the last update event received is stale",
+			chainHash: version,
+			versions:  [][]byte{staleVersion[:]},
+		},
+		{
+			name:      "accepts the last update event received when the chain read is behind",
+			chainHash: staleVersion[:],
+			versions:  [][]byte{version},
+		},
+		{
+			name:        "refuses a manifest matching neither the chain hash nor the last update event",
+			chainHash:   staleVersion[:],
+			versions:    [][]byte{version, otherVersion[:]},
+			expectedErr: ErrManifestVersion,
+		},
+		{
+			name:        "refuses a manifest not matching the chain hash when no update event was received",
+			chainHash:   staleVersion[:],
+			expectedErr: ErrManifestVersion,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := managerForVersionTest(t, sdlObj, tt.chainHash, tt.versions)
+
+			err := m.validateRequest(manifestRequest{
+				ctx:   context.Background(),
+				value: &submitRequest{Manifest: mani},
+			})
+
+			if tt.expectedErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
+}
+
+func managerForVersionTest(t *testing.T, sdlObj sdl.SDL, chainHash []byte, versions [][]byte) *manager {
+	t.Helper()
+
+	did := testutil.DeploymentID(t)
+
+	specs, err := sdlObj.DeploymentGroups()
+	require.NoError(t, err)
+
+	groups := make(dvbeta.Groups, 0, len(specs))
+	for _, spec := range specs {
+		groups = append(groups, dvbeta.Group{
+			State:     dvbeta.GroupOpen,
+			GroupSpec: spec,
+		})
+	}
+
+	return &manager{
+		daddr: did,
+		data: dvbeta.QueryDeploymentResponse{
+			Deployment: dtypes.Deployment{ID: did, Hash: chainHash},
+			Groups:     groups,
+		},
+		versions:        versions,
+		log:             testutil.Logger(t),
+		hostnameService: allowAllHostnames{},
+	}
+}
+
+type allowAllHostnames struct {
+	clustertypes.HostnameServiceClient
+}
+
+func (allowAllHostnames) CanReserveHostnames(_ []string, _ sdktypes.Address) error {
+	return nil
 }

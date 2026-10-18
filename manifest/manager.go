@@ -433,16 +433,11 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return err
 	}
 
-	var versionExpected []byte
-
-	if len(m.versions) != 0 {
-		versionExpected = m.versions[len(m.versions)-1]
-	} else {
-		versionExpected = m.data.Deployment.Hash
-	}
-
-	if !bytes.Equal(version, versionExpected) {
-		m.log.Error("deployment version mismatch", "expected", hex.EncodeToString(m.data.Deployment.Hash), "got", hex.EncodeToString(version))
+	if !m.isExpectedVersion(version) {
+		m.log.Error("deployment version mismatch",
+			"chain", hex.EncodeToString(m.data.Deployment.Hash),
+			"last_update", hex.EncodeToString(m.lastUpdateVersion()),
+			"got", hex.EncodeToString(version))
 		return ErrManifestVersion
 	}
 
@@ -462,6 +457,27 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	}
 
 	return nil
+}
+
+// isExpectedVersion accepts the hash read from the chain as well as the version of the last
+// DeploymentUpdated event this manager received. Trusting the event alone refuses every
+// manifest for the deployment once an update event is missed, until another update lands.
+func (m *manager) isExpectedVersion(version []byte) bool {
+	if bytes.Equal(version, m.data.Deployment.Hash) {
+		return true
+	}
+
+	lastUpdate := m.lastUpdateVersion()
+
+	return len(lastUpdate) != 0 && bytes.Equal(version, lastUpdate)
+}
+
+func (m *manager) lastUpdateVersion() []byte {
+	if len(m.versions) == 0 {
+		return nil
+	}
+
+	return m.versions[len(m.versions)-1]
 }
 
 func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest, groupNames []string) error {
