@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/boz/go-lifecycle"
@@ -200,11 +201,7 @@ loop:
 				break
 			}
 
-			fetchResult := result.Value().(manifestManagerFetchDataResult)
-			m.fetched = true
-			m.fetchedAt = time.Now()
-			m.data = fetchResult.deployment
-			m.localLeases = fetchResult.leases
+			m.applyFetchResult(result.Value().(manifestManagerFetchDataResult))
 
 			m.log.Info("data received", "version", hex.EncodeToString(m.data.Deployment.Hash))
 
@@ -433,10 +430,18 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return err
 	}
 
-	if !m.isExpectedVersion(version) {
+	var versionExpected []byte
+
+	if len(m.versions) != 0 {
+		versionExpected = m.versions[len(m.versions)-1]
+	} else {
+		versionExpected = m.data.Deployment.Hash
+	}
+
+	if !bytes.Equal(version, versionExpected) {
 		m.log.Error("deployment version mismatch",
+			"expected", hex.EncodeToString(versionExpected),
 			"chain", hex.EncodeToString(m.data.Deployment.Hash),
-			"last_update", hex.EncodeToString(m.lastUpdateVersion()),
 			"got", hex.EncodeToString(version))
 		return ErrManifestVersion
 	}
@@ -459,25 +464,21 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	return nil
 }
 
-// isExpectedVersion accepts the hash read from the chain as well as the version of the last
-// DeploymentUpdated event this manager received. Trusting the event alone refuses every
-// manifest for the deployment once an update event is missed, until another update lands.
-func (m *manager) isExpectedVersion(version []byte) bool {
-	if bytes.Equal(version, m.data.Deployment.Hash) {
-		return true
+// applyFetchResult stores the deployment and leases read from the chain. A deployment hash
+// this manager has never seen means it missed that DeploymentUpdated event, so the hash
+// becomes the expected version; otherwise every later manifest would be refused until
+// another update lands. A hash it has already seen comes from a read that lags the events
+// it received, and leaves the expected version alone.
+func (m *manager) applyFetchResult(result manifestManagerFetchDataResult) {
+	m.fetched = true
+	m.fetchedAt = time.Now()
+	m.data = result.deployment
+	m.localLeases = result.leases
+
+	hash := m.data.Deployment.Hash
+	if len(hash) != 0 && !slices.ContainsFunc(m.versions, func(seen []byte) bool { return bytes.Equal(seen, hash) }) {
+		m.versions = append(m.versions, hash)
 	}
-
-	lastUpdate := m.lastUpdateVersion()
-
-	return len(lastUpdate) != 0 && bytes.Equal(version, lastUpdate)
-}
-
-func (m *manager) lastUpdateVersion() []byte {
-	if len(m.versions) == 0 {
-		return nil
-	}
-
-	return m.versions[len(m.versions)-1]
 }
 
 func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest, groupNames []string) error {

@@ -477,10 +477,10 @@ func TestValidateRequestWrapsManifestError(t *testing.T) {
 		httperror.StatusCodeFrom(ManifestSubmitErrorToHTTP(err)))
 }
 
-// TestValidateRequestVersion ensures a pushed manifest is accepted when it matches
-// either the hash read from the chain or the last DeploymentUpdated event the manager
-// received, so a missed update event no longer refuses every later manifest
-// (see akash-network/support#662).
+// TestValidateRequestVersion ensures a chain read that shows a deployment version the
+// manager never received an update event for becomes the expected version, so a missed
+// event no longer refuses every later manifest (see akash-network/support#662), while a
+// read that lags behind a received event cannot bring back an older version.
 func TestValidateRequestVersion(t *testing.T) {
 	sdlObj, err := sdl.ReadFile("../testdata/sdl/simple.yaml")
 	require.NoError(t, err)
@@ -496,8 +496,8 @@ func TestValidateRequestVersion(t *testing.T) {
 
 	tests := []struct {
 		name        string
+		seen        [][]byte
 		chainHash   []byte
-		versions    [][]byte
 		expectedErr error
 	}{
 		{
@@ -505,31 +505,32 @@ func TestValidateRequestVersion(t *testing.T) {
 			chainHash: version,
 		},
 		{
-			name:      "accepts the chain hash when the last update event received is stale",
+			name:      "accepts a chain hash the manager missed the update event for",
+			seen:      [][]byte{staleVersion[:]},
 			chainHash: version,
-			versions:  [][]byte{staleVersion[:]},
 		},
 		{
-			name:      "accepts the last update event received when the chain read is behind",
+			name:      "accepts the last update event received when the chain read lags behind it",
+			seen:      [][]byte{staleVersion[:], version},
 			chainHash: staleVersion[:],
-			versions:  [][]byte{version},
 		},
 		{
-			name:        "refuses a manifest matching neither the chain hash nor the last update event",
-			chainHash:   staleVersion[:],
-			versions:    [][]byte{version, otherVersion[:]},
+			name:        "refuses a chain hash read behind a received update event",
+			seen:        [][]byte{version, otherVersion[:]},
+			chainHash:   version,
 			expectedErr: ErrManifestVersion,
 		},
 		{
-			name:        "refuses a manifest not matching the chain hash when no update event was received",
-			chainHash:   staleVersion[:],
+			name:        "refuses a manifest not matching the chain hash",
+			seen:        [][]byte{version},
+			chainHash:   otherVersion[:],
 			expectedErr: ErrManifestVersion,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			m := managerForVersionTest(t, sdlObj, tt.chainHash, tt.versions)
+			m := managerAfterChainRead(t, sdlObj, tt.seen, tt.chainHash)
 
 			err := m.validateRequest(manifestRequest{
 				ctx:   context.Background(),
@@ -545,7 +546,9 @@ func TestValidateRequestVersion(t *testing.T) {
 	}
 }
 
-func managerForVersionTest(t *testing.T, sdlObj sdl.SDL, chainHash []byte, versions [][]byte) *manager {
+// managerAfterChainRead returns a manager that has already seen the given versions, from
+// update events or earlier chain reads, and has just read chainHash from the chain.
+func managerAfterChainRead(t *testing.T, sdlObj sdl.SDL, seen [][]byte, chainHash []byte) *manager {
 	t.Helper()
 
 	did := testutil.DeploymentID(t)
@@ -561,16 +564,21 @@ func managerForVersionTest(t *testing.T, sdlObj sdl.SDL, chainHash []byte, versi
 		})
 	}
 
-	return &manager{
-		daddr: did,
-		data: dvbeta.QueryDeploymentResponse{
-			Deployment: dtypes.Deployment{ID: did, Hash: chainHash},
-			Groups:     groups,
-		},
-		versions:        versions,
+	m := &manager{
+		daddr:           did,
+		versions:        seen,
 		log:             testutil.Logger(t),
 		hostnameService: allowAllHostnames{},
 	}
+
+	m.applyFetchResult(manifestManagerFetchDataResult{
+		deployment: dvbeta.QueryDeploymentResponse{
+			Deployment: dtypes.Deployment{ID: did, Hash: chainHash},
+			Groups:     groups,
+		},
+	})
+
+	return m
 }
 
 type allowAllHostnames struct {
