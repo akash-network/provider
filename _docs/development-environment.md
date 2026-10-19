@@ -38,6 +38,29 @@ Currently supported host platforms:
 ./provider/script/install_dev_dependencies.sh
 ```
 
+### akt CLI
+
+Client operations (transactions, queries, provider gateway calls) use the
+[`akt`](https://github.com/akash-network/akt) CLI, pinned by `AKT_VERSION` in
+`make/init.mk`. It is installed with the release's `install.sh`, verified with
+`gh attestation verify`, so the GitHub CLI (`gh`, authenticated) is required.
+
+- `make akt` installs it as `.cache/bin/akt` (also part of `make bins`), plus
+  the linux amd64/arm64 binaries in `.cache/akt/linux_<arch>/akt` that
+  `make docker-image` and `make release` copy into the provider images. The
+  image build fails if the binary is not of the image's architecture. Like the
+  other cache tools, it is installed only when `AKT_VERSION` changes (marker in
+  `.cache/versions/akt/`); `make rm-akt akt` forces a reinstall.
+- To use a local akt checkout instead, set `AKT_LOCAL_PATH` (in `dev.env`, the
+  environment or on the make command line; relative paths are resolved from the
+  repository root), e.g. `AKT_LOCAL_PATH=../akt`. `make akt` then builds it from
+  source and cross-compiles the linux binaries with akt's own
+  `make release-snapshot` (Docker required; slow on arm64 hosts).
+
+The `_run` environments set `AKT_HOME` to the environment's `AKASH_HOME`, and
+`make init` creates an akt context named `local` there, so akt shares the
+keyring, certificates and genesis with the `akash` node and `provider-services`.
+
 ## How it works
 
 ### General behaviour

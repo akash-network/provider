@@ -38,6 +38,21 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config make direnv unzip lz4 wget curl jq pv coreutils libudev-dev
+      - name: Install GitHub CLI
+        # make akt verifies the akt installer with `gh attestation` (gh >= 2.49);
+        # Ubuntu's own gh package is older, so use GitHub's apt repository
+        shell: bash
+        run: |
+          sudo mkdir -p -m 755 /etc/apt/keyrings
+          out=$(mktemp)
+          wget -nv -O "$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+          sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg < "$out" > /dev/null
+          sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+          sudo mkdir -p -m 755 /etc/apt/sources.list.d
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt-get update
+          sudo apt-get install -y gh
+          gh --version
       - name: Detect required Go version
         working-directory: "${{ env.GOPATH }}/src/github.com/akash-network/provider"
         run: |
@@ -116,6 +131,8 @@ jobs:
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |
           KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup K8S ingress
         working-directory: ${{ env.GOPATH }}/src/github.com/akash-network/provider/_run/kube
         run: |

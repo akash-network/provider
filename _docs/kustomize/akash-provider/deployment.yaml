@@ -37,7 +37,7 @@ spec:
           emptyDir: {}
       initContainers:
         - name: provider-import-keys
-          image: ghcr.io/akash-network/node:stable
+          image: ghcr.io/akash-network/provider:stable
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "/boot/run.sh"]
           envFrom:

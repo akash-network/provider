@@ -1,7 +1,16 @@
-FROM golang:1.26.2-bookworm
+# trixie: the bundled akt release binary needs glibc >= 2.38 (bookworm has 2.36)
+FROM golang:1.26.2-trixie
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
 COPY provider-services /usr/bin/
+
+# akt CLI, installed per architecture by `make akt`. The binary must be
+# built for the image's platform: buildx/qemu would happily run a foreign-arch
+# binary, so check the platform compiled into it rather than just running it.
+ARG TARGETARCH
+COPY .cache/akt/linux_${TARGETARCH}/akt /usr/bin/akt
+RUN test -n "${TARGETARCH}" \
+ && akt version --long | grep -Eq "^platform:[[:space:]]+linux/${TARGETARCH}$"
 
 ENV DEBIAN_FRONTEND=noninteractive
 

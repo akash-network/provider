@@ -223,7 +223,7 @@ EOF'
             if [[ $packages != "" ]]; then
                 ssh -n "$node" 'sudo apt-get install -y uidmap slirp4netns'
             fi
-            ssh -n "$node" 'curl -sSL https://github.com/containerd/nerdctl/releases/download/v1.7.2/nerdctl-1.7.2-linux-$(uname -m | sed "s/x86_64/amd64/g").tar.gz | sudo tar Cxzv /usr/local/bin/'
+            ssh -n "$node" 'curl -sSL https://github.com/containerd/nerdctl/releases/download/v1.7.2/nerdctl-1.7.2-linux-$(uname -m | sed -e "s/x86_64/amd64/g" -e "s/aarch64/arm64/g").tar.gz | sudo tar Cxzv /usr/local/bin/'
             ssh -n "$node" 'curl -sSL https://github.com/rootless-containers/rootlesskit/releases/download/v2.0.0/rootlesskit-$(uname -m).tar.gz | sudo tar Cxzv /usr/local/bin/'
             ssh -n "$node" 'containerd-rootless-setuptool.sh install'
         done

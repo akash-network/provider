@@ -33,6 +33,8 @@ jobs:
       - run: make build
       - run: make provider-services
       - run: make docker-image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   tests:
     runs-on: [self-hosted, akash]
@@ -81,8 +83,14 @@ jobs:
         run: echo "RELEASE_TAG=v$(./script/semver.sh bump patch $(git describe --tags --abbrev=0))" >> $GITHUB_ENV
       - name: git tag
         run: git tag -a ${{ env.RELEASE_TAG }} -m ${{ env.RELEASE_TAG }}
+      - name: install akt
+        run: make akt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: release dry-run
-        run: make release
+        run: |
+          unset GITHUB_TOKEN
+          make release
 
   coverage:
     runs-on: [self-hosted, akash]

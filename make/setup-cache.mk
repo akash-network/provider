@@ -6,6 +6,10 @@ ifeq (, $(AKASH))
 $(error "AKASH variable is not set")
 endif
 
+ifeq (, $(AKT))
+$(error "AKT variable is not set")
+endif
+
 $(AP_DEVCACHE):
 	@echo "creating .cache dir structure..."
 	mkdir -p $@
@@ -26,13 +30,13 @@ ifeq ($(UNAME_OS_LOWER), darwin)
 	AKASH_INSTALL_ARCH := all
 endif
 
-.PHONY: akash-rm
-akash-rm:
+.PHONY: rm-akash
+rm-akash:
 	rm -f $(AKASHD_VERSION_FILE)
 
 .PHONY: akash
 ifeq ($(AKASHD_BUILD_FROM_SRC), true)
-akash:
+akash: rm-akash
 	@echo "compiling and installing Akash from local sources"
 	$(AP_ROOT)/script/tools.sh build-akash $(AKASHD_LOCAL_PATH)
 #make -C $(AKASHD_LOCAL_PATH) akash AKASH=$(AP_DEVCACHE_BIN)/akash
@@ -47,7 +51,39 @@ $(AKASHD_VERSION_FILE): $(AP_DEVCACHE)
 	rm -rf "$(dir $@)"
 	mkdir -p "$(dir $@)"
 	touch $@
-akash: akash-rm $(AKASHD_VERSION_FILE)
+akash: $(AKASHD_VERSION_FILE)
+endif
+
+.PHONY: rm-akt
+rm-akt:
+	rm -f $(AKT_VERSION_FILE)
+
+# akt for the host in $(AKT), plus the linux binaries copied into provider
+# images in $(AKT_DOCKER_DIR)/linux_<arch>/akt
+.PHONY: akt
+ifeq ($(AKT_BUILD_FROM_SRC), true)
+akt: rm-akt
+	@echo "compiling and installing AKT CLI from local sources"
+	$(AP_ROOT)/script/tools.sh build-akt "$(AKT_LOCAL_SRC)" "$(AKT)"
+	$(AP_ROOT)/script/tools.sh build-akt-docker "$(AKT_LOCAL_SRC)" "$(AKT_DOCKER_DIR)"
+else
+$(AKT_VERSION_FILE): $(AP_DEVCACHE)
+	@echo "Installing AKT $(AKT_VERSION) ..."
+	rm -f $(AKT) $(AKT_DOCKER_DIR)/linux_amd64/akt $(AKT_DOCKER_DIR)/linux_arm64/akt
+	( \
+		tmpfile=$$(mktemp) || exit; \
+		trap 'rm -f "$$tmpfile"' EXIT; \
+		curl -fsSL -o "$$tmpfile" "https://github.com/akash-network/akt/releases/download/$(AKT_VERSION)/install.sh" && \
+		gh attestation verify --repo=akash-network/akt \
+		  --signer-workflow=akash-network/akt/.github/workflows/release.yml "$$tmpfile" && \
+		sh "$$tmpfile" -b "$(AP_DEVCACHE_BIN)" && \
+		BINSTALLER_OS=linux BINSTALLER_ARCH=amd64 sh "$$tmpfile" -b "$(AKT_DOCKER_DIR)/linux_amd64" && \
+		BINSTALLER_OS=linux BINSTALLER_ARCH=arm64 sh "$$tmpfile" -b "$(AKT_DOCKER_DIR)/linux_arm64" \
+	)
+	rm -rf "$(dir $@)"
+	mkdir -p "$(dir $@)"
+	touch $@
+akt: $(AKT_VERSION_FILE)
 endif
 
 $(STATIK_VERSION_FILE): $(AP_DEVCACHE)

@@ -3,6 +3,14 @@ LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provid
 
 COPY provider-services /usr/bin/
 
+# akt CLI, installed per architecture by `make akt`. The binary must be
+# built for the image's platform: buildx/qemu would happily run a foreign-arch
+# binary, so check the platform compiled into it rather than just running it.
+ARG TARGETARCH
+COPY .cache/akt/linux_${TARGETARCH}/akt /usr/bin/akt
+RUN test -n "${TARGETARCH}" \
+ && akt version --long | grep -Eq "^platform:[[:space:]]+linux/${TARGETARCH}$"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN \

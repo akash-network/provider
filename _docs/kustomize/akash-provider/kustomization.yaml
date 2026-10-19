@@ -24,6 +24,8 @@ configMapGenerator:
     literals:
       - AKASH_HOME=/home
       - AP_HOME=/home
+      # akt (provider-import-keys) shares the home with provider-services
+      - AKT_HOME=/home
       - AKASH_FROM=provider
       - AP_FROM=provider
       - AKASH_NODE=http://akash-node:26657

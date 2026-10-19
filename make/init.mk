@@ -45,8 +45,8 @@ endif
 
 UNAME_OS                   := $(shell uname -s)
 UNAME_OS_LOWER             := $(shell uname -s | tr '[:upper:]' '[:lower:]')
-# uname reports x86_64. rename to amd64 to make it usable by goreleaser
-UNAME_ARCH                 ?= $(shell uname -m | sed "s/x86_64/amd64/g")
+# uname reports x86_64 and aarch64 (linux). rename to amd64 and arm64 to make it usable by goreleaser
+UNAME_ARCH                 ?= $(shell uname -m | sed -e "s/x86_64/amd64/g" -e "s/aarch64/arm64/g")
 
 ifeq (, $(shell which wget))
 $(error "No wget in $(PATH), consider installing")
@@ -56,7 +56,7 @@ ifeq (, $(shell which realpath))
 $(error "No realpath in $(PATH), consider installing")
 endif
 
-BINS                         := $(PROVIDER_SERVICES) akash
+BINS                         := $(PROVIDER_SERVICES) akash akt
 SEMVER                       := $(ROOT_DIR)/script/semver.sh
 
 __local_go                   := $(shell GOTOOLCHAIN=local go version | cut -d ' ' -f 3 | sed 's/go*//' | tr -d '\n')
@@ -81,10 +81,14 @@ endif
 GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
 
 AKASHD_MODULE                := pkg.akt.dev/node/v2
-REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
-AKASHD_SRC_IS_LOCAL          ?= $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
 AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")
 AKASHD_VERSION               := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' $(AKASHD_MODULE) | cut -c2-)
+
+REPLACED_MODULES             := $(shell go list -mod=readonly -m -f '{{ .Replace }}' all 2>/dev/null | grep -v -x -F "<nil>" | grep "^/")
+AKASHD_SRC_IS_LOCAL          ?= $(shell $(ROOT_DIR)/script/is_local_gomod.sh "$(AKASHD_MODULE)")
+
+AKT_VERSION                  := v1.0.4
+
 GRPC_GATEWAY_VERSION         := $(shell $(GO) list -mod=readonly -m -f '{{ .Version }}' github.com/grpc-ecosystem/grpc-gateway)
 GOLANGCI_LINT_VERSION        ?= v2.3.0
 STATIK_VERSION               ?= v0.1.7
@@ -110,9 +114,33 @@ ifeq (false,$(AKASHD_SRC_IS_LOCAL))
 	  -H "Accept: application/vnd.github+json" \
 	  -H "Authorization: Bearer $${GITHUB_TOKEN}" \
 	  -H "X-GitHub-Api-Version: 2022-11-28" \
-	  https://api.github.com/repos/akash-network/node/releases/tags/$(AKASHD_VERSION) | jq -e --arg name "akash_darwin_all.zip" '.assets[] | select(.name==$$name)' > /dev/null 2>&1 && echo -n true || echo -n false)
+	  https://api.github.com/repos/akash-network/node/releases/tags/v$(AKASHD_VERSION) | jq -e --arg name "akash_darwin_all.zip" '.assets | any(.name==$$name) | not' > /dev/null 2>&1 && echo -n true || echo -n false)
 else
 	AKASHD_BUILD_FROM_SRC := true
+endif
+
+# AKT_LOCAL_PATH (env, dev.env or command line) builds akt from a local checkout
+# instead of downloading the release. A relative path is anchored at the repo
+# root so it means the same from _run/<env>. The resolved path is kept in
+# AKT_LOCAL_SRC because a command-line AKT_LOCAL_PATH overrides any reassignment.
+AKT_LOCAL_PATH               ?=
+AKT_LOCAL_SRC                :=
+ifneq (,$(strip $(AKT_LOCAL_PATH)))
+AKT_LOCAL_SRC                := $(realpath $(if $(filter /%,$(AKT_LOCAL_PATH)),$(AKT_LOCAL_PATH),$(ROOT_DIR)/$(AKT_LOCAL_PATH)))
+ifeq (,$(AKT_LOCAL_SRC))
+$(error "AKT_LOCAL_PATH=$(AKT_LOCAL_PATH) does not exist")
+endif
+endif
+
+AKT_BUILD_FROM_SRC           := false
+ifeq (,$(AKT_LOCAL_SRC))
+	AKT_BUILD_FROM_SRC := $(shell curl -sL \
+	  -H "Accept: application/vnd.github+json" \
+	  -H "Authorization: Bearer $${GITHUB_TOKEN}" \
+	  -H "X-GitHub-Api-Version: 2022-11-28" \
+	  https://api.github.com/repos/akash-network/akt/releases/tags/$(AKT_VERSION) | jq -e --arg name "akt_$(AKT_VERSION:v%=%)_darwin_all.zip" '.assets | any(.name==$$name) | not' > /dev/null 2>&1 && echo -n true || echo -n false)
+else
+	AKT_BUILD_FROM_SRC := true
 endif
 
 RELEASE_DOCKER_IMAGE         ?= ghcr.io/akash-network/provider
@@ -135,6 +163,7 @@ MOCKERY_VERSION_FILE             := $(AP_DEVCACHE_VERSIONS)/mockery/v$(MOCKERY_V
 K8S_CODEGEN_VERSION_FILE         := $(AP_DEVCACHE_VERSIONS)/k8s-codegen/$(K8S_CODEGEN_VERSION)
 GOLANGCI_LINT_VERSION_FILE       := $(AP_DEVCACHE_VERSIONS)/golangci-lint/$(GOLANGCI_LINT_VERSION)
 AKASHD_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/akash/$(AKASHD_VERSION)
+AKT_VERSION_FILE                 := $(AP_DEVCACHE_VERSIONS)/akt/$(AKT_VERSION)
 KIND_VERSION_FILE                := $(AP_DEVCACHE_VERSIONS)/kind/$(KIND_VERSION)
 SEMVER_VERSION_FILE              := $(AP_DEVCACHE_VERSIONS)/semver/$(SEMVER_VERSION)
 
@@ -146,5 +175,7 @@ K8S_KUBE_CODEGEN                 := $(AP_DEVCACHE_BIN)/$(K8S_KUBE_CODEGEN_FILE)
 K8S_GO_TO_PROTOBUF               := $(AP_DEVCACHE_BIN)/go-to-protobuf
 GOLANGCI_LINT                    := $(AP_DEVCACHE_BIN)/golangci-lint
 SEMVER                           := $(AP_DEVCACHE_BIN)/semver
+# linux akt binaries for provider images: $(AKT_DOCKER_DIR)/linux_<arch>/akt
+AKT_DOCKER_DIR                   := $(AP_DEVCACHE)/akt
 
 include $(AP_ROOT)/make/setup-cache.mk
