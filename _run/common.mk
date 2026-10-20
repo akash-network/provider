@@ -54,8 +54,8 @@ SERVER_CERTS := provider
 
 # akt keeps its config, contexts and keyring in AKT_HOME (= AKASH_HOME, see
 # common-base.mk). Without a config akt starts an interactive first-run wizard,
-# so nothing below runs akt before the config exists: client-init-context
-# creates it with "context network create", which akt exempts from the wizard.
+# so nothing below runs akt before the config exists: akt-context creates it
+# with "context network create", which akt exempts from the wizard.
 AKT_CONFIG   := $(AKT_HOME)/config.yaml
 
 # akt_key_address <key-name>: bech32 address of a key, or empty while akt is
@@ -67,8 +67,10 @@ akt_key_address = $(shell [ -f "$(AKT_CONFIG)" ] && $(AKT) context keys show "$(
 akt-context-ready:
 	@test -f "$(AKT_CONFIG)" || { echo 'akt is not initialised in $(AKT_HOME); run "make init"' >&2; exit 1; }
 
+# akt-context runs on every init: environments initialised before akt was used
+# have the completion marker, so the init chain below never runs for them again.
 .PHONY: init
-init: bins akash-init
+init: bins akash-init akt-context
 
 $(AP_RUN_DIR):
 	mkdir -p $@
@@ -85,7 +87,7 @@ $(AKASH_INIT): client-init node-init | $(AKASH_HOME)
 akash-init: $(AKASH_INIT)
 
 .INTERMEDIATE: client-init
-client-init: akash-init-reset client-init-context client-init-keys
+client-init: akash-init-reset client-init-keys
 
 # An init that did not finish leaves keys, certificates and genesis state that
 # its steps cannot resume (they refuse to overwrite them). Without the
@@ -100,8 +102,13 @@ akash-init-reset:
 # Reconciles the akt network, keyring and context named "local" one by one from
 # their own state, so a run interrupted after any step converges when re-run.
 # Definitions that exist but differ from this environment are not overwritten.
-.INTERMEDIATE: client-init-context
-client-init-context:
+# Phony rather than part of the intermediate init chain, so it also runs for an
+# environment whose init completed before akt was used; it must not be a normal
+# prerequisite in that chain, which would then always look out of date. The reset
+# goes first: make runs a phony prerequisite while still deciding on the missing
+# intermediate ones, so without it the reset could wipe a just-created config.
+.PHONY: akt-context
+akt-context: | akash-init-reset
 	@set -e; \
 	if [ -f "$(AKT_CONFIG)" ] && $(AKT) context network show local >/dev/null 2>&1 </dev/null; then \
 		echo "akt: network local exists"; \
@@ -132,12 +139,14 @@ client-init-context:
 .INTERMEDIATE: client-init-keys
 client-init-keys: $(patsubst %,client-init-key-%,$(KEY_NAMES)) client-init-key-multisig
 
+# keys are added through the akt context (order-only: it must exist first, but
+# must not make a completed init look stale)
 .INTERMEDIATE: $(patsubst %,client-init-key-%,$(KEY_NAMES))
-client-init-key-%:
+client-init-key-%: | akt-context
 	$(AKT) context keys add "$(@:client-init-key-%=%)" --no-backup </dev/null
 
 .INTERMEDIATE: client-init-key-multisig
-client-init-key-multisig:
+client-init-key-multisig: | akt-context
 	$(AKT) context keys add \
 		"$(MULTISIG_KEY)" \
 		--multisig "$(subst $(space),$(comma),$(strip $(MULTISIG_SIGNERS)))" \

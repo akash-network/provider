@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/tools/pager"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
@@ -176,32 +177,42 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 		return nil, err
 	}
 
-	evData := make([]hostnameResourceEvent, len(data))
-	for i, v := range data {
+	// a resource whose lease ID cannot be built is skipped rather than emitted without a type
+	evData := make([]hostnameResourceEvent, 0, len(data))
+	for _, v := range data {
 		lid, err := v.Spec.LeaseID()
 		if err != nil {
-			c.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+			c.log.Error("failed to convert LeaseID from CRD resource", "hostname", v.Spec.Hostname, "err", err)
 			continue
 		}
 
-		ev := hostnameResourceEvent{
+		evData = append(evData, hostnameResourceEvent{
 			eventType:    ctypes.ProviderResourceAdd,
 			lid:          lid,
 			hostname:     v.Spec.Hostname,
 			serviceName:  v.Spec.ServiceName,
 			externalPort: v.Spec.ExternalPort,
-		}
-		evData[i] = ev
+		})
 	}
 
 	data = nil
 
 	output := make(chan chostname.ResourceEvent)
 
+	// every send also waits on ctx, so a consumer that stops reading and cancels ctx
+	// releases the producer
 	go func() {
-		defer close(output)
+		defer func() {
+			close(output)
+			watcher.Stop()
+		}()
+
 		for _, v := range evData {
-			output <- v
+			select {
+			case output <- v:
+			case <-ctx.Done():
+				return
+			}
 		}
 		evData = nil // do not hold the reference
 
@@ -212,11 +223,23 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 				if !ok { // Channel closed when an error happens
 					return
 				}
-				ph := result.Object.(*crd.ProviderHost)
+
+				// an error event carries a *metav1.Status; end the stream so the
+				// consumer restarts the observation
+				if result.Type == watch.Error {
+					c.log.Error("watch error", "err", kerrors.FromObject(result.Object))
+					return
+				}
+
+				ph, ok := result.Object.(*crd.ProviderHost)
+				if !ok {
+					c.log.Error("unexpected object in hostname watch", "err", fmt.Errorf("unexpected object type %T", result.Object))
+					continue
+				}
 
 				lid, err := ph.Spec.LeaseID()
 				if err != nil {
-					c.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+					c.log.Error("failed to convert LeaseID from CRD resource", "hostname", ph.Spec.Hostname, "err", err)
 					continue
 				}
 
@@ -235,16 +258,16 @@ func (c *client) ObserveHostnameState(ctx context.Context) (<-chan chostname.Res
 				case watch.Deleted:
 					ev.eventType = ctypes.ProviderResourceDelete
 
-				case watch.Error:
-					// Based on examination of the implementation code, this is basically never called anyways
-					c.log.Error("watch` error", "err", result.Object)
-
 				default:
 
 					continue
 				}
 
-				output <- ev
+				select {
+				case output <- ev:
+				case <-ctx.Done():
+					return
+				}
 			case <-ctx.Done():
 				return
 			}
@@ -269,10 +292,13 @@ func (c *client) AllHostnames(ctx context.Context) ([]chostname.ActiveHostname, 
 		ph := obj.(*crd.ProviderHost)
 		hostname := ph.Spec.Hostname
 
+		// keep the hostname reserved: failing here would abort provider startup over one bad
+		// resource, and skipping it would let another tenant claim the hostname
 		lid, err := ph.Spec.LeaseID()
 		if err != nil {
-			c.log.Error("failed to convert LeaseID from CRD resource", "err", err)
-			return err
+			lid = reservationLeaseID(ph)
+			c.log.Error("invalid lease ID in ProviderHost, keeping its hostname reserved; fix or remove the resource and restart the provider",
+				"hostname", hostname, "owner", lid.Owner, "err", err)
 		}
 
 		result = append(result, chostname.ActiveHostname{
@@ -285,4 +311,34 @@ func (c *client) AllHostnames(ctx context.Context) ([]chostname.ActiveHostname, 
 		return nil, err
 	}
 	return result, nil
+}
+
+// unrecoverableOwner reserves the hostnames of ProviderHosts whose owner cannot be recovered. It
+// is a valid address, as hostname reservations require, that no tenant holds the key of, so the
+// hostname is denied to every tenant. Reservations are loaded at startup and this one is never
+// released, so it is lifted by fixing or removing the resource and restarting the provider.
+func unrecoverableOwner() string {
+	return sdk.AccAddress(make([]byte, 20)).String()
+}
+
+// reservationLeaseID returns the lease a ProviderHost reserves its hostname for when its spec does
+// not yield a valid lease ID. Reservations compare owner, dseq and gseq only, so the owner is taken
+// from the spec or, failing that, from the lease owner label; the provider address is kept as is.
+func reservationLeaseID(ph *crd.ProviderHost) mtypes.LeaseID {
+	lid := mtypes.LeaseID{
+		Owner:    unrecoverableOwner(),
+		DSeq:     ph.Spec.Dseq,
+		GSeq:     ph.Spec.Gseq,
+		OSeq:     ph.Spec.Oseq,
+		Provider: ph.Spec.Provider,
+	}
+
+	for _, owner := range []string{ph.Spec.Owner, ph.Labels[builder.AkashLeaseOwnerLabelName]} {
+		if _, err := sdk.AccAddressFromBech32(owner); err == nil {
+			lid.Owner = owner
+			break
+		}
+	}
+
+	return lid
 }

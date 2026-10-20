@@ -5,7 +5,9 @@ attestation sidecar use the same logger (`tools/logging`, backed by zap). All lo
 
 ## Options
 
-Each option can be set as a flag, an environment variable (`AP_` or `AKASH_` prefix) or a config file key.
+Each option can be set as a flag, an environment variable (`AP_` or `AKASH_` prefix; `AP_` wins when both
+are set) or a config file key. Operator subcommands (`operator inventory|ip|hostname`) do not read the config
+file: set their options with flags or environment variables.
 
 | Flag              | Environment        | Values                                                        | Default       |
 |-------------------|--------------------|---------------------------------------------------------------|---------------|
@@ -131,6 +133,10 @@ The sidecar reads the same options from `ATTESTATION_LOG_LEVEL`, `ATTESTATION_LO
 `ATTESTATION_LOG_COLOR`, `ATTESTATION_LOG_TIMESTAMP` and `ATTESTATION_TRACE` (same values and defaults).
 The provider's attestation webhook injects them into every sidecar from the provider's own configuration,
 so logging is configured once on the provider.
+
+The sidecar is a separate Go module with its own copy of the logger (`sidecar/attestation/internal/logging`).
+Change options, values, defaults or parsing in both copies: both test suites run
+`tools/logging/testdata/conformance.json`, so a change made to one copy only fails the other's tests.
 
 ## Behavior changes
 

@@ -50,10 +50,22 @@ function get_goversion() {
 	echo -n "go$goversion"
 }
 
+# require_src <command> <dir>
+# Exits unless <dir> is set: depending on the bash version, cd "" either fails
+# with an unclear message or succeeds and stays in the current directory, where
+# the build would then run.
+function require_src() {
+	if [[ -z "$2" ]]; then
+		echo "$1: source directory required" >&2
+		exit 1
+	fi
+}
+
 function build_akash() {
 	local tmp_akash
 	tmp_akash="${AP_DEVCACHE_BIN}/akash"
 
+	require_src build-akash "$1"
 	cd "$1" || exit 1
 
 	direnv allow
@@ -65,6 +77,7 @@ function build_akash() {
 }
 
 function build_akash_docker() {
+	require_src build-akash-docker "$1"
 	cd "$1" || exit 1
 	direnv allow
 	_direnv_hook
@@ -81,6 +94,7 @@ function build_akt() (
 	local dest
 	local partial
 
+	require_src build-akt "$src"
 	mkdir -p "$(dirname "$2")" || exit 1
 	dest="$(cd "$(dirname "$2")" && pwd)/$(basename "$2")" || exit 1
 	partial="${dest}.partial.$$"
@@ -106,6 +120,7 @@ function build_akt_docker() (
 	local path
 	local dest
 
+	require_src build-akt-docker "$src"
 	mkdir -p "$2" || exit 1
 	outdir=$(cd "$2" && pwd) || exit 1
 

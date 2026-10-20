@@ -65,7 +65,11 @@ func isOff(val string) bool {
 // Setup builds the logger from the logging options and stores it, together with
 // its Config, in the command context. When the context already holds a logger,
 // Setup returns it unchanged.
-func Setup(cmd *cobra.Command) (log.Logger, error) {
+//
+// Each option is also read from <PREFIX>_<OPTION> for every prefix in envPrefixes,
+// earlier prefixes taking precedence, so the environment applies even to commands
+// whose pre-run does not bind those prefixes (operator subcommands).
+func Setup(cmd *cobra.Command, envPrefixes ...string) (log.Logger, error) {
 	ctx := cmd.Context()
 	if ctx == nil {
 		ctx = context.Background()
@@ -80,6 +84,20 @@ func Setup(cmd *cobra.Command) (log.Logger, error) {
 			if err := viper.BindPFlag(name, flag); err != nil {
 				return nil, err
 			}
+		}
+
+		if len(envPrefixes) == 0 {
+			continue
+		}
+
+		input := make([]string, 0, len(envPrefixes)+1)
+		input = append(input, name)
+		for _, prefix := range envPrefixes {
+			input = append(input, strings.ToUpper(prefix+"_"+name))
+		}
+
+		if err := viper.BindEnv(input...); err != nil {
+			return nil, err
 		}
 	}
 

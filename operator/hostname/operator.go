@@ -573,28 +573,30 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 		return nil, err
 	}
 
-	evData := make([]hostnameResourceEvent, len(data))
-	for i, v := range data {
+	// a resource whose lease ID cannot be built is skipped rather than emitted without a type
+	evData := make([]hostnameResourceEvent, 0, len(data))
+	for _, v := range data {
 		lid, err := v.Spec.LeaseID()
 		if err != nil {
-			op.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+			op.log.Error("failed to convert LeaseID from CRD resource", "hostname", v.Spec.Hostname, "err", err)
 			continue
 		}
 
-		ev := hostnameResourceEvent{
+		evData = append(evData, hostnameResourceEvent{
 			lid:          lid,
 			eventType:    ctypes.ProviderResourceAdd,
 			hostname:     v.Spec.Hostname,
 			serviceName:  v.Spec.ServiceName,
 			externalPort: v.Spec.ExternalPort,
-		}
-		evData[i] = ev
+		})
 	}
 
 	data = nil
 
 	output := make(chan chostname.ResourceEvent)
 
+	// every send also waits on ctx: the consumer stops reading when it fails to apply an event,
+	// and cancels ctx when it returns
 	go func() {
 		defer func() {
 			close(output)
@@ -602,7 +604,11 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 		}()
 
 		for _, v := range evData {
-			output <- v
+			select {
+			case output <- v:
+			case <-ctx.Done():
+				return
+			}
 		}
 		evData = nil // do not hold the reference
 
@@ -613,10 +619,23 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 				if !ok { // Channel closed when an error happens
 					return
 				}
-				ph := result.Object.(*crd.ProviderHost)
+
+				// an error event carries a *metav1.Status; end the stream so the
+				// observation restarts with a new list and watch
+				if result.Type == watch.Error {
+					op.log.Error("watch error", "err", kerrors.FromObject(result.Object))
+					return
+				}
+
+				ph, ok := result.Object.(*crd.ProviderHost)
+				if !ok {
+					op.log.Error("unexpected object in hostname watch", "err", fmt.Errorf("unexpected object type %T", result.Object))
+					continue
+				}
+
 				lid, err := ph.Spec.LeaseID()
 				if err != nil {
-					op.log.Error("failed to convert LeaseID from CRD resource", "err", err)
+					op.log.Error("failed to convert LeaseID from CRD resource", "hostname", ph.Spec.Hostname, "err", err)
 					continue
 				}
 
@@ -635,16 +654,16 @@ func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan ch
 				case watch.Deleted:
 					ev.eventType = ctypes.ProviderResourceDelete
 
-				case watch.Error:
-					// Based on examination of the implementation code, this is basically never called anyways
-					op.log.Error("watch error", "err", result.Object)
-
 				default:
 
 					continue
 				}
 
-				output <- ev
+				select {
+				case output <- ev:
+				case <-ctx.Done():
+					return
+				}
 			case <-ctx.Done():
 				return
 			}

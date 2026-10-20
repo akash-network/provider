@@ -1,6 +1,10 @@
 // Package logging provides the single logging setup used by all provider-services
 // commands: option parsing, a zap-backed implementation of cosmossdk.io/log.Logger,
 // cobra wiring and the canonical log keys.
+//
+// The attestation sidecar, a separate module, keeps a copy in
+// sidecar/attestation/internal/logging. Changes to options, values, defaults or parsing
+// go into both; testdata/conformance.json is run by both test suites.
 package logging
 
 import (

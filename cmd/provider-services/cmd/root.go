@@ -14,6 +14,7 @@ import (
 	"pkg.akt.dev/go/sdkutil"
 	"pkg.akt.dev/node/v2/app"
 
+	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	"github.com/akash-network/provider/operator"
 	"github.com/akash-network/provider/tools/logging"
 	"github.com/akash-network/provider/version"
@@ -23,7 +24,7 @@ func NewRootCmd() *cobra.Command {
 	encodingConfig := sdkutil.MakeEncodingConfig()
 	app.ModuleBasics().RegisterInterfaces(encodingConfig.InterfaceRegistry)
 
-	envPrefixes := []string{"AP", "AKASH"}
+	envPrefixes := providerflags.EnvPrefixes()
 	upstreamPreRunE := cli.GetPersistentPreRunE(encodingConfig, envPrefixes, cli.DefaultHome)
 
 	cmd := &cobra.Command{
@@ -40,7 +41,7 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 
-			_, err := logging.Setup(cmd)
+			_, err := logging.Setup(cmd, envPrefixes...)
 
 			return err
 		},

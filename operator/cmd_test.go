@@ -24,14 +24,20 @@ var errProbe = errors.New("probe failed before startup")
 const probeCmd = "probe"
 
 // executeOperatorProbe mounts OperatorsCmd under a root carrying the logging
-// flags (as the real root does) and runs a probe operator subcommand.
-func executeOperatorProbe(t *testing.T, runE func(cmd *cobra.Command, args []string) error, args ...string) error {
+// flags (as the real root does) and runs a probe operator subcommand, with env
+// set on top of an environment free of logging variables.
+func executeOperatorProbe(t *testing.T, env map[string]string, runE func(cmd *cobra.Command, args []string) error, args ...string) error {
 	t.Helper()
 
 	viper.Reset()
 	t.Cleanup(viper.Reset)
-	for _, name := range []string{"LOG_LEVEL", "LOG_FORMAT", "LOG_COLOR", "LOG_TIMESTAMP", "TRACE"} {
-		t.Setenv("AP_"+name, "")
+	for _, prefix := range []string{"AP_", "AKASH_"} {
+		for _, name := range []string{"LOG_LEVEL", "LOG_FORMAT", "LOG_COLOR", "LOG_TIMESTAMP", "TRACE"} {
+			t.Setenv(prefix+name, "")
+		}
+	}
+	for key, val := range env {
+		t.Setenv(key, val)
 	}
 
 	root := &cobra.Command{Use: "root", SilenceErrors: true, SilenceUsage: true}
@@ -56,7 +62,7 @@ func TestOperatorLoggingFlags(t *testing.T) {
 	var got logging.Config
 	var ok bool
 
-	err := executeOperatorProbe(t, func(cmd *cobra.Command, _ []string) error {
+	err := executeOperatorProbe(t, nil, func(cmd *cobra.Command, _ []string) error {
 		got, ok = logging.ConfigFromCtx(cmd.Context())
 		return nil
 	}, "--log_format", "json", "--log_color=true", "--log_timestamp", "off")
@@ -68,10 +74,46 @@ func TestOperatorLoggingFlags(t *testing.T) {
 	require.Equal(t, logging.TimestampOff, got.Timestamp)
 }
 
+// Operator subcommands do not run the root pre-run, which applies the AKASH_ fallback prefix.
+// Their logging options must still be read from both prefixes, AP_ taking precedence.
+func TestOperatorLoggingEnv(t *testing.T) {
+	tests := map[string]struct {
+		env           map[string]string
+		wantFormat    string
+		wantTimestamp string
+	}{
+		"AKASH_ prefix": {
+			env:           map[string]string{"AKASH_LOG_FORMAT": "json", "AKASH_LOG_TIMESTAMP": "kitchen"},
+			wantFormat:    "json",
+			wantTimestamp: "kitchen",
+		},
+		"AP_ wins over AKASH_": {
+			env:           map[string]string{"AP_LOG_TIMESTAMP": "kitchen", "AKASH_LOG_TIMESTAMP": "rfc3339", "AKASH_LOG_FORMAT": "json"},
+			wantFormat:    "json",
+			wantTimestamp: "kitchen",
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			var got logging.Config
+
+			err := executeOperatorProbe(t, tc.env, func(cmd *cobra.Command, _ []string) error {
+				got, _ = logging.ConfigFromCtx(cmd.Context())
+				return nil
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantFormat, got.Format)
+			require.Equal(t, tc.wantTimestamp, got.Timestamp)
+		})
+	}
+}
+
 func TestOperatorRunEErrorCancelsGroup(t *testing.T) {
 	var runCtx context.Context
 
-	err := executeOperatorProbe(t, func(cmd *cobra.Command, _ []string) error {
+	err := executeOperatorProbe(t, nil, func(cmd *cobra.Command, _ []string) error {
 		runCtx = cmd.Context()
 		return errProbe
 	})

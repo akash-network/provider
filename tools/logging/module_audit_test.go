@@ -32,7 +32,7 @@ func TestLogsHaveModule(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, pkgs)
 
-	var violations []string
+	violations := make([]string, 0, len(pkgs))
 	for _, p := range pkgs {
 		violations = append(violations, newModuleAudit(p).run()...)
 	}

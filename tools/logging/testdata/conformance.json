@@ -1,0 +1,53 @@
+{
+  "defaults": {
+    "level": "info",
+    "format": "plain",
+    "color": true,
+    "timestamp": "rfc3339nano",
+    "trace": false
+  },
+  "cases": [
+    {
+      "name": "defaults",
+      "in": {"level": "info", "format": "plain", "color": true, "timestamp": "rfc3339nano", "trace": false},
+      "want": {"level_spec": "info", "level": "info", "format": "plain", "color": true, "timestamp": "rfc3339nano", "trace": false}
+    },
+    {
+      "name": "json disables color",
+      "in": {"level": "debug", "format": "json", "color": true, "timestamp": "rfc3339", "trace": true},
+      "want": {"level_spec": "debug", "level": "debug", "format": "json", "color": false, "timestamp": "rfc3339", "trace": true}
+    },
+    {
+      "name": "trace is debug",
+      "in": {"level": "trace", "format": "plain", "color": false, "timestamp": "kitchen"},
+      "want": {"level_spec": "trace", "level": "debug", "format": "plain", "color": false, "timestamp": "kitchen"}
+    },
+    {
+      "name": "values are trimmed and lowercased",
+      "in": {"level": "  WARN ", "format": " JSON ", "color": false, "timestamp": " Off "},
+      "want": {"level_spec": "warn", "level": "warn", "format": "json", "color": false, "timestamp": "off"}
+    },
+    {
+      "name": "empty values",
+      "in": {"level": "", "format": "", "color": true, "timestamp": ""},
+      "want": {"level_spec": "info", "level": "info", "format": "plain", "color": true, "timestamp": "off"}
+    },
+    {
+      "name": "module filter with default level",
+      "in": {"level": "bidengine-order:debug, *:warn", "format": "plain", "timestamp": "off"},
+      "want": {"level_spec": "bidengine-order:debug, *:warn", "level": "warn", "modules": {"bidengine-order": "debug"}, "format": "plain", "timestamp": "off"}
+    },
+    {
+      "name": "module filter without default level leaves other modules unfiltered",
+      "in": {"level": "operator-inventory.nodes:error", "format": "plain", "timestamp": "off"},
+      "want": {"level_spec": "operator-inventory.nodes:error", "level": "debug", "modules": {"operator-inventory.nodes": "error"}, "format": "plain", "timestamp": "off"}
+    },
+    {"name": "format text is rejected", "in": {"level": "info", "format": "text", "timestamp": "off"}},
+    {"name": "unknown timestamp is rejected", "in": {"level": "info", "format": "plain", "timestamp": "unix"}},
+    {"name": "unknown level is rejected", "in": {"level": "verbose", "format": "plain", "timestamp": "off"}},
+    {"name": "unknown module level is rejected", "in": {"level": "bidengine-order:verbose", "format": "plain", "timestamp": "off"}},
+    {"name": "duplicate module is rejected", "in": {"level": "bidengine-order:debug,bidengine-order:info", "format": "plain", "timestamp": "off"}},
+    {"name": "empty module is rejected", "in": {"level": ":debug", "format": "plain", "timestamp": "off"}},
+    {"name": "malformed pair is rejected", "in": {"level": "bidengine-order:debug:info", "format": "plain", "timestamp": "off"}}
+  ]
+}

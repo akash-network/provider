@@ -47,6 +47,10 @@ jobs:
       - name: Setup environment
         uses: ./.github/actions/setup-ubuntu
       - run: make test-full
+      # separate Go module, not covered by test-full; shares the
+      # logging conformance fixture with tools/logging
+      - name: Attestation sidecar tests
+        run: make -C sidecar/attestation test
       - name: Check workload recovery across provider upgrades
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         env:

@@ -29,6 +29,11 @@ linters:
     rules:
       - path: (.+)\.go$
         text: comment on exported (method|function|type|const|var)
+      # tests spell out inputs and expected values as literals on
+      # purpose rather than deriving them from the code's constants
+      - path: _test\.go$
+        linters:
+          - goconst
     paths:
       - third_party$
       - builtin$

@@ -1,6 +1,8 @@
 // Package logging configures the attestation sidecar's logger from environment
 // variables. It mirrors the provider's tools/logging options, values and defaults;
-// the provider injects these variables from its own configuration.
+// the provider injects these variables from its own configuration. Changes go into
+// both copies: the provider's tools/logging/testdata/conformance.json is run by both
+// test suites.
 package logging
 
 import (

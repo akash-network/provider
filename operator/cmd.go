@@ -26,7 +26,8 @@ func OperatorsCmd() *cobra.Command {
 		Short:        "kubernetes operators control",
 		SilenceUsage: true,
 		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			if _, err := logging.Setup(cmd); err != nil {
+			// this pre-run shadows the root one, so the env prefixes are bound here
+			if _, err := logging.Setup(cmd, providerflags.EnvPrefixes()...); err != nil {
 				return err
 			}
 
