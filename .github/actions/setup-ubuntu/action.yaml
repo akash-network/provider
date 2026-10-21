@@ -62,6 +62,9 @@ runs:
       with:
         go-version: "${{ env.GOVERSION }}"
         check-latest: true
+        # the Go cache archive is ~3.5 GB: restoring it on the self-hosted
+        # runners has taken ~20 min and then failed
+        cache: false
     - name: set environment
       uses: HatsuneMiku3939/direnv-action@v1
       with:
