@@ -138,6 +138,46 @@ func TestModuleFilterBeforeEncoding(t *testing.T) {
 	require.Equal(t, "x-info", lines[1]["message"])
 }
 
+// Context added after the module is bound keeps the module's level, as for the chain
+// event service, which derives its logger with With("cmp", "events").
+func TestModuleLevelSurvivesWith(t *testing.T) {
+	buf := &bytes.Buffer{}
+	root := New(buf, mustConfig(t, "events:warn,*:error", "json", false, "off", false))
+
+	root.With("module", "events").With("cmp", "events").Warn("module-warn")
+	root.With("cmp", "events").Warn("unscoped-warn")
+
+	lines := jsonLines(t, buf)
+	require.Len(t, lines, 1, buf.String())
+	require.Equal(t, "module-warn", lines[0]["message"])
+	require.Equal(t, "events", lines[0]["module"])
+}
+
+// "disabled" turns logging off, globally or for the modules it is set for.
+func TestDisabledLevel(t *testing.T) {
+	cases := map[string][]string{
+		"disabled":                         nil,
+		"provider:disabled,*:info":         {"root-error"},
+		"*:disabled,bidengine-order:debug": {"order-debug"},
+	}
+
+	for spec, want := range cases {
+		buf := &bytes.Buffer{}
+		l := New(buf, mustConfig(t, spec, "json", false, "off", false))
+
+		l.Error("root-error")
+		l.With("module", "provider").Error("provider-error")
+		l.Error("provider-entry-error", "module", "provider")
+		l.With("module", "bidengine-order").Debug("order-debug")
+
+		var got []string
+		for _, line := range jsonLines(t, buf) {
+			got = append(got, fmt.Sprint(line["message"]))
+		}
+		require.Equal(t, want, got, spec)
+	}
+}
+
 func TestTraceStack(t *testing.T) {
 	buf := &bytes.Buffer{}
 	New(buf, mustConfig(t, "info", "json", false, "off", true)).Error("m", "err", errors.New("boom"))

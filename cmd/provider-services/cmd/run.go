@@ -813,7 +813,7 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	evtSvc, err := events.NewEvents(ctx, cctx.Client, "provider-cli", bus)
+	evtSvc, err := newEventsService(ctx, cctx.Client, bus, logger)
 	if err != nil {
 		return err
 	}
@@ -991,6 +991,12 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	}
 
 	return nil
+}
+
+// newEventsService starts the chain event service. The service adds only "cmp" to the
+// logger it is given, so "module" is bound here for the module filter to apply.
+func newEventsService(ctx context.Context, node sdkclient.CometRPC, bus pubsub.Bus, logger log.Logger) (events.Service, error) {
+	return events.NewEvents(ctx, node, "provider-cli", bus, events.WithLogger(logger.With("module", "events")))
 }
 
 // attestationSidecarEnv returns the environment injected into attestation sidecars:

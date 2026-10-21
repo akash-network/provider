@@ -7,6 +7,7 @@ package logging
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -45,9 +46,15 @@ const (
 const (
 	allowedFormats    = "plain|json"
 	allowedTimestamps = "off|rfc3339|rfc3339nano|kitchen"
-	allowedLevels     = "trace|debug|info|warn|error|fatal|panic"
+	allowedLevels     = "trace|debug|info|warn|error|fatal|panic|disabled"
 	defaultModuleKey  = "*"
 )
+
+// levelDisabled is the level of "disabled": above every level, so no entry passes it.
+const levelDisabled = zapcore.InvalidLevel
+
+// zerologLevels names zerolog's numeric levels -1 to 5.
+var zerologLevels = [...]string{"trace", "debug", "info", "warn", "error", "fatal", "panic"}
 
 // Config is the resolved logging configuration.
 type Config struct {
@@ -191,6 +198,21 @@ func parseLevel(val string) (zapcore.Level, error) {
 		return zapcore.FatalLevel, nil
 	case "panic":
 		return zapcore.PanicLevel, nil
+	case "disabled":
+		return levelDisabled, nil
+	}
+
+	// zerolog's numeric levels, accepted before the logging rework: lower numbers
+	// log everything, higher ones nothing
+	if n, err := strconv.Atoi(val); err == nil && n >= math.MinInt8 && n <= math.MaxInt8 {
+		switch {
+		case n < -1:
+			return zapcore.DebugLevel, nil
+		case n > 5:
+			return levelDisabled, nil
+		}
+
+		return parseLevel(zerologLevels[n+1])
 	}
 
 	return 0, fmt.Errorf("invalid %s %q: allowed values %s or module filter \"module:level,...,*:level\"", EnvLevel, val, allowedLevels) // nolint: err113

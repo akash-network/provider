@@ -98,6 +98,18 @@ func TestRootLogOptionsFromEnv(t *testing.T) {
 	require.Equal(t, "debug", got.LevelSpec)
 }
 
+// Levels accepted before the logging rework: "disabled" and zerolog's numeric levels,
+// globally or for a module.
+func TestRootPreviousLogLevelsAccepted(t *testing.T) {
+	clearLogEnv(t)
+
+	for _, level := range []string{"disabled", "provider:disabled,*:info", "1", "provider:1,*:info"} {
+		got, err := executeProbe(t, "--log_level", level)
+		require.NoError(t, err, level)
+		require.Equal(t, level, got.LevelSpec, level)
+	}
+}
+
 func TestNoTopLevelOperatorCommands(t *testing.T) {
 	root := NewRootCmd()
 

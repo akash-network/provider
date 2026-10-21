@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -117,6 +119,46 @@ func TestPlainColorAndModuleFilter(t *testing.T) {
 	}
 	if strings.Contains(out, "<nil>") {
 		t.Fatalf("timestamp off must not print <nil>: %q", out)
+	}
+}
+
+// "disabled" turns logging off, globally or for the modules it is set for.
+func TestDisabledLevel(t *testing.T) {
+	cases := map[string][]string{
+		"disabled":                             nil,
+		"tee:disabled,*:info":                  {"root-error"},
+		"*:disabled,attestation-sidecar:debug": {"sidecar-debug"},
+	}
+
+	for spec, want := range cases {
+		cfg, err := ConfigFromEnv(envFrom(map[string]string{EnvLevel: spec, EnvFormat: "json", EnvTimestamp: "off"}))
+		if err != nil {
+			t.Fatalf("%s: %v", spec, err)
+		}
+
+		buf := &bytes.Buffer{}
+		l := New(buf, cfg)
+
+		l.Error("root-error")
+		l.With("module", "tee").Error("tee-error")
+		l.Error("tee-entry-error", "module", "tee")
+		l.With("module", "attestation-sidecar").Debug("sidecar-debug")
+
+		var got []string
+		for _, line := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+			if line == "" {
+				continue
+			}
+			var m map[string]any
+			if err := json.Unmarshal([]byte(line), &m); err != nil {
+				t.Fatalf("%s: invalid entry %q: %v", spec, line, err)
+			}
+			got = append(got, fmt.Sprint(m["message"]))
+		}
+
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s: logged %q, want %q", spec, got, want)
+		}
 	}
 }
 

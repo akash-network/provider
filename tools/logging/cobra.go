@@ -20,7 +20,7 @@ var optionNames = []string{FlagLogLevel, FlagLogFormat, FlagLogColor, FlagLogTim
 // AddFlags registers log_level, log_format, log_color and log_timestamp with the
 // provider defaults. The trace flag is registered by cometbft's PrepareBaseCmd.
 func AddFlags(fs *pflag.FlagSet) {
-	fs.String(FlagLogLevel, DefaultLevel, "The logging level (trace|debug|info|warn|error|fatal|panic) or module filter \"module:level,...,*:level\"")
+	fs.String(FlagLogLevel, DefaultLevel, "The logging level (trace|debug|info|warn|error|fatal|panic|disabled) or module filter \"module:level,...,*:level\"")
 	fs.String(FlagLogFormat, DefaultFormat, "The logging format (plain|json)")
 	fs.Bool(FlagLogColor, DefaultColor, "Colored logging output. Ignored when log_format=json")
 	fs.String(FlagLogTimestamp, DefaultTimestamp, "Timestamp format of the logs (off|rfc3339|rfc3339nano|kitchen)")

@@ -11,7 +11,7 @@ file: set their options with flags or environment variables.
 
 | Flag              | Environment        | Values                                                        | Default       |
 |-------------------|--------------------|---------------------------------------------------------------|---------------|
-| `--log_level`     | `AP_LOG_LEVEL`     | `trace\|debug\|info\|warn\|error\|fatal\|panic` or a module filter | `info`        |
+| `--log_level`     | `AP_LOG_LEVEL`     | `trace\|debug\|info\|warn\|error\|fatal\|panic\|disabled` or a module filter | `info`        |
 | `--log_format`    | `AP_LOG_FORMAT`    | `plain\|json`                                                  | `plain`       |
 | `--log_color`     | `AP_LOG_COLOR`     | `true\|false`                                                  | `true`        |
 | `--log_timestamp` | `AP_LOG_TIMESTAMP` | `off\|rfc3339\|rfc3339nano\|kitchen` (empty value = `off`)     | `rfc3339nano` |
@@ -19,6 +19,9 @@ file: set their options with flags or environment variables.
 
 - `log_format=json` always disables colors, whatever `log_color` says.
 - `trace` and `debug` are the same level.
+- `disabled` turns logging off; in a module filter it turns off that module only (`provider:disabled,*:info`).
+- Numeric levels follow zerolog, as before: `-1` trace, `0` debug, `1` info, `2` warn, `3` error, `4` fatal,
+  `5` panic; lower numbers log everything, `6` to `127` nothing.
 - With `trace=false` an error is logged as its message only; with `trace=true` error entries also carry
   `stacktrace` and, for errors that support it, `errVerbose`.
 
@@ -120,6 +123,7 @@ Module names changed where a different key was used before:
 | `client=kube` (kube client)    | `kube-client` in `run`, `operator-ip.kube-client` in `operator ip` |
 | none (`run` itself)            | `provider`                                                     |
 | none (REST / gRPC gateway)     | `gateway-rest`, `gateway-grpc`                                 |
+| `cmp=events` (chain event service, `pkg.akt.dev/go`) | `events`; entries keep the upstream `cmp=events` field   |
 
 ## Hardware discovery pods
 

@@ -10,38 +10,71 @@
     {
       "name": "defaults",
       "in": {"level": "info", "format": "plain", "color": true, "timestamp": "rfc3339nano", "trace": false},
-      "want": {"level_spec": "info", "level": "info", "format": "plain", "color": true, "timestamp": "rfc3339nano", "trace": false}
+      "want": {"level_spec": "info", "level": "info", "format": "plain", "color": true, "timestamp": "rfc3339nano", "trace": false},
+      "env": {"LOG_LEVEL": "info", "LOG_FORMAT": "plain", "LOG_COLOR": "true", "LOG_TIMESTAMP": "rfc3339nano", "TRACE": "false"}
     },
     {
       "name": "json disables color",
       "in": {"level": "debug", "format": "json", "color": true, "timestamp": "rfc3339", "trace": true},
-      "want": {"level_spec": "debug", "level": "debug", "format": "json", "color": false, "timestamp": "rfc3339", "trace": true}
+      "want": {"level_spec": "debug", "level": "debug", "format": "json", "color": false, "timestamp": "rfc3339", "trace": true},
+      "env": {"LOG_LEVEL": "debug", "LOG_FORMAT": "json", "LOG_COLOR": "false", "LOG_TIMESTAMP": "rfc3339", "TRACE": "true"}
     },
     {
       "name": "trace is debug",
       "in": {"level": "trace", "format": "plain", "color": false, "timestamp": "kitchen"},
-      "want": {"level_spec": "trace", "level": "debug", "format": "plain", "color": false, "timestamp": "kitchen"}
+      "want": {"level_spec": "trace", "level": "debug", "format": "plain", "color": false, "timestamp": "kitchen"},
+      "env": {"LOG_LEVEL": "trace", "LOG_FORMAT": "plain", "LOG_COLOR": "false", "LOG_TIMESTAMP": "kitchen", "TRACE": "false"}
     },
     {
       "name": "values are trimmed and lowercased",
       "in": {"level": "  WARN ", "format": " JSON ", "color": false, "timestamp": " Off "},
-      "want": {"level_spec": "warn", "level": "warn", "format": "json", "color": false, "timestamp": "off"}
+      "want": {"level_spec": "warn", "level": "warn", "format": "json", "color": false, "timestamp": "off"},
+      "env": {"LOG_LEVEL": "warn", "LOG_FORMAT": "json", "LOG_COLOR": "false", "LOG_TIMESTAMP": "off", "TRACE": "false"}
     },
     {
       "name": "empty values",
       "in": {"level": "", "format": "", "color": true, "timestamp": ""},
-      "want": {"level_spec": "info", "level": "info", "format": "plain", "color": true, "timestamp": "off"}
+      "want": {"level_spec": "info", "level": "info", "format": "plain", "color": true, "timestamp": "off"},
+      "env": {"LOG_LEVEL": "info", "LOG_FORMAT": "plain", "LOG_COLOR": "true", "LOG_TIMESTAMP": "off", "TRACE": "false"}
     },
     {
       "name": "module filter with default level",
       "in": {"level": "bidengine-order:debug, *:warn", "format": "plain", "timestamp": "off"},
-      "want": {"level_spec": "bidengine-order:debug, *:warn", "level": "warn", "modules": {"bidengine-order": "debug"}, "format": "plain", "timestamp": "off"}
+      "want": {"level_spec": "bidengine-order:debug, *:warn", "level": "warn", "modules": {"bidengine-order": "debug"}, "format": "plain", "timestamp": "off"},
+      "env": {"LOG_LEVEL": "bidengine-order:debug, *:warn", "LOG_FORMAT": "plain", "LOG_COLOR": "false", "LOG_TIMESTAMP": "off", "TRACE": "false"}
     },
     {
       "name": "module filter without default level leaves other modules unfiltered",
       "in": {"level": "operator-inventory.nodes:error", "format": "plain", "timestamp": "off"},
-      "want": {"level_spec": "operator-inventory.nodes:error", "level": "debug", "modules": {"operator-inventory.nodes": "error"}, "format": "plain", "timestamp": "off"}
+      "want": {"level_spec": "operator-inventory.nodes:error", "level": "debug", "modules": {"operator-inventory.nodes": "error"}, "format": "plain", "timestamp": "off"},
+      "env": {"LOG_LEVEL": "operator-inventory.nodes:error", "LOG_FORMAT": "plain", "LOG_COLOR": "false", "LOG_TIMESTAMP": "off", "TRACE": "false"}
     },
+    {
+      "name": "disabled turns logging off",
+      "in": {"level": "disabled", "format": "plain", "color": true, "timestamp": "off"},
+      "want": {"level_spec": "disabled", "level": "disabled", "format": "plain", "color": true, "timestamp": "off"},
+      "env": {"LOG_LEVEL": "disabled", "LOG_FORMAT": "plain", "LOG_COLOR": "true", "LOG_TIMESTAMP": "off", "TRACE": "false"}
+    },
+    {
+      "name": "module filter disables a module",
+      "in": {"level": "provider:disabled,*:info", "format": "json", "color": true, "timestamp": "rfc3339", "trace": true},
+      "want": {"level_spec": "provider:disabled,*:info", "level": "info", "modules": {"provider": "disabled"}, "format": "json", "color": false, "timestamp": "rfc3339", "trace": true},
+      "env": {"LOG_LEVEL": "provider:disabled,*:info", "LOG_FORMAT": "json", "LOG_COLOR": "false", "LOG_TIMESTAMP": "rfc3339", "TRACE": "true"}
+    },
+    {
+      "name": "numeric level follows zerolog",
+      "in": {"level": "1", "format": "plain", "timestamp": "off"},
+      "want": {"level_spec": "1", "level": "info", "format": "plain", "timestamp": "off"},
+      "env": {"LOG_LEVEL": "1", "LOG_FORMAT": "plain", "LOG_COLOR": "false", "LOG_TIMESTAMP": "off", "TRACE": "false"}
+    },
+    {
+      "name": "numeric module levels follow zerolog",
+      "in": {"level": "a:-128,b:-1,c:0,d:2,e:3,f:4,g:5,h:6,*:127", "format": "plain", "timestamp": "off"},
+      "want": {"level_spec": "a:-128,b:-1,c:0,d:2,e:3,f:4,g:5,h:6,*:127", "level": "disabled", "modules": {"a": "debug", "b": "debug", "c": "debug", "d": "warn", "e": "error", "f": "fatal", "g": "panic", "h": "disabled"}, "format": "plain", "timestamp": "off"},
+      "env": {"LOG_LEVEL": "a:-128,b:-1,c:0,d:2,e:3,f:4,g:5,h:6,*:127", "LOG_FORMAT": "plain", "LOG_COLOR": "false", "LOG_TIMESTAMP": "off", "TRACE": "false"}
+    },
+    {"name": "numeric level above zerolog's range is rejected", "in": {"level": "128", "format": "plain", "timestamp": "off"}},
+    {"name": "numeric module level below zerolog's range is rejected", "in": {"level": "bidengine-order:-129", "format": "plain", "timestamp": "off"}},
     {"name": "format text is rejected", "in": {"level": "info", "format": "text", "timestamp": "off"}},
     {"name": "unknown timestamp is rejected", "in": {"level": "info", "format": "plain", "timestamp": "unix"}},
     {"name": "unknown level is rejected", "in": {"level": "verbose", "format": "plain", "timestamp": "off"}},
