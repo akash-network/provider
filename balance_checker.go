@@ -82,7 +82,7 @@ func newBalanceChecker(
 	bc := &balanceChecker{
 		ctx:     ctx,
 		session: clientSession,
-		log:     clientSession.Log().With("cmp", "balance-checker"),
+		log:     clientSession.Log().With("module", "balance-checker"),
 		bus:     bus,
 		lc:      lifecycle.New(),
 		ownAddr: accAddr,
@@ -318,7 +318,7 @@ loop:
 				}
 			}
 			if res.err != nil {
-				bc.log.Info("couldn't check lease balance. retrying in 1m", "leaseId", res.lid, "err", res.err)
+				bc.log.Info("couldn't check lease balance. retrying in 1m", "lid", res.lid, "err", res.err)
 				lState.tm = bc.timerFunc(ctx, time.Minute, res.lid, res.state == respStateScheduledWithdraw, leaseCheckCh)
 				continue loop
 			}
@@ -327,12 +327,12 @@ loop:
 
 			switch res.state {
 			case respStateOutOfFunds:
-				bc.log.Debug("lease is out of funds", "lease", res.lid)
+				bc.log.Debug("lease is out of funds", "lid", res.lid)
 				// reschedule funds check. if lease not being topped up then network will close it
 				fallthrough
 			case respStateScheduledWithdraw:
 				withdraw = true
-				bc.log.Debug("sending withdraw", "lease", res.lid)
+				bc.log.Debug("sending withdraw", "lid", res.lid)
 				// reschedule periodic withdraw if configured
 				if bc.cfg.WithdrawalPeriod > 0 {
 					lState.scheduledWithdrawAt = time.Now().Add(bc.cfg.WithdrawalPeriod)
@@ -364,7 +364,7 @@ loop:
 			}
 		case res := <-resultch:
 			if err := res.Error(); err != nil {
-				bc.log.Error("failed to do lease withdrawal", "err", err, "LeaseID", res.Value().(mtypes.LeaseID))
+				bc.log.Error("failed to do lease withdrawal", "err", err, "lid", res.Value().(mtypes.LeaseID))
 			}
 		}
 	}

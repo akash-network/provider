@@ -18,7 +18,7 @@ func fakeIBNode(t *testing.T, devices map[string]string) string {
 		dir := filepath.Join(root, dev, "ports", "1")
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		if layer != "" {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "link_layer"), []byte(layer+"\n"), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "link_layer"), []byte(layer+"\n"), 0o600))
 		}
 	}
 	return root

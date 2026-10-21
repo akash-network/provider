@@ -1,6 +1,6 @@
 module github.com/akash-network/provider
 
-go 1.26.2
+go 1.26.10
 
 require (
 	cosmossdk.io/errors v1.0.2
@@ -15,8 +15,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/go-acme/lego/v4 v4.26.0
 	github.com/go-andiamo/splitter v1.2.5
-	github.com/go-logr/logr v1.4.3
-	github.com/go-logr/zapr v1.3.0
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/context v1.1.2
@@ -52,7 +50,7 @@ require (
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
-	pkg.akt.dev/go v0.4.5
+	pkg.akt.dev/go v0.4.6
 	pkg.akt.dev/go/cli v0.2.4
 	pkg.akt.dev/go/sdl v0.4.5
 	pkg.akt.dev/node v1.2.2
@@ -209,6 +207,7 @@ require (
 	github.com/go-kit/kit v0.13.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.2 // indirect

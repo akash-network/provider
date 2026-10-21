@@ -14,7 +14,6 @@ import (
 
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
-	"github.com/akash-network/provider/cmd/provider-services/cmd/util"
 	"github.com/akash-network/provider/migrations"
 	"github.com/akash-network/provider/tools/fromctx"
 	"github.com/akash-network/provider/version"
@@ -30,9 +29,7 @@ func MigrateRunCmd() *cobra.Command {
 				return err
 			}
 
-			logger := util.OpenLogger()
-			ctx := ctxlog.WithLogger(cmd.Context(), logger)
-			cmd.SetContext(ctx)
+			ctx := cmd.Context()
 
 			kubecfg := fromctx.MustKubeConfigFromCtx(ctx)
 			kc, err := kubernetes.NewForConfig(kubecfg)
@@ -87,7 +84,7 @@ func addMigrateRunFlags(cmd *cobra.Command) error {
 }
 
 func doMigrateRun(ctx context.Context, cmd *cobra.Command) error {
-	logger := ctxlog.LogcFromCtx(ctx)
+	logger := ctxlog.LogcFromCtx(ctx).With("module", "migrations")
 
 	statePath, err := determineStatePath(cmd)
 	if err != nil {

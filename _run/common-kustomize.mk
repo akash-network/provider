@@ -34,7 +34,7 @@ kustomize-set-image-akash-node:
 
 .PHONY: kustomize-set-image-akash-provider
 kustomize-set-image-akash-provider:
-	$(SETUP_KUBE) kustomize image "initContainers/0" "$(AKASH_DOCKER_IMAGE)" > "$(KUSTOMIZE_DIR)/akash-provider/docker-image.yaml"
+	$(SETUP_KUBE) kustomize image "initContainers/0" "$(DOCKER_IMAGE)" > "$(KUSTOMIZE_DIR)/akash-provider/docker-image.yaml"
 	$(SETUP_KUBE) kustomize image "containers/0" "$(DOCKER_IMAGE)" >> "$(KUSTOMIZE_DIR)/akash-provider/docker-image.yaml"
 
 .PHONY: kustomize-set-image-akash-operator-%
@@ -51,7 +51,7 @@ kustomize-configure-akash-node:
 	cp -r "$(AKASH_HOME)/"* "$(KUSTOMIZE_AKASH)/cache/"
 
 .PHONY: kustomize-configure-akash-provider
-kustomize-configure-akash-provider:
+kustomize-configure-akash-provider: akt-context-ready
 	mkdir -p "$(KUSTOMIZE_PROVIDER)/cache"
 	cp -r "$(AKASH_HOME)/config" "$(KUSTOMIZE_PROVIDER)/cache/"
 	echo "$(CLIENT_EXPORT_PASSWORD)" > "$(KUSTOMIZE_PROVIDER)/cache/key-pass.txt"
@@ -59,7 +59,7 @@ kustomize-configure-akash-provider:
 	( \
 		cat "$(KUSTOMIZE_PROVIDER)/cache/key-pass.txt" ; \
 		cat "$(KUSTOMIZE_PROVIDER)/cache/key-pass.txt"   \
-	) | $(AKASH) keys export provider 1> "$(KUSTOMIZE_PROVIDER)/cache/key.txt"
+	) | $(AKT) context keys export provider 1> "$(KUSTOMIZE_PROVIDER)/cache/key.txt"
 
 .PHONY: kustomize-configure-akash-operator-hostname
 kustomize-configure-akash-operator-hostname:

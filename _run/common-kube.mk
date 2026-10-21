@@ -22,7 +22,7 @@ endif
 
 # when image is built locally, for example on M1 (arm64) and kubernetes cluster is running on amd64
 # we need to specify what arch to deploy as docker manifests can't be transferred locally
-KUBE_DOCKER_IMAGE_ARCH     ?= $(shell uname -m | sed "s/x86_64/amd64/g")
+KUBE_DOCKER_IMAGE_ARCH     ?= $(UNAME_ARCH)
 
 AKASH_LOCAL_DOCKER_IMAGE   ?= ghcr.io/akash-network/node:latest-$(KUBE_DOCKER_IMAGE_ARCH)
 

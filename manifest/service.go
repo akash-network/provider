@@ -124,6 +124,11 @@ type manifestRequest struct {
 	ctx   context.Context
 }
 
+// logWatchdogDone records that the watchdog of deployment did has finished.
+func (s *service) logWatchdogDone(did dtypes.DeploymentID) {
+	s.session.Log().Info("watchdog done", "did", did)
+}
+
 func (s *service) updateGauges() {
 	manifestManagerGauge.Set(float64(len(s.managers)))
 	manifestWatchdogGauge.Set(float64(len(s.managers)))
@@ -263,20 +268,20 @@ loop:
 				if ev.LeaseID.GetProvider() != s.session.Provider().Address().String() {
 					continue
 				}
-				s.session.Log().Info("lease won", "lease", ev.LeaseID)
+				s.session.Log().Info("lease won", "lid", ev.LeaseID)
 				s.handleLease(ev, true)
 			case *dtypes.EventDeploymentUpdated:
-				s.session.Log().Info("update received", "deployment", ev.ID, "version", ev.Hash)
+				s.session.Log().Info("update received", "did", ev.ID, "version", ev.Hash)
 
 				key := dquery.DeploymentPath(ev.ID)
 				if manager := s.managers[key]; manager != nil {
-					s.session.Log().Info("deployment updated", "deployment", ev.ID, "version", ev.Hash)
+					s.session.Log().Info("deployment updated", "did", ev.ID, "version", ev.Hash)
 					manager.handleUpdate(ev.Hash)
 				}
 			case *dtypes.EventDeploymentClosed:
 				key := dquery.DeploymentPath(ev.ID)
 				if manager := s.managers[key]; manager != nil {
-					s.session.Log().Info("deployment closed", "deployment", ev.ID)
+					s.session.Log().Info("deployment closed", "did", ev.ID)
 					manager.stop()
 				}
 			case *mtypes.EventLeaseClosed:
@@ -286,7 +291,7 @@ loop:
 
 				key := dquery.DeploymentPath(ev.ID.DeploymentID())
 				if manager := s.managers[key]; manager != nil {
-					s.session.Log().Info("lease closed", "lease", ev.ID)
+					s.session.Log().Info("lease closed", "lid", ev.ID)
 					manager.removeLease(ev.ID)
 				}
 			}
@@ -308,7 +313,7 @@ loop:
 		case <-signalch:
 			bus.Pub(provider.ManifestStatus{Deployments: uint32(len(s.managers))}, []string{ptypes.PubSubTopicManifestStatus}, tpubsub.WithRetain()) // nolint: gosec
 		case manager := <-s.managerch:
-			s.session.Log().Info("manager done", "deployment", manager.daddr)
+			s.session.Log().Info("manager done", "did", manager.daddr)
 
 			delete(s.managers, dquery.DeploymentPath(manager.daddr))
 
@@ -316,9 +321,9 @@ loop:
 			s.maybeRemoveWatchdog(manager.daddr)
 
 			trySignal()
-		case leaseID := <-s.watchdogch:
-			s.session.Log().Info("watchdog done", "lease", leaseID)
-			delete(s.watchdogs, leaseID)
+		case did := <-s.watchdogch:
+			s.logWatchdogDone(did)
+			delete(s.watchdogs, did)
 		}
 		s.updateGauges()
 	}
@@ -329,11 +334,10 @@ loop:
 		s.updateGauges()
 	}
 
-	s.session.Log().Debug("draining watchdogs", "qty", len(s.watchdogs))
+	s.session.Log().Debug("draining watchdogs", "count", len(s.watchdogs))
 	for _, watchdog := range s.watchdogs {
 		if watchdog != nil {
-			leaseID := <-s.watchdogch
-			s.session.Log().Info("watchdog done", "lease", leaseID)
+			s.logWatchdogDone(<-s.watchdogch)
 		}
 	}
 

@@ -19,13 +19,13 @@ func ensureConfigfsTSM() {
 	// Kata mounts /sys read-only inside containers. Remount rw so we can
 	// mount configfs underneath it (requires privileged).
 	if err := unix.Mount("", "/sys", "", unix.MS_REMOUNT, ""); err != nil {
-		fmt.Fprintf(os.Stderr, "setup: remount /sys rw: %v\n", err)
+		logger().Warn("remount /sys read-write failed", "err", err)
 		return
 	}
 	if err := unix.Mount("none", "/sys/kernel/config", "configfs", 0, ""); err != nil {
-		fmt.Fprintf(os.Stderr, "setup: mount configfs: %v\n", err)
+		logger().Warn("mount configfs failed", "err", err)
 	} else {
-		fmt.Fprintf(os.Stderr, "setup: mounted configfs, tsm available: %v\n", dirExists("/sys/kernel/config/tsm"))
+		logger().Info("mounted configfs", "tsm_available", dirExists("/sys/kernel/config/tsm"))
 	}
 }
 
@@ -38,16 +38,16 @@ func ensureSEVGuestDev() {
 	}
 	minor, ok := miscDevMinor("sev-guest")
 	if !ok {
-		fmt.Fprintf(os.Stderr, "setup: sev-guest not found in /proc/misc\n")
+		logger().Info("sev-guest not found in /proc/misc")
 		return
 	}
-	fmt.Fprintf(os.Stderr, "setup: sev-guest minor=%d\n", minor)
+	logger().Info("sev-guest device found", "minor", minor)
 	// misc devices use major 10
 	dev := unix.Mkdev(10, minor)
 	if err := unix.Mknod("/dev/sev-guest", unix.S_IFCHR|0600, int(dev)); err != nil {
-		fmt.Fprintf(os.Stderr, "setup: mknod /dev/sev-guest: %v\n", err)
+		logger().Warn("mknod failed", "path", "/dev/sev-guest", "err", err)
 	} else {
-		fmt.Fprintf(os.Stderr, "setup: created /dev/sev-guest\n")
+		logger().Info("created device node", "path", "/dev/sev-guest")
 	}
 }
 
@@ -73,9 +73,9 @@ func ensureNvidiaDevices() {
 		}
 		dev := unix.Mkdev(nvidiaMajor, d.minor)
 		if err := unix.Mknod(d.path, unix.S_IFCHR|0666, int(dev)); err != nil {
-			fmt.Fprintf(os.Stderr, "setup: mknod %s: %v\n", d.path, err)
+			logger().Warn("mknod failed", "path", d.path, "err", err)
 		} else {
-			fmt.Fprintf(os.Stderr, "setup: created %s (major=%d, minor=%d)\n", d.path, nvidiaMajor, d.minor)
+			logger().Info("created device node", "path", d.path, "major", nvidiaMajor, "minor", d.minor)
 		}
 	}
 }
@@ -101,7 +101,7 @@ func setupGuestRootfs() error {
 		if err := unix.Mknod(devPath, unix.S_IFBLK|0660, int(dev)); err != nil {
 			return fmt.Errorf("mknod %s: %w", devPath, err)
 		}
-		fmt.Fprintf(os.Stderr, "nvidia-gpu: created %s (%d:%d)\n", devPath, devMajor, devMinor)
+		logger().Info("created device node", "path", devPath, "major", devMajor, "minor", devMinor)
 	}
 
 	if err := os.MkdirAll(guestMountDir, 0755); err != nil {
@@ -113,10 +113,10 @@ func setupGuestRootfs() error {
 	for _, fsType := range []string{"erofs", "ext4"} {
 		mountErr = unix.Mount(devPath, guestMountDir, fsType, unix.MS_RDONLY, "")
 		if mountErr == nil {
-			fmt.Fprintf(os.Stderr, "nvidia-gpu: mounted guest rootfs at %s (fstype=%s)\n", guestMountDir, fsType)
+			logger().Info("mounted guest rootfs", "path", guestMountDir, "fstype", fsType)
 			break
 		}
-		fmt.Fprintf(os.Stderr, "nvidia-gpu: mount %s as %s failed: %v\n", devPath, fsType, mountErr)
+		logger().Warn("mount guest rootfs failed", "device", devPath, "fstype", fsType, "err", mountErr)
 	}
 	if mountErr != nil {
 		return fmt.Errorf("mount %s on %s: %w", devPath, guestMountDir, mountErr)
@@ -157,7 +157,7 @@ func mountTmpfsAndCopyHelper(tmpDir, helperSrc string) error {
 	if err := os.WriteFile(dst, data, 0755); err != nil {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
-	fmt.Fprintf(os.Stderr, "nvidia-gpu: installed helper at %s\n", dst)
+	logger().Info("installed nvml helper", "path", dst)
 	return nil
 }
 

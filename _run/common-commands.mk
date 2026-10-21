@@ -1,8 +1,8 @@
 KEY_NAME ?= main
 
-KEY_ADDRESS          ?= $(shell $(AKASH) $(KEY_OPTS) keys show "$(KEY_NAME)" -a)
+KEY_ADDRESS          ?= $(call akt_key_address,$(KEY_NAME))
 PROVIDER_KEY_NAME    ?= provider
-PROVIDER_ADDRESS     ?= $(shell $(AKASH) $(KEY_OPTS) keys show "$(PROVIDER_KEY_NAME)" -a)
+PROVIDER_ADDRESS     ?= $(call akt_key_address,$(PROVIDER_KEY_NAME))
 PROVIDER_CONFIG_PATH ?= provider.yaml
 
 SDL_PATH ?= deployment.yaml
@@ -14,306 +14,257 @@ PRICE          ?= 10uakt
 CERT_HOSTNAME  ?= localhost
 LEASE_SERVICES ?= web
 
-RESOURCE_SERVER_HOST    ?= localhost:8445
-GATEWAY_GRPC_ENDPOINT  ?= localhost:8444
+# Deployment deposit in uact, e.g. DEPOSIT=5000000uact. Empty lets akt use the
+# chain's minimum uact deposit. SDLs priced in uakt cannot be deployed on the
+# current chain (see _run/kube/README.md).
+DEPOSIT        ?=
 
 GW_AUTH_TYPE   ?= jwt
 
+# Provider gateway commands have no --from: they act as the context's default
+# account unless AKT_FROM selects another key, so pass the tenant explicitly.
+AKT_AS_TENANT   = AKT_FROM="$(KEY_NAME)" $(AKT)
+
 .PHONY: multisig-send
-multisig-send:
-	$(AKASH) tx send \
-		"$(shell $(AKASH) $(KEY_OPTS) keys show "$(MULTISIG_KEY)" -a)" \
-		"$(shell $(AKASH) $(KEY_OPTS) keys show "$(KEY_NAME)"     -a)" \
+multisig-send: akt-context-ready
+	$(AKT) tx bank send \
+		"$(MULTISIG_KEY)" \
+		"$(KEY_ADDRESS)" \
 		1000000uakt \
 		--generate-only \
+		-o json \
 		> "$(AKASH_HOME)/multisig-tx.json"
-	$(AKASH) tx sign \
+	$(AKT) tx sign \
 		"$(AKASH_HOME)/multisig-tx.json" \
-		--multisig "$(shell $(AKASH) $(KEY_OPTS) keys show "$(MULTISIG_KEY)" -a)" \
+		--multisig "$(call akt_key_address,$(MULTISIG_KEY))" \
 		--from "main" \
-		> "$(AKASH_HOME)/multisig-sig-main.json"
-	$(AKASH) tx sign \
+		--sign-mode amino-json \
+		--output-document "$(AKASH_HOME)/multisig-sig-main.json"
+	$(AKT) tx sign \
 		"$(AKASH_HOME)/multisig-tx.json" \
-		--multisig "$(shell $(AKASH) $(KEY_OPTS) keys show "$(MULTISIG_KEY)" -a)" \
+		--multisig "$(call akt_key_address,$(MULTISIG_KEY))" \
 		--from "other" \
-		> "$(AKASH_HOME)/multisig-sig-other.json"
-	$(AKASH) tx multisign \
+		--sign-mode amino-json \
+		--output-document "$(AKASH_HOME)/multisig-sig-other.json"
+	$(AKT) tx multi-sign \
 		"$(AKASH_HOME)/multisig-tx.json" \
 		"$(MULTISIG_KEY)" \
 		"$(AKASH_HOME)/multisig-sig-main.json" \
 		"$(AKASH_HOME)/multisig-sig-other.json" \
-		> "$(AKASH_HOME)/multisig-final.json"
-	$(AKASH) "$(CHAIN_OPTS)" tx broadcast "$(AKASH_HOME)/multisig-final.json"
+		--output-document "$(AKASH_HOME)/multisig-final.json"
+	$(AKT) tx broadcast "$(AKASH_HOME)/multisig-final.json" -y
 
 .PHONY: provider-create
-provider-create:
-	$(AKASH) tx provider create "$(PROVIDER_CONFIG_PATH)" --from "$(PROVIDER_KEY_NAME)"
+provider-create: akt-context-ready
+	$(AKT) tx provider create "$(PROVIDER_CONFIG_PATH)" --from "$(PROVIDER_KEY_NAME)" -y
 
 .PHONY: provider-update
-provider-update:
-	$(AKASH) tx provider update "$(PROVIDER_CONFIG_PATH)" --from "$(PROVIDER_KEY_NAME)"
+provider-update: akt-context-ready
+	$(AKT) tx provider update "$(PROVIDER_CONFIG_PATH)" --from "$(PROVIDER_KEY_NAME)" -y
 
 .PHONY: provider-status
-provider-status:
-	$(PROVIDER_SERVICES) status $(PROVIDER_ADDRESS)
-
-.PHONY: authenticate
-authenticate:
-	$(PROVIDER_SERVICES) authenticate \
-		--from      "$(KEY_ADDRESS)" \
-		--provider  "$(PROVIDER_ADDRESS)"
-
-.PHONY: auth-server
-auth-server:
-	$(PROVIDER_SERVICES) auth-server \
-		--from "$(PROVIDER_KEY_NAME)" \
-		--jwt-auth-listen-address "$(JWT_AUTH_HOST)" \
-
-.PHONY: run-resource-server
-run-resource-server:
-	$(PROVIDER_SERVICES) run-resource-server \
-		--from "$(PROVIDER_KEY_NAME)" \
-		--resource-server-listen-address "$(RESOURCE_SERVER_HOST)" \
-		--loki-gateway-listen-address localhost:3100 \
+provider-status: akt-context-ready
+	$(AKT) provider status "$(PROVIDER_ADDRESS)"
 
 .PHONY: send-manifest
-send-manifest:
-	$(PROVIDER_SERVICES) send-manifest "$(SDL_PATH)" \
-		--dseq "$(DSEQ)"     \
-		--from "$(KEY_NAME)" \
+send-manifest: akt-context-ready
+	$(AKT_AS_TENANT) provider send-manifest "$(SDL_PATH)" \
+		--dseq      "$(DSEQ)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: get-manifest
-get-manifest:
-	$(PROVIDER_SERVICES) get-manifest \
-		--dseq "$(DSEQ)"     \
-		--from "$(KEY_NAME)" \
-		--provide   "$(PROVIDER_ADDRESS)" \
+get-manifest: akt-context-ready
+	$(AKT_AS_TENANT) provider get-manifest "$(DSEQ)" \
+		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
-
 .PHONY: deployment-create
-deployment-create:
-	$(PROVIDER_SERVICES) tx deployment create "$(SDL_PATH)" \
+deployment-create: akt-context-ready
+	$(AKT) tx deployment create "$(SDL_PATH)" \
 		--dseq "$(DSEQ)" \
-		--from "$(KEY_NAME)"
+		$(if $(DEPOSIT),--deposit "$(DEPOSIT)") \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: deployment-deposit
-deployment-deposit:
-	$(AKASH) tx escrow deposit deployment "$(PRICE)" \
+deployment-deposit: akt-context-ready
+	$(AKT) tx escrow deposit deployment "$(PRICE)" \
 		--dseq "$(DSEQ)" \
-		--from "$(KEY_NAME)"
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: deployment-update
-deployment-update:
-	$(AKASH) tx deployment update "$(SDL_PATH)" \
-		--dseq "$(DSEQ)" \
-		--from "$(KEY_NAME)"
+deployment-update: akt-context-ready
+	$(AKT) tx deployment update "$(SDL_PATH)" "$(DSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: deployment-close
-deployment-close:
-	$(AKASH) tx deployment close \
-		--owner "$(MAIN_ADDR)" \
-		--dseq "$(DSEQ)"       \
-		--from "$(KEY_NAME)"
+deployment-close: akt-context-ready
+	$(AKT) tx deployment close "$(DSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: group-close
-group-close:
-	$(AKASH) tx deployment group close \
-		--owner "$(KEY_ADDRESS)"       \
-		--dseq  "$(DSEQ)"              \
-		--gseq  "$(GSEQ)"              \
-		--from  "$(KEY_NAME)"
+group-close: akt-context-ready
+	$(AKT) tx deployment group close "$(DSEQ)" "$(GSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: group-pause
-group-pause:
-	$(AKASH) tx deployment group pause \
-		--owner "$(KEY_ADDRESS)"       \
-		--dseq  "$(DSEQ)"              \
-		--gseq  "$(GSEQ)"              \
-		--from  "$(KEY_NAME)"
+group-pause: akt-context-ready
+	$(AKT) tx deployment group pause "$(DSEQ)" "$(GSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: group-start
-group-start:
-	$(AKASH) tx deployment group start \
-		--owner "$(KEY_ADDRESS)"       \
-		--dseq  "$(DSEQ)"              \
-		--gseq  "$(GSEQ)"              \
-		--from  "$(KEY_NAME)"
+group-start: akt-context-ready
+	$(AKT) tx deployment group start "$(DSEQ)" "$(GSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: bid-create
-bid-create:
-	$(AKASH) tx market bid create \
-		--owner "$(KEY_ADDRESS)"       \
-		--dseq  "$(DSEQ)"              \
-		--gseq  "$(GSEQ)"              \
-		--oseq  "$(OSEQ)"              \
+bid-create: akt-context-ready
+	$(AKT) tx market bid create \
+		--owner "$(KEY_ADDRESS)" \
+		--dseq  "$(DSEQ)" \
+		--gseq  "$(GSEQ)" \
+		--oseq  "$(OSEQ)" \
+		--price "$(PRICE)" \
 		--from  "$(PROVIDER_KEY_NAME)" \
-		--price "$(PRICE)"
+		-y
 
 .PHONY: bid-close
-bid-close:
-	$(AKASH) tx market bid close \
-		--owner "$(KEY_ADDRESS)"       \
-		--dseq  "$(DSEQ)"              \
-		--gseq  "$(GSEQ)"              \
-		--oseq  "$(OSEQ)"              \
-		--from  "$(PROVIDER_KEY_NAME)"
+bid-close: akt-context-ready
+	$(AKT) tx market bid close \
+		--owner "$(KEY_ADDRESS)" \
+		--dseq  "$(DSEQ)" \
+		--gseq  "$(GSEQ)" \
+		--oseq  "$(OSEQ)" \
+		--from  "$(PROVIDER_KEY_NAME)" \
+		-y
 
 .PHONY: lease-create
-lease-create:
-	$(AKASH) tx market lease create \
-		--owner "$(KEY_ADDRESS)"         \
-		--dseq  "$(DSEQ)"                \
-		--gseq  "$(GSEQ)"                \
-		--oseq  "$(OSEQ)"                \
-		--provider "$(PROVIDER_ADDRESS)" \
-		--from  "$(KEY_NAME)"
+lease-create: akt-context-ready
+	$(AKT) tx market lease create "$(DSEQ)" "$(PROVIDER_ADDRESS)" \
+		--gseq "$(GSEQ)" \
+		--oseq "$(OSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: lease-withdraw
-lease-withdraw:
-	$(AKASH) tx market lease withdraw \
-		--owner "$(KEY_ADDRESS)"         \
-		--dseq  "$(DSEQ)"                \
-		--gseq  "$(GSEQ)"                \
-		--oseq  "$(OSEQ)"                \
-		--provider "$(PROVIDER_ADDRESS)" \
-		--from  "$(PROVIDER_KEY_NAME)"
+lease-withdraw: akt-context-ready
+	$(AKT) tx market lease withdraw "$(DSEQ)" "$(PROVIDER_ADDRESS)" \
+		--owner "$(KEY_ADDRESS)" \
+		--gseq  "$(GSEQ)" \
+		--oseq  "$(OSEQ)" \
+		--from  "$(PROVIDER_KEY_NAME)" \
+		-y
 
 .PHONY: lease-close
-lease-close:
-	$(AKASH) tx market lease close \
-		--owner "$(KEY_ADDRESS)"         \
-		--dseq  "$(DSEQ)"                \
-		--gseq  "$(GSEQ)"                \
-		--oseq  "$(OSEQ)"                \
-		--provider "$(PROVIDER_ADDRESS)" \
-		--from  "$(KEY_NAME)"
+lease-close: akt-context-ready
+	$(AKT) tx market lease close "$(DSEQ)" "$(PROVIDER_ADDRESS)" \
+		--gseq "$(GSEQ)" \
+		--oseq "$(OSEQ)" \
+		--from "$(KEY_NAME)" \
+		-y
 
 .PHONY: query-accounts
 query-accounts: $(patsubst %, query-account-%,$(GENESIS_ACCOUNTS))
 
 .PHONY: query-account-%
-query-account-%:
-	$(AKASH) query bank balances "$(shell $(AKASH) $(KEY_OPTS) keys show -a "$(@:query-account-%=%)")"
-	$(AKASH) query account       "$(shell $(AKASH) $(KEY_OPTS) keys show -a "$(@:query-account-%=%)")"
+query-account-%: akt-context-ready
+	$(AKT) query bank balances "$(call akt_key_address,$*)"
+	$(AKT) query auth account  "$(call akt_key_address,$*)"
 
 .PHONY: query-provider
-query-provider:
-	$(AKASH) query provider get "$(PROVIDER_ADDRESS)"
+query-provider: akt-context-ready
+	$(AKT) query provider "$(PROVIDER_ADDRESS)"
 
 .PHONY: query-providers
-query-providers:
-	$(AKASH) query provider list
+query-providers: akt-context-ready
+	$(AKT) query provider
 
 .PHONY: query-deployment
-query-deployment:
-	$(AKASH) query deployment get \
-		--owner "$(KEY_ADDRESS)" \
-		--dseq  "$(DSEQ)"
+query-deployment: akt-context-ready
+	$(AKT) query deployment "$(KEY_ADDRESS)/$(DSEQ)"
 
 .PHONY: query-deployments
-query-deployments:
-	$(AKASH) query deployment list
+query-deployments: akt-context-ready
+	$(AKT) query deployment "$(KEY_ADDRESS)"
 
 .PHONY: query-order
-query-order:
-	$(AKASH) query market order get \
-		--owner "$(KEY_ADDRESS)" \
-		--dseq  "$(DSEQ)"        \
-		--gseq  "$(GSEQ)"        \
-		--oseq  "$(OSEQ)"
+query-order: akt-context-ready
+	$(AKT) query market order "$(KEY_ADDRESS)/$(DSEQ)/$(GSEQ)/$(OSEQ)"
 
 .PHONY: query-orders
-query-orders:
-	$(AKASH) query market order list
+query-orders: akt-context-ready
+	$(AKT) query market order "$(KEY_ADDRESS)"
 
 .PHONY: query-bid
-query-bid:
-	$(AKASH) query market bid get \
-		--owner     "$(KEY_ADDRESS)" \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--provider  "$(PROVIDER_ADDRESS)"
+query-bid: akt-context-ready
+	$(AKT) query market bid "$(KEY_ADDRESS)/$(DSEQ)/$(GSEQ)/$(OSEQ)/$(PROVIDER_ADDRESS)"
 
 .PHONY: query-bids
-query-bids:
-	$(AKASH) query market bid list
+query-bids: akt-context-ready
+	$(AKT) query market bid "$(KEY_ADDRESS)"
 
 .PHONY: query-lease
-query-lease:
-	$(AKASH) query market lease get \
-		--owner     "$(KEY_ADDRESS)" \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--provider  "$(PROVIDER_ADDRESS)"
+query-lease: akt-context-ready
+	$(AKT) query market lease "$(KEY_ADDRESS)/$(DSEQ)/$(GSEQ)/$(OSEQ)/$(PROVIDER_ADDRESS)"
 
 .PHONY: query-leases
-query-leases:
-	$(AKASH) query market lease list
+query-leases: akt-context-ready
+	$(AKT) query market lease "$(KEY_ADDRESS)"
 
 .PHONY: query-certificates
-query-certificates:
-	$(AKASH) query cert list
+query-certificates: akt-context-ready
+	$(AKT) query cert list "$(KEY_ADDRESS)"
 
 .PHONY: query-account-certificates
-query-account-certificates:
-	$(AKASH) query cert list --owner="$(KEY_ADDRESS)" --state="valid"
+query-account-certificates: akt-context-ready
+	$(AKT) query cert list "$(KEY_ADDRESS)" valid
 
 .PHONY: create-server-certificate
-create-server-certificate:
-	$(AKASH) tx cert create server $(CERT_HOSTNAME) --from=$(KEY_NAME) --rie
+create-server-certificate: akt-context-ready
+	$(AKT) tx cert generate server "$(CERT_HOSTNAME)" --from "$(KEY_NAME)" --overwrite
+	$(AKT) tx cert publish server --from "$(KEY_NAME)" -y
 
 .PHONY: revoke-certificate
-revoke-certificate:
-	$(AKASH) tx cert revoke --from=$(KEY_NAME)
-
-.PHONY: events-run
-events-run:
-	$(AKASH) events
+revoke-certificate: akt-context-ready
+	$(AKT) tx cert revoke client --from "$(KEY_NAME)" -y
 
 .PHONY: provider-lease-logs
-provider-lease-logs:
-	$(PROVIDER_SERVICES) lease-logs \
+provider-lease-logs: akt-context-ready
+	$(AKT_AS_TENANT) provider lease-logs "$(DSEQ)" \
 		-f \
-		--service="$(LEASE_SERVICES)" \
-		--dseq      "$(DSEQ)"     \
-		--from      "$(KEY_NAME)" \
+		--service   "$(LEASE_SERVICES)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: provider-lease-events
-provider-lease-events:
-	$(PROVIDER_SERVICES) lease-events \
+provider-lease-events: akt-context-ready
+	$(AKT_AS_TENANT) provider lease-events "$(DSEQ)" \
 		-f \
-		--dseq "$(DSEQ)"     \
-		--from "$(KEY_NAME)" \
-		--provider "$(PROVIDER_ADDRESS)" \
+		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
 
 .PHONY: provider-lease-attestation
-provider-lease-attestation:
-	$(PROVIDER_SERVICES) lease-attestation 		--dseq      "$(DSEQ)"     		--gseq      "$(GSEQ)"     		--oseq      "$(OSEQ)"     		--from      "$(KEY_NAME)" 		--provider  "$(PROVIDER_ADDRESS)" 		--auth-type "$(GW_AUTH_TYPE)"
-
-.PHONY: provider-lease-status
-provider-lease-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)"    \
-		--provider  "$(PROVIDER_ADDRESS)" \
-		--auth-type=$(GW_AUTH_TYPE)
-
-.PHONY: provider-service-status
-provider-service-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)" \
+provider-lease-attestation: akt-context-ready
+	$(AKT_AS_TENANT) provider lease-attestation "$(DSEQ)" \
+		--gseq      "$(GSEQ)" \
+		--oseq      "$(OSEQ)" \
 		--provider  "$(PROVIDER_ADDRESS)" \
 		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: provider-lease-status
+provider-lease-status: akt-context-ready
+	$(AKT_AS_TENANT) provider lease-status "$(DSEQ)" \
+		--gseq      "$(GSEQ)" \
+		--oseq      "$(OSEQ)" \
+		--provider  "$(PROVIDER_ADDRESS)" \
+		--auth-type "$(GW_AUTH_TYPE)"
+
+.PHONY: provider-service-status
+provider-service-status: provider-lease-status

@@ -107,7 +107,7 @@ func NewService(
 	waiter waiter.OperatorWaiter,
 	cfg Config,
 ) (Service, error) {
-	log := session.Log().With("module", "provider-cluster", "cmp", "service")
+	log := session.Log().With("module", "provider-cluster")
 
 	lc := lifecycle.New()
 
@@ -139,7 +139,7 @@ func NewService(
 	activeHostnames := make(map[string]mtypes.LeaseID, len(allHostnames))
 	for _, v := range allHostnames {
 		activeHostnames[v.Hostname] = v.ID
-		log.Debug("found existing hostname", "hostname", v.Hostname, "id", v.ID)
+		log.Debug("found existing hostname", "hostname", v.Hostname, "lid", v.ID)
 	}
 	hostnames, err := newHostnameService(ctx, cfg, activeHostnames)
 	if err != nil {
@@ -345,17 +345,17 @@ loop:
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) {
 			case event.ManifestReceived:
-				s.log.Info("manifest received", "lease", ev.LeaseID)
+				s.log.Info("manifest received", "lid", ev.LeaseID)
 
 				mgroup := ev.ManifestGroup()
 				if mgroup == nil {
-					s.log.Error("indeterminate manifest group", "lease", ev.LeaseID, "group-name", ev.Group.GroupSpec.Name)
+					s.log.Error("indeterminate manifest group", "lid", ev.LeaseID, "group_name", ev.Group.GroupSpec.Name)
 					break
 				}
 
 				reservation, err := s.inventory.lookup(ev.LeaseID.OrderID(), mgroup)
 				if err != nil {
-					s.log.Error("error looking up manifest", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
+					s.log.Error("error looking up manifest", "err", err, "lid", ev.LeaseID, "group_name", mgroup.Name)
 					break
 				}
 
@@ -368,7 +368,7 @@ loop:
 				key := ev.LeaseID
 				if manager := s.managers[key]; manager != nil {
 					if err := manager.update(deployment); err != nil {
-						s.log.Error("updating deployment", "err", err, "lease", ev.LeaseID, "group-name", mgroup.Name)
+						s.log.Error("updating deployment", "err", err, "lid", ev.LeaseID, "group_name", mgroup.Name)
 					}
 					break
 				}
@@ -381,7 +381,7 @@ loop:
 				s.teardownLease(ev.ID)
 			case *mtypes.EventLeaseReclaimStarted:
 				s.log.Info("lease reclamation started",
-					"lease", ev.ID,
+					"lid", ev.ID,
 					"reason", ev.Reason,
 					"deadline", ev.Deadline)
 				// Workloads keep running during the reclamation window. The lease's manager
@@ -389,10 +389,10 @@ loop:
 				// block time; the resulting EventLeaseClosed drives teardown here.
 				if manager := s.managers[ev.ID]; manager != nil {
 					if err := manager.reclaim(ev.Deadline); err != nil {
-						s.log.Error("arming reclamation close", "err", err, "lease", ev.ID)
+						s.log.Error("arming reclamation close", "err", err, "lid", ev.ID)
 					}
 				} else {
-					s.log.Warn("reclaim event for lease with no local manager", "lease", ev.ID)
+					s.log.Warn("reclaim event for lease with no local manager", "lid", ev.ID)
 				}
 			}
 		case ch := <-s.statusch:
@@ -425,13 +425,13 @@ loop:
 			}
 			bus.Pub(msg, []string{ptypes.PubSubTopicClusterStatus}, tpubsub.WithRetain())
 		case dm := <-s.managerch:
-			s.log.Info("manager done", "lease", dm.deployment.LeaseID())
+			s.log.Info("manager done", "lid", dm.deployment.LeaseID())
 
 			// unreserve resources
 			if err := s.inventory.unreserve(dm.deployment.LeaseID().OrderID()); err != nil {
 				s.log.Error("unreserving inventory",
 					"err", err,
-					"lease", dm.deployment.LeaseID())
+					"lid", dm.deployment.LeaseID())
 			}
 
 			delete(s.managers, dm.deployment.LeaseID())
@@ -442,11 +442,11 @@ loop:
 		s.updateDeploymentManagerGauge()
 	}
 
-	s.log.Debug("draining deployment managers...", "qty", len(s.managers))
+	s.log.Debug("draining deployment managers...", "count", len(s.managers))
 	for _, manager := range s.managers {
 		if manager != nil {
 			manager := <-s.managerch
-			s.log.Debug("manager done", "lease", manager.deployment.LeaseID())
+			s.log.Debug("manager done", "lid", manager.deployment.LeaseID())
 		}
 	}
 
@@ -469,17 +469,17 @@ func (s *service) doCheckDeploymentExists(req checkDeploymentExistsRequest) {
 func (s *service) teardownLease(lid mtypes.LeaseID) {
 	if manager := s.managers[lid]; manager != nil {
 		if err := manager.teardown(); err != nil {
-			s.log.Error("tearing down lease deployment", "err", err, "lease", lid)
+			s.log.Error("tearing down lease deployment", "err", err, "lid", lid)
 		}
 		return
 	}
 
 	// unreserve resources if no manager present yet.
 	if lid.Provider == s.session.Provider().Owner {
-		s.log.Info("unreserving unmanaged order", "lease", lid)
+		s.log.Info("unreserving unmanaged order", "lid", lid)
 		err := s.inventory.unreserve(lid.OrderID())
 		if err != nil && !errors.Is(errReservationNotFound, err) {
-			s.log.Error("unreserve failed", "lease", lid, "err", err)
+			s.log.Error("unreserve failed", "lid", lid, "err", err)
 		}
 	}
 }

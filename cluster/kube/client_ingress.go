@@ -98,16 +98,18 @@ func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirectiv
 }
 
 func (c *client) ConnectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
-	c.log.Info("connecting hostname to deployment",
+	log := c.log.With("lid", directive.LeaseID)
+
+	log.Info("connecting hostname to deployment",
 		"hostname", directive.Hostname,
-		"ingress-mode", c.ingressMode)
+		"ingress_mode", c.ingressMode)
 
 	if c.ingressMode == builder.IngressModeGateway {
-		c.log.Info("using Gateway API mode for hostname connection")
+		log.Info("using Gateway API mode for hostname connection")
 		return c.connectHostnameToDeploymentGateway(ctx, directive)
 	}
 
-	c.log.Info("using NGINX Ingress mode for hostname connection")
+	log.Info("using NGINX Ingress mode for hostname connection")
 	ingressName := directive.Hostname
 	ns := builder.LidNS(directive.LeaseID)
 	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)

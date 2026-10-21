@@ -19,6 +19,12 @@ else
 $(error "AKASH_HOME is not set")
 endif
 
+# akt must use the same home as the node and provider-services (keyring,
+# certificates, genesis); both are exported by the environment's .envrc
+ifneq ($(AKT_HOME),$(AKASH_HOME))
+$(error "AKT_HOME ($(AKT_HOME)) must equal AKASH_HOME ($(AKASH_HOME)); run \"direnv allow\" in $(CURDIR)")
+endif
+
 .PHONY: bins
 bins:
 ifneq ($(SKIP_BUILD), true)

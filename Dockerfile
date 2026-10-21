@@ -3,8 +3,19 @@ LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provid
 
 COPY provider-services /usr/bin/
 
+# akt CLI, installed per architecture by `make akt`. The binary must be
+# built for the image's platform: buildx/qemu would happily run a foreign-arch
+# binary, so check the platform compiled into it rather than just running it.
+ARG TARGETARCH
+COPY .cache/akt/linux_${TARGETARCH}/akt /usr/bin/akt
+RUN test -n "${TARGETARCH}" \
+ && akt version --long | grep -Eq "^platform:[[:space:]]+linux/${TARGETARCH}$"
+
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ca-certificates must be at least the build that dropped the emSign ECC Root CA - G3
+# and Sectigo AAA roots (eMudhra intermediate key compromise, October 2026). curl in
+# this image fetches bid prices, so an older bundle would trust forged certificates.
 RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -16,7 +27,8 @@ RUN \
     curl \
     ca-certificates \
     pci.ids \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20260816ubuntu0.24.04.1
 
 ENV DEBIAN_FRONTEND=""
 

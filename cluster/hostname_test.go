@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
+	mtypes "pkg.akt.dev/go/node/market/v1"
 	"pkg.akt.dev/go/testutil"
 )
 
@@ -124,6 +126,36 @@ func TestReserveAndReleaseDomain(t *testing.T) {
 
 	select {
 	case <-s.service.lc.Done():
+	case <-time.After(testWait):
+		t.Fatal("timed out waiting for service shutdown")
+	}
+}
+
+// The kube client reserves the hostname of a ProviderHost whose owner cannot be recovered for the
+// all-zero address (AllHostnames). The service must start with that reservation and deny the
+// hostname to every tenant rather than treat it as available.
+func TestStartupReservationForNoTenantDeniesEveryTenant(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), testWait)
+	defer cancel()
+
+	noTenant := mtypes.LeaseID{
+		Owner:    sdktypes.AccAddress(make([]byte, 20)).String(),
+		DSeq:     1,
+		GSeq:     1,
+		OSeq:     1,
+		Provider: testutil.AccAddress(t).String(),
+	}
+
+	svc, err := newHostnameService(ctx, Config{}, map[string]mtypes.LeaseID{"damaged.example.com": noTenant})
+	require.NoError(t, err)
+
+	_, err = svc.ReserveHostnames(ctx, []string{"damaged.example.com"}, testutil.LeaseID(t))
+	require.ErrorIs(t, err, ErrHostnameNotAllowed)
+
+	cancel()
+
+	select {
+	case <-svc.lc.Done():
 	case <-time.After(testWait):
 		t.Fatal("timed out waiting for service shutdown")
 	}

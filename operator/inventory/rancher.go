@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 
 	inventory "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -96,7 +97,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 
 	events := bus.Sub(topicKubeNS, topicKubeSC, topicKubeNodes)
 
-	log := fromctx.LogrFromCtx(c.ctx).WithName("rancher")
+	log := ctxlog.LogcFromCtx(c.ctx).With("module", "operator-inventory.rancher")
 	kc := fromctx.MustKubeClientFromCtx(c.ctx)
 
 	scs := make(rancherStorageClasses)
@@ -166,7 +167,7 @@ func (c *rancher) run(startch chan<- struct{}) error {
 
 					params, exists := scs[obj.Spec.StorageClassName]
 					if !exists {
-						log.Error(fmt.Errorf("storage class %q is not tracked", obj.Spec.StorageClassName), "persistent volume delete event references untracked storage class", "driver", "rancher", "storage_class", obj.Spec.StorageClassName, "persistent_volume", obj.Name, "persistent_volume_id", string(obj.UID))
+						log.Error("persistent volume delete event references untracked storage class", "err", fmt.Errorf("storage class %q is not tracked", obj.Spec.StorageClassName), "driver", "rancher", "storage_class", obj.Spec.StorageClassName, "persistent_volume", obj.Name, "persistent_volume_id", string(obj.UID))
 						break
 					}
 
@@ -214,13 +215,13 @@ func (c *rancher) run(startch chan<- struct{}) error {
 							var err error
 							pvWatcher, err = kc.CoreV1().PersistentVolumes().Watch(c.ctx, metav1.ListOptions{})
 							if err != nil {
-								log.Error(err, "couldn't start watcher on persistent volumes")
+								log.Error("couldn't start watcher on persistent volumes", "err", err)
 							}
 							pvEvents = pvWatcher.ResultChan()
 
 							pvList, err := kc.CoreV1().PersistentVolumes().List(c.ctx, metav1.ListOptions{})
 							if err != nil {
-								log.Error(err, "couldn't list persistent volumes")
+								log.Error("couldn't list persistent volumes", "err", err)
 							}
 
 							for _, pv := range pvList.Items {

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/akash-network/attestation-sidecar/tee"
+	"github.com/akash-network/provider/sidecar/attestation/tee"
 )
 
 const protocolVersion = "4"

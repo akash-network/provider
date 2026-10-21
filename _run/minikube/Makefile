@@ -21,24 +21,6 @@ provider-run:
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none"
 
-.PHONY: provider-lease-status
-provider-lease-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)"
-
-.PHONY: provider-service-status
-provider-service-status:
-	$(PROVIDER_SERVICES) lease-status \
-		--dseq      "$(DSEQ)"        \
-		--gseq      "$(GSEQ)"        \
-		--oseq      "$(OSEQ)"        \
-		--from      "$(KEY_NAME)" \
-		--provider  "$(PROVIDER_ADDRESS)"
-
 .PHONY: provider-lease-ping
 provider-lease-ping:
 	curl -sIH "Host: hello.localhost" localhost:$(KIND_HTTP_PORT)

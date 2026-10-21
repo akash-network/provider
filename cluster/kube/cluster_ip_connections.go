@@ -61,11 +61,13 @@ func (c *client) PurgeDeclaredIP(ctx context.Context, leaseID mtypes.LeaseID, se
 }
 
 func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName string, port uint32, externalPort uint32, proto manifest.ServiceProtocol, sharingKey string, overwrite bool) error {
+	log := c.log.With("lid", lID)
+
 	// Note: This interface expects sharing key to contain a value that is unique per deployment owner, in this
 	// case it is the bech32 address, or a derivative thereof
 	resourceName := strings.ToLower(fmt.Sprintf("%s-%s-%d", sharingKey, proto.ToString(), externalPort))
 
-	c.log.Debug("checking for resource", "resource-name", resourceName)
+	log.Debug("checking for resource", "resource_name", resourceName)
 	foundEntry, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Get(ctx, resourceName, metav1.GetOptions{})
 	exists := true
 	if err != nil {
@@ -102,11 +104,11 @@ func (c *client) DeclareIP(ctx context.Context, lID mtypes.LeaseID, serviceName 
 		},
 	}
 
-	c.log.Info("declaring leased ip", "lease", lID,
-		"service-name", serviceName,
+	log.Info("declaring leased ip",
+		"service", serviceName,
 		"port", port,
-		"external-port", externalPort,
-		"sharing-key", sharingKey,
+		"external_port", externalPort,
+		"sharing_key", sharingKey,
 		"exists", exists)
 	// Create or update the entry
 	if exists {
@@ -155,7 +157,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, 
 		return nil, err
 	}
 
-	c.log.Info("starting ip passthrough watch", "resourceVersion", lastResourceVersion)
+	c.log.Info("starting ip passthrough watch", "resource_version", lastResourceVersion)
 	watcher, err := c.ac.AkashV2beta2().ProviderLeasedIPs(c.ns).Watch(ctx, metav1.ListOptions{
 		TypeMeta:             metav1.TypeMeta{},
 		LabelSelector:        "",
@@ -228,12 +230,12 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, 
 				plip := result.Object.(*akashtypes.ProviderLeasedIP)
 				ownerAddr, err := sdktypes.AccAddressFromBech32(plip.Spec.LeaseID.Owner)
 				if err != nil {
-					c.log.Error("invalid owner address in provider host", "addr", plip.Spec.LeaseID.Owner, "err", err)
+					c.log.Error("invalid owner address in provider host", "owner", plip.Spec.LeaseID.Owner, "err", err)
 					continue // Ignore event
 				}
 				providerAddr, err := sdktypes.AccAddressFromBech32(plip.Spec.LeaseID.Provider)
 				if err != nil {
-					c.log.Error("invalid provider address in provider host", "addr", plip.Spec.LeaseID.Provider, "err", err)
+					c.log.Error("invalid provider address in provider host", "provider", plip.Spec.LeaseID.Provider, "err", err)
 					continue // Ignore event
 				}
 				leaseID, err := plip.Spec.LeaseID.FromCRD()
@@ -243,7 +245,7 @@ func (c *client) ObserveIPState(ctx context.Context) (<-chan cip.ResourceEvent, 
 				}
 				proto, err := manifest.ParseServiceProtocol(plip.Spec.Protocol)
 				if err != nil {
-					c.log.Error("invalid protocol", "err", err)
+					c.log.Error("invalid protocol", "lid", leaseID, "err", err)
 					continue
 				}
 

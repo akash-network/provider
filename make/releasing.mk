@@ -17,8 +17,12 @@ null  :=
 space := $(null) #
 comma := ,
 
+# goreleaser gets the GitHub token only for releases. GITHUB_TOKEN itself is
+# left alone: other recipes need it (e.g. gh verifying the akt installer).
+GORELEASER_GITHUB_TOKEN  := $(GITHUB_TOKEN)
+
 ifneq ($(GORELEASER_RELEASE),true)
-	GITHUB_TOKEN=
+	GORELEASER_GITHUB_TOKEN :=
 	GORELEASER_SKIP_FLAGS += publish
 endif
 
@@ -73,7 +77,7 @@ chmod-akash-scripts:
 	find "$(AKASHD_LOCAL_PATH)/script" -type f -name '*.sh' -exec echo "chmod +x {}" \; -exec chmod +x {} \;
 
 .PHONY: docker-image
-docker-image: wasmvm-libs
+docker-image: wasmvm-libs akt
 	docker run \
 		--rm \
 		-e MOD="$(GO_MOD)" \
@@ -103,13 +107,13 @@ gen-changelog: $(GIT_CHGLOG)
 	./script/genchangelog.sh "$(RELEASE_TAG)" .cache/changelog.md
 
 .PHONY: release
-release: wasmvm-libs gen-changelog
+release: wasmvm-libs akt gen-changelog
 	docker run \
 		--rm \
 		-e MOD="$(GO_MOD)" \
 		-e BUILD_TAGS="$(GORELEASER_TAGS)" \
 		-e BUILD_LDFLAGS="$(GORELEASER_LDFLAGS)" \
-		-e GITHUB_TOKEN="$(GITHUB_TOKEN)" \
+		-e GITHUB_TOKEN="$(GORELEASER_GITHUB_TOKEN)" \
 		-e GORELEASER_CURRENT_TAG="$(RELEASE_TAG)" \
 		-e DOCKER_IMAGE=$(RELEASE_DOCKER_IMAGE) \
 		-e GOTOOLCHAIN="$(GOTOOLCHAIN)" \

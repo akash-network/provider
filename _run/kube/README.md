@@ -32,14 +32,38 @@ Most `make` commands are configurable and have defaults to make it
 such that you don't need to override them for a simple pass-through of
 this example.
 
-| Name                | Default    | Description                     |
-|---------------------|------------|---------------------------------|
-| `KEY_NAME`          | `main`     | standard key name               |
-| `PROVIDER_KEY_NAME` | `provider` | name of key to use for provider |
-| `DSEQ`              | 1          | deployment sequence             |
-| `GSEQ`              | 1          | group sequence                  |
-| `OSEQ`              | 1          | order sequence                  |
-| `PRICE`             | 10uakt     | price to bid                    |
+| Name                | Default           | Description                                                  |
+|---------------------|-------------------|--------------------------------------------------------------|
+| `KEY_NAME`          | `main`            | tenant key; also the identity used for provider gateway calls |
+| `PROVIDER_KEY_NAME` | `provider`        | name of key to use for provider                              |
+| `SDL_PATH`          | `deployment.yaml` | SDL used by `deployment-create`, `send-manifest`, ...        |
+| `DSEQ`              | 1                 | deployment sequence                                          |
+| `GSEQ`              | 1                 | group sequence                                               |
+| `OSEQ`              | 1                 | order sequence                                               |
+| `PRICE`             | 10uakt            | price to bid                                                 |
+| `DEPOSIT`           | (empty)           | deployment deposit, e.g. `5000000uact`; empty uses the chain's uact minimum |
+
+Client commands (transactions, queries, provider gateway calls) run through
+[`akt`](https://github.com/akash-network/akt), installed into `.cache/bin` by
+`make init`. `make init` creates an akt context named `local` in `AKASH_HOME`
+(`AKT_HOME` points at the same directory), so akt shares the keyring,
+certificates and genesis with the `akash` node and `provider-services`. Targets
+other than `make init` refuse to run until that context exists.
+
+Things that differ from the previous `akash`/`provider-services` commands:
+
+- `query-deployments`, `query-orders`, `query-bids`, `query-leases` and
+  `query-certificates` list entries of the `KEY_NAME` account only, not of
+  every owner.
+- Deployments are funded in `uact`. SDLs priced in `uakt` (for example
+  [`grafana.yaml`](grafana.yaml)) cannot be deployed on the current chain:
+  without `DEPOSIT` akt rejects them with `Mismatched denominations (uact != uakt): Deposit invalid`,
+  and with a `uakt` deposit the chain rejects the transaction (`Deposit invalid`).
+  Use `uact` pricing, as in [`deployment.yaml`](deployment.yaml).
+- The provider assumes `amd64` for SDLs that do not set a CPU architecture. On
+  an arm64 host (e.g. kind on Apple Silicon) add `attributes: {arch: arm64}`
+  under `resources.cpu`, otherwise the provider reports insufficient capacity
+  and does not bid.
 
 # Runbook
 

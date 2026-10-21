@@ -39,7 +39,7 @@ func newWatchdog(sess session.Session, parent <-chan struct{}, done chan<- dtype
 		broadcastTimeout: broadcastTimeout,
 		lc:               lifecycle.New(),
 		sess:             sess,
-		log:              sess.Log().With("leaseID", leaseID),
+		log:              sess.Log().With("lid", leaseID),
 	}
 
 	go result.lc.WatchChannel(parent)

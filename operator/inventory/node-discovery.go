@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
+	"cosmossdk.io/log"
 	"github.com/jaypipes/ghw/pkg/cpu"
 	"github.com/jaypipes/ghw/pkg/gpu"
 	"github.com/jaypipes/ghw/pkg/memory"
@@ -30,10 +30,12 @@ import (
 	"k8s.io/utils/ptr"
 
 	v1 "pkg.akt.dev/go/inventory/v1"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/logging"
 )
 
 var (
@@ -166,10 +168,30 @@ func (dp *nodeDiscovery) queryGPU(ctx context.Context) (*gpu.Info, error) {
 	return dpQuery[gpu.Info](dp, ctx, dpReqGPU)
 }
 
+// discoveryPodEnv returns the environment of hardware discovery pods. The pods run
+// provider-services, so the operator's logging configuration is passed as AP_* variables.
+func discoveryPodEnv(ctx context.Context) []corev1.EnvVar {
+	logCfg, ok := logging.ConfigFromCtx(ctx)
+	if !ok {
+		logCfg = logging.DefaultConfig()
+	}
+
+	logEnv := logCfg.Env("AP_")
+
+	env := make([]corev1.EnvVar, 0, len(logEnv)+1)
+	env = append(env, corev1.EnvVar{Name: "PCIDB_ENABLE_NETWORK_FETCH", Value: "1"})
+
+	for _, e := range logEnv {
+		env = append(env, corev1.EnvVar{Name: e.Name, Value: e.Value})
+	}
+
+	return env
+}
+
 func (dp *nodeDiscovery) apiConnector() error {
 	ctx := dp.ctx
 
-	log := fromctx.LogrFromCtx(ctx).WithName("node.discovery")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.node.discovery")
 
 	defer func() {
 		log.Info("shutting down hardware discovery pod", "node", dp.name)
@@ -218,12 +240,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 							ContainerPort: 8081,
 						},
 					},
-					Env: []corev1.EnvVar{
-						{
-							Name:  "PCIDB_ENABLE_NETWORK_FETCH",
-							Value: "1",
-						},
-					},
+					Env: discoveryPodEnv(ctx),
 					// P-1: mount the host's /sys so the /infiniband handler
 					// can walk /host/sys/class/infiniband AND resolve the
 					// sysfs symlinks each device dir points into under
@@ -280,7 +297,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 		}
 
 		if !kerrors.IsAlreadyExists(err) {
-			log.Error(err, fmt.Sprintf("unable to start discovery pod on node \"%s\"", dp.name))
+			log.Error(fmt.Sprintf("unable to start discovery pod on node \"%s\"", dp.name), "err", err)
 		}
 
 		tctx, tcancel := context.WithTimeout(ctx, time.Second)
@@ -309,7 +326,7 @@ func (dp *nodeDiscovery) apiConnector() error {
 			",app.kubernetes.io/part-of=provider",
 	})
 	if err != nil {
-		log.Error(err, fmt.Sprintf("unable to start pod watcher on node \"%s\"", dp.name))
+		log.Error(fmt.Sprintf("unable to start pod watcher on node \"%s\"", dp.name), "err", err)
 		return err
 	}
 
@@ -422,7 +439,7 @@ func isPodAllocated(status corev1.PodStatus) bool {
 
 func (dp *nodeDiscovery) monitor() error {
 	ctx := dp.ctx
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.node.monitor")
 
 	bus := fromctx.MustPubSubFromCtx(ctx)
 	kc := fromctx.MustKubeClientFromCtx(ctx)
@@ -500,7 +517,7 @@ func (dp *nodeDiscovery) monitor() error {
 		})
 
 		if terr != nil {
-			log.Error(terr, "unable to start pods watcher")
+			log.Error("unable to start pods watcher", "err", terr)
 			return terr
 		}
 
@@ -701,7 +718,7 @@ func (dp *nodeDiscovery) monitor() error {
 
 				_, err := dp.kc.CoreV1().Nodes().Patch(dp.ctx, node.Name, k8stypes.JSONPatchType, data, metav1.PatchOptions{})
 				if err != nil {
-					log.Error(err, fmt.Sprintf("couldn't apply patches for node \"%s\"", node.Name))
+					log.Error(fmt.Sprintf("couldn't apply patches for node \"%s\"", node.Name), "err", err)
 				} else {
 					log.Info(fmt.Sprintf("successfully applied labels and/or annotations patches for node \"%s\"", node.Name), "labels", currLabels)
 				}
@@ -785,12 +802,12 @@ func (dp *nodeDiscovery) initNodeInfo(gpusIDs RegistryGPUVendors, knode *corev1.
 // zero-value IBDiscovery, which propagates through the rest of the
 // inventory as "this node has no interconnect capability."
 func (dp *nodeDiscovery) parseIBInfo(ctx context.Context) IBDiscovery {
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.node.monitor")
 
 	ib, err := dp.queryIB(ctx)
 	if err != nil || ib == nil {
 		if err != nil {
-			log.V(4).Info("unable to query infiniband; treating node as non-interconnect", "err", err.Error())
+			log.Debug("unable to query infiniband; treating node as non-interconnect", "err", err)
 		}
 		return IBDiscovery{}
 	}
@@ -981,7 +998,7 @@ type allocatedResourceChange struct {
 	AllocatedAfter  string `json:"allocated_after"`
 }
 
-func subAllocatedResource(log logr.Logger, node *v1.Node, pod *corev1.Pod, resourceName string, allocated *resource.Quantity, val resource.Quantity) {
+func subAllocatedResource(log log.Logger, node *v1.Node, pod *corev1.Pod, resourceName string, allocated *resource.Quantity, val resource.Quantity) {
 	before := allocated.DeepCopy()
 	after := allocated.DeepCopy()
 	after.Sub(val)
@@ -997,7 +1014,7 @@ func subAllocatedResource(log logr.Logger, node *v1.Node, pod *corev1.Pod, resou
 			AllocatedAfter:  after.String(),
 		}
 
-		log.Error(errNegativeAllocatedResource, "inventory allocated resource went negative",
+		log.Error("inventory allocated resource went negative", "err", errNegativeAllocatedResource,
 			"node", node.Name,
 			"pod", change.Pod,
 			"pod_id", change.PodID,
@@ -1008,7 +1025,7 @@ func subAllocatedResource(log logr.Logger, node *v1.Node, pod *corev1.Pod, resou
 	*allocated = after
 }
 
-func subPodAllocatedResources(log logr.Logger, node *v1.Node, pod *corev1.Pod) {
+func subPodAllocatedResources(log log.Logger, node *v1.Node, pod *corev1.Pod) {
 	// interconnectResource is the node's dynamic device-plugin resource name
 	// (e.g. rdma/rdma_shared_device_ib), which forces the condition-form
 	// switch below — it cannot be a constant case expression.
@@ -1168,7 +1185,7 @@ func generateLabels(cfg Config, knode *corev1.Node, node v1.Node, sc storageClas
 }
 
 func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context, arch string) v1.CPUInfoS {
-	log := fromctx.LogrFromCtx(ctx).WithName("node.monitor")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.node.monitor")
 
 	var cpus *cpu.Info
 	var err error
@@ -1187,7 +1204,7 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context, arch string) v1.CPUIn
 		}
 	}
 	if err != nil {
-		log.Error(err, "unable to query cpu", "attempts", cpuQueryMaxAttempts)
+		log.Error("unable to query cpu", "err", err, "max_attempts", cpuQueryMaxAttempts)
 		return v1.CPUInfoS{}
 	}
 
@@ -1209,11 +1226,11 @@ func (dp *nodeDiscovery) parseCPUInfo(ctx context.Context, arch string) v1.CPUIn
 func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendors) v1.GPUInfoS {
 	res := make(v1.GPUInfoS, 0)
 
-	log := fromctx.LogrFromCtx(ctx).WithName("node.gpu-discovery")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory.node.gpu-discovery")
 
 	log.Info("starting GPU discovery",
 		"node", dp.name,
-		"registryVendors", len(info),
+		"registry_vendors", len(info),
 	)
 
 	// Track PCI addresses found via ghw so the PCI fallback can skip them
@@ -1221,13 +1238,13 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 
 	gpus, err := dp.queryGPU(ctx)
 	if err != nil {
-		log.Error(err, "ghw GPU query failed, will rely on PCI fallback", "node", dp.name)
+		log.Error("ghw GPU query failed, will rely on PCI fallback", "err", err, "node", dp.name)
 	}
 
 	if gpus != nil {
 		log.Info("ghw GPU query result",
 			"node", dp.name,
-			"graphicsCards", len(gpus.GraphicsCards),
+			"graphics_cards", len(gpus.GraphicsCards),
 		)
 
 		for _, dev := range gpus.GraphicsCards {
@@ -1235,7 +1252,7 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if dinfo == nil {
 				log.Info("ghw: skipping graphics card with nil DeviceInfo",
 					"node", dp.name,
-					"address", dev.Address,
+					"pci_addr", dev.Address,
 				)
 				continue
 			}
@@ -1245,7 +1262,7 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if vinfo == nil || pinfo == nil {
 				log.Info("ghw: skipping graphics card with nil vendor or product info",
 					"node", dp.name,
-					"address", dev.Address,
+					"pci_addr", dev.Address,
 				)
 				continue
 			}
@@ -1254,9 +1271,9 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if !exists {
 				log.Info("ghw: GPU vendor not in registry, skipping",
 					"node", dp.name,
-					"address", dev.Address,
-					"vendorID", vinfo.ID,
-					"vendorName", vinfo.Name,
+					"pci_addr", dev.Address,
+					"vendor_id", vinfo.ID,
+					"vendor_name", vinfo.Name,
 				)
 				continue
 			}
@@ -1265,24 +1282,24 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if !exists {
 				log.Info("ghw: GPU product not in registry, skipping",
 					"node", dp.name,
-					"address", dev.Address,
-					"vendorID", vinfo.ID,
-					"vendorName", vendor.Name,
-					"productID", pinfo.ID,
-					"productName", pinfo.Name,
+					"pci_addr", dev.Address,
+					"vendor_id", vinfo.ID,
+					"vendor_name", vendor.Name,
+					"product_id", pinfo.ID,
+					"product_name", pinfo.Name,
 				)
 				continue
 			}
 
 			log.Info("ghw: matched GPU from DRM",
 				"node", dp.name,
-				"address", dev.Address,
+				"pci_addr", dev.Address,
 				"vendor", vendor.Name,
 				"model", model.Name,
-				"vendorID", vinfo.ID,
-				"productID", pinfo.ID,
+				"vendor_id", vinfo.ID,
+				"product_id", pinfo.ID,
 				"interface", model.Interface,
-				"memorySize", model.MemorySize,
+				"memory_size", model.MemorySize,
 			)
 
 			knownAddresses[dev.Address] = struct{}{}
@@ -1301,15 +1318,15 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 
 	log.Info("ghw GPU discovery phase complete",
 		"node", dp.name,
-		"gpusFoundViaDRM", len(res),
-		"knownPCIAddresses", len(knownAddresses),
+		"gpus_found_via_drm", len(res),
+		"known_pci_addresses", len(knownAddresses),
 	)
 
 	// PCI fallback: discover GPUs not visible to ghw (e.g. bound to vfio-pci)
 	// by scanning all PCI devices with display controller class (0x03)
 	pciDevices, err := dp.queryPCI(ctx)
 	if err != nil {
-		log.Error(err, "PCI query failed, cannot run GPU fallback", "node", dp.name)
+		log.Error("PCI query failed, cannot run GPU fallback", "err", err, "node", dp.name)
 	}
 
 	if pciDevices != nil {
@@ -1336,8 +1353,8 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if _, found := knownAddresses[dev.Address]; found {
 				log.Info("pci-fallback: display controller already discovered via ghw, skipping",
 					"node", dp.name,
-					"address", dev.Address,
-					"vendorID", vendorID,
+					"pci_addr", dev.Address,
+					"vendor_id", vendorID,
 					"driver", dev.Driver,
 				)
 				continue
@@ -1346,7 +1363,7 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if dev.Vendor == nil || dev.Product == nil {
 				log.Info("pci-fallback: display controller with nil vendor or product, skipping",
 					"node", dp.name,
-					"address", dev.Address,
+					"pci_addr", dev.Address,
 					"driver", dev.Driver,
 				)
 				continue
@@ -1356,9 +1373,9 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if !exists {
 				log.Info("pci-fallback: display controller vendor not in registry, skipping",
 					"node", dp.name,
-					"address", dev.Address,
-					"vendorID", vendorID,
-					"vendorName", vendorName,
+					"pci_addr", dev.Address,
+					"vendor_id", vendorID,
+					"vendor_name", vendorName,
 					"driver", dev.Driver,
 				)
 				continue
@@ -1368,11 +1385,11 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			if !exists {
 				log.Info("pci-fallback: display controller product not in registry, skipping",
 					"node", dp.name,
-					"address", dev.Address,
-					"vendorID", vendorID,
-					"vendorName", vendor.Name,
-					"productID", productID,
-					"productName", productName,
+					"pci_addr", dev.Address,
+					"vendor_id", vendorID,
+					"vendor_name", vendor.Name,
+					"product_id", productID,
+					"product_name", productName,
 					"driver", dev.Driver,
 				)
 				continue
@@ -1380,15 +1397,15 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 
 			log.Info("pci-fallback: discovered GPU via PCI bus scan",
 				"node", dp.name,
-				"address", dev.Address,
+				"pci_addr", dev.Address,
 				"vendor", vendor.Name,
 				"model", model.Name,
-				"vendorID", dev.Vendor.ID,
-				"productID", dev.Product.ID,
+				"vendor_id", dev.Vendor.ID,
+				"product_id", dev.Product.ID,
 				"interface", model.Interface,
-				"memorySize", model.MemorySize,
+				"memory_size", model.MemorySize,
 				"driver", dev.Driver,
-				"classID", dev.Class.ID,
+				"class_id", dev.Class.ID,
 			)
 
 			res = append(res, v1.GPUInfo{
@@ -1403,8 +1420,8 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 
 		log.Info("PCI fallback phase complete",
 			"node", dp.name,
-			"totalPCIDevices", len(pciDevices.Devices),
-			"displayControllers", displayControllers,
+			"total_pci_devices", len(pciDevices.Devices),
+			"display_controllers", displayControllers,
 		)
 	} else if err == nil {
 		log.Info("PCI query returned nil", "node", dp.name)
@@ -1414,7 +1431,7 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 
 	log.Info("GPU discovery complete",
 		"node", dp.name,
-		"totalGPUsDiscovered", len(res),
+		"total_gpus_discovered", len(res),
 	)
 
 	for i, g := range res {
@@ -1422,11 +1439,11 @@ func (dp *nodeDiscovery) parseGPUInfo(ctx context.Context, info RegistryGPUVendo
 			"node", dp.name,
 			"index", i,
 			"vendor", g.Vendor,
-			"vendorID", g.VendorID,
+			"vendor_id", g.VendorID,
 			"model", g.Name,
-			"modelID", g.ModelID,
+			"model_id", g.ModelID,
 			"interface", g.Interface,
-			"memorySize", g.MemorySize,
+			"memory_size", g.MemorySize,
 		)
 	}
 

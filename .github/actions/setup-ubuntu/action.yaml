@@ -18,6 +18,33 @@ runs:
       run: |
         sudo apt-get update
         sudo apt-get install -y pkg-config make direnv unzip lz4 wget curl npm jq pv coreutils libudev-dev
+    - name: Install GitHub CLI
+      # make akt verifies the akt installer with `gh attestation verify
+      # --signer-workflow` (gh >= 2.51). gh is preinstalled only on
+      # GitHub-hosted runners and Ubuntu's own package is too old, so use
+      # GitHub's apt repository.
+      shell: bash
+      run: |
+        # gh already capable (GitHub-hosted image, or a self-hosted runner
+        # that ran this before): skip the repo setup, but still upgrade gh
+        # from the package lists the previous step refreshed.
+        # No grep -q: with pipefail, an early grep exit can SIGPIPE gh.
+        if gh attestation verify --help 2>/dev/null |
+            grep -- --signer-workflow >/dev/null; then
+          sudo apt-get install -y --only-upgrade gh
+          gh --version
+          exit 0
+        fi
+        sudo mkdir -p -m 755 /etc/apt/keyrings
+        out=$(mktemp)
+        wget -nv -O "$out" https://cli.github.com/packages/githubcli-archive-keyring.gpg
+        sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg < "$out" > /dev/null
+        sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
+        sudo mkdir -p -m 755 /etc/apt/sources.list.d
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y gh
+        gh --version
     - name: Setup npm
       uses: actions/setup-node@v4
       with:

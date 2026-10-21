@@ -70,7 +70,7 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 		return err
 	}
 
-	log := ctxlog.LogcFromCtx(ctx)
+	log := ctxlog.LogcFromCtx(ctx).With("module", "gateway-grpc")
 
 	grpcSrv := grpc.NewServer(grpc.Creds(credentials.NewTLS(tlsCfg)), grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
 		MinTime:             30 * time.Second,
@@ -118,7 +118,7 @@ func NewServer(ctx context.Context, endpoint string, cquery gwutils.CertGetter, 
 // per-request gRPC context does not inherit, so we merge them here.
 func authInterceptor(serverCtx context.Context) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp interface{}, err error) {
-		log := ctxlog.LogcFromCtx(serverCtx)
+		log := ctxlog.LogcFromCtx(serverCtx).With("module", "gateway-grpc")
 
 		var tokString string
 		var peerCerts []*x509.Certificate
@@ -146,7 +146,7 @@ func authInterceptor(serverCtx context.Context) grpc.UnaryServerInterceptor {
 		// application-level values that are not present in the per-request gRPC ctx.
 		claims, err := gwutils.AuthProcess(serverCtx, peerCerts, tokString)
 		if err != nil {
-			log.Error("grpc auth failed", "method", info.FullMethod, "error", err)
+			log.Error("grpc auth failed", "method", info.FullMethod, "err", err)
 			return nil, err
 		}
 

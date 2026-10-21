@@ -109,6 +109,8 @@ dockers:
   - dockerfile: Dockerfile
     ids:
       - provider-services-linux-amd64
+    extra_files:
+      - .cache/akt/linux_amd64/akt
     use: buildx
     goos: linux
     goarch: amd64
@@ -129,6 +131,8 @@ dockers:
   - dockerfile: Dockerfile
     ids:
       - provider-services-linux-arm64
+    extra_files:
+      - .cache/akt/linux_arm64/akt
     use: buildx
     goos: linux
     goarch: arm64
@@ -149,6 +153,8 @@ dockers:
   - dockerfile: Dockerfile.debug
     ids:
       - provider-services-linux-amd64-debug
+    extra_files:
+      - .cache/akt/linux_amd64/akt
     use: buildx
     goos: linux
     goarch: amd64
@@ -166,6 +172,8 @@ dockers:
   - dockerfile: Dockerfile.debug
     ids:
       - provider-services-linux-arm64-debug
+    extra_files:
+      - .cache/akt/linux_arm64/akt
     use: buildx
     goos: linux
     goarch: arm64

@@ -122,6 +122,12 @@ func familyPrefix(s string) string {
 	return s[:end]
 }
 
+// Fabric values reported for an HCA, derived from the link_layer of its port 1.
+const (
+	fabricInfiniband = "infiniband"
+	fabricRoCE       = "roce"
+)
+
 // fabricOfFirstHCA reads `<root>/<first device>/ports/1/link_layer` and
 // translates the result into the provider's fabric string. Returns the
 // empty string when no port reports a layer. A node with mixed link
@@ -140,10 +146,10 @@ func fabricOfFirstHCA(root string, names []string) string {
 	}
 
 	switch strings.TrimSpace(strings.ToLower(string(raw))) {
-	case "infiniband":
-		return "infiniband"
+	case fabricInfiniband:
+		return fabricInfiniband
 	case "ethernet":
-		return "roce"
+		return fabricRoCE
 	}
 	return ""
 }

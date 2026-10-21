@@ -3,17 +3,26 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/akash-network/attestation-sidecar/tee"
+	"github.com/akash-network/provider/sidecar/attestation/internal/logging"
+	"github.com/akash-network/provider/sidecar/attestation/tee"
 )
 
 func main() {
+	logCfg, err := logging.ConfigFromEnv(os.Getenv)
+	if err != nil {
+		logging.New(os.Stdout, logging.DefaultConfig()).Error("invalid logging configuration", "err", err)
+		os.Exit(1)
+	}
+
+	logger := logging.New(os.Stdout, logCfg).With("module", "attestation-sidecar")
+	tee.SetLogger(logger.With("module", "tee"))
+
 	listenAddr := os.Getenv("ATTESTATION_LISTEN_ADDR")
 	if listenAddr == "" {
 		listenAddr = ":8790"
@@ -21,22 +30,22 @@ func main() {
 
 	provider, err := tee.Detect()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: no TEE attestation surface available: %v\n", err)
+		logger.Error("no TEE attestation surface available", "err", err)
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "detected TEE: %s\n", provider.Name())
+	logger.Info("detected TEE", "tee", provider.Name())
 
 	// Generate ephemeral TLS keypair for channel binding.
 	// The public key hash can be embedded in report_data to prove
 	// the TLS endpoint runs inside the attested TEE.
 	binding, err := GenerateEphemeralKeypair()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: failed to generate TLS keypair: %v\n", err)
+		logger.Error("failed to generate TLS keypair", "err", err)
 		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "generated ephemeral TLS keypair for channel binding\n")
+	logger.Info("generated ephemeral TLS keypair for channel binding")
 
 	srv := NewServer(listenAddr, provider, binding)
 
@@ -50,15 +59,15 @@ func main() {
 	defer cancel()
 
 	go func() {
-		fmt.Fprintf(os.Stderr, "attestation sidecar listening on %s (TLS)\n", listenAddr)
+		logger.Info("attestation sidecar listening", "listen_addr", listenAddr, "tls", true)
 		if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+			logger.Error("server error", "err", err)
 			cancel()
 		}
 	}()
 
 	<-ctx.Done()
-	fmt.Fprintln(os.Stderr, "shutting down...")
+	logger.Info("shutting down")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()

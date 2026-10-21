@@ -9,8 +9,31 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/akash-network/provider/tools/logging/logtest"
 	"github.com/akash-network/provider/utils/httperror"
 )
+
+func TestAuthErrorResponseLogsUnknownError(t *testing.T) {
+	rec := logtest.New()
+	err := errors.New("backend exploded")
+
+	res := authErrorResponse(rec, err)
+
+	require.Equal(t, http.StatusInternalServerError, res.StatusCode)
+	entries := rec.Entries()
+	require.Len(t, entries, 1)
+	require.Equal(t, "error", entries[0].Level)
+	require.Equal(t, err, entries[0].KV["err"])
+}
+
+func TestAuthErrorResponseDoesNotLogHTTPErrors(t *testing.T) {
+	rec := logtest.New()
+
+	res := authErrorResponse(rec, httperror.ErrJWTInvalid)
+
+	require.Equal(t, http.StatusUnauthorized, res.StatusCode)
+	require.Empty(t, rec.Entries())
+}
 
 func TestDefaultErrorHandler(t *testing.T) {
 	tests := []struct {

@@ -376,7 +376,7 @@ func newInventoryConnector(ctx context.Context, svc *corev1.Service, invch chan<
 }
 
 func inventoryRun(ctx context.Context, endpoint string, invch chan<- inventoryState) error {
-	log := ctxlog.LogcFromCtx(ctx).With("operator", "inventory")
+	log := ctxlog.LogcFromCtx(ctx).With("module", "operator-inventory-client")
 
 	// Establish the gRPC connection
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))

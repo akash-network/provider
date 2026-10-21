@@ -47,11 +47,11 @@ func leaseAttestationCmd() *cobra.Command {
 
 // attestationResult is the CLI output format.
 type attestationResult struct {
-	Nonce         string                        `json:"nonce"`
+	Nonce         string                            `json:"nonce"`
 	Quote         *leasev1.AttestationQuoteResponse `json:"quote"`
-	ReportSize    int                           `json:"report_size_bytes"`
-	NonceVerified bool                          `json:"nonce_verified"`
-	MockReport    bool                          `json:"mock_report"`
+	ReportSize    int                               `json:"report_size_bytes"`
+	NonceVerified bool                              `json:"nonce_verified"`
+	MockReport    bool                              `json:"mock_report"`
 }
 
 func doLeaseAttestation(cmd *cobra.Command) error {
@@ -97,7 +97,7 @@ func doLeaseAttestation(cmd *cobra.Command) error {
 
 	// Dial the gRPC server with TLS (provider uses self-signed certs).
 	tlsCfg := &tls.Config{
-		InsecureSkipVerify: true,       // nolint: gosec
+		InsecureSkipVerify: true, // nolint: gosec
 		MinVersion:         tls.VersionTLS12,
 	}
 	conn, err := grpc.NewClient(grpcAddr, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))

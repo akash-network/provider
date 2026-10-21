@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"pkg.akt.dev/go/util/ctxlog"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
@@ -30,7 +31,7 @@ func Cmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ns := viper.GetString(providerflags.FlagK8sManifestNS)
 			poolName := viper.GetString(flagMetalLbPoolName)
-			logger := common.OpenLogger().With("operator", "ip")
+			logger := ctxlog.LogcFromCtx(cmd.Context()).With("module", "operator-ip")
 
 			ctx := cmd.Context()
 
@@ -40,7 +41,7 @@ func Cmd() *cobra.Command {
 				return fmt.Errorf("%w: provider address must valid bech32", err)
 			}
 
-			client, err := clusterClient.NewClient(cmd.Context(), logger, ns)
+			client, err := clusterClient.NewClient(cmd.Context(), logger.With("module", "operator-ip.kube-client"), ns)
 			if err != nil {
 				return err
 			}
@@ -55,7 +56,7 @@ func Cmd() *cobra.Command {
 				return err
 			}
 
-			restPort, err := common.DetectPort(ctx, cmd.Flags(), common.FlagRESTPort, "operator-ip", "rest")
+			restPort, err := common.DetectPort(ctx, logger, cmd.Flags(), common.FlagRESTPort, "operator-ip", "rest")
 			if err != nil {
 				return err
 			}
@@ -79,8 +80,8 @@ func Cmd() *cobra.Command {
 			srv := http.Server{Addr: restAddr, Handler: router}
 
 			group.Go(func() error {
-				logger.Info("HTTP listening", "address", restAddr)
-				return srv.ListenAndServe()
+				logger.Info("HTTP listening", "listen_addr", restAddr)
+				return common.ListenAndServe(&srv)
 			})
 
 			group.Go(func() error {

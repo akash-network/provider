@@ -37,17 +37,29 @@ attributes:
 )
 
 type queryOpt struct {
-	body *bytes.Buffer
+	body []byte
 }
 
 type queryOption func(*queryOpt)
 
 func queryWithBody(val []byte) queryOption {
 	return func(opt *queryOpt) {
-		if len(val) > 0 {
-			opt.body = bytes.NewBuffer(val)
-		}
+		opt.body = val
 	}
+}
+
+// newQueryRequest returns a new request on every call: sending a request
+// consumes its body, so retries cannot reuse one.
+func newQueryRequest(t *testing.T, url, host string, body []byte) *http.Request {
+	t.Helper()
+
+	req, err := http.NewRequest("GET", url, bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Host = host // NOTE: cannot be inserted as a req.Header element, that is overwritten by this req.Host field.
+	req.Header.Add("Cache-Control", "no-cache")
+	req.Header.Add("Connection", "keep-alive")
+
+	return req
 }
 
 // skip integration-only tests.
@@ -64,19 +76,11 @@ func integrationTestOnly(t testing.TB) {
 func queryAppWithRetries(t *testing.T, appURL string, appHost string, limit int, opts ...queryOption) *http.Response {
 	t.Helper()
 
-	opt := &queryOpt{
-		body: bytes.NewBuffer([]byte{}),
-	}
-
+	opt := &queryOpt{}
 	for _, o := range opts {
 		o(opt)
 	}
 
-	req, err := http.NewRequest("GET", appURL, opt.body)
-	require.NoError(t, err)
-	req.Host = appHost
-	req.Header.Add("Cache-Control", "no-cache")
-	req.Header.Add("Connection", "keep-alive")
 	tr := &http.Transport{
 		DisableKeepAlives: false,
 		DialContext: (&net.Dialer{
@@ -90,9 +94,10 @@ func queryAppWithRetries(t *testing.T, appURL string, appHost string, limit int,
 	}
 
 	var resp *http.Response
+	var err error
 	const delay = 1 * time.Second
 	for i := 0; i != limit; i++ {
-		resp, err = httpClient.Do(req)
+		resp, err = httpClient.Do(newQueryRequest(t, appURL, appHost, opt.body))
 		if resp != nil {
 			t.Log("GET: ", appURL, resp.StatusCode)
 		}
@@ -119,20 +124,11 @@ func queryAppWithHostname(t *testing.T, appURL string, limit int, hostname strin
 	t.Helper()
 	// Assert provider launches app in kind cluster
 
-	opt := &queryOpt{
-		body: bytes.NewBuffer([]byte{}),
-	}
-
+	opt := &queryOpt{}
 	for _, o := range opts {
 		o(opt)
 	}
 
-	req, err := http.NewRequest("GET", appURL, opt.body)
-
-	require.NoError(t, err)
-	req.Host = hostname // NOTE: cannot be inserted as a req.Header element, that is overwritten by this req.Host field.
-	req.Header.Add("Cache-Control", "no-cache")
-	req.Header.Add("Connection", "keep-alive")
 	// Assert that the service is accessible. Unfortunately brittle single request.
 	tr := &http.Transport{
 		DisableKeepAlives: false,
@@ -143,9 +139,10 @@ func queryAppWithHostname(t *testing.T, appURL string, limit int, hostname strin
 
 	// retry mechanism
 	var resp *http.Response
+	var err error
 	for i := 0; i < limit; i++ {
 		time.Sleep(1 * time.Second) // reduce absurdly long wait period
-		resp, err = httpClient.Do(req)
+		resp, err = httpClient.Do(newQueryRequest(t, appURL, hostname, opt.body))
 		if err != nil {
 			t.Log(err)
 			continue
