@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/boz/go-lifecycle"
@@ -81,6 +82,7 @@ type manager struct {
 	pendingRequests []manifestRequest
 	manifests       []*maniv2beta2.Manifest
 	versions        [][]byte
+	updatesReceived uint64
 
 	localLeases []event.LeaseWon
 	fetched     bool
@@ -187,8 +189,7 @@ loop:
 			}
 		case version := <-m.updatech:
 			m.log.Info("received version", "version", hex.EncodeToString(version))
-			m.versions = append(m.versions, version)
-			m.clearFetched()
+			m.applyUpdate(version)
 
 		case result := <-runch:
 			runch = nil
@@ -200,11 +201,7 @@ loop:
 				break
 			}
 
-			fetchResult := result.Value().(manifestManagerFetchDataResult)
-			m.fetched = true
-			m.fetchedAt = time.Now()
-			m.data = fetchResult.deployment
-			m.localLeases = fetchResult.leases
+			m.applyFetchResult(result.Value().(manifestManagerFetchDataResult))
 
 			m.log.Info("data received", "version", hex.EncodeToString(m.data.Deployment.Hash))
 
@@ -244,15 +241,22 @@ func (m *manager) maybeFetchData(ctx context.Context, runch <-chan runner.Result
 }
 
 func (m *manager) fetchData(ctx context.Context) <-chan runner.Result {
+	updatesReceived := m.updatesReceived
+
 	return runner.Do(func() runner.Result {
 		// TODO: retry
-		return runner.NewResult(m.doFetchData(ctx))
+		result, err := m.doFetchData(ctx)
+		result.updatesReceived = updatesReceived
+
+		return runner.NewResult(result, err)
 	})
 }
 
 type manifestManagerFetchDataResult struct {
 	deployment dvbeta.QueryDeploymentResponse
 	leases     []event.LeaseWon
+	// updatesReceived is the manager's update event count when the fetch started.
+	updatesReceived uint64
 }
 
 func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResult, error) {
@@ -442,7 +446,10 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	}
 
 	if !bytes.Equal(version, versionExpected) {
-		m.log.Error("deployment version mismatch", "expected", hex.EncodeToString(m.data.Deployment.Hash), "got", hex.EncodeToString(version))
+		m.log.Error("deployment version mismatch",
+			"expected", hex.EncodeToString(versionExpected),
+			"chain", hex.EncodeToString(m.data.Deployment.Hash),
+			"got", hex.EncodeToString(version))
 		return ErrManifestVersion
 	}
 
@@ -462,6 +469,34 @@ func (m *manager) validateRequest(req manifestRequest) error {
 	}
 
 	return nil
+}
+
+func (m *manager) applyUpdate(version []byte) {
+	m.versions = append(m.versions, version)
+	m.updatesReceived++
+	m.clearFetched()
+}
+
+// applyFetchResult stores the deployment and leases read from the chain. A deployment hash
+// this manager has never seen means it missed that DeploymentUpdated event, so the hash
+// becomes the expected version; otherwise every later manifest would be refused until
+// another update lands. A hash it has already seen comes from a read that lags the events
+// it received, and leaves the expected version alone. So does any hash from a fetch that
+// started before the last update event arrived, since that read may predate the update.
+func (m *manager) applyFetchResult(result manifestManagerFetchDataResult) {
+	m.fetched = true
+	m.fetchedAt = time.Now()
+	m.data = result.deployment
+	m.localLeases = result.leases
+
+	if result.updatesReceived != m.updatesReceived {
+		return
+	}
+
+	hash := m.data.Deployment.Hash
+	if len(hash) != 0 && !slices.ContainsFunc(m.versions, func(seen []byte) bool { return bytes.Equal(seen, hash) }) {
+		m.versions = append(m.versions, hash)
+	}
 }
 
 func (m *manager) checkHostnamesForManifest(requestManifest maniv2beta2.Manifest, groupNames []string) error {
