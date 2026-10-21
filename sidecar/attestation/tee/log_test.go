@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/akash-network/attestation-sidecar/internal/logging"
+	"github.com/akash-network/provider/sidecar/attestation/internal/logging"
 )
 
 type entry struct {

@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/akash-network/attestation-sidecar/internal/logging"
-	"github.com/akash-network/attestation-sidecar/tee"
+	"github.com/akash-network/provider/sidecar/attestation/internal/logging"
+	"github.com/akash-network/provider/sidecar/attestation/tee"
 )
 
 func main() {

@@ -13,6 +13,9 @@ RUN test -n "${TARGETARCH}" \
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ca-certificates must be at least the build that dropped the emSign ECC Root CA - G3
+# and Sectigo AAA roots (eMudhra intermediate key compromise, October 2026). curl in
+# this image fetches bid prices, so an older bundle would trust forged certificates.
 RUN \
     apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -24,7 +27,8 @@ RUN \
     curl \
     ca-certificates \
     pci.ids \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20260816ubuntu0.24.04.1
 
 ENV DEBIAN_FRONTEND=""
 

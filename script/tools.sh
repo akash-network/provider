@@ -12,23 +12,18 @@ gomod="$SCRIPT_DIR/../go.mod"
 function get_gotoolchain() {
 	local gotoolchain
 	local goversion
-	local local_goversion
 
 	gotoolchain=$(grep -E '^toolchain go[0-9]{1,}.[0-9]{1,}.[0-9]{1,}$' <"$gomod" | cut -d ' ' -f 2 | tr -d '\n')
 	goversion=$(grep -E '^go [0-9]{1,}.[0-9]{1,}(.[0-9]{1,})?$' <"$gomod" | cut -d ' ' -f 2 | tr -d '\n')
 
 	if [[ ${gotoolchain} == "" ]]; then
-		# determine go toolchain from go version in go.mod
-		if which go >/dev/null 2>&1; then
-			local_goversion=$(GOTOOLCHAIN=local go version | cut -d ' ' -f 3 | sed 's/go*//' | tr -d '\n')
-			if [[ $($SEMVER compare "v$local_goversion" v"$goversion") -ge 0 ]]; then
-				goversion=$local_goversion
-			else
-				local_goversion=
-			fi
-		fi
-
-		if [[ "$local_goversion" == "" ]]; then
+		# determine go toolchain from go version in go.mod. A full version is used
+		# as is, never swapped for a newer local go: early patches of a newer minor
+		# can lack fixes backported to this one (go1.27.0-go1.27.2 lack go1.26.10's
+		# CVE-2026-111943 fix), and the result also selects the goreleaser-cross tag.
+		# A toolchain line cannot pin this instead: go mod tidy drops one that
+		# matches the go line.
+		if [[ ! $goversion =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 			goversion=$(curl -s "https://go.dev/dl/?mode=json&include=all" | jq -r --arg regexp "^go$goversion" '.[] | select(.stable == true) | select(.version | match($regexp)) | .version' | head -n 1 | sed -e s/^go//)
 		fi
 

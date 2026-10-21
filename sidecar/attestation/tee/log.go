@@ -3,7 +3,7 @@ package tee
 import (
 	"sync/atomic"
 
-	"github.com/akash-network/attestation-sidecar/internal/logging"
+	"github.com/akash-network/provider/sidecar/attestation/internal/logging"
 )
 
 var pkgLogger atomic.Value // holds loggerBox

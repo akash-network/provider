@@ -1,5 +1,5 @@
 # trixie: the bundled akt release binary needs glibc >= 2.38 (bookworm has 2.36)
-FROM golang:1.26.2-trixie
+FROM golang:1.26.10-trixie
 LABEL "org.opencontainers.image.source"="https://github.com/akash-network/provider"
 
 COPY provider-services /usr/bin/
@@ -14,6 +14,8 @@ RUN test -n "${TARGETARCH}" \
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# ca-certificates must be at least the build that dropped the emSign ECC Root CA - G3
+# and Sectigo AAA roots (eMudhra intermediate key compromise, October 2026).
 RUN \
     go install github.com/go-delve/delve/cmd/dlv@latest \
  && apt-get update \
@@ -26,7 +28,8 @@ RUN \
     curl \
     ca-certificates \
     pci.ids \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge 20250419+deb13u1
 
 ENV DEBIAN_FRONTEND=""
 
