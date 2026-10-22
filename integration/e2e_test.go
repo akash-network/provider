@@ -60,6 +60,7 @@ import (
 	operatorcommon "github.com/akash-network/provider/operator/common"
 	akashclient "github.com/akash-network/provider/pkg/client/clientset/versioned"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
+	"github.com/akash-network/provider/testutil/shard"
 	"github.com/akash-network/provider/tools/fromctx"
 )
 
@@ -95,6 +96,12 @@ type IntegrationTestSuite struct {
 	oracleClient      cclient.Client
 	priceFeedInterval time.Duration
 	gatewayAPIMode    bool
+
+	// running is set from the start of SetupSuite until TearDownSuite has
+	// finished. A suite that fails in between keeps its test network up, which
+	// holds a package-wide lock, so TestIntegrationTestSuite runs no further
+	// suites after it.
+	running bool
 }
 
 const (
@@ -114,6 +121,7 @@ var cliFlags = cli.TestFlags().
 	WithGasAuto()
 
 func (s *IntegrationTestSuite) SetupSuite() {
+	s.running = true
 	s.appHost, s.appPort = appEnv(s.T())
 
 	encCfg := sdkutil.MakeEncodingConfig()
@@ -720,6 +728,8 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 	s.ctxCancel() // Stop context that provider & hostname operator are tied to
 
 	_ = s.group.Wait()
+
+	s.running = false
 }
 
 func newestLease(leases []mvbeta.QueryLeaseResponse) mtypes.Lease {
@@ -742,21 +752,110 @@ func getKubernetesIP() string {
 	return os.Getenv("KUBE_NODE_IP")
 }
 
+// e2eTestingSuite is a suite built on IntegrationTestSuite.
+type e2eTestingSuite interface {
+	suite.TestingSuite
+	stillRunning() bool
+}
+
+// stillRunning reports whether the suite started SetupSuite but did not finish
+// TearDownSuite.
+func (s *IntegrationTestSuite) stillRunning() bool {
+	return s.running
+}
+
+// e2eSuite is a suite TestIntegrationTestSuite runs, with a rough estimate of
+// its run time in CI that is used only to balance shards.
+type e2eSuite struct {
+	suite    e2eTestingSuite
+	estimate time.Duration
+}
+
+// e2eSuites returns new instances of the suites TestIntegrationTestSuite runs,
+// in run order. The estimates come from the block waits and sleeps in each
+// suite, scaled to the ~21 min the whole list took in CI before sharding;
+// recalibrate them from the per-suite durations in each shard's job summary.
+func e2eSuites() []e2eSuite {
+	return []e2eSuite{
+		{suite: new(E2EContainerToContainer), estimate: 75 * time.Second},
+		{suite: new(E2EAppNodePort), estimate: 60 * time.Second},
+		{suite: new(E2EDeploymentUpdate), estimate: 120 * time.Second},
+		{suite: new(E2EApp), estimate: 110 * time.Second},
+		{suite: new(E2EPersistentStorageDefault), estimate: 100 * time.Second},
+		{suite: new(E2EPersistentStorageBeta2), estimate: 115 * time.Second},
+		{suite: new(E2EPersistentStorageDeploymentUpdate), estimate: 100 * time.Second},
+		{suite: new(E2EStorageClassRam), estimate: 75 * time.Second},
+		{suite: new(E2EMigrateHostname), estimate: 135 * time.Second},
+		{suite: new(E2ECustomCurrency), estimate: 110 * time.Second},
+		{suite: &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}}, estimate: 85 * time.Second},
+	}
+}
+
+// suiteName is the subtest name a suite runs under.
+func suiteName(s suite.TestingSuite) string {
+	return reflect.TypeOf(s).Elem().Name()
+}
+
+// runE2ESuites runs the suites in order, each as a subtest named after its
+// type. After a suite that failed in SetupSuite or TearDownSuite its test
+// network is still up and holds a package-wide lock the next suite would wait
+// on, so it returns an error instead of running the rest, as a failing
+// suite.Run ended the whole test before shards.
+func runE2ESuites(t *testing.T, suites []e2eTestingSuite) error {
+	for _, s := range suites {
+		name := suiteName(s)
+		t.Run(name, func(t *testing.T) {
+			suite.Run(t, s)
+		})
+
+		if s.stillRunning() {
+			return fmt.Errorf("%s did not finish TearDownSuite: not running the suites after it", name)
+		}
+	}
+
+	return nil
+}
+
+// k8sTestsEstimate is how long the K8s tests take in CI (the Run K8s Tests
+// step of shard 1). They run on shard 1 after its suites, so shard 1 is given
+// that much less suite work.
+const k8sTestsEstimate = 110 * time.Second
+
+// TestIntegrationTestSuite runs the e2e suites one after another. CI splits
+// them into shards that run on separate machines: E2E_SHARD_INDEX and
+// E2E_SHARD_TOTAL select this run's shard, and with neither set every suite
+// runs. Each suite is a subtest named after its type, so a single suite runs
+// with -run 'TestIntegrationTestSuite/E2EMigrateHostname$'.
 func TestIntegrationTestSuite(t *testing.T) {
 	integrationTestOnly(t)
 
-	suite.Run(t, new(E2EContainerToContainer))
-	suite.Run(t, new(E2EAppNodePort))
-	suite.Run(t, new(E2EDeploymentUpdate))
-	suite.Run(t, new(E2EApp))
-	suite.Run(t, new(E2EPersistentStorageDefault))
-	suite.Run(t, new(E2EPersistentStorageDefault))
-	suite.Run(t, new(E2EPersistentStorageBeta2))
-	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
-	suite.Run(t, new(E2EStorageClassRam))
-	suite.Run(t, new(E2EMigrateHostname))
-	suite.Run(t, new(E2ECustomCurrency))
-	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+	spec, err := shard.FromEnv()
+	require.NoError(t, err)
+
+	suites := e2eSuites()
+	estimates := make([]time.Duration, len(suites))
+	for i, s := range suites {
+		estimates[i] = s.estimate
+	}
+
+	shards, err := shard.Assign(estimates, spec.Total, shard.Reserve(1, k8sTestsEstimate))
+	require.NoError(t, err)
+
+	indexes := shards[spec.Index-1]
+	if len(indexes) == 0 {
+		t.Skipf("shard %d/%d has no e2e suites to run: %s (E2E_SHARDS in CI) is higher than useful", spec.Index, spec.Total, shard.EnvTotal)
+	}
+
+	picked := make([]e2eTestingSuite, len(indexes))
+	names := make([]string, len(indexes))
+	for i, idx := range indexes {
+		picked[i] = suites[idx].suite
+		names[i] = suiteName(picked[i])
+	}
+
+	t.Logf("shard %d/%d runs %d of %d e2e suites: %s", spec.Index, spec.Total, len(picked), len(suites), strings.Join(names, ", "))
+
+	require.NoError(t, runE2ESuites(t, picked), "shard %d/%d", spec.Index, spec.Total)
 }
 
 // TestQueryApp enables rapid testing of the querying functionality locally

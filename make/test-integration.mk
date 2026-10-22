@@ -19,13 +19,20 @@ KUBE_NODE_IP ?= 172.18.8.101
 
 INTEGRATION_VARS := TEST_INTEGRATION=true
 
+# test-e2e-integration runs the e2e suites in TestIntegrationTestSuite and the
+# e2e package's cluster-free tests. CI splits the suites into shards that run on
+# separate machines; E2E_SHARD_INDEX (1-based) and E2E_SHARD_TOTAL select one,
+# and with neither set every suite runs:
+#   E2E_SHARD_INDEX=2 E2E_SHARD_TOTAL=3 make test-e2e-integration
+# Each suite is a subtest named after its type; to run one, use the go test
+# command below with e.g. -run 'TestIntegrationTestSuite/E2EMigrateHostname$'.
 .PHONY: test-e2e-integration
 test-e2e-integration:
 	# Assumes cluster created and configured:
 	# ```
 	# KUSTOMIZE_INSTALLS=akash-operator-inventory make kube-cluster-setup-e2e
 	# ```
-	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run TestIntegrationTestSuite -timeout 3000s
+	$(KIND_VARS) $(INTEGRATION_VARS) $(GO_TEST) -count=1 -p 4 -tags "e2e" -v ./integration/... -run '^(TestIntegrationTestSuite|TestQueryAppWithRetriesResendsBody|TestRunE2ESuites)$$' -timeout 3000s
 
 .PHONY: test-e2e-integration-k8s
 test-e2e-integration-k8s:
