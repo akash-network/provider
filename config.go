@@ -20,6 +20,7 @@ type Config struct {
 	BidPricingStrategy       bidengine.BidPricingStrategy
 	BidDeposit               sdk.Coin
 	BidTimeout               time.Duration
+	MaxOrderAge              time.Duration
 	ManifestTimeout          time.Duration
 	BroadcastTimeout         time.Duration
 	BalanceCheckerCfg        BalanceCheckerConfig
