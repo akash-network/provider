@@ -169,11 +169,16 @@ func (o *order) isStaleBid(bid mvbeta.Bid) bool {
 	// This bid could be very old, compute the minimum age of the bid
 	// do not try anything clever here like asking the RPC node for the current height
 	// just use the height from when the session is created
-	createdAtBlock := bid.GetCreatedAt()
-	blockAge := createdAtBlock - o.session.CreatedAtBlockHeight()
-	const minTimePerBlock = 5 * time.Second
-	atLeastThisOld := time.Duration(blockAge) * minTimePerBlock
-	return atLeastThisOld > o.cfg.BidTimeout
+	return olderThan(bid.GetCreatedAt(), o.session.CreatedAtBlockHeight(), o.cfg.BidTimeout)
+}
+
+// minTimePerBlock is a lower bound on the time between two blocks.
+const minTimePerBlock = 5 * time.Second
+
+// olderThan reports whether something created at block height createdAt is older than d at block
+// height current. Each block counts as minTimePerBlock, so the age is never overestimated.
+func olderThan(createdAt, current int64, d time.Duration) bool {
+	return time.Duration(current-createdAt)*minTimePerBlock > d
 }
 
 func (o *order) run(checkForExistingBid bool) {

@@ -288,3 +288,72 @@ func Test_OrdersFetcher_RejectsRepeatedNextKey(t *testing.T) {
 	// only the first page was sent; the page repeating its own key was rejected
 	require.Len(t, s.svc.ordersch, 1)
 }
+
+// orderAt is an open order created at the given block height.
+func orderAt(id mtypes.OrderID, height int64) mvbeta.Order {
+	return mvbeta.Order{ID: id, CreatedAt: height}
+}
+
+// With MaxOrderAge set, open orders older than it are skipped, but an order with an open bid of
+// this provider is queued whatever its age, so a bid left open by a crash is still closed.
+func Test_OrdersFetcher_SkipsOrdersOlderThanMaxAge(t *testing.T) {
+	s := newOrdersFetcherScaffold(t)
+
+	const height = 1_000_000
+	// 7 days at the 5s lower bound per block
+	maxAge := 7 * 24 * time.Hour
+	ageBlocks := int64(maxAge / minTimePerBlock)
+
+	s.svc.cfg.MaxOrderAge = maxAge
+	s.svc.session = session.New(testutil.Logger(t), nil, s.svc.session.Provider(), height)
+
+	oldWithBid, old, recent, edge := testOrderID(t, 1), testOrderID(t, 2), testOrderID(t, 3), testOrderID(t, 4)
+
+	var bidsReq *mvbeta.QueryBidsRequest
+	s.market.On("Bids", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { bidsReq = args.Get(1).(*mvbeta.QueryBidsRequest) }).
+		Return(&mvbeta.QueryBidsResponse{
+			Bids:       []mvbeta.QueryBidResponse{{Bid: mvbeta.Bid{ID: mtypes.MakeBidID(oldWithBid, s.svc.session.Provider().Address())}}},
+			Pagination: &sdkquery.PageResponse{},
+		}, nil).Once()
+
+	s.market.On("Orders", mock.Anything, pageKey(nil)).
+		Return(&mvbeta.QueryOrdersResponse{
+			Orders: []mvbeta.Order{
+				orderAt(oldWithBid, height-ageBlocks-1),
+				orderAt(old, height-ageBlocks-1),
+				orderAt(recent, height-10),
+				orderAt(edge, height-ageBlocks),
+			},
+			Pagination: &sdkquery.PageResponse{},
+		}, nil).Once()
+
+	require.NoError(t, requireFetcherExit(t, s.run(s.ctx)))
+	s.market.AssertExpectations(t)
+
+	require.Equal(t, s.svc.session.Provider().Owner, bidsReq.Filters.Provider)
+	require.Equal(t, mvbeta.BidOpen.String(), bidsReq.Filters.State)
+
+	require.Equal(t, []mtypes.OrderID{oldWithBid}, (<-s.svc.ordersch).orders, "orders with an open bid come first, whatever their age")
+	require.Equal(t, []mtypes.OrderID{recent, edge}, (<-s.svc.ordersch).orders, "orders older than max age are skipped")
+}
+
+// MaxOrderAge 0 keeps the full traversal: every open order is queued and bids are not queried.
+func Test_OrdersFetcher_MaxAgeZeroQueuesAllOrders(t *testing.T) {
+	s := newOrdersFetcherScaffold(t)
+	s.svc.session = session.New(testutil.Logger(t), nil, s.svc.session.Provider(), 1_000_000)
+
+	old, recent := testOrderID(t, 1), testOrderID(t, 2)
+
+	s.market.On("Orders", mock.Anything, pageKey(nil)).
+		Return(&mvbeta.QueryOrdersResponse{
+			Orders:     []mvbeta.Order{orderAt(old, 1), orderAt(recent, 999_990)},
+			Pagination: &sdkquery.PageResponse{},
+		}, nil).Once()
+
+	require.NoError(t, requireFetcherExit(t, s.run(s.ctx)))
+
+	s.market.AssertExpectations(t)
+	s.market.AssertNotCalled(t, "Bids", mock.Anything, mock.Anything)
+	require.Equal(t, []mtypes.OrderID{old, recent}, (<-s.svc.ordersch).orders)
+}
