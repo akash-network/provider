@@ -38,6 +38,7 @@ import (
 
 	"github.com/akash-network/provider/cluster"
 	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	"github.com/akash-network/provider/cluster/kube/gateway"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
@@ -240,6 +241,57 @@ func (c *client) Deployments(ctx context.Context) ([]ctypes.IDeployment, error) 
 	}
 
 	return deployments, nil
+}
+
+// LeaseIDs returns the leases that have a namespace or a manifest in the
+// cluster. Namespaces Kubernetes is already deleting are left out.
+func (c *client) LeaseIDs(ctx context.Context) ([]mtypes.LeaseID, error) {
+	namespaces, err := wrapKubeCall("namespaces-list", func() (*corev1.NamespaceList, error) {
+		return c.kc.CoreV1().Namespaces().List(ctx, metav1.ListOptions{
+			LabelSelector: builder.AkashManagedLabelName + "=true",
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	manifests, err := wrapKubeCall("manifests-list", func() (*crd.ManifestList, error) {
+		return c.ac.AkashV2beta2().Manifests(c.ns).List(ctx, metav1.ListOptions{})
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[mtypes.LeaseID]struct{}, len(namespaces.Items)+len(manifests.Items))
+	lids := make([]mtypes.LeaseID, 0, len(namespaces.Items)+len(manifests.Items))
+	add := func(lid mtypes.LeaseID) {
+		if _, exists := seen[lid]; !exists {
+			seen[lid] = struct{}{}
+			lids = append(lids, lid)
+		}
+	}
+
+	for _, ns := range namespaces.Items {
+		// Deleting a namespace that is already being deleted fails with a conflict.
+		if ns.DeletionTimestamp != nil {
+			continue
+		}
+		// Managed namespaces without lease labels, like the provider's own, hold no lease.
+		if lid, err := clientcommon.RecoverLeaseIDFromLabels(ns.Labels); err == nil {
+			add(lid)
+		}
+	}
+
+	for _, manifest := range manifests.Items {
+		lid, err := manifest.Spec.LeaseID.FromCRD()
+		if err != nil {
+			c.log.Error("manifest names no lease", "ns", manifest.Name, "err", err)
+			continue
+		}
+		add(lid)
+	}
+
+	return lids, nil
 }
 
 type deploymentService struct {

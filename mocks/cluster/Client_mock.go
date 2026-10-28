@@ -974,6 +974,68 @@ func (_c *Client_LeaseEvents_Call) RunAndReturn(run func(context1 context.Contex
 	return _c
 }
 
+// LeaseIDs provides a mock function for the type Client
+func (_mock *Client) LeaseIDs(context1 context.Context) ([]v1.LeaseID, error) {
+	ret := _mock.Called(context1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LeaseIDs")
+	}
+
+	var r0 []v1.LeaseID
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]v1.LeaseID, error)); ok {
+		return returnFunc(context1)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []v1.LeaseID); ok {
+		r0 = returnFunc(context1)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]v1.LeaseID)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(context1)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// Client_LeaseIDs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LeaseIDs'
+type Client_LeaseIDs_Call struct {
+	*mock.Call
+}
+
+// LeaseIDs is a helper method to define mock.On call
+//   - context1 context.Context
+func (_e *Client_Expecter) LeaseIDs(context1 interface{}) *Client_LeaseIDs_Call {
+	return &Client_LeaseIDs_Call{Call: _e.mock.On("LeaseIDs", context1)}
+}
+
+func (_c *Client_LeaseIDs_Call) Run(run func(context1 context.Context)) *Client_LeaseIDs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *Client_LeaseIDs_Call) Return(leaseIDs []v1.LeaseID, err error) *Client_LeaseIDs_Call {
+	_c.Call.Return(leaseIDs, err)
+	return _c
+}
+
+func (_c *Client_LeaseIDs_Call) RunAndReturn(run func(context1 context.Context) ([]v1.LeaseID, error)) *Client_LeaseIDs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // LeaseLogs provides a mock function for the type Client
 func (_mock *Client) LeaseLogs(context1 context.Context, leaseID v1.LeaseID, s string, b bool, n *int64) ([]*v1beta3.ServiceLog, error) {
 	ret := _mock.Called(context1, leaseID, s, b, n)

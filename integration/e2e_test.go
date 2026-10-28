@@ -190,7 +190,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 	s.validator = s.network.Validators[0]
 
-	s.ev, err = events.NewEvents(s.ctx, s.validator.ClientCtx.Client, "e2e-tests", s.bus)
+	s.ev, err = events.NewEvents(s.ctx, s.validator.RPCAddress, "e2e-tests", s.bus)
 	s.Require().NoError(err)
 
 	// Send coins value
