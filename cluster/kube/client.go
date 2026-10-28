@@ -75,7 +75,6 @@ type client struct {
 	ns                string
 	log               log.Logger
 	kubeContentConfig *restclient.Config
-	ingressMode       builder.IngressMode
 	gatewayName       string
 	gatewayNamespace  string
 	gatewayImpl       gateway.GatewayProvider
@@ -128,22 +127,17 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 	}
 
 	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
-	ingressMode := builder.IngressMode(gwCfg.IngressMode)
 
-	// Initialize Gateway provider if using gateway-api mode
-	var gatewayImpl gateway.GatewayProvider
-	if ingressMode == builder.IngressModeGateway {
-		impl, err := gateway.GetProvider(gwCfg.Provider, log)
-		if err != nil {
-			return nil, fmt.Errorf("kube: failed to get gateway provider: %w", err)
-		}
-		gatewayImpl = impl
-		log.Info("initialized gateway provider",
-			"gateway_provider", impl.Name())
+	// provider-services does not render tenant routes (the hostname operator does),
+	// so a provider that cannot be resolved is logged rather than failing startup.
+	gatewayImpl, err := gateway.ResolveProvider(ctx, dc, gwCfg.Provider, gwCfg.Namespace, gwCfg.Name, log)
+	if err != nil {
+		log.Error("unable to resolve gateway provider", "gateway_provider", gwCfg.Provider, "err", err)
+	} else {
+		log.Info("initialized gateway provider", "gateway_provider", gatewayImpl.Name())
 	}
 
 	log.Info("initializing kube client",
-		"ingress_mode", gwCfg.IngressMode,
 		"gateway_name", gwCfg.Name,
 		"gateway_namespace", gwCfg.Namespace,
 		"gateway_provider", gwCfg.Provider)
@@ -156,7 +150,6 @@ func NewClient(ctx context.Context, log log.Logger, ns string) (Client, error) {
 		ns:                ns,
 		log:               log,
 		kubeContentConfig: kubecfg,
-		ingressMode:       ingressMode,
 		gatewayName:       gwCfg.Name,
 		gatewayNamespace:  gwCfg.Namespace,
 		gatewayImpl:       gatewayImpl,

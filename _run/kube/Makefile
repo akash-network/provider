@@ -1,4 +1,3 @@
-GATEWAY_API          ?= false
 CONFIDENTIAL_COMPUTE ?= false
 
 KUBE_SETUP_PREREQUISITES   ?= \
@@ -27,13 +26,10 @@ include ../common.mk
 include ../common-commands.mk
 include ../common-kube.mk
 
-# Gateway API mode overrides
-ifeq ($(GATEWAY_API),true)
+# NGINX Gateway Fabric is exposed through NodePorts mapped by kind-config-gateway.yaml;
+# Envoy binds host ports and uses the default kind config.
+ifeq ($(GATEWAY_IMPL),nginx)
 KIND_CONFIG_FILE := $(CURDIR)/kind-config-gateway.yaml
-
-# Override default ingress setup to use Gateway API instead of NGINX Ingress
-kube-setup-ingress-default: kube-setup-ingress-gateway
-	@echo "Gateway API ingress setup complete"
 endif
 
 # CC mode: use Kind config with containerd runtime patches (no restart needed)
@@ -74,7 +70,6 @@ provider-run:
 		--bid-price-strategy "randomRange" \
 		--deployment-runtime-class "none" \
 		--ip-operator=true \
-		$(if $(filter true,$(GATEWAY_API)),--ingress-mode=gateway-api) \
 		$(if $(filter true,$(CONFIDENTIAL_COMPUTE)),\
 			--attestation-webhook-enabled=true \
 			--attestation-sidecar-image="$(ATTESTATION_SIDECAR_IMAGE)" \
@@ -120,9 +115,7 @@ clean-kube:
 kube-deployments-rollout: #$(patsubst %, kube-deployment-rollout-%,$(KUSTOMIZE_INSTALLS))
 
 .PHONY: kube-setup-kube
-ifeq ($(GATEWAY_API),true)
-kube-setup-kube: kube-setup-hostname-operator-gateway
-else ifeq ($(CONFIDENTIAL_COMPUTE),true)
+ifeq ($(CONFIDENTIAL_COMPUTE),true)
 kube-setup-kube:
 	@echo "  [CC] Persisting CC configuration to cache..."
 	@touch $(CC_MARKER)
@@ -139,24 +132,6 @@ kube-setup-kube:
 else
 kube-setup-kube:
 endif
-
-.PHONY: kube-setup-ingress-gateway
-kube-setup-ingress-gateway:
-	kubectl kustomize $(KUSTOMIZE_ROOT)/nginx-gateway-fabric/crds | kubectl apply --server-side -f -
-	kubectl kustomize $(KUSTOMIZE_ROOT)/nginx-gateway-fabric | kubectl apply -f -
-	kubectl apply -f "$(METALLB_CONFIG_PATH)"
-	kubectl apply -f "$(METALLB_IP_CONFIG_PATH)"
-	kubectl apply -f "$(METALLB_SERVICE_PATH)"
-	@echo "Waiting for Gateway to be ready..."
-	@kubectl wait --for=condition=Programmed gateway/akash-gateway -n akash-gateway --timeout=120s
-
-.PHONY: kube-setup-hostname-operator-gateway
-kube-setup-hostname-operator-gateway:
-	@echo "Configuring hostname operator for Gateway API mode..."
-	kubectl wait --for=condition=available deployment/operator-hostname -n akash-services --timeout=90s
-	kubectl patch configmap operator-hostname -n akash-services --type=strategic --patch-file hostname-operator-gateway-patch.yaml
-	kubectl rollout restart deployment/operator-hostname -n akash-services
-	kubectl rollout status deployment/operator-hostname -n akash-services --timeout=60s
 
 .PHONY: kube-cluster-delete
 kube-cluster-delete: $(KIND)

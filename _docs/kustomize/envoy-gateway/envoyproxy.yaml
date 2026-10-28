@@ -1,0 +1,47 @@
+---
+# Envoy runs as a DaemonSet bound to the node's host ports, as on providers.
+# Envoy Gateway shifts privileged listener ports by +10000 inside the container and
+# declares only its metrics and readiness ports, so the patch adds the traffic ports
+# with their host ports. The image is pinned on the EnvoyProxy itself: an attached
+# EnvoyProxy replaces the controller's image default.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: akash-envoy
+  namespace: envoy-gateway-system
+spec:
+  provider:
+    type: Kubernetes
+    kubernetes:
+      envoyService:
+        type: ClusterIP
+      envoyDaemonSet:
+        container:
+          image: docker.io/envoyproxy/envoy:distroless-v1.39.6
+        patch:
+          type: StrategicMerge
+          value:
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: envoy
+                      ports:
+                        - containerPort: 10080
+                          hostPort: 80
+                          protocol: TCP
+                        - containerPort: 10443
+                          hostPort: 443
+                          protocol: TCP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: akash-envoy
+    namespace: envoy-gateway-system

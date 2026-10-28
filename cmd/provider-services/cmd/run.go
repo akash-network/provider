@@ -598,16 +598,13 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 			return fmt.Errorf("kube client unavailable: %w", err)
 		}
 	}
-	ingressMode, err := builder.ParseIngressMode(viper.GetString(FlagIngressMode))
-	if err != nil {
+	if err := builder.ValidateIngressMode(viper.GetString(FlagIngressMode)); err != nil {
 		return err
 	}
 	gatewayName := viper.GetString(FlagGatewayName)
 	gatewayNamespace := viper.GetString(FlagGatewayNamespace)
 	gatewayProvider := viper.GetString(FlagGatewayProvider)
 
-	// Add ingress mode and gateway settings
-	kubeSettings.IngressMode = ingressMode
 	kubeSettings.GatewayName = gatewayName
 	kubeSettings.GatewayNamespace = gatewayNamespace
 	kubeSettings.GatewayProvider = gatewayProvider
@@ -616,28 +613,24 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	logger.Info("provider ingress configuration",
-		"ingress_mode", ingressMode,
+	logger.Info("provider gateway configuration",
 		"gateway_name", gatewayName,
 		"gateway_namespace", gatewayNamespace,
 		"gateway_provider", gatewayProvider)
 
-	if ingressMode == builder.IngressModeGateway {
-		if gatewayName == "" {
-			return fmt.Errorf("gateway-name is required when ingress-mode is %s", builder.IngressModeGateway)
-		}
-		if gatewayNamespace == "" {
-			return fmt.Errorf("gateway-namespace is required when ingress-mode is %s", builder.IngressModeGateway)
-		}
+	if gatewayName == "" {
+		return fmt.Errorf("gateway-name is required")
+	}
+	if gatewayNamespace == "" {
+		return fmt.Errorf("gateway-namespace is required")
 	}
 
 	clusterSettings := map[interface{}]interface{}{
 		builder.SettingsKey: kubeSettings,
 		fromctx.CtxKeyGatewayConfig: fromctx.GatewayConfig{
-			IngressMode: string(ingressMode),
-			Name:        gatewayName,
-			Namespace:   gatewayNamespace,
-			Provider:    gatewayProvider,
+			Name:      gatewayName,
+			Namespace: gatewayNamespace,
+			Provider:  gatewayProvider,
 		},
 	}
 
@@ -711,7 +704,6 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	config.BidPricingStrategy = pricing
 	config.ClusterSettings = clusterSettings
-	config.IngressMode = ingressMode
 	config.GatewayName = gatewayName
 	config.GatewayNamespace = gatewayNamespace
 	config.GatewayProvider = gatewayProvider

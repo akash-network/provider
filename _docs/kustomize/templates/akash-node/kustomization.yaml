@@ -44,9 +44,9 @@ patches:
 
   - path: gateway-host.yaml
     target:
-      group: networking.k8s.io
+      group: gateway.networking.k8s.io
       version: v1
-      kind: Ingress
+      kind: HTTPRoute
       name: akash-node
   - path: docker-image.yaml
     target:

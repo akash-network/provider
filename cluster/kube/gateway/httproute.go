@@ -2,11 +2,13 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
+	"sort"
 	"time"
 
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,16 +20,47 @@ import (
 	"k8s.io/client-go/util/retry"
 	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
+	mtypes "pkg.akt.dev/go/node/market/v1"
+
 	"github.com/akash-network/provider/cluster/kube/builder"
 	"github.com/akash-network/provider/cluster/kube/clientcommon"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
 // HTTPRouteGVR is the GroupVersionResource for Gateway API HTTPRoutes.
-var HTTPRouteGVR = schema.GroupVersionResource{
-	Group:    "gateway.networking.k8s.io",
-	Version:  "v1",
-	Resource: "httproutes",
+var HTTPRouteGVR = schema.GroupVersion(gatewayv1.GroupVersion).WithResource("httproutes")
+
+const httpRouteKind = "HTTPRoute"
+
+var (
+	// SnippetsFilterGVR is the NGF per-route filter resource.
+	SnippetsFilterGVR = schema.GroupVersionResource{Group: "gateway.nginx.org", Version: "v1alpha1", Resource: "snippetsfilters"}
+	// BackendTrafficPolicyGVR is the Envoy Gateway per-route policy resource.
+	BackendTrafficPolicyGVR = schema.GroupVersionResource{Group: "gateway.envoyproxy.io", Version: "v1alpha1", Resource: "backendtrafficpolicies"}
+
+	// extensionResources maps every route extension kind any implementation creates
+	// to its resource. Reconciliation deletes obsolete extensions of all of them, so a
+	// route moving between implementations is left with only the current one's.
+	extensionResources = map[schema.GroupVersionKind]schema.GroupVersionResource{
+		SnippetsFilterGVR.GroupVersion().WithKind(snippetsFilterKind):             SnippetsFilterGVR,
+		BackendTrafficPolicyGVR.GroupVersion().WithKind(backendTrafficPolicyKind): BackendTrafficPolicyGVR,
+	}
+
+	// ErrExtensionPending means the gateway controller did not report on a route
+	// extension in time. The caller retries; it is not a rejection.
+	ErrExtensionPending = errors.New("route extension not yet accepted by the gateway")
+	// ErrExtensionRejected means the gateway controller rejected a route extension.
+	ErrExtensionRejected = errors.New("route extension rejected by the gateway")
+)
+
+// ExtensionResources returns the resources of every route extension kind, sorted.
+func ExtensionResources() []schema.GroupVersionResource {
+	res := make([]schema.GroupVersionResource, 0, len(extensionResources))
+	for _, gvr := range extensionResources {
+		res = append(res, gvr)
+	}
+	sort.Slice(res, func(i, j int) bool { return res[i].String() < res[j].String() })
+	return res
 }
 
 // HTTPRouteConfig contains configuration for HTTPRoute operations.
@@ -35,6 +68,12 @@ type HTTPRouteConfig struct {
 	GatewayName      string
 	GatewayNamespace string
 	Provider         GatewayProvider
+
+	// SkipAcceptanceWait applies extensions without waiting for the gateway
+	// controller to accept them. The migrate command sets it before the Gateway
+	// changes class, when the target controller is not yet a parent and so never
+	// reports status.
+	SkipAcceptanceWait bool
 }
 
 // HTTPRouteObserver allows callers to observe HTTPRoute operations for metrics or logging.
@@ -51,17 +90,38 @@ func (NoopHTTPRouteObserver) OnCreate(error) {}
 func (NoopHTTPRouteObserver) OnUpdate(error) {}
 func (NoopHTTPRouteObserver) OnDelete(error) {}
 
-// CreateOrUpdateHTTPRoute creates or updates an HTTPRoute for a hostname directive.
-// It uses the provided Provider to build annotations and the HTTPRoute spec.
+// labelRouteExtension stamps the labels and annotation that let reconciliation and
+// cleanup select every extension of a route.
+func labelRouteExtension(obj *unstructured.Unstructured, routeName string, lid mtypes.LeaseID) {
+	labels := map[string]string{
+		builder.AkashManagedLabelName: "true",
+		RouteHashLabel:                RouteHash(routeName),
+	}
+	builder.AppendLeaseLabels(lid, labels)
+	obj.SetLabels(labels)
+	obj.SetAnnotations(map[string]string{RouteNameAnnotation: routeName})
+}
+
+// CreateOrUpdateHTTPRoute creates or updates an HTTPRoute for a hostname directive
+// and reconciles its full set of route extensions: the desired ones are applied,
+// and every other extension of the route, from either implementation, is deleted.
 //
-// Route extensions (an NGF SnippetsFilter) are applied before the HTTPRoute
-// publishes its ExtensionRef to them. A route that references a missing
-// SnippetsFilter makes NGF set ResolvedRefs=False and serve HTTP 500 for that
-// rule, so an existing route keeps its working spec until the filter is applied.
-// The SnippetsFilter is owner-referenced to the route for garbage collection, so
-// a brand-new route is first created as a detached placeholder (no ParentRefs or
-// rules) to mint a UID; its routable spec is attached only after the filter is
-// accepted, so a failed reconcile never exposes the backend without its options.
+// The order depends on the implementation (GatewayProvider.RouteFirst):
+//
+//   - NGF: extensions first. A route that references a missing SnippetsFilter makes
+//     NGF serve HTTP 500 for that rule, so the filter is applied and accepted before
+//     the route publishes its ExtensionRef. The filter is owner-referenced to the
+//     route, so a brand-new route is first created as a detached placeholder (no
+//     ParentRefs or rules) to mint a UID; its routable spec is attached only after
+//     the filter is accepted, so a failed reconcile never exposes the backend
+//     without its options.
+//   - Envoy: route first. A BackendTrafficPolicy only gets status through the
+//     route's parent Gateway, so a new route is created routable, then its policies
+//     are applied and awaited. A route served briefly without its policy runs on
+//     gateway defaults, never a 500. On an existing route the policies are applied
+//     before the route update, so a tightened retry policy is in place before the
+//     route gains rules that rely on it. A rejected policy is deleted, since a
+//     policy that fails translation turns its route into a 500.
 func CreateOrUpdateHTTPRoute(
 	ctx context.Context,
 	dc dynamic.Interface,
@@ -81,17 +141,15 @@ func CreateOrUpdateHTTPRoute(
 	spec := config.Provider.BuildHTTPRouteSpec(
 		config.GatewayName,
 		config.GatewayNamespace,
-		directive.Hostname,
-		directive.ServiceName,
-		directive.ServicePort,
+		directive,
 		exts,
 	)
 
 	toUnstructured := func(s gatewayv1.HTTPRouteSpec) (*unstructured.Unstructured, error) {
 		obj := &gatewayv1.HTTPRoute{
 			TypeMeta: metav1.TypeMeta{
-				APIVersion: "gateway.networking.k8s.io/v1",
-				Kind:       "HTTPRoute",
+				APIVersion: gatewayv1.GroupVersion.String(),
+				Kind:       httpRouteKind,
 			},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        routeName,
@@ -107,6 +165,11 @@ func CreateOrUpdateHTTPRoute(
 		return &unstructured.Unstructured{Object: m}, nil
 	}
 
+	u, err := toUnstructured(spec)
+	if err != nil {
+		return err
+	}
+
 	routes := dc.Resource(HTTPRouteGVR).Namespace(ns)
 	existing, getErr := routes.Get(ctx, routeName, metav1.GetOptions{})
 	if getErr != nil && !kerrors.IsNotFound(getErr) {
@@ -114,162 +177,344 @@ func CreateOrUpdateHTTPRoute(
 	}
 	routeExists := getErr == nil
 
-	var ownerUID types.UID
-	createdPlaceholder := false
+	r := routeReconcile{
+		ctx:      ctx,
+		dc:       dc,
+		config:   config,
+		ns:       ns,
+		name:     routeName,
+		routes:   routes,
+		observer: observer,
+		exists:   routeExists,
+	}
 	if routeExists {
-		ownerUID = existing.GetUID()
-	} else if len(exts) > 0 {
-		// Create a detached placeholder with an empty spec (no ParentRefs, hostnames,
-		// or rules) purely to mint a UID for the SnippetsFilter owner reference. It
-		// must not be routable: if the filter apply, its acceptance, or the final
-		// update fails, the backend must not be exposed without its http_options. The
-		// routable spec is attached below, only after the filter is accepted.
-		placeholder, err := toUnstructured(gatewayv1.HTTPRouteSpec{})
-		if err != nil {
-			return err
-		}
-		created, err := routes.Create(ctx, placeholder, metav1.CreateOptions{})
-		if err != nil {
-			observer.OnCreate(err)
-			return err
-		}
-		ownerUID = created.GetUID()
-		createdPlaceholder = true
+		r.uid = existing.GetUID()
 	}
 
-	if err := applyRouteExtensions(ctx, dc, ns, routeName, ownerUID, exts); err != nil {
+	if config.Provider.RouteFirst() {
+		return r.routeFirst(u, exts)
+	}
+
+	placeholder, err := toUnstructured(gatewayv1.HTTPRouteSpec{})
+	if err != nil {
+		return err
+	}
+	return r.extensionsFirst(u, placeholder, exts)
+}
+
+// routeReconcile carries one route's reconcile state between its steps.
+type routeReconcile struct {
+	ctx      context.Context
+	dc       dynamic.Interface
+	config   HTTPRouteConfig
+	ns       string
+	name     string
+	routes   dynamic.ResourceInterface
+	observer HTTPRouteObserver
+	exists   bool
+	uid      types.UID
+}
+
+func (r *routeReconcile) routeFirst(u *unstructured.Unstructured, exts []*unstructured.Unstructured) error {
+	var applied []*unstructured.Unstructured
+
+	if r.exists {
+		var err error
+		if applied, err = applyRouteExtensions(r.ctx, r.dc, r.ns, r.name, r.uid, exts); err != nil {
+			return err
+		}
+		if err := r.publish(u); err != nil {
+			return err
+		}
+	} else {
+		created, err := r.routes.Create(r.ctx, u, metav1.CreateOptions{})
+		r.observer.OnCreate(err)
+		if err != nil {
+			return err
+		}
+		r.uid = created.GetUID()
+		if applied, err = applyRouteExtensions(r.ctx, r.dc, r.ns, r.name, r.uid, exts); err != nil {
+			return err
+		}
+	}
+
+	if err := removeObsoleteExtensions(r.ctx, r.dc, r.ns, r.name, r.uid, exts); err != nil {
 		return err
 	}
 
-	u, err := toUnstructured(spec)
+	return r.await(applied, true)
+}
+
+func (r *routeReconcile) extensionsFirst(u, placeholder *unstructured.Unstructured, exts []*unstructured.Unstructured) error {
+	createdPlaceholder := false
+	if !r.exists && len(exts) > 0 {
+		// Create a detached placeholder with an empty spec (no ParentRefs, hostnames,
+		// or rules) purely to mint a UID for the extension owner reference. It must
+		// not be routable: if the extension apply, its acceptance, or the final update
+		// fails, the backend must not be exposed without its http_options.
+		created, err := r.routes.Create(r.ctx, placeholder, metav1.CreateOptions{})
+		if err != nil {
+			r.observer.OnCreate(err)
+			return err
+		}
+		r.uid = created.GetUID()
+		createdPlaceholder = true
+	}
+
+	applied, err := applyRouteExtensions(r.ctx, r.dc, r.ns, r.name, r.uid, exts)
 	if err != nil {
 		return err
 	}
 
-	// Brand-new route with no extensions: nothing was created above, so create it.
-	if !routeExists && !createdPlaceholder {
-		_, err = routes.Create(ctx, u, metav1.CreateOptions{})
-		observer.OnCreate(err)
+	// Wait for the gateway controller to accept every extension before the route
+	// publishes its reference. NGF watches HTTPRoutes and SnippetsFilters through
+	// independent caches, so publishing the reference first lets NGF reconcile the
+	// route before it observes the filter and serve HTTP 500 until the caches
+	// converge. An existing route keeps its previous working config meanwhile.
+	if err := r.await(applied, false); err != nil {
 		return err
 	}
 
-	// The route already exists, or we just created a bare one. Publish the final
-	// spec, re-reading the resourceVersion on each attempt: NGF writes route status
-	// between our earlier reads and this update, so a cached resourceVersion can be
-	// stale and 409, which would otherwise leave the route without its filter.
-	err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		current, gErr := routes.Get(ctx, routeName, metav1.GetOptions{})
+	if !r.exists && !createdPlaceholder {
+		created, err := r.routes.Create(r.ctx, u, metav1.CreateOptions{})
+		r.observer.OnCreate(err)
+		if err != nil {
+			return err
+		}
+		r.uid = created.GetUID()
+	} else if err := r.publish(u); err != nil {
+		return err
+	}
+
+	return removeObsoleteExtensions(r.ctx, r.dc, r.ns, r.name, r.uid, exts)
+}
+
+// publish updates the route to its final spec, re-reading the resourceVersion on
+// each attempt: the gateway controller writes route status between our reads, so a
+// cached resourceVersion can be stale and 409.
+func (r *routeReconcile) publish(u *unstructured.Unstructured) error {
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, gErr := r.routes.Get(r.ctx, r.name, metav1.GetOptions{})
 		if gErr != nil {
 			return gErr
 		}
 		u.SetResourceVersion(current.GetResourceVersion())
-		_, uErr := routes.Update(ctx, u, metav1.UpdateOptions{})
+		_, uErr := r.routes.Update(r.ctx, u, metav1.UpdateOptions{})
 		return uErr
 	})
-	if routeExists {
-		observer.OnUpdate(err)
+	if r.exists {
+		r.observer.OnUpdate(err)
 	} else {
-		observer.OnCreate(err)
+		r.observer.OnCreate(err)
 	}
 	return err
 }
 
-// applyRouteExtensions upserts auxiliary CRD objects (e.g. an NGF SnippetsFilter)
-// owner-referenced to the HTTPRoute so they are garbage-collected with it.
-func applyRouteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeName string, ownerUID types.UID, exts []*unstructured.Unstructured) error {
+// await waits for the gateway controller's verdict on each applied extension. A
+// rejected extension that is already live (route-first ordering) is deleted, so its
+// route falls back to gateway defaults instead of serving 500.
+func (r *routeReconcile) await(applied []*unstructured.Unstructured, deleteRejected bool) error {
+	if r.config.SkipAcceptanceWait {
+		return nil
+	}
+
+	for _, ext := range applied {
+		gvr := extensionResources[ext.GroupVersionKind()]
+		status, err := waitForExtensionVerdict(r.ctx, r.dc, r.config, gvr, r.ns, ext.GetName())
+		if err != nil {
+			return err
+		}
+
+		switch status.State {
+		case ExtensionAccepted:
+			continue
+		case ExtensionRejected:
+			if deleteRejected {
+				if dErr := r.dc.Resource(gvr).Namespace(r.ns).Delete(r.ctx, ext.GetName(), metav1.DeleteOptions{}); dErr != nil && !kerrors.IsNotFound(dErr) {
+					return fmt.Errorf("failed to delete rejected route extension %s %q: %w", ext.GetKind(), ext.GetName(), dErr)
+				}
+			}
+			return fmt.Errorf("%w: %s %q: %s: %s", ErrExtensionRejected, ext.GetKind(), ext.GetName(), status.Reason, status.Message)
+		default:
+			return fmt.Errorf("%w: %s %q", ErrExtensionPending, ext.GetKind(), ext.GetName())
+		}
+	}
+
+	return nil
+}
+
+// applyRouteExtensions upserts route extensions owner-referenced to the HTTPRoute,
+// so they are garbage-collected with it, and returns them as applied.
+func applyRouteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeName string, ownerUID types.UID, exts []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
 	controller := true
+	applied := make([]*unstructured.Unstructured, 0, len(exts))
+
 	for _, ext := range exts {
 		ext.SetOwnerReferences([]metav1.OwnerReference{{
-			APIVersion: "gateway.networking.k8s.io/v1",
-			Kind:       "HTTPRoute",
+			APIVersion: gatewayv1.GroupVersion.String(),
+			Kind:       httpRouteKind,
 			Name:       routeName,
 			UID:        ownerUID,
 			Controller: &controller,
 		}})
 
 		gvk := ext.GroupVersionKind()
-		gvr := schema.GroupVersionResource{
-			Group:    gvk.Group,
-			Version:  gvk.Version,
-			Resource: strings.ToLower(gvk.Kind) + "s",
+		gvr, known := extensionResources[gvk]
+		if !known {
+			return nil, fmt.Errorf("unknown route extension kind %s", gvk)
 		}
 
 		existing, err := dc.Resource(gvr).Namespace(ns).Get(ctx, ext.GetName(), metav1.GetOptions{})
-		var applied *unstructured.Unstructured
+		var obj *unstructured.Unstructured
 		switch {
 		case err == nil:
 			ext.SetResourceVersion(existing.GetResourceVersion())
-			applied, err = dc.Resource(gvr).Namespace(ns).Update(ctx, ext, metav1.UpdateOptions{})
+			obj, err = dc.Resource(gvr).Namespace(ns).Update(ctx, ext, metav1.UpdateOptions{})
 		case kerrors.IsNotFound(err):
-			applied, err = dc.Resource(gvr).Namespace(ns).Create(ctx, ext, metav1.CreateOptions{})
+			obj, err = dc.Resource(gvr).Namespace(ns).Create(ctx, ext, metav1.CreateOptions{})
 		}
 		if err != nil {
-			return fmt.Errorf("failed to apply route extension %s %q: %w", gvk.Kind, ext.GetName(), err)
+			return nil, fmt.Errorf("failed to apply route extension %s %q: %w", gvk.Kind, ext.GetName(), err)
 		}
 
-		// Wait for the gateway controller to accept the extension before the caller
-		// publishes the HTTPRoute reference to it. NGF watches HTTPRoutes and
-		// SnippetsFilters through independent caches, so publishing the reference
-		// first lets NGF reconcile the route before it observes the filter, set
-		// ResolvedRefs=False, and serve HTTP 500 until the caches converge. Blocking
-		// here keeps an existing route on its previous working config until the
-		// filter is ready; if the controller never accepts, the caller retries and
-		// the route stays filter-less rather than serving 500.
-		if err := waitForExtensionAccepted(ctx, dc, gvr, ns, ext.GetName(), applied.GetGeneration()); err != nil {
-			return fmt.Errorf("route extension %s %q not accepted by the gateway: %w", gvk.Kind, ext.GetName(), err)
+		applied = append(applied, obj)
+	}
+
+	return applied, nil
+}
+
+// removeObsoleteExtensions deletes every extension of the route that is not in the
+// desired set, from either implementation, selected by the route's digest label.
+// Owner references alone don't clean these up: the HTTPRoute survives. SnippetsFilters
+// created before extensions were labeled are matched by the route's name, and only
+// deleted when their owner reference points at this route's UID. A kind whose CRD
+// is not installed is skipped.
+func removeObsoleteExtensions(ctx context.Context, dc dynamic.Interface, ns, routeName string, routeUID types.UID, desired []*unstructured.Unstructured) error {
+	keep := make(map[string]struct{}, len(desired))
+	key := func(gvr schema.GroupVersionResource, name string) string { return gvr.String() + "/" + name }
+	for _, ext := range desired {
+		keep[key(extensionResources[ext.GroupVersionKind()], ext.GetName())] = struct{}{}
+	}
+
+	selector := fmt.Sprintf("%s=%s", RouteHashLabel, RouteHash(routeName))
+	for _, gvr := range ExtensionResources() {
+		list, err := dc.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{LabelSelector: selector})
+		if err != nil {
+			if absentResource(err) {
+				continue
+			}
+			return fmt.Errorf("failed to list route extensions %s: %w", gvr.Resource, err)
 		}
+		for _, item := range list.Items {
+			if _, ok := keep[key(gvr, item.GetName())]; ok {
+				continue
+			}
+			if err := deleteExtension(ctx, dc, gvr, ns, item.GetName()); err != nil {
+				return err
+			}
+		}
+	}
+
+	if _, ok := keep[key(SnippetsFilterGVR, routeName)]; ok || routeUID == "" {
+		return nil
+	}
+
+	legacy, err := dc.Resource(SnippetsFilterGVR).Namespace(ns).Get(ctx, routeName, metav1.GetOptions{})
+	if err != nil {
+		if absentResource(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to get legacy SnippetsFilter %q: %w", routeName, err)
+	}
+	if _, labeled := legacy.GetLabels()[RouteHashLabel]; labeled || !ownedBy(legacy, routeUID) {
+		return nil
+	}
+
+	return deleteExtension(ctx, dc, SnippetsFilterGVR, ns, routeName)
+}
+
+func deleteExtension(ctx context.Context, dc dynamic.Interface, gvr schema.GroupVersionResource, ns, name string) error {
+	err := dc.Resource(gvr).Namespace(ns).Delete(ctx, name, metav1.DeleteOptions{})
+	if err != nil && !kerrors.IsNotFound(err) {
+		return fmt.Errorf("failed to delete obsolete route extension %s %q: %w", gvr.Resource, name, err)
 	}
 	return nil
 }
 
-// routeExtensionAcceptTimeout bounds the wait for the gateway controller to
-// accept a route extension; on timeout applyRouteExtensions returns an error for
-// the caller to retry.
+// absentResource reports whether err means the object or its CRD does not exist.
+func absentResource(err error) bool {
+	return kerrors.IsNotFound(err) || meta.IsNoMatchError(err)
+}
+
+func ownedBy(obj *unstructured.Unstructured, uid types.UID) bool {
+	for _, ref := range obj.GetOwnerReferences() {
+		if ref.UID == uid {
+			return true
+		}
+	}
+	return false
+}
+
+// routeExtensionAcceptTimeout bounds the wait for the gateway controller's verdict
+// on a route extension; on timeout the extension is reported pending, for the
+// caller to retry.
 var (
 	routeExtensionAcceptTimeout = 15 * time.Second
 	routeExtensionPollInterval  = 250 * time.Millisecond
 )
 
-// waitForExtensionAccepted polls the extension until the gateway controller
-// reports Accepted=True at or beyond the applied generation.
-func waitForExtensionAccepted(ctx context.Context, dc dynamic.Interface, gvr schema.GroupVersionResource, ns, name string, generation int64) error {
-	return wait.PollUntilContextTimeout(ctx, routeExtensionPollInterval, routeExtensionAcceptTimeout, true, func(ctx context.Context) (bool, error) {
+// waitForExtensionVerdict polls the extension until the controller accepts or
+// rejects its current generation, or the timeout passes (pending).
+func waitForExtensionVerdict(
+	ctx context.Context,
+	dc dynamic.Interface,
+	config HTTPRouteConfig,
+	gvr schema.GroupVersionResource,
+	ns, name string,
+) (ExtensionStatus, error) {
+	var status ExtensionStatus
+	err := wait.PollUntilContextTimeout(ctx, routeExtensionPollInterval, routeExtensionAcceptTimeout, true, func(ctx context.Context) (bool, error) {
 		obj, err := dc.Resource(gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return false, err
 		}
-		return extensionAccepted(obj, generation), nil
+		status = config.Provider.ExtensionStatus(obj, config.GatewayNamespace, config.GatewayName)
+		return status.State != ExtensionPending, nil
 	})
+	if err != nil && wait.Interrupted(err) && ctx.Err() == nil {
+		return ExtensionStatus{State: ExtensionPending}, nil
+	}
+	return status, err
 }
 
-// extensionAccepted reports whether the gateway controller has set Accepted=True
-// on the extension for at least the given generation. A missing or zero
-// observedGeneration is tolerated so it works across controllers that do not
-// stamp it.
-func extensionAccepted(obj *unstructured.Unstructured, generation int64) bool {
-	controllers, _, _ := unstructured.NestedSlice(obj.Object, "status", "controllers")
-	for _, c := range controllers {
-		cm, ok := c.(map[string]interface{})
+// acceptedCondition reads the Accepted condition from a condition list, judged at
+// the object's current generation. A missing or zero observedGeneration is
+// tolerated for controllers that do not stamp it.
+func acceptedCondition(conditions []interface{}, generation int64) (ExtensionStatus, bool) {
+	for _, cond := range conditions {
+		condm, ok := cond.(map[string]interface{})
 		if !ok {
 			continue
 		}
-		conditions, _, _ := unstructured.NestedSlice(cm, "conditions")
-		for _, cond := range conditions {
-			condm, ok := cond.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			typ, _, _ := unstructured.NestedString(condm, "type")
-			status, _, _ := unstructured.NestedString(condm, "status")
-			if typ != "Accepted" || status != "True" {
-				continue
-			}
-			if obsGen, found, _ := unstructured.NestedInt64(condm, "observedGeneration"); !found || obsGen == 0 || obsGen >= generation {
-				return true
-			}
+		typ, _, _ := unstructured.NestedString(condm, "type")
+		if typ != "Accepted" {
+			continue
+		}
+		if obsGen, found, _ := unstructured.NestedInt64(condm, "observedGeneration"); found && obsGen != 0 && obsGen < generation {
+			continue
+		}
+
+		status, _, _ := unstructured.NestedString(condm, "status")
+		reason, _, _ := unstructured.NestedString(condm, "reason")
+		message, _, _ := unstructured.NestedString(condm, "message")
+		switch status {
+		case "True":
+			return ExtensionStatus{State: ExtensionAccepted, Reason: reason, Message: message}, true
+		case "False":
+			return ExtensionStatus{State: ExtensionRejected, Reason: reason, Message: message}, true
 		}
 	}
-	return false
+	return ExtensionStatus{State: ExtensionPending}, false
 }
 
 // DeleteHTTPRoute removes an HTTPRoute by hostname.

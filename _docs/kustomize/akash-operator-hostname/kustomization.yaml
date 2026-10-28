@@ -5,7 +5,7 @@ namespace: akash-services
 resources:
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
+  - route.yaml
   - role-bindings.yaml
   - service-accounts.yaml
   - cluster-roles.yaml
@@ -19,6 +19,6 @@ configMapGenerator:
       - retry-delay=3s
       - ignore-list-age-limit=2613600s
       - event-failure-limit=3
-      - ingress-mode=ingress
+      - ingress-mode=gateway-api
 generatorOptions:
   disableNameSuffixHash: true

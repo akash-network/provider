@@ -22,15 +22,13 @@ type GatewayProvider interface {
 	BuildAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string
 
 	// BuildHTTPRouteSpec builds the HTTPRoute spec with implementation-specific features.
-	// This includes standard Gateway API features (hostnames, routes, backends) plus an
-	// ExtensionRef filter for each route extension, so the rule references exactly the
-	// objects BuildRouteExtensions returns and the two cannot diverge.
+	// This includes standard Gateway API features (hostnames, routes, backends) plus any
+	// implementation-specific rule shape: an ExtensionRef filter for each route
+	// extension (NGF), or the rules route extensions target by section name (Envoy).
 	BuildHTTPRouteSpec(
 		gatewayName string,
 		gatewayNamespace string,
-		hostname string,
-		serviceName string,
-		servicePort int32,
+		directive chostname.ConnectToDeploymentDirective,
 		extensions []*unstructured.Unstructured,
 	) gatewayv1.HTTPRouteSpec
 
@@ -38,4 +36,33 @@ type GatewayProvider interface {
 	// HTTPRoute (e.g. an NGF SnippetsFilter). They are applied owner-referenced to
 	// the HTTPRoute so they are garbage-collected with it. Returns nil when none.
 	BuildRouteExtensions(namespace, routeName string, directive chostname.ConnectToDeploymentDirective) []*unstructured.Unstructured
+
+	// RouteFirst reports whether the routable HTTPRoute is published before its
+	// extensions are applied. NGF needs the reverse: a rule that references a
+	// missing filter serves 500, so its filters must be accepted first. Envoy needs
+	// the route first: a policy only gets status through the route's parent Gateway,
+	// and a policy that applies live is deleted if the gateway rejects it.
+	RouteFirst() bool
+
+	// ExtensionStatus reports whether this implementation's controller, on the given
+	// Gateway, has accepted the extension at its current generation.
+	ExtensionStatus(obj *unstructured.Unstructured, gatewayNamespace, gatewayName string) ExtensionStatus
+}
+
+// ExtensionState is the gateway controller's verdict on a route extension.
+type ExtensionState int
+
+const (
+	// ExtensionPending means the controller has not reported on the current
+	// generation yet. A timeout while pending is not a rejection.
+	ExtensionPending ExtensionState = iota
+	ExtensionAccepted
+	ExtensionRejected
+)
+
+// ExtensionStatus carries an extension's state and, when rejected, why.
+type ExtensionStatus struct {
+	State   ExtensionState
+	Reason  string
+	Message string
 }

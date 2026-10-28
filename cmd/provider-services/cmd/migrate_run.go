@@ -7,7 +7,6 @@ import (
 
 	"cosmossdk.io/log"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"k8s.io/client-go/kubernetes"
 	cflags "pkg.akt.dev/go/cli/flags"
 	"pkg.akt.dev/go/util/ctxlog"
@@ -39,16 +38,6 @@ func MigrateRunCmd() *cobra.Command {
 
 			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyKubeClientSet, kc)
 
-			gatewayName := viper.GetString(FlagGatewayName)
-			gatewayNamespace := viper.GetString(FlagGatewayNamespace)
-
-			fromctx.CmdSetContextValue(cmd, fromctx.CtxKeyGatewayConfig, fromctx.GatewayConfig{
-				Name:        gatewayName,
-				Namespace:   gatewayNamespace,
-				IngressMode: "ingress",
-				Provider:    "nginx",
-			})
-
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -67,16 +56,6 @@ func addMigrateRunFlags(cmd *cobra.Command) error {
 	cmd.Flags().String(FlagMigrationsStatePath, "", "path to migrations state file (default: $AP_HOME/migrations.json)")
 
 	if err := providerflags.AddKubeConfigPathFlag(cmd); err != nil {
-		return err
-	}
-
-	cmd.Flags().String(FlagGatewayName, "akash-gateway", "Gateway name when using gateway-api mode")
-	if err := viper.BindPFlag(FlagGatewayName, cmd.Flags().Lookup(FlagGatewayName)); err != nil {
-		return err
-	}
-
-	cmd.Flags().String(FlagGatewayNamespace, "akash-gateway", "Gateway namespace when using gateway-api mode")
-	if err := viper.BindPFlag(FlagGatewayNamespace, cmd.Flags().Lookup(FlagGatewayNamespace)); err != nil {
 		return err
 	}
 
