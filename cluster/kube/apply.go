@@ -85,7 +85,7 @@ func applyNetPolicies(ctx context.Context, kc kubernetes.Interface, b builder.Ne
 		case err == nil:
 			// Pass the desired policy (pol) to Update, not the existing one (oobj).
 			// This ensures uobj.Spec reflects the desired state, allowing the comparison
-			// to detect when NetworkPolicy specs need updating (e.g., ingress-nginx to gateway-api).
+			// to detect when NetworkPolicy specs need updating (e.g., a changed gateway namespace).
 			uobj, err = b.Update(pol)
 
 			if err == nil && (!b.IsObjectRevisionLatest(uobj.Labels) ||

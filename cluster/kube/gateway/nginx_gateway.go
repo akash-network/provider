@@ -17,6 +17,8 @@ import (
 const (
 	snippetsFilterAPIVersion = "gateway.nginx.org/v1alpha1"
 	snippetsFilterKind       = "SnippetsFilter"
+
+	nginxControllerName = "gateway.nginx.org/nginx-gateway-controller"
 )
 
 // nginxGateway implements the Gateway API interface for NGINX Gateway Fabric.
@@ -44,11 +46,13 @@ func (n *nginxGateway) Name() string {
 func (n *nginxGateway) BuildHTTPRouteSpec(
 	gatewayName string,
 	gatewayNamespace string,
-	hostname string,
-	serviceName string,
-	servicePort int32,
+	directive chostname.ConnectToDeploymentDirective,
 	extensions []*unstructured.Unstructured,
 ) gatewayv1.HTTPRouteSpec {
+	hostname := directive.Hostname
+	serviceName := directive.ServiceName
+	servicePort := directive.ServicePort
+
 	parentRefs := []gatewayv1.ParentReference{
 		{
 			Group:     (*gatewayv1.Group)(&gatewayv1.GroupVersion.Group),
@@ -136,8 +140,34 @@ func (n *nginxGateway) BuildRouteExtensions(namespace, routeName string, directi
 			},
 		},
 	}}
+	labelRouteExtension(sf, routeName, directive.LeaseID)
 
 	return []*unstructured.Unstructured{sf}
+}
+
+// RouteFirst is false: a route must not reference a SnippetsFilter NGF has not
+// accepted, or that rule serves 500.
+func (n *nginxGateway) RouteFirst() bool {
+	return false
+}
+
+// ExtensionStatus reads NGF's verdict from status.controllers[].conditions.
+func (n *nginxGateway) ExtensionStatus(obj *unstructured.Unstructured, _, _ string) ExtensionStatus {
+	controllers, _, _ := unstructured.NestedSlice(obj.Object, "status", "controllers")
+	for _, c := range controllers {
+		cm, ok := c.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if name, _, _ := unstructured.NestedString(cm, "controllerName"); name != "" && name != nginxControllerName {
+			continue
+		}
+		conditions, _, _ := unstructured.NestedSlice(cm, "conditions")
+		if status, found := acceptedCondition(conditions, obj.GetGeneration()); found {
+			return status
+		}
+	}
+	return ExtensionStatus{State: ExtensionPending}
 }
 
 // httpOptionsSnippet renders the directive's http_options as nginx directives for

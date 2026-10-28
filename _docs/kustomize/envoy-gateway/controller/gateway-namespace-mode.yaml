@@ -1,0 +1,36 @@
+---
+# install.yaml's controller config with deploy.type GatewayNamespace added.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: envoy-gateway-config
+  namespace: envoy-gateway-system
+data:
+  envoy-gateway.yaml: |
+    apiVersion: gateway.envoyproxy.io/v1alpha1
+    kind: EnvoyGateway
+    extensionApis: {}
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    logging:
+      level:
+        default: info
+    provider:
+      kubernetes:
+        deploy:
+          type: GatewayNamespace
+        rateLimitDeployment:
+          container:
+            image: docker.io/envoyproxy/ratelimit:5ae0682e
+          patch:
+            type: StrategicMerge
+            value:
+              spec:
+                template:
+                  spec:
+                    containers:
+                    - imagePullPolicy: IfNotPresent
+                      name: envoy-ratelimit
+        shutdownManager:
+          image: envoyproxy/gateway:v1.9.3
+      type: Kubernetes

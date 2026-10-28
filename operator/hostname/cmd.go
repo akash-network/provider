@@ -11,6 +11,7 @@ import (
 	"pkg.akt.dev/go/util/ctxlog"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 	"github.com/akash-network/provider/operator/common"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -38,7 +39,6 @@ func Cmd() *cobra.Command {
 
 			gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
 			logger.Info("hostname operator configuration",
-				"ingress_mode", gwCfg.IngressMode,
 				"gateway_name", gwCfg.Name,
 				"gateway_namespace", gwCfg.Namespace,
 				"gateway_provider", gwCfg.Provider)
@@ -98,22 +98,22 @@ func Cmd() *cobra.Command {
 }
 
 func addGatewayApiFlags(cmd *cobra.Command) {
-	cmd.Flags().String("ingress-mode", "ingress", "Ingress mode: 'ingress' for NGINX Ingress (default) or 'gateway-api' for Gateway API")
+	cmd.Flags().String("ingress-mode", builder.IngressModeGateway, "Deprecated: only 'gateway-api' is supported; ingress-nginx support was removed")
 	if err := viper.BindPFlag("ingress-mode", cmd.Flags().Lookup("ingress-mode")); err != nil {
 		panic(err)
 	}
 
-	cmd.Flags().String("gateway-name", "akash-gateway", "Gateway name when using gateway-api mode")
+	cmd.Flags().String("gateway-name", "akash-gateway", "Gateway that tenant HTTPRoutes attach to")
 	if err := viper.BindPFlag("gateway-name", cmd.Flags().Lookup("gateway-name")); err != nil {
 		panic(err)
 	}
 
-	cmd.Flags().String("gateway-namespace", "akash-gateway", "Gateway namespace when using gateway-api mode")
+	cmd.Flags().String("gateway-namespace", "akash-gateway", "Namespace of the Gateway")
 	if err := viper.BindPFlag("gateway-namespace", cmd.Flags().Lookup("gateway-namespace")); err != nil {
 		panic(err)
 	}
 
-	cmd.Flags().String("gateway-provider", "nginx", "Gateway provider: 'nginx' for NGINX Gateway Fabric (default)")
+	cmd.Flags().String("gateway-provider", gateway.AutoProvider, "Gateway API implementation: 'auto' (detect from the Gateway's GatewayClass), 'envoy' or 'nginx'")
 	if err := viper.BindPFlag("gateway-provider", cmd.Flags().Lookup("gateway-provider")); err != nil {
 		panic(err)
 	}
@@ -121,28 +121,25 @@ func addGatewayApiFlags(cmd *cobra.Command) {
 }
 
 func withGatewayApi(ctx context.Context) (context.Context, error) {
-	ingressMode, err := builder.ParseIngressMode(viper.GetString("ingress-mode"))
-	if err != nil {
+	if err := builder.ValidateIngressMode(viper.GetString("ingress-mode")); err != nil {
 		return nil, err
 	}
+
 	gatewayName := viper.GetString("gateway-name")
 	gatewayNamespace := viper.GetString("gateway-namespace")
 	gatewayProvider := viper.GetString("gateway-provider")
 
-	if ingressMode == builder.IngressModeGateway {
-		if gatewayName == "" {
-			return nil, fmt.Errorf("gateway-name is required when ingress-mode is %s", builder.IngressModeGateway)
-		}
-		if gatewayNamespace == "" {
-			return nil, fmt.Errorf("gateway-namespace is required when ingress-mode is %s", builder.IngressModeGateway)
-		}
+	if gatewayName == "" {
+		return nil, fmt.Errorf("gateway-name is required")
+	}
+	if gatewayNamespace == "" {
+		return nil, fmt.Errorf("gateway-namespace is required")
 	}
 
 	ctx = context.WithValue(ctx, fromctx.CtxKeyGatewayConfig, fromctx.GatewayConfig{
-		IngressMode: string(ingressMode),
-		Name:        gatewayName,
-		Namespace:   gatewayNamespace,
-		Provider:    gatewayProvider,
+		Name:      gatewayName,
+		Namespace: gatewayNamespace,
+		Provider:  gatewayProvider,
 	})
 
 	return ctx, nil

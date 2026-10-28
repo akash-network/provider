@@ -6,12 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"strconv"
 	"strings"
 	"time"
 
-	netv1 "k8s.io/api/networking/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,10 +21,7 @@ import (
 	manifest "pkg.akt.dev/go/manifest/v2beta3"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 
-	"github.com/akash-network/provider/cluster/kube"
 	"github.com/akash-network/provider/cluster/kube/builder"
-	"github.com/akash-network/provider/cluster/kube/clientcommon"
-	kubeclienterrors "github.com/akash-network/provider/cluster/kube/errors"
 	"github.com/akash-network/provider/cluster/kube/gateway"
 	ctypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
@@ -55,7 +49,8 @@ type hostnameOperator struct {
 	server             common.OperatorHTTP
 	flagHostnamesData  common.PrepareFlagFn
 	flagIgnoreListData common.PrepareFlagFn
-	ingressConfig      kube.IngressConfig
+	gatewayName        string
+	gatewayNamespace   string
 	gatewayImpl        gateway.GatewayProvider
 }
 
@@ -86,43 +81,34 @@ func newHostnameOperator(ctx context.Context, logger log.Logger, ns string, conf
 	}
 
 	gwCfg := fromctx.MustGatewayConfigFromCtx(ctx)
-	ingressMode := builder.IngressMode(gwCfg.IngressMode)
 
-	// Initialize Gateway provider if using gateway-api mode
-	var gatewayImpl gateway.GatewayProvider
-	if ingressMode == builder.IngressModeGateway {
-		impl, err := gateway.GetProvider(gwCfg.Provider, logger)
-		if err != nil {
-			return nil, fmt.Errorf("hostname operator: failed to get gateway provider: %w", err)
-		}
-		gatewayImpl = impl
-		logger.Info("initialized gateway provider",
-			"gateway_provider", impl.Name())
+	// Resolved once at startup: with "auto", the operator picks up a Gateway class
+	// switch on its next restart.
+	gatewayImpl, err := gateway.ResolveProvider(ctx, dc, gwCfg.Provider, gwCfg.Namespace, gwCfg.Name, logger)
+	if err != nil {
+		return nil, fmt.Errorf("hostname operator: failed to resolve gateway provider: %w", err)
 	}
 
 	logger.Info("initializing hostname operator",
-		"ingress_mode", gwCfg.IngressMode,
 		"gateway_name", gwCfg.Name,
 		"gateway_namespace", gwCfg.Namespace,
-		"gateway_provider", gwCfg.Provider)
+		"gateway_provider", gwCfg.Provider,
+		"gateway_implementation", gatewayImpl.Name())
 
 	op := &hostnameOperator{
-		ctx:           ctx,
-		hostnames:     make(map[string]managedHostname),
-		ns:            ns,
-		log:           logger,
-		kc:            kc,
-		ac:            ac,
-		dc:            dc,
-		cfg:           config,
-		server:        opHTTP,
-		leasesIgnored: common.NewIgnoreList(ilc),
-		ingressConfig: kube.IngressConfig{
-			IngressMode:      ingressMode,
-			GatewayName:      gwCfg.Name,
-			GatewayNamespace: gwCfg.Namespace,
-		},
-		gatewayImpl: gatewayImpl,
+		ctx:              ctx,
+		hostnames:        make(map[string]managedHostname),
+		ns:               ns,
+		log:              logger,
+		kc:               kc,
+		ac:               ac,
+		dc:               dc,
+		cfg:              config,
+		server:           opHTTP,
+		leasesIgnored:    common.NewIgnoreList(ilc),
+		gatewayName:      gwCfg.Name,
+		gatewayNamespace: gwCfg.Namespace,
+		gatewayImpl:      gatewayImpl,
 	}
 
 	op.flagIgnoreListData = op.server.AddPreparedEndpoint("/ignore-list", op.prepareIgnoreListData)
@@ -195,6 +181,9 @@ func (op *hostnameOperator) monitorUntilError() error {
 		return err
 	}
 
+	retries := newHostnameRetries(ctx, hostnameRetryBase, hostnameRetryMax)
+	defer retries.stop()
+
 	pruneTicker := time.NewTicker(op.cfg.PruneInterval)
 	defer pruneTicker.Stop()
 	prepareTicker := time.NewTicker(op.cfg.WebRefreshInterval)
@@ -212,9 +201,18 @@ loop:
 				exitError = common.ErrObservationStopped
 				break loop
 			}
-			err = op.applyEvent(ctx, ev)
-			if err != nil {
-				op.log.Error("failed applying event", "lid", ev.GetLeaseID(), "err", err)
+			// a newer event supersedes any pending retry of the same hostname
+			retries.forget(ev.GetHostname())
+			if err = op.handleEvent(ctx, ev, retries); err != nil {
+				exitError = err
+				break loop
+			}
+		case tok := <-retries.due:
+			ev, ok := retries.take(tok)
+			if !ok {
+				continue
+			}
+			if err = op.handleEvent(ctx, ev, retries); err != nil {
 				exitError = err
 				break loop
 			}
@@ -315,6 +313,30 @@ func (op *hostnameOperator) recordEventError(ev chostname.ResourceEvent, failure
 
 func (op *hostnameOperator) isEventIgnored(ev chostname.ResourceEvent) bool {
 	return op.leasesIgnored.IsFlagged(ev.GetLeaseID())
+}
+
+// handleEvent applies an event. A failed add or update is rescheduled for that
+// hostname alone; only other failures end the observation loop.
+func (op *hostnameOperator) handleEvent(ctx context.Context, ev chostname.ResourceEvent, retries *hostnameRetries) error {
+	err := op.applyEvent(ctx, ev)
+	if err == nil {
+		retries.forget(ev.GetHostname())
+		return nil
+	}
+
+	switch ev.GetEventType() {
+	case ctypes.ProviderResourceAdd, ctypes.ProviderResourceUpdate:
+		delay := retries.schedule(ev)
+		op.log.Error("failed applying event, will retry",
+			"lid", ev.GetLeaseID(),
+			"hostname", ev.GetHostname(),
+			"retry_in", delay,
+			"err", err)
+		return nil
+	default:
+		op.log.Error("failed applying event", "lid", ev.GetLeaseID(), "err", err)
+		return err
+	}
 }
 
 func (op *hostnameOperator) applyEvent(ctx context.Context, ev chostname.ResourceEvent) error {
@@ -483,9 +505,10 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 		err = op.connectHostnameToDeployment(ctx, directive)
 		// }
 	} else {
-		log.Debug("Swapping ingress to new deployment")
-		//  Delete the ingress in one namespace and recreate it in the correct one
-		err = op.removeHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, false)
+		log.Debug("Swapping route to new deployment")
+		// Delete the route in one namespace and recreate it in the correct one. A route
+		// already gone must not block the transfer.
+		err = op.removeHostnameFromDeployment(ctx, ev.GetHostname(), entry.presentLease, true)
 		if err == nil {
 			// Remove the current entry, if the next action succeeds then it gets inserted below
 			delete(op.hostnames, ev.GetHostname())
@@ -493,7 +516,7 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 		}
 	}
 
-	if err == nil { // Update stored entry if everything went OK
+	record := func() {
 		entry.presentExternalPort = ev.GetExternalPort()
 		entry.presentServiceName = ev.GetServiceName()
 		entry.presentLease = leaseID
@@ -503,51 +526,24 @@ func (op *hostnameOperator) applyAddOrUpdateEvent(ctx context.Context, ev chostn
 		op.flagHostnamesData()
 	}
 
+	if err == nil { // Update stored entry if everything went OK
+		record()
+		return nil
+	}
+
+	// A failed reconcile can still leave the route live: with route-first ordering
+	// (Envoy) the routable route is published before its policies are applied and
+	// accepted. Record ownership whenever the route exists, so a later transfer of the
+	// hostname deletes it instead of leaving it serving this lease.
+	if published, gErr := op.hostnameRouteExists(ctx, ev.GetHostname(), leaseID); gErr == nil && published {
+		record()
+	}
+
 	return err
 }
 
 func (op *hostnameOperator) getHostnameDeploymentConnections(ctx context.Context) ([]chostname.LeaseIDConnection, error) {
-	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
-		return op.getHostnameDeploymentConnectionsGateway(ctx)
-	}
-
-	ingressPager := pager.New(func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
-		return op.kc.NetworkingV1().Ingresses(metav1.NamespaceAll).List(ctx, opts)
-	})
-
-	results := make([]chostname.LeaseIDConnection, 0)
-	err := ingressPager.EachListItem(ctx,
-		metav1.ListOptions{LabelSelector: fmt.Sprintf("%s=true", builder.AkashManagedLabelName)},
-		func(obj runtime.Object) error {
-			ingress := obj.(*netv1.Ingress)
-			ingressLeaseID, err := clientcommon.RecoverLeaseIDFromLabels(ingress.Labels)
-			if err != nil {
-				return err
-			}
-			if len(ingress.Spec.Rules) != 1 {
-				return fmt.Errorf("%w: invalid number of rules %d", kubeclienterrors.ErrInvalidHostnameConnection, len(ingress.Spec.Rules))
-			}
-			rule := ingress.Spec.Rules[0]
-
-			if len(rule.HTTP.Paths) != 1 {
-				return fmt.Errorf("%w: invalid number of paths %d", kubeclienterrors.ErrInvalidHostnameConnection, len(rule.HTTP.Paths))
-			}
-			rulePath := rule.HTTP.Paths[0]
-			results = append(results, chostname.LeaseIDHostnameConnection{
-				LeaseID:      ingressLeaseID,
-				Hostname:     rule.Host,
-				ExternalPort: rulePath.Backend.Service.Port.Number,
-				ServiceName:  rulePath.Backend.Service.Name,
-			})
-
-			return nil
-		})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return results, nil
+	return op.getHostnameDeploymentConnectionsGateway(ctx)
 }
 
 func (op *hostnameOperator) observeHostnameState(ctx context.Context) (<-chan chostname.ResourceEvent, error) {
@@ -693,181 +689,13 @@ func (op *hostnameOperator) getManifestGroup(ctx context.Context, lID mtypes.Lea
 }
 
 func (op *hostnameOperator) removeHostnameFromDeployment(ctx context.Context, hostname string, leaseID mtypes.LeaseID, allowMissing bool) error {
-	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
-		return op.removeHostnameFromDeploymentGateway(ctx, hostname, leaseID, allowMissing)
-	}
-
-	ns := builder.LidNS(leaseID)
-	labelSelector := &strings.Builder{}
-
-	kubeSelectorForLease(labelSelector, leaseID)
-
-	fieldSelector := &strings.Builder{}
-	_, _ = fmt.Fprintf(fieldSelector, "metadata.name=%s", hostname)
-
-	// This delete only works if the ingress exists & the labels match the lease ID given
-	err := op.kc.NetworkingV1().Ingresses(ns).DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{
-		TypeMeta:             metav1.TypeMeta{},
-		LabelSelector:        labelSelector.String(),
-		FieldSelector:        fieldSelector.String(),
-		Watch:                false,
-		AllowWatchBookmarks:  false,
-		ResourceVersion:      "",
-		ResourceVersionMatch: "",
-		TimeoutSeconds:       nil,
-		Limit:                0,
-		Continue:             "",
-	})
-
-	if err != nil && allowMissing && kerrors.IsNotFound(err) {
-		return nil
-	}
-
-	return err
+	return op.removeHostnameFromDeploymentGateway(ctx, hostname, leaseID, allowMissing)
 }
 
 func (op *hostnameOperator) connectHostnameToDeployment(ctx context.Context, directive chostname.ConnectToDeploymentDirective) error {
-	log := op.log.With("lid", directive.LeaseID)
-
-	log.Info("hostname operator connecting hostname to deployment",
+	op.log.With("lid", directive.LeaseID).Info("hostname operator connecting hostname to deployment",
 		"hostname", directive.Hostname,
-		"ingress_mode", op.ingressConfig.IngressMode)
+		"gateway_implementation", op.gatewayImpl.Name())
 
-	if op.ingressConfig.IngressMode == builder.IngressModeGateway {
-		log.Info("hostname operator using Gateway API mode")
-		return op.connectHostnameToDeploymentGateway(ctx, directive)
-	}
-
-	log.Info("hostname operator using NGINX Ingress mode")
-	ingressName := directive.Hostname
-	ns := builder.LidNS(directive.LeaseID)
-	rules := ingressRules(directive.Hostname, directive.ServiceName, directive.ServicePort)
-
-	foundEntry, err := op.kc.NetworkingV1().Ingresses(ns).Get(ctx, ingressName, metav1.GetOptions{})
-	// metricsutils.IncCounterVecWithLabelValuesFiltered(kubeCallsCounter, "ingresses-get", err, kubeErrors.IsNotFound)
-
-	labels := make(map[string]string)
-	labels[builder.AkashManagedLabelName] = "true"
-	builder.AppendLeaseLabels(directive.LeaseID, labels)
-
-	ingressClassName := akashIngressClassName
-	obj := &netv1.Ingress{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        ingressName,
-			Labels:      labels,
-			Annotations: kubeNginxIngressAnnotations(directive),
-		},
-		Spec: netv1.IngressSpec{
-			IngressClassName: &ingressClassName,
-			Rules:            rules,
-		},
-	}
-
-	switch {
-	case err == nil:
-		obj.ResourceVersion = foundEntry.ResourceVersion
-		_, err = op.kc.NetworkingV1().Ingresses(ns).Update(ctx, obj, metav1.UpdateOptions{})
-		// metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "networking-ingresses-update", err)
-	case kerrors.IsNotFound(err):
-		_, err = op.kc.NetworkingV1().Ingresses(ns).Create(ctx, obj, metav1.CreateOptions{})
-		// metricsutils.IncCounterVecWithLabelValues(kubeCallsCounter, "networking-ingresses-create", err)
-	}
-
-	return err
-}
-
-func ingressRules(hostname string, kubeServiceName string, kubeServicePort int32) []netv1.IngressRule {
-	// for some reason we need to pass a pointer to this
-	pathTypeForAll := netv1.PathTypePrefix
-	ruleValue := netv1.HTTPIngressRuleValue{
-		Paths: []netv1.HTTPIngressPath{{
-			Path:     "/",
-			PathType: &pathTypeForAll,
-			Backend: netv1.IngressBackend{
-				Service: &netv1.IngressServiceBackend{
-					Name: kubeServiceName,
-					Port: netv1.ServiceBackendPort{
-						Number: kubeServicePort,
-					},
-				},
-			},
-		}},
-	}
-
-	return []netv1.IngressRule{{
-		Host:             hostname,
-		IngressRuleValue: netv1.IngressRuleValue{HTTP: &ruleValue},
-	}}
-}
-
-func kubeNginxIngressAnnotations(directive chostname.ConnectToDeploymentDirective) map[string]string {
-	// For kubernetes/ingress-nginx
-	// https://github.com/kubernetes/ingress-nginx
-	const root = "nginx.ingress.kubernetes.io"
-
-	readTimeout := math.Ceil(float64(directive.ReadTimeout) / 1000.0)
-	sendTimeout := math.Ceil(float64(directive.SendTimeout) / 1000.0)
-	result := map[string]string{
-		fmt.Sprintf("%s/proxy-read-timeout", root): fmt.Sprintf("%d", int(readTimeout)),
-		fmt.Sprintf("%s/proxy-send-timeout", root): fmt.Sprintf("%d", int(sendTimeout)),
-
-		fmt.Sprintf("%s/proxy-next-upstream-tries", root): strconv.Itoa(int(directive.NextTries)),
-		fmt.Sprintf("%s/proxy-body-size", root):           strconv.Itoa(int(directive.MaxBodySize)),
-	}
-
-	nextTimeoutKey := fmt.Sprintf("%s/proxy-next-upstream-timeout", root)
-	nextTimeout := 0 // default magic value for disable
-	if directive.NextTimeout > 0 {
-		nextTimeout = int(math.Ceil(float64(directive.NextTimeout) / 1000.0))
-	}
-
-	result[nextTimeoutKey] = fmt.Sprintf("%d", nextTimeout)
-
-	strBuilder := strings.Builder{}
-
-	for i, v := range directive.NextCases {
-		first := string(v[0])
-		isHTTPCode := strings.ContainsAny(first, "12345")
-
-		if isHTTPCode {
-			strBuilder.WriteString("http_")
-		}
-		strBuilder.WriteString(v)
-
-		if i != len(directive.NextCases)-1 {
-			// The actual separator is the space character for kubernetes/ingress-nginx
-			strBuilder.WriteRune(' ')
-		}
-	}
-
-	result[fmt.Sprintf("%s/proxy-next-upstream", root)] = strBuilder.String()
-
-	// Buffering is on by default, so only the explicit "off" needs an annotation.
-	if directive.ProxyBufferingDisable {
-		result[fmt.Sprintf("%s/proxy-buffering", root)] = "off"
-	}
-	// Emit only a buffer set nginx will accept; an inconsistent one would freeze the
-	// shared ingress config on reload. ProxyBuffersSize is NGF-only (no annotation here).
-	pb := directive.IngressProxyBuffers()
-	if pb.BufferSize > 0 {
-		result[fmt.Sprintf("%s/proxy-buffer-size", root)] = strconv.Itoa(int(pb.BufferSize))
-	}
-	if pb.Number > 0 {
-		result[fmt.Sprintf("%s/proxy-buffers-number", root)] = strconv.Itoa(int(pb.Number))
-	}
-	if pb.BusySize > 0 {
-		result[fmt.Sprintf("%s/proxy-busy-buffers-size", root)] = strconv.Itoa(int(pb.BusySize))
-	}
-	if directive.ProxyConnectTimeout > 0 {
-		result[fmt.Sprintf("%s/proxy-connect-timeout", root)] = fmt.Sprintf("%d", int(math.Ceil(float64(directive.ProxyConnectTimeout)/1000.0)))
-	}
-
-	return result
-}
-
-func kubeSelectorForLease(dst *strings.Builder, lID mtypes.LeaseID) {
-	_, _ = fmt.Fprintf(dst, "%s=%s", builder.AkashLeaseOwnerLabelName, lID.Owner)
-	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.AkashLeaseDSeqLabelName, lID.DSeq)
-	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.AkashLeaseGSeqLabelName, lID.GSeq)
-	_, _ = fmt.Fprintf(dst, ",%s=%d", builder.AkashLeaseOSeqLabelName, lID.OSeq)
+	return op.connectHostnameToDeploymentGateway(ctx, directive)
 }

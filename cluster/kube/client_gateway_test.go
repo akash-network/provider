@@ -28,9 +28,7 @@ func TestNginxGatewayHTTPRouteSpec(t *testing.T) {
 	spec := impl.BuildHTTPRouteSpec(
 		"test-gateway",
 		"test-namespace",
-		"test.example.com",
-		"test-service",
-		8080,
+		directive,
 		exts,
 	)
 

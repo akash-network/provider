@@ -35,9 +35,6 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 		return []*netv1.NetworkPolicy{}, nil
 	}
 
-	const ingressLabelName = "app.kubernetes.io/name"
-	const ingressLabelValue = "ingress-nginx"
-
 	// Build ingress rules
 	ingressRules := []netv1.NetworkPolicyIngressRule{
 		{ // Allow Network Connections from same Namespace
@@ -46,22 +43,6 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 					NamespaceSelector: &metav1.LabelSelector{
 						MatchLabels: map[string]string{
 							akashNetworkNamespace: LidNS(b.deployment.LeaseID()),
-						},
-					},
-				},
-			},
-		},
-		{ // Allow Network Connections from NGINX ingress controller
-			From: []netv1.NetworkPolicyPeer{
-				{
-					NamespaceSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							ingressLabelName: ingressLabelValue,
-						},
-					},
-					PodSelector: &metav1.LabelSelector{
-						MatchLabels: map[string]string{
-							ingressLabelName: ingressLabelValue,
 						},
 					},
 				},
@@ -83,8 +64,9 @@ func (b *netPol) Create() ([]*netv1.NetworkPolicy, error) { // nolint:unparam
 		},
 	})
 
-	// Add Gateway API ingress rule if gateway-api mode is enabled
-	if b.settings.IngressMode == IngressModeGateway && b.settings.GatewayNamespace != "" {
+	// Allow Network Connections from the gateway data plane, which runs in the
+	// Gateway's namespace.
+	if b.settings.GatewayNamespace != "" {
 		ingressRules = append(ingressRules, netv1.NetworkPolicyIngressRule{
 			// Allow Network Connections from Gateway API namespace
 			From: []netv1.NetworkPolicyPeer{

@@ -12,6 +12,8 @@ nodes:
     extraPortMappings:
       - containerPort: 80
         protocol: TCP
+      - containerPort: 443
+        protocol: TCP
 containerdConfigPatches:
   - |-
     [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-qemu-snp]

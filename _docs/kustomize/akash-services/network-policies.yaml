@@ -25,12 +25,13 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: akash-services-allow-ingress-nginx
+  name: akash-services-allow-gateway
 spec:
   podSelector:
     matchLabels: {}
   ingress:
+    # The gateway data plane runs in the Gateway's namespace.
     - from:
         - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: ingress-nginx
+              kubernetes.io/metadata.name: akash-gateway

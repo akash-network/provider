@@ -3,7 +3,7 @@ version: "2.0"
 
 services:
   web:
-    image: quay.io/ovrclk/demo-app
+    image: docker.io/traefik/whoami:v1.12.0
     expose:
       - port: 80
         as: 80

@@ -6,7 +6,7 @@ resources:
   - rbac.yaml
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
+  - route.yaml
   - service_account.yaml
 commonLabels:
   app.kubernetes.io/name: provider
