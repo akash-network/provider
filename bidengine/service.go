@@ -12,6 +12,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	tpubsub "github.com/troian/pubsub"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	sdkquery "github.com/cosmos/cosmos-sdk/types/query"
 	sclient "pkg.akt.dev/go/node/client/v1beta3"
@@ -26,6 +28,7 @@ import (
 	"github.com/akash-network/provider/operator/waiter"
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
+	"github.com/akash-network/provider/tools/pconfig"
 	ptypes "github.com/akash-network/provider/types"
 )
 
@@ -69,6 +72,11 @@ func NewService(
 	waiter waiter.OperatorWaiter,
 	cfg Config,
 ) (Service, error) {
+	pcfg, err := fromctx.PersistentConfigFromCtx(pctx)
+	if err != nil {
+		return nil, err
+	}
+
 	session = session.ForModule("bidengine-service")
 
 	sub, err := bus.Subscribe()
@@ -97,6 +105,7 @@ func NewService(
 		cancel:   cancel,
 		lc:       lifecycle.New(),
 		cfg:      cfg,
+		pcfg:     pcfg,
 		pass:     providerAttrService,
 		waiter:   waiter,
 	}
@@ -120,6 +129,10 @@ var errOrdersNextKeyRepeated = errors.New("orders pagination: next key repeats t
 // ordersPage is a page of open orders to catch up on.
 type ordersPage struct {
 	orders []mtypes.OrderID
+	// key is the pagination key the page was requested with, nil for the first page.
+	key []byte
+	// last marks the page the node returned no next key for.
+	last bool
 }
 
 // service manages the lifecycle and coordination of order processing and bid creation.
@@ -130,6 +143,8 @@ type service struct {
 	cluster cluster.Cluster
 	// cfg holds configuration parameters for bid engine (pricing, deposits, timeouts etc).
 	cfg Config
+	// pcfg persists the pagination key the open orders catch-up resumes from.
+	pcfg pconfig.Storage
 
 	// bus is the event bus for publishing lease events.
 	bus pubsub.Bus
@@ -144,6 +159,8 @@ type service struct {
 	drainch chan *order
 	// ordersch receives pages of open orders to catch up on from the blockchain.
 	ordersch chan ordersPage
+	// catchupIncomplete is set once a catch-up order failed to get a monitor.
+	catchupIncomplete bool
 
 	group *errgroup.Group
 	// cancel holds the cancel function of the service context.
@@ -200,20 +217,38 @@ func (s *service) updateOrderManagerGauge() {
 	orderManagerGauge.Set(float64(len(s.orders)))
 }
 
-// ordersFetcher traverses all open orders once and queues them for run, which creates their
-// monitors. It always starts from the beginning and persists no progress: monitors live in
-// memory and close their bids when the provider shuts down, so after any restart every open
-// order needs a monitor again, whatever an earlier run had already seen. Orders created while
-// the traversal runs arrive as EventOrderCreated.
+// ordersFetcher traverses the open orders once and queues them, page by page, for run, which
+// creates their monitors. The traversal starts at the pagination key persisted by the previous
+// traversal, or at the beginning if there is none, and follows the next keys until the last
+// page. Once run has processed the last page it persists the key that page was requested with,
+// see processOrdersPage. A traversal from the beginning that fits into one page persists an empty
+// key, so the next start traverses from the beginning again. Orders created while the provider
+// runs arrive as EventOrderCreated.
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	var nextKey []byte
+	nextKey, err := s.pcfg.BidEngine().GetOrdersNextKey(ctx)
+	if err != nil {
+		s.session.Log().Error("loading orders pagination key", "err", err)
+	}
 
-	s.session.Log().Info("catching up open orders")
+	// resuming is set while the persisted key has not been accepted by the node yet
+	resuming := len(nextKey) > 0
+	if resuming {
+		s.session.Log().Info("resuming open orders catch-up", "pagination_key", fmt.Sprintf("%x", nextKey))
+	} else {
+		nextKey = nil
+		s.session.Log().Info("catching up open orders from the beginning")
+	}
 
 	limit := cap(s.ordersch)
 
 loop:
 	for {
+		// a query sent on a canceled context does not necessarily fail: over ABCI the
+		// client does not use the context at all
+		if ctx.Err() != nil {
+			break loop
+		}
+
 		preq := &sdkquery.PageRequest{
 			Key:   nextKey,
 			Limit: uint64(limit),
@@ -226,10 +261,24 @@ loop:
 			Pagination: preq,
 		})
 		if err != nil {
-			// check the context rather than the error: gRPC reports cancellation as a status
-			// error which does not match context.Canceled
+			// a canceled query is no error to report. Check the context rather than the
+			// error: canceled before the request reaches gRPC, the query fails with
+			// context.Canceled, once in flight with a gRPC status error, which does not
+			// match context.Canceled
 			if ctx.Err() != nil {
 				break loop
+			}
+
+			// the node rejects a persisted key it cannot decode, e.g. one saved before a
+			// node upgrade changed the key format, on every retry
+			if resuming && status.Code(err) == codes.InvalidArgument {
+				s.session.Log().Error("orders pagination key rejected, catching up open orders from the beginning",
+					"pagination_key", fmt.Sprintf("%x", nextKey), "err", err)
+
+				nextKey = nil
+				resuming = false
+
+				continue
 			}
 
 			s.session.Log().Error("querying open orders", "err", err)
@@ -243,8 +292,11 @@ loop:
 			continue
 		}
 
+		resuming = false
+
 		page := ordersPage{
 			orders: make([]mtypes.OrderID, 0, len(resp.Orders)),
+			key:    nextKey,
 		}
 
 		for _, order := range resp.Orders {
@@ -255,6 +307,8 @@ loop:
 		if resp.Pagination != nil {
 			pageNextKey = resp.Pagination.NextKey
 		}
+
+		page.last = len(pageNextKey) == 0
 
 		if ctx.Err() != nil {
 			break loop
@@ -273,7 +327,7 @@ loop:
 		}
 
 		// empty next key indicates all open orders have been traversed
-		if len(pageNextKey) == 0 {
+		if page.last {
 			break loop
 		}
 
@@ -285,7 +339,13 @@ loop:
 
 // processOrdersPage creates monitors for a page of catch-up orders. An order can also arrive as
 // EventOrderCreated while the traversal runs; such an order keeps the monitor it already has.
-func (s *service) processOrdersPage(page ordersPage) {
+//
+// Once the last page is processed, the key it was requested with is persisted, so a restart
+// resumes the catch-up from that page instead of traversing all open orders again. The key is
+// persisted here rather than by the fetcher, which runs ahead of run: a restart must not skip
+// pages still queued in ordersch. For the same reason it is not persisted if any order of the
+// traversal failed to get a monitor.
+func (s *service) processOrdersPage(ctx context.Context, page ordersPage) {
 	for _, orderID := range page.orders {
 		key := mquery.OrderPath(orderID)
 		if s.orders[key] != nil {
@@ -297,11 +357,28 @@ func (s *service) processOrdersPage(page ordersPage) {
 		order, err := newOrder(s, orderID, s.cfg, s.pass, true)
 		if err != nil {
 			s.session.Log().Error("creating catchup order", "oid", orderID, "err", err)
+			s.catchupIncomplete = true
 			continue
 		}
 		s.orders[key] = order
 		s.updateOrderManagerGauge()
 	}
+
+	if !page.last {
+		return
+	}
+
+	if s.catchupIncomplete {
+		s.session.Log().Warn("open orders catch-up incomplete, keeping the persisted orders pagination key so a restart traverses the orders again")
+		return
+	}
+
+	if err := s.pcfg.BidEngine().SetOrdersNextKey(ctx, page.key); err != nil {
+		s.session.Log().Error("persisting orders pagination key", "err", err)
+		return
+	}
+
+	s.session.Log().Info("open orders catch-up complete", "pagination_key", fmt.Sprintf("%x", page.key))
 }
 
 // stopOrdersFetcher cancels the orders fetcher and waits for it to return, so it does not
@@ -348,7 +425,7 @@ loop:
 			s.lc.ShutdownInitiated(shutdownErr)
 			break loop
 		case page := <-s.ordersch:
-			s.processOrdersPage(page)
+			s.processOrdersPage(ctx, page)
 		case ev := <-s.sub.Events():
 			switch ev := ev.(type) { // nolint: gocritic
 			case *mtypes.EventOrderCreated:

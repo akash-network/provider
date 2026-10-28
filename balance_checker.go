@@ -12,11 +12,14 @@ import (
 	"cosmossdk.io/log"
 	tmrpc "github.com/cometbft/cometbft/rpc/core/types"
 
+	errorsmod "cosmossdk.io/errors"
 	sdkmath "cosmossdk.io/math"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 
 	aclient "pkg.akt.dev/go/node/client/v1beta3"
 	dtypes "pkg.akt.dev/go/node/deployment/v1beta4"
+	emodule "pkg.akt.dev/go/node/escrow/module"
+	etypes "pkg.akt.dev/go/node/escrow/types/v1"
 	mtypes "pkg.akt.dev/go/node/market/v1"
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
@@ -41,6 +44,19 @@ const (
 	respStateScheduledWithdraw
 )
 
+// isEscrowClosedErr reports whether a lease withdrawal failed with the escrow
+// error code for a closed payment or account. The tx client maps a failed tx
+// result's ABCI codespace and code back to the registered error. The chain
+// never reopens either (an overdrawn payment fails with ErrPaymentClosed too),
+// so the withdrawal can never succeed.
+//
+// Gas simulation failures carry no escrow code: the chain returns them as gRPC
+// code Unknown (ABCI sdk/6 "unknown request"). They are retried, and the
+// retry's funds check reads the payment and account states instead.
+func isEscrowClosedErr(err error) bool {
+	return errorsmod.IsOf(err, emodule.ErrPaymentClosed, emodule.ErrAccountClosed)
+}
+
 type BalanceCheckerConfig struct {
 	WithdrawalPeriod        time.Duration
 	LeaseFundsCheckInterval time.Duration
@@ -49,6 +65,10 @@ type BalanceCheckerConfig struct {
 type leaseState struct {
 	tm                  *time.Timer
 	scheduledWithdrawAt time.Time
+	// closed is set once the checker has reported the lease closed. Until the
+	// cluster removes it with LeaseRemoveFundsMonitor, the lease is not checked
+	// or withdrawn from again, and late results for it are ignored.
+	closed bool
 }
 
 type balanceChecker struct {
@@ -165,6 +185,21 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 		return resp
 	}
 
+	// The chain can leave a lease active after its escrow payment closed or
+	// was overdrawn. Neither state reopens, so withdrawal can never succeed:
+	// close the lease locally as the chain's payment-closed hook would.
+	// Reclaiming leases are included: that hook closes the lease whenever its
+	// bid is active, so a live lease with a dead payment has an inactive bid,
+	// and the reclamation close (MsgCloseBid) cannot succeed either.
+	switch lease.EscrowPayment.State.State {
+	case etypes.StateClosed:
+		resp.closed = &mtypes.EventLeaseClosed{ID: lid, Reason: mtypes.LeaseClosedReasonUnspecified}
+		return resp
+	case etypes.StateOverdrawn:
+		resp.closed = &mtypes.EventLeaseClosed{ID: lid, Reason: mtypes.LeaseClosedReasonInsufficientFunds}
+		return resp
+	}
+
 	var dResp *dtypes.QueryDeploymentResponse
 
 	// Fetch the balance of the escrow account
@@ -173,6 +208,18 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 	})
 
 	if resp.err != nil {
+		return resp
+	}
+
+	// A closed or overdrawn escrow account never reopens either: a deposit to
+	// an overdrawn account settles and closes it. Close the lease locally as
+	// the chain's account-closed hook would.
+	switch dResp.EscrowAccount.State.State {
+	case etypes.StateClosed:
+		resp.closed = &mtypes.EventLeaseClosed{ID: lid, Reason: mtypes.LeaseClosedReasonOwner}
+		return resp
+	case etypes.StateOverdrawn:
+		resp.closed = &mtypes.EventLeaseClosed{ID: lid, Reason: mtypes.LeaseClosedReasonInsufficientFunds}
 		return resp
 	}
 
@@ -209,10 +256,10 @@ func (bc *balanceChecker) doEscrowCheck(ctx context.Context, lid mtypes.LeaseID,
 
 	blocksRemain := util.LeaseCalcBlocksRemain(balanceRemain, totalLeaseAmount)
 
-	// lease is out of funds
+	// lease is out of funds: check it again after the funds check interval
 	if blocksRemain <= 0 {
 		resp.state = respStateOutOfFunds
-		resp.checkAfter = time.Minute * 10
+		resp.checkAfter = bc.cfg.LeaseFundsCheckInterval
 	} else {
 		blocksPerCheckInterval := int64(bc.cfg.LeaseFundsCheckInterval / netutil.AverageBlockTime)
 		if blocksRemain > blocksPerCheckInterval {
@@ -299,21 +346,28 @@ loop:
 					bc.runEscrowCheck(ctx, ev.LeaseID, false, leaseCheckCh)
 				}
 			case event.LeaseRemoveFundsMonitor:
-				bc.removeLease(ev.LeaseID)
+				if lState, exists := bc.leases[ev.LeaseID]; exists {
+					if lState.tm != nil {
+						// AfterFunc timers have no channel to drain when already fired.
+						lState.tm.Stop()
+					}
+					delete(bc.leases, ev.LeaseID)
+				}
 			}
 		case res := <-leaseCheckCh:
 			// we may have timer fired just a heart beat ahead of lease remove event.
 			lState, exists := bc.leases[res.lid]
-			if !exists {
+			if !exists || lState.closed {
 				continue loop
 			}
 
 			if res.closed != nil {
-				// Reuse the normal local teardown path. This does not send a
-				// transaction or change the on-chain lease.
+				// The cluster tears the lease down and removes its funds monitor
+				// with LeaseRemoveFundsMonitor. This does not send a transaction
+				// or change the on-chain lease.
 				res.err = bc.bus.Publish(res.closed)
 				if res.err == nil {
-					bc.removeLease(res.lid)
+					lState.closed = true
 					continue loop
 				}
 			}
@@ -363,20 +417,39 @@ loop:
 				}()
 			}
 		case res := <-resultch:
-			if err := res.Error(); err != nil {
-				bc.log.Error("failed to do lease withdrawal", "err", err, "lid", res.Value().(mtypes.LeaseID))
+			err := res.Error()
+			if err == nil {
+				continue loop
 			}
-		}
-	}
-}
 
-func (bc *balanceChecker) removeLease(lid mtypes.LeaseID) {
-	if state, exists := bc.leases[lid]; exists {
-		if state.tm != nil {
-			// AfterFunc timers have no channel to drain when already fired.
-			state.tm.Stop()
+			lid := res.Value().(mtypes.LeaseID)
+			// A lease removed or reported closed while its withdrawal was in
+			// flight is already being torn down.
+			lState, exists := bc.leases[lid]
+			if !exists || lState.closed || !isEscrowClosedErr(err) {
+				bc.log.Error("failed to do lease withdrawal", "err", err, "lid", lid)
+				continue loop
+			}
+
+			// The escrow closed after the funds check read it. Withdrawal cannot
+			// succeed again, so tear the lease down instead of retrying it, with
+			// the reason the funds check would report. ErrPaymentClosed cannot
+			// tell a closed payment from an overdrawn one, so it is unspecified.
+			reason := mtypes.LeaseClosedReasonUnspecified
+			if errorsmod.IsOf(err, emodule.ErrAccountClosed) {
+				reason = mtypes.LeaseClosedReasonOwner
+			}
+			bc.log.Info("lease escrow closed, tearing down deployment", "lid", lid, "err", err)
+			// The cluster tears the lease down and removes its funds monitor with
+			// LeaseRemoveFundsMonitor. If publishing fails, the already scheduled
+			// funds check retries the teardown.
+			if err := bc.bus.Publish(&mtypes.EventLeaseClosed{ID: lid, Reason: reason}); err != nil {
+				bc.log.Error("unable to tear down lease with closed escrow", "err", err, "lid", lid)
+				continue loop
+			}
+
+			lState.closed = true
 		}
-		delete(bc.leases, lid)
 	}
 }
 
