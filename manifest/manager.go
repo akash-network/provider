@@ -92,6 +92,13 @@ type manager struct {
 	lc  lifecycle.Lifecycle
 
 	hostnameService clustertypes.HostnameServiceClient
+
+	// manifestReceived is set once the service has passed the manager a
+	// manifest for its deployment, whether the manager accepts it or not. From
+	// then on no watchdog starts for the deployment's leases, just as a manifest
+	// arriving stops the running one: the manager hands a lease won later the
+	// manifest it accepted. Only the service's event loop reads or writes it.
+	manifestReceived bool
 }
 
 func (m *manager) stop() {

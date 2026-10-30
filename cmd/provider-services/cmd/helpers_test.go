@@ -139,3 +139,30 @@ func TestRunCmdDoesNotExposeMonitorHealthcheckFlags(t *testing.T) {
 	require.Nil(t, cmd.Flags().Lookup("monitor-healthcheck-period"))
 	require.Nil(t, cmd.Flags().Lookup("monitor-healthcheck-period-jitter"))
 }
+
+// A withdrawal period of 0 turns withdrawals off. A negative one is a mistake,
+// not another way to turn them off, and a period shorter than the funds check
+// interval cannot be kept.
+func TestValidateWithdrawalPeriod(t *testing.T) {
+	const fundsCheckInterval = 10 * time.Minute
+	for _, tc := range []struct {
+		name    string
+		period  time.Duration
+		wantErr bool
+	}{
+		{name: "withdrawals off", period: 0},
+		{name: "default", period: 24 * time.Hour},
+		{name: "funds check interval", period: fundsCheckInterval},
+		{name: "shorter than the funds check interval", period: fundsCheckInterval - time.Minute, wantErr: true},
+		{name: "negative", period: -24 * time.Hour, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateWithdrawalPeriod(tc.period, fundsCheckInterval)
+			if tc.wantErr {
+				require.ErrorContains(t, err, FlagWithdrawalPeriod)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

@@ -95,6 +95,9 @@ type IntegrationTestSuite struct {
 	oracleClient      cclient.Client
 	priceFeedInterval time.Duration
 	gatewayAPIMode    bool
+	// withdrawalPeriod, when set, makes the provider withdraw from every lease
+	// once per period.
+	withdrawalPeriod time.Duration
 }
 
 const (
@@ -445,6 +448,15 @@ func (s *IntegrationTestSuite) SetupSuite() {
 			WithFlag(pcmd.FlagGatewayNamespace, "akash-gateway")
 	}
 
+	if s.withdrawalPeriod > 0 {
+		// The provider requires a funds check interval of at least a minute, and
+		// no longer than the withdrawal period.
+		s.Require().GreaterOrEqual(s.withdrawalPeriod, time.Minute, "withdrawal period below the provider's minimum")
+		pArgs = pArgs.
+			WithFlag(pcmd.FlagLeaseFundsMonitorInterval, s.withdrawalPeriod.String()).
+			WithFlag(pcmd.FlagWithdrawalPeriod, s.withdrawalPeriod.String())
+	}
+
 	dialer := net.Dialer{
 		Timeout: time.Second * 3,
 	}
@@ -750,13 +762,14 @@ func TestIntegrationTestSuite(t *testing.T) {
 	suite.Run(t, new(E2EDeploymentUpdate))
 	suite.Run(t, new(E2EApp))
 	suite.Run(t, new(E2EPersistentStorageDefault))
-	suite.Run(t, new(E2EPersistentStorageDefault))
+	suite.Run(t, new(E2EEscrowMonitor))
 	suite.Run(t, new(E2EPersistentStorageBeta2))
 	suite.Run(t, new(E2EPersistentStorageDeploymentUpdate))
 	suite.Run(t, new(E2EStorageClassRam))
 	suite.Run(t, new(E2EMigrateHostname))
 	suite.Run(t, new(E2ECustomCurrency))
 	suite.Run(t, &E2EIPAddress{IntegrationTestSuite{ipMarketplace: true}})
+	suite.Run(t, &E2ELeaseWithdraw{IntegrationTestSuite{withdrawalPeriod: time.Minute}})
 }
 
 // TestQueryApp enables rapid testing of the querying functionality locally

@@ -303,6 +303,7 @@ loop:
 			s.maybeRemoveWatchdog(req.value.Deployment)
 
 			manager := s.ensureManager(req.value.Deployment)
+			manager.manifestReceived = true
 			// The manager is responsible for putting a result in req.ch
 			manager.handleManifest(req)
 			trySignal()
@@ -351,16 +352,16 @@ func (s *service) maybeRemoveWatchdog(deploymentID dtypes.DeploymentID) {
 }
 
 func (s *service) handleLease(ev event.LeaseWon, isNew bool) {
+	manager := s.ensureManager(ev.LeaseID.DeploymentID())
+
 	// Only run this if configured to do so
 	if isNew && s.config.ManifestTimeout > time.Duration(0) {
 		// Create watchdog if it does not exist AND a manifest has not been received yet
-		if watchdog := s.watchdogs[ev.LeaseID.DeploymentID()]; watchdog == nil {
+		if watchdog := s.watchdogs[ev.LeaseID.DeploymentID()]; watchdog == nil && !manager.manifestReceived {
 			watchdog = newWatchdog(s.session, s.lc.ShuttingDown(), s.watchdogch, ev.LeaseID, s.config.ManifestTimeout, s.config.BroadcastTimeout)
 			s.watchdogs[ev.LeaseID.DeploymentID()] = watchdog
 		}
 	}
-
-	manager := s.ensureManager(ev.LeaseID.DeploymentID())
 
 	manager.handleLease(ev)
 }
