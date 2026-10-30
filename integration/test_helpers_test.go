@@ -40,3 +40,41 @@ func TestQueryAppWithRetriesResendsBody(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, []string{"payload", "payload"}, bodies)
 }
+
+// fakeE2ESuite stands in for an e2e suite without a cluster. With keepRunning
+// it ends like a suite that failed in SetupSuite or TearDownSuite.
+type fakeE2ESuite struct {
+	IntegrationTestSuite
+	name        string
+	keepRunning bool
+	ran         *[]string
+}
+
+func (s *fakeE2ESuite) SetupSuite()    { s.running = true }
+func (s *fakeE2ESuite) TearDownTest()  {}
+func (s *fakeE2ESuite) TearDownSuite() { s.running = s.keepRunning }
+func (s *fakeE2ESuite) TestRecordRun() { *s.ran = append(*s.ran, s.name) }
+
+func TestRunE2ESuites(t *testing.T) {
+	t.Run("runs every suite that finishes", func(t *testing.T) {
+		var ran []string
+		err := runE2ESuites(t, []e2eTestingSuite{
+			&fakeE2ESuite{name: "first", ran: &ran},
+			&fakeE2ESuite{name: "second", ran: &ran},
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{"first", "second"}, ran)
+	})
+
+	// the unfinished suite's test network would block the next suite
+	t.Run("stops after a suite that did not finish", func(t *testing.T) {
+		var ran []string
+		err := runE2ESuites(t, []e2eTestingSuite{
+			&fakeE2ESuite{name: "first", ran: &ran},
+			&fakeE2ESuite{name: "unfinished", keepRunning: true, ran: &ran},
+			&fakeE2ESuite{name: "after", ran: &ran},
+		})
+		require.Error(t, err)
+		require.Equal(t, []string{"first", "unfinished"}, ran)
+	})
+}
