@@ -6,14 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	cmtlog "github.com/cometbft/cometbft/libs/log"
 	ctypes "github.com/cometbft/cometbft/rpc/core/types"
-	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	rpcserver "github.com/cometbft/cometbft/rpc/jsonrpc/server"
+	rpctypes "github.com/cometbft/cometbft/rpc/jsonrpc/types"
 	"github.com/stretchr/testify/require"
 
 	"pkg.akt.dev/go/util/ctxlog"
@@ -71,28 +75,29 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-// eventsNode implements the CometRPC and EventsClient methods the chain event service
-// (pkg.akt.dev/go/util/events) uses to start and to watch block headers.
-type eventsNode struct {
-	sdkclient.CometRPC
+// newQueryOnlyNode serves the CometBFT JSON-RPC status route the chain event service
+// (pkg.akt.dev/go/util/events) starts on, but no websocket endpoint, so every block
+// subscription it dials fails.
+func newQueryOnlyNode(t *testing.T) *httptest.Server {
+	t.Helper()
 
-	headers chan ctypes.ResultEvent
+	routes := map[string]*rpcserver.RPCFunc{
+		"status": rpcserver.NewRPCFunc(func(*rpctypes.Context) (*ctypes.ResultStatus, error) {
+			return &ctypes.ResultStatus{SyncInfo: ctypes.SyncInfo{LatestBlockHeight: 1}}, nil
+		}, ""),
+	}
+
+	mux := http.NewServeMux()
+	rpcserver.RegisterRPCFuncs(mux, routes, cmtlog.NewNopLogger())
+
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	return srv
 }
-
-func (n *eventsNode) Status(context.Context) (*ctypes.ResultStatus, error) {
-	return &ctypes.ResultStatus{SyncInfo: ctypes.SyncInfo{LatestBlockHeight: 1}}, nil
-}
-
-func (n *eventsNode) Subscribe(context.Context, string, string, ...int) (<-chan ctypes.ResultEvent, error) {
-	return n.headers, nil
-}
-
-func (n *eventsNode) Unsubscribe(context.Context, string, string) error { return nil }
-
-func (n *eventsNode) UnsubscribeAll(context.Context, string) error { return nil }
 
 // The chain event service logs under module "events", so a filter enabling its warnings
-// applies to them: here the warning on a closed block subscription.
+// applies to them: here the warning on a block subscription the node does not serve.
 func TestEventsServiceLogsUnderEventsModule(t *testing.T) {
 	cfg, err := logging.ParseConfig("events:warn,*:error", logging.FormatJSON, false, logging.TimestampOff, false)
 	require.NoError(t, err)
@@ -107,29 +112,64 @@ func TestEventsServiceLogsUnderEventsModule(t *testing.T) {
 	bus := pubsub.NewBus()
 	defer bus.Close()
 
-	node := &eventsNode{headers: make(chan ctypes.ResultEvent)}
+	node := newQueryOnlyNode(t)
 
-	svc, err := newEventsService(ctx, node, bus, root.With("module", "provider"))
-	require.NoError(t, err)
+	// The service starts although the node serves no websocket: it redials in the
+	// background rather than failing the provider's startup.
+	svc, err := newEventsService(ctx, node.URL, bus, root.With("module", "provider"))
+	require.NoError(t, err, "a node without a websocket must not fail startup")
 	defer svc.Shutdown()
-
-	close(node.headers)
 
 	var entry map[string]any
 	require.Eventually(t, func() bool {
 		for _, line := range strings.Split(out.String(), "\n") {
-			if strings.Contains(line, "block subscription channel closed") {
+			if strings.Contains(line, "block subscription dial failed") {
 				return json.Unmarshal([]byte(line), &entry) == nil
 			}
 		}
 		return false
-	}, 5*time.Second, 10*time.Millisecond, "closed subscription warning not logged under events:warn,*:error")
+	}, 5*time.Second, 10*time.Millisecond, "failed subscription warning not logged under events:warn,*:error")
 
 	require.Equal(t, "events", entry["module"])
+	require.Equal(t, "warn", entry["level"], "only a warning tests the events:warn entry: an error passes *:error anyway")
 }
 
 func TestRunCmdDoesNotExposeMonitorHealthcheckFlags(t *testing.T) {
 	cmd := RunCmd()
 	require.Nil(t, cmd.Flags().Lookup("monitor-healthcheck-period"))
 	require.Nil(t, cmd.Flags().Lookup("monitor-healthcheck-period-jitter"))
+}
+
+// A withdrawal period of 0 turns withdrawals off. A negative one is a mistake,
+// not another way to turn them off, and a period shorter than the funds check
+// interval cannot be kept. Each error names the flag and the range it accepts.
+func TestValidateWithdrawalPeriod(t *testing.T) {
+	const fundsCheckInterval = 10 * time.Minute
+	const (
+		negative = "must be >= 0"
+		short    = `must be >= "lease-funds-monitor-interval"`
+	)
+	for _, tc := range []struct {
+		name    string
+		period  time.Duration
+		wantErr string
+	}{
+		{name: "withdrawals off", period: 0},
+		{name: "default", period: 24 * time.Hour},
+		{name: "funds check interval", period: fundsCheckInterval},
+		{name: "just shorter than the funds check interval", period: fundsCheckInterval - time.Nanosecond, wantErr: short},
+		{name: "shortest period", period: time.Nanosecond, wantErr: short},
+		{name: "just negative", period: -time.Nanosecond, wantErr: negative},
+		{name: "negative", period: -24 * time.Hour, wantErr: negative},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateWithdrawalPeriod(tc.period, fundsCheckInterval)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, FlagWithdrawalPeriod)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }

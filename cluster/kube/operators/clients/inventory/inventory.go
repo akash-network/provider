@@ -256,24 +256,8 @@ func (inv *inventory) tryAdjust(
 }
 
 func tryAdjustCPU(rp *inventoryV1.CPU, res *rtypes.CPU) bool {
-	requestedArch := "amd64"
-
-	if len(res.Attributes) > 0 {
-		attrs, err := cinventory.ParseCPUAttributes(res.Attributes)
-		if err != nil {
-			return false
-		}
-		if attrs.Arch != "" {
-			requestedArch = attrs.Arch
-		}
-	}
-
-	// if node has CPU info with arch set, validate it matches the request.
-	// nodes with no arch (pre-feature inventory) are treated as amd64 for backward compatibility.
-	if len(rp.Info) > 0 && rp.Info[0].Arch != "" {
-		if rp.Info[0].Arch != requestedArch {
-			return false
-		}
+	if ok, err := cinventory.CPUArchMatches(rp.Info, res.Attributes); err != nil || !ok {
+		return false
 	}
 
 	return rp.Quantity.SubMilliNLZ(res.Units)
