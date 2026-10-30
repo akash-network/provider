@@ -41,6 +41,19 @@ ifeq ($(DETECTED_OS), Darwin)
 	export CGO_CFLAGS=-Wno-deprecated-declarations
 endif
 
+# goreleaser-cross runs as root. Locally it mounts the host GOPATH, as before.
+# In CI the host's ~/go is shared by jobs running go as the runner user, and
+# root-owned module directories left there make them fail with "permission
+# denied", so the container's module and build caches (the defaults for
+# GOPATH=/go and HOME=/root) live in docker volumes instead.
+ifeq ($(CI), true)
+	GORELEASER_GO_VOLUMES ?= \
+		-v provider-gomodcache:/go/pkg/mod \
+		-v provider-gocache:/root/.cache/go-build
+else
+	GORELEASER_GO_VOLUMES ?= -v $(GOPATH):/go
+endif
+
 GORELEASER_GOWORK := off
 ifneq ($(GOWORK), off)
 	GORELEASER_GOWORK := /go/src/$(GORELEASER_MOD_MOUNT)/go.work
@@ -90,7 +103,7 @@ docker-image: wasmvm-libs akt
 		-e GRPCURL_VERSION="$(GRPCURL_VERSION)" \
 		-e GRPCURL_SHA256_AMD64="$(GRPCURL_SHA256_AMD64)" \
 		-e GRPCURL_SHA256_ARM64="$(GRPCURL_SHA256_ARM64)" \
-		-v $(GOPATH):/go \
+		$(GORELEASER_GO_VOLUMES) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
@@ -123,7 +136,7 @@ release: wasmvm-libs akt gen-changelog
 		-e GRPCURL_SHA256_AMD64="$(GRPCURL_SHA256_AMD64)" \
 		-e GRPCURL_SHA256_ARM64="$(GRPCURL_SHA256_ARM64)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		-v $(GOPATH):/go \
+		$(GORELEASER_GO_VOLUMES) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
