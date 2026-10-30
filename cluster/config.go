@@ -2,8 +2,6 @@ package cluster
 
 import (
 	"time"
-
-	"github.com/akash-network/provider/cluster/kube/builder"
 )
 
 type Config struct {
@@ -22,7 +20,6 @@ type Config struct {
 	MonitorRetryPeriodJitter        time.Duration
 	MonitorHealthcheckPeriod        time.Duration
 	MonitorHealthcheckPeriodJitter  time.Duration
-	IngressMode                     builder.IngressMode
 	GatewayName                     string
 	GatewayNamespace                string
 	GatewayProvider                 string
@@ -38,10 +35,9 @@ func NewDefaultConfig() Config {
 		MonitorMaxRetries:               40,
 		MonitorRetryPeriod:              time.Second * 4, // nolint revive
 		MonitorRetryPeriodJitter:        time.Second * 15,
-		IngressMode:                     builder.IngressModeIngress,
 		GatewayName:                     "akash-gateway",
 		GatewayNamespace:                "akash-gateway",
-		GatewayProvider:                 "nginx",
+		GatewayProvider:                 "auto",
 		ReclamationRPCTimeout:           30 * time.Second,
 		ReclamationCloseRetryInterval:   time.Minute,
 	}

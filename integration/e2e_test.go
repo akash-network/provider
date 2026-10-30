@@ -95,7 +95,6 @@ type IntegrationTestSuite struct {
 	oracleMnemonic    string
 	oracleClient      cclient.Client
 	priceFeedInterval time.Duration
-	gatewayAPIMode    bool
 
 	// running is set from the start of SetupSuite until TearDownSuite has
 	// finished. A suite that fails in between keeps its test network up, which
@@ -446,12 +445,9 @@ func (s *IntegrationTestSuite) SetupSuite() {
 			WithFlag("ip-operator", true)
 	}
 
-	if s.gatewayAPIMode {
-		pArgs = pArgs.
-			WithFlag(pcmd.FlagIngressMode, "gateway-api").
-			WithFlag(pcmd.FlagGatewayName, "akash-gateway").
-			WithFlag(pcmd.FlagGatewayNamespace, "akash-gateway")
-	}
+	pArgs = pArgs.
+		WithFlag(pcmd.FlagGatewayName, "akash-gateway").
+		WithFlag(pcmd.FlagGatewayNamespace, "akash-gateway")
 
 	dialer := net.Dialer{
 		Timeout: time.Second * 3,
@@ -463,12 +459,9 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		WithFlag(operatorcommon.FlagRESTAddress, "127.0.0.1").
 		WithFlag(operatorcommon.FlagRESTPort, hostnameOperatorPort)
 
-	if s.gatewayAPIMode {
-		hostnameOperatorArgs = hostnameOperatorArgs.
-			WithFlag("ingress-mode", "gateway-api").
-			WithFlag("gateway-name", "akash-gateway").
-			WithFlag("gateway-namespace", "akash-gateway")
-	}
+	hostnameOperatorArgs = hostnameOperatorArgs.
+		WithFlag("gateway-name", "akash-gateway").
+		WithFlag("gateway-namespace", "akash-gateway")
 
 	s.group.Go(func() error {
 		s.T().Logf("starting hostname operator for test on %s", hostnameOperatorHost)
@@ -723,7 +716,7 @@ func (s *IntegrationTestSuite) TearDownSuite() {
 	)
 	s.Require().NoError(err)
 
-	time.Sleep(3 * time.Second) // Make sure hostname operator has time to delete ingress
+	time.Sleep(3 * time.Second) // Make sure hostname operator has time to delete the route
 
 	s.ctxCancel() // Stop context that provider & hostname operator are tied to
 

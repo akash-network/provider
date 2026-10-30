@@ -1,0 +1,17 @@
+---
+# TLS passthrough to the provider API; needs the Gateway's tls-passthrough listener.
+apiVersion: gateway.networking.k8s.io/v1alpha2
+kind: TLSRoute
+metadata:
+  name: akash-provider
+spec:
+  parentRefs:
+    - name: akash-gateway
+      namespace: akash-gateway
+      sectionName: tls-passthrough
+  hostnames:
+    - akash-provider.localhost
+  rules:
+    - backendRefs:
+        - name: provider-service
+          port: 8443

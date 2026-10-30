@@ -5,7 +5,7 @@ namespace: akash-services
 resources:
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
+  - route.yaml
   - role-bindings.yaml
   - service-accounts.yaml
   - cluster-roles.yaml

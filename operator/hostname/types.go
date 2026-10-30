@@ -9,10 +9,6 @@ import (
 	chostname "github.com/akash-network/provider/cluster/types/v1beta3/clients/hostname"
 )
 
-const (
-	akashIngressClassName = "akash-ingress-class"
-)
-
 type managedHostname struct {
 	lastEvent    chostname.ResourceEvent
 	presentLease mtypes.LeaseID

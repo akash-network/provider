@@ -10,6 +10,7 @@ func migrate() *cobra.Command {
 	}
 
 	cmd.AddCommand(MigrateRunCmd())
+	cmd.AddCommand(MigrateGatewayCmd())
 
 	return cmd
 }

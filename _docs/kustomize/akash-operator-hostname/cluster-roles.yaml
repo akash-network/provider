@@ -10,18 +10,6 @@ metadata:
     app.kubernetes.io/part-of: provider
 rules:
   - apiGroups:
-      - networking.k8s.io
-    resources:
-      - ingresses
-    verbs:
-      - get
-      - list
-      - create
-      - update
-      - delete
-      - deletecollection
-      - watch
-  - apiGroups:
       - gateway.networking.k8s.io
     resources:
       - httproutes
@@ -49,14 +37,15 @@ rules:
       - gateway.networking.k8s.io
     resources:
       - gateways
+      - gatewayclasses
     verbs:
       - get
       - list
       - watch
   - apiGroups:
-      - gateway.nginx.org
+      - gateway.envoyproxy.io
     resources:
-      - snippetsfilters
+      - backendtrafficpolicies
     verbs:
       - get
       - list

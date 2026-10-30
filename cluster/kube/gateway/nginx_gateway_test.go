@@ -145,11 +145,11 @@ func TestBuildRouteExtensionsSnippetsFilter(t *testing.T) {
 func TestBuildHTTPRouteSpecExtensionRef(t *testing.T) {
 	gw := NewNginxGateway(log.NewNopLogger())
 
-	bare := gw.BuildHTTPRouteSpec("gw", "gwns", "hello.localhost", "web", 80, nil)
+	bare := gw.BuildHTTPRouteSpec("gw", "gwns", testDirective(), nil)
 	require.Empty(t, bare.Rules[0].Filters)
 
 	exts := gw.BuildRouteExtensions("ns1", "hello.localhost", testDirective())
-	spec := gw.BuildHTTPRouteSpec("gw", "gwns", "hello.localhost", "web", 80, exts)
+	spec := gw.BuildHTTPRouteSpec("gw", "gwns", testDirective(), exts)
 	require.Len(t, spec.Rules[0].Filters, 1)
 	f := spec.Rules[0].Filters[0]
 	require.Equal(t, gatewayv1.HTTPRouteFilterExtensionRef, f.Type)

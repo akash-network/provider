@@ -14,6 +14,8 @@ import (
 	cflags "pkg.akt.dev/go/cli/flags"
 
 	"github.com/akash-network/provider"
+	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	providerflags "github.com/akash-network/provider/cmd/provider-services/cmd/flags"
 )
 
@@ -344,22 +346,22 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().String(FlagIngressMode, "ingress", "Ingress mode: 'ingress' for NGINX Ingress (default) or 'gateway-api' for Gateway API")
+	cmd.Flags().String(FlagIngressMode, builder.IngressModeGateway, "Deprecated: only 'gateway-api' is supported; ingress-nginx support was removed")
 	if err := viper.BindPFlag(FlagIngressMode, cmd.Flags().Lookup(FlagIngressMode)); err != nil {
 		return err
 	}
 
-	cmd.Flags().String(FlagGatewayName, "akash-gateway", "Gateway name when using gateway-api mode")
+	cmd.Flags().String(FlagGatewayName, "akash-gateway", "Gateway that tenant HTTPRoutes attach to")
 	if err := viper.BindPFlag(FlagGatewayName, cmd.Flags().Lookup(FlagGatewayName)); err != nil {
 		return err
 	}
 
-	cmd.Flags().String(FlagGatewayNamespace, "akash-gateway", "Gateway namespace when using gateway-api mode")
+	cmd.Flags().String(FlagGatewayNamespace, "akash-gateway", "Namespace of the Gateway; tenant NetworkPolicies allow traffic from it")
 	if err := viper.BindPFlag(FlagGatewayNamespace, cmd.Flags().Lookup(FlagGatewayNamespace)); err != nil {
 		return err
 	}
 
-	cmd.Flags().String(FlagGatewayProvider, "nginx", "Gateway provider: 'nginx' for NGINX Gateway Fabric (default)")
+	cmd.Flags().String(FlagGatewayProvider, gateway.AutoProvider, "Gateway API implementation: 'auto' (detect from the Gateway's GatewayClass), 'envoy' or 'nginx'")
 	if err := viper.BindPFlag(FlagGatewayProvider, cmd.Flags().Lookup(FlagGatewayProvider)); err != nil {
 		return err
 	}

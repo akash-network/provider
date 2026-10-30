@@ -1,4 +1,4 @@
 ---
 - op: replace
-  path: /spec/rules/0/host
+  path: /spec/hostnames/0
   value: akash.localhost

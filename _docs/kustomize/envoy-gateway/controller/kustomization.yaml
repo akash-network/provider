@@ -1,0 +1,23 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Envoy Gateway controller and CRDs (Gateway API experimental channel included) for
+# dev and CI clusters, from the pinned release manifest. install.yaml is the helm
+# chart's default render; the patches below reproduce what the chart renders for
+# config.envoyGateway.provider.kubernetes.deploy.type=GatewayNamespace, so the
+# proxies run in the Gateway's namespace (akash-gateway), which tenant
+# NetworkPolicies allow. Apply server-side: several CRDs exceed the client-side
+# apply annotation limit.
+resources:
+  - https://github.com/envoyproxy/gateway/releases/download/v1.9.3/install.yaml
+  - infra-manager-rbac.yaml
+patches:
+  - path: gateway-namespace-mode.yaml
+  - target:
+      group: admissionregistration.k8s.io
+      version: v1
+      kind: MutatingWebhookConfiguration
+      name: envoy-gateway-topology-injector.envoy-gateway-system
+    patch: |-
+      - op: remove
+        path: /webhooks/0/namespaceSelector
