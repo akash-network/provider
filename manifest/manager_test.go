@@ -2,13 +2,20 @@ package manifest
 
 import (
 	"context"
+	"crypto/sha256"
 	"net/http"
 	"testing"
 
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	"github.com/stretchr/testify/require"
 
 	maniv2beta2 "pkg.akt.dev/go/manifest/v2beta3"
+	dtypes "pkg.akt.dev/go/node/deployment/v1"
+	dvbeta "pkg.akt.dev/go/node/deployment/v1beta4"
+	"pkg.akt.dev/go/sdl"
+	"pkg.akt.dev/go/testutil"
 
+	clustertypes "github.com/akash-network/provider/cluster/types/v1beta3"
 	"github.com/akash-network/provider/utils/httperror"
 )
 
@@ -468,4 +475,133 @@ func TestValidateRequestWrapsManifestError(t *testing.T) {
 	require.ErrorIs(t, err, maniv2beta2.ErrInvalidManifest)
 	require.Equal(t, http.StatusUnprocessableEntity,
 		httperror.StatusCodeFrom(ManifestSubmitErrorToHTTP(err)))
+}
+
+// TestValidateRequestVersion ensures a chain read that shows a deployment version the
+// manager never received an update event for becomes the expected version, so a missed
+// event no longer refuses every later manifest (see akash-network/support#662), while a
+// read that lags behind a received event cannot bring back an older version.
+func TestValidateRequestVersion(t *testing.T) {
+	sdlObj, err := sdl.ReadFile("../testdata/sdl/simple.yaml")
+	require.NoError(t, err)
+
+	mani, err := sdlObj.Manifest()
+	require.NoError(t, err)
+
+	version, err := mani.Version()
+	require.NoError(t, err)
+
+	staleVersion := sha256.Sum256([]byte("stale version"))
+	otherVersion := sha256.Sum256([]byte("other version"))
+
+	did := testutil.DeploymentID(t)
+	groups := deploymentGroupsForVersionTest(t, sdlObj)
+
+	update := func(hash []byte) func(*manager) {
+		return func(m *manager) { m.applyUpdate(hash) }
+	}
+	read := func(hash []byte) func(*manager) {
+		return func(m *manager) { m.applyFetchResult(chainReadForVersionTest(did, groups, hash, m.updatesReceived)) }
+	}
+	readStartedBeforeLastUpdate := func(hash []byte) func(*manager) {
+		return func(m *manager) { m.applyFetchResult(chainReadForVersionTest(did, groups, hash, m.updatesReceived-1)) }
+	}
+
+	tests := []struct {
+		name        string
+		steps       []func(*manager)
+		expectedErr error
+	}{
+		{
+			name:  "accepts the chain hash when no update event was received",
+			steps: []func(*manager){read(version)},
+		},
+		{
+			name:  "accepts a chain hash the manager missed the update event for",
+			steps: []func(*manager){update(staleVersion[:]), read(version)},
+		},
+		{
+			name:  "accepts the last update event received when a later chain read lags behind it",
+			steps: []func(*manager){read(staleVersion[:]), update(version), read(staleVersion[:])},
+		},
+		{
+			name:        "refuses a chain hash read behind a received update event",
+			steps:       []func(*manager){read(version), update(otherVersion[:]), read(version)},
+			expectedErr: ErrManifestVersion,
+		},
+		{
+			name:  "accepts the update event when a chain read that started before it returns an older hash",
+			steps: []func(*manager){update(version), readStartedBeforeLastUpdate(staleVersion[:])},
+		},
+		{
+			name:        "refuses the hash of a chain read that started before the last update event",
+			steps:       []func(*manager){update(otherVersion[:]), readStartedBeforeLastUpdate(version)},
+			expectedErr: ErrManifestVersion,
+		},
+		{
+			name:        "refuses a manifest not matching the chain hash",
+			steps:       []func(*manager){read(otherVersion[:])},
+			expectedErr: ErrManifestVersion,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				daddr:           did,
+				log:             testutil.Logger(t),
+				hostnameService: allowAllHostnames{},
+			}
+
+			for _, step := range tt.steps {
+				step(m)
+			}
+
+			err := m.validateRequest(manifestRequest{
+				ctx:   context.Background(),
+				value: &submitRequest{Manifest: mani},
+			})
+
+			if tt.expectedErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.expectedErr)
+		})
+	}
+}
+
+func deploymentGroupsForVersionTest(t *testing.T, sdlObj sdl.SDL) dvbeta.Groups {
+	t.Helper()
+
+	specs, err := sdlObj.DeploymentGroups()
+	require.NoError(t, err)
+
+	groups := make(dvbeta.Groups, 0, len(specs))
+	for _, spec := range specs {
+		groups = append(groups, dvbeta.Group{
+			State:     dvbeta.GroupOpen,
+			GroupSpec: spec,
+		})
+	}
+
+	return groups
+}
+
+func chainReadForVersionTest(did dtypes.DeploymentID, groups dvbeta.Groups, hash []byte, updatesReceived uint64) manifestManagerFetchDataResult {
+	return manifestManagerFetchDataResult{
+		deployment: dvbeta.QueryDeploymentResponse{
+			Deployment: dtypes.Deployment{ID: did, Hash: hash},
+			Groups:     groups,
+		},
+		updatesReceived: updatesReceived,
+	}
+}
+
+type allowAllHostnames struct {
+	clustertypes.HostnameServiceClient
+}
+
+func (allowAllHostnames) CanReserveHostnames(_ []string, _ sdktypes.Address) error {
+	return nil
 }
