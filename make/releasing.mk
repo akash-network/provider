@@ -41,24 +41,22 @@ ifeq ($(DETECTED_OS), Darwin)
 	export CGO_CFLAGS=-Wno-deprecated-declarations
 endif
 
-# goreleaser-cross runs as root. Its Go module and build caches live in docker
-# volumes rather than the host GOPATH, so root never owns anything under the
-# host's ~/go: host-side go (tool installs, builds) running as a regular user
-# would otherwise fail with "permission denied" on the shared module cache.
-GORELEASER_GOMODCACHE_VOLUME ?= provider-gomodcache
-GORELEASER_GOCACHE_VOLUME    ?= provider-gocache
-
-GORELEASER_GO_MOUNTS := \
-	-e GOMODCACHE=/go/pkg/mod \
-	-e GOCACHE=/root/.cache/go-build \
-	-v $(GORELEASER_GOMODCACHE_VOLUME):/go/pkg/mod \
-	-v $(GORELEASER_GOCACHE_VOLUME):/root/.cache/go-build
+# goreleaser-cross runs as root. Locally it mounts the host GOPATH, as before.
+# In CI the host's ~/go is shared by jobs running go as the runner user, and
+# root-owned module directories left there make them fail with "permission
+# denied", so the container's module and build caches (the defaults for
+# GOPATH=/go and HOME=/root) live in docker volumes instead.
+ifeq ($(CI), true)
+	GORELEASER_GO_VOLUMES ?= \
+		-v provider-gomodcache:/go/pkg/mod \
+		-v provider-gocache:/root/.cache/go-build
+else
+	GORELEASER_GO_VOLUMES ?= -v $(GOPATH):/go
+endif
 
 GORELEASER_GOWORK := off
 ifneq ($(GOWORK), off)
 	GORELEASER_GOWORK := /go/src/$(GORELEASER_MOD_MOUNT)/go.work
-	# go.work may use modules checked out next to this one under GOPATH/src
-	GORELEASER_GO_MOUNTS += -v $(GOPATH)/src:/go/src
 endif
 
 .PHONY: bump-%
@@ -105,7 +103,7 @@ docker-image: wasmvm-libs akt
 		-e GRPCURL_VERSION="$(GRPCURL_VERSION)" \
 		-e GRPCURL_SHA256_AMD64="$(GRPCURL_SHA256_AMD64)" \
 		-e GRPCURL_SHA256_ARM64="$(GRPCURL_SHA256_ARM64)" \
-		$(GORELEASER_GO_MOUNTS) \
+		$(GORELEASER_GO_VOLUMES) \
 		-v /var/run/docker.sock:/var/run/docker.sock \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME) \
@@ -138,7 +136,7 @@ release: wasmvm-libs akt gen-changelog
 		-e GRPCURL_SHA256_AMD64="$(GRPCURL_SHA256_AMD64)" \
 		-e GRPCURL_SHA256_ARM64="$(GRPCURL_SHA256_ARM64)" \
 		-v /var/run/docker.sock:/var/run/docker.sock \
-		$(GORELEASER_GO_MOUNTS) \
+		$(GORELEASER_GO_VOLUMES) \
 		-v $(shell pwd):/go/src/$(GO_MOD_NAME) \
 		-w /go/src/$(GO_MOD_NAME)\
 		$(GORELEASER_IMAGE) \
