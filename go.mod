@@ -65,6 +65,8 @@ retract (
 	v0.11.0
 	v0.6.5
 	v0.6.0
+	v0.4.10-rc0
+	v0.4.7-rc0
 )
 
 replace (

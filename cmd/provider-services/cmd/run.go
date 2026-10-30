@@ -111,7 +111,6 @@ const (
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
 	FlagLeaseFundsMonitorInterval        = "lease-funds-monitor-interval"
-	FlagMinimumBalance                   = "minimum-balance"
 	FlagProviderConfig                   = "provider-config"
 	FlagCachedResultMaxAge               = "cached-result-max-age"
 	FlagRPCQueryTimeout                  = "rpc-query-timeout"
@@ -198,6 +197,21 @@ func TxPersistentPreRunE(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// validateWithdrawalPeriod checks the --withdrawal-period value: 0 turns
+// withdrawals off, a negative period is rejected, and a positive one must be
+// at least the funds check interval.
+func validateWithdrawalPeriod(period, fundsCheckInterval time.Duration) error {
+	if period < 0 {
+		return fmt.Errorf(`flag "%s" value must be >= 0`, FlagWithdrawalPeriod) // nolint: err113
+	}
+
+	if period > 0 && period < fundsCheckInterval {
+		return fmt.Errorf(`flag "%s" value must be >= "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+	}
+
+	return nil
+}
+
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -218,8 +232,8 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
-			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
-				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+			if err := validateWithdrawalPeriod(withdrawPeriod, leaseFundsMonInterval); err != nil {
+				return err
 			}
 
 			if reclamationWindow < 0 {
