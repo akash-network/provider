@@ -6,11 +6,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/boz/go-lifecycle"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
 	"cosmossdk.io/log"
+	grpctypes "github.com/cosmos/cosmos-sdk/types/grpc"
 
 	maniv2beta2 "pkg.akt.dev/go/manifest/v2beta3"
 	dtypes "pkg.akt.dev/go/node/deployment/v1"
@@ -80,7 +84,10 @@ type manager struct {
 	requests        []manifestRequest
 	pendingRequests []manifestRequest
 	manifests       []*maniv2beta2.Manifest
-	versions        [][]byte
+	// expected is the deployment hash from the chain read at the greatest block height so
+	// far; a manifest must match it. clearFetched leaves it alone, so a read from a node
+	// that lags behind an earlier one cannot move it back.
+	expected deploymentVersion
 
 	localLeases []event.LeaseWon
 	fetched     bool
@@ -183,12 +190,11 @@ loop:
 
 			if runch = m.maybeFetchData(ctx, runch); runch == nil {
 				m.validateRequests()
-				m.emitReceivedEvents()
+				m.maybeEmitReceivedEvents()
+				runch = m.maybeRereadData(ctx)
 			}
 		case version := <-m.updatech:
-			m.log.Info("received version", "version", hex.EncodeToString(version))
-			m.versions = append(m.versions, version)
-			m.clearFetched()
+			m.applyUpdate(version)
 
 		case result := <-runch:
 			runch = nil
@@ -201,16 +207,14 @@ loop:
 			}
 
 			fetchResult := result.Value().(manifestManagerFetchDataResult)
-			m.fetched = true
-			m.fetchedAt = time.Now()
-			m.data = fetchResult.deployment
-			m.localLeases = fetchResult.leases
+			m.applyFetchResult(fetchResult)
 
-			m.log.Info("data received", "version", hex.EncodeToString(m.data.Deployment.Hash))
+			m.log.Info("data received", "version", hex.EncodeToString(m.data.Deployment.Hash), "height", fetchResult.height)
 
 			m.validateRequests()
-			m.emitReceivedEvents()
+			m.maybeEmitReceivedEvents()
 			m.maybeScheduleStop()
+			runch = m.maybeRereadData(ctx)
 		}
 	}
 
@@ -243,6 +247,18 @@ func (m *manager) maybeFetchData(ctx context.Context, runch <-chan runner.Result
 	return runch
 }
 
+// maybeRereadData starts a new chain read if validateRequests kept requests waiting for one,
+// and returns nil otherwise. Callers only use it while no read is running.
+func (m *manager) maybeRereadData(ctx context.Context) <-chan runner.Result {
+	if len(m.requests) == 0 {
+		return nil
+	}
+
+	m.clearFetched()
+
+	return m.fetchData(ctx)
+}
+
 func (m *manager) fetchData(ctx context.Context) <-chan runner.Result {
 	return runner.Do(func() runner.Result {
 		// TODO: retry
@@ -253,12 +269,71 @@ func (m *manager) fetchData(ctx context.Context) <-chan runner.Result {
 type manifestManagerFetchDataResult struct {
 	deployment dvbeta.QueryDeploymentResponse
 	leases     []event.LeaseWon
+	// height is the block height the deployment was read at, 0 if the node did not say.
+	height int64
+}
+
+// deploymentVersion is a deployment hash and the block height a chain read returned it at.
+type deploymentVersion struct {
+	hash   []byte
+	height int64
+}
+
+// applyUpdate handles a DeploymentUpdated event. It only drops the cached chain read, so
+// the next manifest is checked against a fresh one: an event can be missed or arrive late,
+// so the expected version comes from chain reads alone.
+func (m *manager) applyUpdate(version []byte) {
+	m.log.Info("received version", "version", hex.EncodeToString(version))
+	m.clearFetched()
+}
+
+// applyFetchResult stores a chain read. Its deployment hash becomes the expected version
+// unless an earlier read was answered at a greater height. A read without a height (0)
+// counts only while no read has reported one.
+func (m *manager) applyFetchResult(result manifestManagerFetchDataResult) {
+	m.fetched = true
+	m.fetchedAt = time.Now()
+	m.data = result.deployment
+	m.localLeases = result.leases
+
+	hash := result.deployment.Deployment.Hash
+	if len(hash) == 0 {
+		return
+	}
+
+	if result.height < m.expected.height {
+		m.log.Info("chain read behind an earlier one, keeping expected version",
+			"version", hex.EncodeToString(hash), "height", result.height,
+			"expected", hex.EncodeToString(m.expected.hash), "expected_height", m.expected.height)
+		return
+	}
+
+	m.expected = deploymentVersion{hash: hash, height: result.height}
+}
+
+// readHeight returns the block height a chain query was answered at, from the response
+// header Cosmos SDK sets, or 0 if the node did not report one.
+func readHeight(header metadata.MD) int64 {
+	values := header.Get(grpctypes.GRPCBlockHeightHeader)
+	if len(values) == 0 {
+		return 0
+	}
+
+	height, err := strconv.ParseInt(values[0], 10, 64)
+	if err != nil || height < 0 {
+		return 0
+	}
+
+	return height
 }
 
 func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResult, error) {
 	subctx, cancel := context.WithTimeout(ctx, m.config.RPCQueryTimeout)
 	defer cancel()
-	deploymentResponse, err := m.session.Client().Query().Deployment().Deployment(subctx, &dvbeta.QueryDeploymentRequest{ID: m.daddr})
+
+	var header metadata.MD
+	deploymentResponse, err := m.session.Client().Query().Deployment().Deployment(subctx,
+		&dvbeta.QueryDeploymentRequest{ID: m.daddr}, grpc.Header(&header))
 	if err != nil {
 		return manifestManagerFetchDataResult{}, err
 	}
@@ -302,6 +377,7 @@ func (m *manager) doFetchData(ctx context.Context) (manifestManagerFetchDataResu
 	return manifestManagerFetchDataResult{
 		deployment: *deploymentResponse,
 		leases:     leases,
+		height:     readHeight(header),
 	}, nil
 }
 
@@ -333,6 +409,17 @@ func (m *manager) fillAllRequests(response error) {
 		req.ch <- response
 	}
 	m.requests = nil
+}
+
+// maybeEmitReceivedEvents publishes the latest manifest unless requests wait for another
+// chain read and none was accepted. The re-read publishes then, so the cluster does not get
+// the previous manifest again just before a new one.
+func (m *manager) maybeEmitReceivedEvents() {
+	if len(m.requests) > 0 && len(m.pendingRequests) == 0 {
+		return
+	}
+
+	m.emitReceivedEvents()
 }
 
 func (m *manager) emitReceivedEvents() {
@@ -375,6 +462,8 @@ func (m *manager) validateRequests() {
 		return
 	}
 
+	var reread []manifestRequest
+
 	manifests := make([]*maniv2beta2.Manifest, 0)
 	for _, req := range m.requests {
 		// If the request context is complete then skip processing it
@@ -384,6 +473,14 @@ func (m *manager) validateRequests() {
 		default:
 		}
 		if err := m.validateRequest(req); err != nil {
+			if errors.Is(err, ErrManifestVersion) && !req.reread {
+				// The chain read may predate the update this manifest is for:
+				// read the chain once more before refusing it.
+				m.log.Info("manifest version mismatch, reading the chain again")
+				req.reread = true
+				reread = append(reread, req)
+				continue
+			}
 			m.log.Error("invalid manifest", "err", err)
 			req.ch <- err
 			continue
@@ -394,7 +491,8 @@ func (m *manager) validateRequests() {
 		m.pendingRequests = append(m.pendingRequests, req)
 	}
 
-	m.requests = nil // all requests processed at this time
+	// all requests are processed, except those waiting for another chain read
+	m.requests = reread
 
 	m.log.Debug("requests valid", "num_requests", len(manifests))
 
@@ -433,16 +531,16 @@ func (m *manager) validateRequest(req manifestRequest) error {
 		return err
 	}
 
-	var versionExpected []byte
-
-	if len(m.versions) != 0 {
-		versionExpected = m.versions[len(m.versions)-1]
-	} else {
-		versionExpected = m.data.Deployment.Hash
-	}
-
-	if !bytes.Equal(version, versionExpected) {
-		m.log.Error("deployment version mismatch", "expected", hex.EncodeToString(m.data.Deployment.Hash), "got", hex.EncodeToString(version))
+	if !bytes.Equal(version, m.expected.hash) {
+		// A first mismatch only leads to another chain read; after that one it is final.
+		logMismatch := m.log.Info
+		if req.reread {
+			logMismatch = m.log.Error
+		}
+		logMismatch("deployment version mismatch",
+			"expected", hex.EncodeToString(m.expected.hash),
+			"expected_height", m.expected.height,
+			"got", hex.EncodeToString(version))
 		return ErrManifestVersion
 	}
 

@@ -122,6 +122,9 @@ type manifestRequest struct {
 	value *submitRequest
 	ch    chan<- error
 	ctx   context.Context
+	// reread is set once the manager has read the chain again for this request after a
+	// version mismatch, so another mismatch refuses it.
+	reread bool
 }
 
 // logWatchdogDone records that the watchdog of deployment did has finished.
