@@ -205,20 +205,45 @@ func (s *service) updateOrderManagerGauge() {
 // memory and close their bids when the provider shuts down, so after any restart every open
 // order needs a monitor again, whatever an earlier run had already seen. Orders created while
 // the traversal runs arrive as EventOrderCreated.
+//
+// With cfg.MaxOrderAge set, open orders older than that are skipped: an order stays open on chain
+// until its tenant closes the deployment, so abandoned orders would otherwise be evaluated again
+// on every start. Orders this provider has an open bid on are queued whatever their age, so a bid
+// left open by a crash is still found and closed.
 func (s *service) ordersFetcher(ctx context.Context, aqc sclient.QueryClient) error {
-	var nextKey []byte
+	maxAge := s.cfg.MaxOrderAge
+	height := s.session.CreatedAtBlockHeight()
 
-	s.session.Log().Info("catching up open orders")
+	s.session.Log().Info("catching up open orders", "max_order_age", maxAge)
 
-	limit := cap(s.ordersch)
+	if maxAge > 0 {
+		bids, _, err := s.traverse(ctx, "open bids", func(ctx context.Context, preq *sdkquery.PageRequest) ([]mtypes.OrderID, int, *sdkquery.PageResponse, error) {
+			resp, err := aqc.Market().Bids(ctx, &mvbeta.QueryBidsRequest{
+				Filters: mvbeta.BidFilters{
+					Provider: s.session.Provider().Owner,
+					State:    mvbeta.BidOpen.String(),
+				},
+				Pagination: preq,
+			})
+			if err != nil {
+				return nil, 0, nil, err
+			}
 
-loop:
-	for {
-		preq := &sdkquery.PageRequest{
-			Key:   nextKey,
-			Limit: uint64(limit),
+			ids := make([]mtypes.OrderID, 0, len(resp.Bids))
+			for _, bid := range resp.Bids {
+				ids = append(ids, bid.Bid.ID.OrderID())
+			}
+
+			return ids, 0, resp.Pagination, nil
+		})
+		if err != nil {
+			return err
 		}
 
+		s.session.Log().Info("caught up orders with an open bid", "orders", bids)
+	}
+
+	orders, skipped, err := s.traverse(ctx, "open orders", func(ctx context.Context, preq *sdkquery.PageRequest) ([]mtypes.OrderID, int, *sdkquery.PageResponse, error) {
 		resp, err := aqc.Market().Orders(ctx, &mvbeta.QueryOrdersRequest{
 			Filters: mvbeta.OrderFilters{
 				State: mvbeta.OrderOpen.String(),
@@ -226,61 +251,97 @@ loop:
 			Pagination: preq,
 		})
 		if err != nil {
+			return nil, 0, nil, err
+		}
+
+		ids := make([]mtypes.OrderID, 0, len(resp.Orders))
+		skipped := 0
+		for _, order := range resp.Orders {
+			if maxAge > 0 && olderThan(order.CreatedAt, height, maxAge) {
+				skipped++
+				continue
+			}
+			ids = append(ids, order.ID)
+		}
+
+		return ids, skipped, resp.Pagination, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	s.session.Log().Info("caught up open orders", "orders", orders, "skipped_older_than_max_age", skipped)
+
+	return nil
+}
+
+// ordersQuery fetches one page of a traversal: the order IDs to queue, how many orders of the
+// page were skipped, and the pagination of the response.
+type ordersQuery func(context.Context, *sdkquery.PageRequest) ([]mtypes.OrderID, int, *sdkquery.PageResponse, error)
+
+// traverse runs query from the first page to the last and queues the order IDs of every page
+// for run. A failed query is retried until ctx is done. It returns the number of orders queued
+// and skipped, and ctx.Err() when it was stopped before the last page.
+func (s *service) traverse(ctx context.Context, what string, query ordersQuery) (int, int, error) {
+	var nextKey []byte
+	queued, skipped := 0, 0
+
+	limit := cap(s.ordersch)
+
+	for {
+		ids, pageSkipped, pagination, err := query(ctx, &sdkquery.PageRequest{
+			Key:   nextKey,
+			Limit: uint64(limit),
+		})
+		if err != nil {
 			// check the context rather than the error: gRPC reports cancellation as a status
 			// error which does not match context.Canceled
 			if ctx.Err() != nil {
-				break loop
+				return queued, skipped, ctx.Err()
 			}
 
-			s.session.Log().Error("querying open orders", "err", err)
+			s.session.Log().Error("querying "+what, "err", err)
 
 			select {
 			case <-ctx.Done():
-				break loop
+				return queued, skipped, ctx.Err()
 			case <-time.After(ordersFetchRetryPeriod):
 			}
 
 			continue
 		}
 
-		page := ordersPage{
-			orders: make([]mtypes.OrderID, 0, len(resp.Orders)),
-		}
-
-		for _, order := range resp.Orders {
-			page.orders = append(page.orders, order.ID)
-		}
-
 		var pageNextKey []byte
-		if resp.Pagination != nil {
-			pageNextKey = resp.Pagination.NextKey
+		if pagination != nil {
+			pageNextKey = pagination.NextKey
 		}
 
 		if ctx.Err() != nil {
-			break loop
+			return queued, skipped, ctx.Err()
 		}
 
 		// a page naming the requested key as the next one would be fetched forever;
 		// an empty next key marks the last page and is handled below
 		if len(pageNextKey) != 0 && bytes.Equal(pageNextKey, nextKey) {
-			return fmt.Errorf("%w: %x", errOrdersNextKeyRepeated, pageNextKey)
+			return queued, skipped, fmt.Errorf("%w: %x", errOrdersNextKeyRepeated, pageNextKey)
 		}
 
 		select {
-		case s.ordersch <- page:
+		case s.ordersch <- ordersPage{orders: ids}:
 		case <-ctx.Done():
-			break loop
+			return queued, skipped, ctx.Err()
 		}
 
-		// empty next key indicates all open orders have been traversed
+		queued += len(ids)
+		skipped += pageSkipped
+
+		// empty next key indicates all pages have been traversed
 		if len(pageNextKey) == 0 {
-			break loop
+			return queued, skipped, nil
 		}
 
 		nextKey = pageNextKey
 	}
-
-	return ctx.Err()
 }
 
 // processOrdersPage creates monitors for a page of catch-up orders. An order can also arrive as

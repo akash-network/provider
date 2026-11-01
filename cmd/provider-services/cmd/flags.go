@@ -186,6 +186,11 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().Duration(FlagMaxOrderAge, 7*24*time.Hour, "open orders older than this are not evaluated when the provider starts, unless it has an open bid on them (0 evaluates all open orders)")
+	if err := viper.BindPFlag(FlagMaxOrderAge, cmd.Flags().Lookup(FlagMaxOrderAge)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Duration(FlagReclamationWindow, 0, "reclamation window duration to offer in bids (e.g. 24h, 720h). 0 means no reclamation offered")
 	if err := viper.BindPFlag(FlagReclamationWindow, cmd.Flags().Lookup(FlagReclamationWindow)); err != nil {
 		return err

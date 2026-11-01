@@ -552,7 +552,8 @@ func Test_ShouldCloseBidWhenAlreadySetAndOld(t *testing.T) {
 		Attributes:      nil,
 	}
 
-	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, &cfg, 1)
+	// the provider starts 1000 blocks after the bid was created, well past the bid timeout
+	order, scaffold, _ := makeOrderForTest(t, true, mvbeta.BidOpen, nil, &cfg, testBidCreatedAt+1000)
 
 	testutil.ChannelWaitForClose(t, order.lc.Done())
 
@@ -819,3 +820,24 @@ func Test_ShouldntBidIfOrderAttrsDontMatch(t *testing.T) {
 
 // TODO - add test failing the call to Broadcast on TxClient and
 // and then confirm that the reservation is cancelled
+
+// Regression: the block age was computed as created - session height, which is negative for
+// any bid made before the provider started, so an expired bid was never detected.
+func Test_IsStaleBid(t *testing.T) {
+	const height = 1_000_000
+	bidTimeout := 5 * time.Minute
+	timeoutBlocks := int64(bidTimeout / minTimePerBlock)
+
+	provider := &ptypes.Provider{Owner: testutil.AccAddress(t).String()}
+	o := &order{
+		cfg:     Config{BidTimeout: bidTimeout},
+		session: session.New(testutil.Logger(t), nil, provider, height),
+	}
+
+	require.True(t, o.isStaleBid(mvbeta.Bid{CreatedAt: height - timeoutBlocks - 1}), "bid older than the bid timeout")
+	require.False(t, o.isStaleBid(mvbeta.Bid{CreatedAt: height - timeoutBlocks}), "bid exactly at the bid timeout")
+	require.False(t, o.isStaleBid(mvbeta.Bid{CreatedAt: height - 1}), "recent bid")
+
+	o.cfg.BidTimeout = 0
+	require.False(t, o.isStaleBid(mvbeta.Bid{CreatedAt: 1}), "bid timeout disabled")
+}
