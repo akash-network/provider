@@ -50,8 +50,8 @@ require (
 	k8s.io/code-generator v0.34.1
 	k8s.io/kubectl v0.33.3
 	k8s.io/utils v0.0.0-20260108192941-914a6e750570
-	pkg.akt.dev/go v0.4.6
-	pkg.akt.dev/go/cli v0.2.4
+	pkg.akt.dev/go v0.4.8
+	pkg.akt.dev/go/cli v0.2.5-rc0
 	pkg.akt.dev/go/sdl v0.4.5
 	pkg.akt.dev/node v1.2.2
 	pkg.akt.dev/node/v2 v2.1.0
@@ -65,6 +65,8 @@ retract (
 	v0.11.0
 	v0.6.5
 	v0.6.0
+	v0.4.10-rc0
+	v0.4.7-rc0
 )
 
 replace (

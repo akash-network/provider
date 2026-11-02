@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	inventoryV1 "pkg.akt.dev/go/inventory/v1"
 	attrtypes "pkg.akt.dev/go/node/types/attributes/v1"
 	"pkg.akt.dev/go/sdl"
 	"pkg.akt.dev/go/util/units"
@@ -146,6 +147,32 @@ func ParseCPUAttributes(attrs attrtypes.Attributes) (CPUAttributes, error) {
 	}
 
 	return res, nil
+}
+
+// CPUArchMatches reports whether a node, described by info, can take a CPU request
+// carrying attrs. The arch attribute only narrows placement: a request that names no
+// arch matches every node, whatever its arch, so an SDL without arch deploys on a
+// single-node, homogeneous or mixed cluster of any arch. A request that names an arch
+// matches only a node that reports the same arch; a node's arch is that of its first
+// CPU info entry, which the inventory operator sets on every entry. A node that reports
+// none, from an inventory operator that predates arch reporting or whose CPU query
+// failed, cannot be ruled out and matches. Attributes ParseCPUAttributes rejects are an
+// error.
+func CPUArchMatches(info inventoryV1.CPUInfoS, attrs attrtypes.Attributes) (bool, error) {
+	if len(attrs) == 0 {
+		return true, nil
+	}
+
+	parsed, err := ParseCPUAttributes(attrs)
+	if err != nil {
+		return false, err
+	}
+
+	if parsed.Arch == "" || len(info) == 0 || info[0].Arch == "" {
+		return true, nil
+	}
+
+	return info[0].Arch == parsed.Arch, nil
 }
 
 func ParseStorageAttributes(attrs attrtypes.Attributes) (StorageAttributes, error) {

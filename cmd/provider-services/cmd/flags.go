@@ -4,9 +4,6 @@ import (
 	"time"
 
 	"github.com/go-acme/lego/v4/lego"
-	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
-
-	sdkmath "cosmossdk.io/math"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -211,18 +208,13 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
-	cmd.Flags().Duration(FlagWithdrawalPeriod, time.Hour*24, "period at which withdrawals are made from the escrow accounts")
+	cmd.Flags().Duration(FlagWithdrawalPeriod, time.Hour*24, "period at which withdrawals are made from the escrow accounts. 0 turns withdrawals off: lease balances are still checked, but a lease out of funds stays open until its escrow is settled")
 	if err := viper.BindPFlag(FlagWithdrawalPeriod, cmd.Flags().Lookup(FlagWithdrawalPeriod)); err != nil {
 		return err
 	}
 
 	cmd.Flags().Duration(FlagLeaseFundsMonitorInterval, time.Minute*10, "interval at which lease is checked for funds available on the escrow accounts. >= 1m")
 	if err := viper.BindPFlag(FlagLeaseFundsMonitorInterval, cmd.Flags().Lookup(FlagLeaseFundsMonitorInterval)); err != nil {
-		return err
-	}
-
-	cmd.Flags().Uint64(FlagMinimumBalance, mvbeta.DefaultBidMinDeposit.Amount.Mul(sdkmath.NewIntFromUint64(2)).Uint64(), "minimum account balance at which withdrawal is started")
-	if err := viper.BindPFlag(FlagMinimumBalance, cmd.Flags().Lookup(FlagMinimumBalance)); err != nil {
 		return err
 	}
 

@@ -60,10 +60,12 @@ Things that differ from the previous `akash`/`provider-services` commands:
   without `DEPOSIT` akt rejects them with `Mismatched denominations (uact != uakt): Deposit invalid`,
   and with a `uakt` deposit the chain rejects the transaction (`Deposit invalid`).
   Use `uact` pricing, as in [`deployment.yaml`](deployment.yaml).
-- The provider assumes `amd64` for SDLs that do not set a CPU architecture. On
-  an arm64 host (e.g. kind on Apple Silicon) add `attributes: {arch: arm64}`
-  under `resources.cpu`, otherwise the provider reports insufficient capacity
-  and does not bid.
+- An SDL that sets no CPU architecture deploys on nodes of any architecture,
+  so the example SDLs work unchanged on an arm64 host (e.g. kind on Apple
+  Silicon). `attributes: {arch: amd64}` or `{arch: arm64}` under
+  `resources.cpu` only makes inventory matching skip nodes reporting another
+  architecture. It does not constrain pod placement: in a mixed-architecture
+  cluster, pods may still be scheduled on nodes of another architecture.
 
 # Runbook
 

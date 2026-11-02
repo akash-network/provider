@@ -65,6 +65,8 @@ type Client interface {
 	Deploy(ctx context.Context, deployment ctypes.IDeployment) error
 	TeardownLease(context.Context, mtypes.LeaseID) error
 	Deployments(context.Context) ([]ctypes.IDeployment, error)
+	// LeaseIDs returns the leases that have a namespace or a manifest in the cluster.
+	LeaseIDs(context.Context) ([]mtypes.LeaseID, error)
 	Exec(ctx context.Context,
 		lID mtypes.LeaseID,
 		service string,
@@ -297,6 +299,10 @@ func (c *nullClient) TeardownLease(_ context.Context, lid mtypes.LeaseID) error 
 }
 
 func (c *nullClient) Deployments(context.Context) ([]ctypes.IDeployment, error) {
+	return nil, nil
+}
+
+func (c *nullClient) LeaseIDs(context.Context) ([]mtypes.LeaseID, error) {
 	return nil, nil
 }
 

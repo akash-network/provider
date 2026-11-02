@@ -78,7 +78,7 @@ else
 	DETECTED_OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
 endif
 
-GO_MOD_NAME                  := $(shell go list -m 2>/dev/null)
+GO_MOD_NAME                  := $(shell GOWORK=off go list -m 2>/dev/null)
 
 AKASHD_MODULE                := pkg.akt.dev/node/v2
 AKASHD_LOCAL_PATH            := $(shell $(GO) list -mod=readonly -m -f '{{ .Dir }}' "$(AKASHD_MODULE)")

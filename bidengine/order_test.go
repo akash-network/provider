@@ -39,6 +39,7 @@ import (
 	"github.com/akash-network/provider/session"
 	"github.com/akash-network/provider/tools/fromctx"
 	"github.com/akash-network/provider/tools/logging/logtest"
+	"github.com/akash-network/provider/tools/pconfig/memory"
 )
 
 type orderTestScaffold struct {
@@ -217,8 +218,12 @@ func makeOrderForTestWithLogger(
 	cfg.Deposit = mvbeta.DefaultBidMinDeposit
 	cfg.MaxGroupVolumes = constants.DefaultMaxGroupVolumes
 
+	pcfg, err := memory.NewMemory()
+	require.NoError(t, err)
+
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, fromctx.CtxKeyPubSub, tpubsub.New(ctx, 1000))
+	ctx = context.WithValue(ctx, fromctx.CtxKeyPersistentConfig, pcfg)
 	myService, err := NewService(ctx, scaffold.queryClient, mySession, scaffold.cluster, scaffold.testBus, waiter.NewNullWaiter(), cfg)
 	require.NoError(t, err)
 	require.NotNil(t, myService)

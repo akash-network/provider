@@ -111,7 +111,6 @@ const (
 	FlagMetricsListener                  = "metrics-listener"
 	FlagWithdrawalPeriod                 = "withdrawal-period"
 	FlagLeaseFundsMonitorInterval        = "lease-funds-monitor-interval"
-	FlagMinimumBalance                   = "minimum-balance"
 	FlagProviderConfig                   = "provider-config"
 	FlagCachedResultMaxAge               = "cached-result-max-age"
 	FlagRPCQueryTimeout                  = "rpc-query-timeout"
@@ -198,6 +197,21 @@ func TxPersistentPreRunE(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
+// validateWithdrawalPeriod checks the --withdrawal-period value: 0 turns
+// withdrawals off, a negative period is rejected, and a positive one must be
+// at least the funds check interval.
+func validateWithdrawalPeriod(period, fundsCheckInterval time.Duration) error {
+	if period < 0 {
+		return fmt.Errorf(`flag "%s" value must be >= 0`, FlagWithdrawalPeriod) // nolint: err113
+	}
+
+	if period > 0 && period < fundsCheckInterval {
+		return fmt.Errorf(`flag "%s" value must be >= "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+	}
+
+	return nil
+}
+
 // RunCmd launches the Akash Provider service
 func RunCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -218,8 +232,8 @@ func RunCmd() *cobra.Command {
 				return fmt.Errorf(`flag "%s" contains invalid value. expected >=1m<=24h`, FlagLeaseFundsMonitorInterval) // nolint: err113
 			}
 
-			if withdrawPeriod > 0 && withdrawPeriod < leaseFundsMonInterval {
-				return fmt.Errorf(`flag "%s" value must be > "%s"`, FlagWithdrawalPeriod, FlagLeaseFundsMonitorInterval) // nolint: err113
+			if err := validateWithdrawalPeriod(withdrawPeriod, leaseFundsMonInterval); err != nil {
+				return err
 			}
 
 			if reclamationWindow < 0 {
@@ -813,10 +827,14 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	evtSvc, err := newEventsService(ctx, cctx.Client, bus, logger)
+	evtSvc, err := newEventsService(ctx, cctx.NodeURI, bus, logger)
 	if err != nil {
 		return err
 	}
+
+	group.Go(func() error {
+		return watchEvents(ctx, evtSvc)
+	})
 
 	group.Go(func() error {
 		<-service.Done()
@@ -993,10 +1011,15 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// newEventsService starts the chain event service. The service adds only "cmp" to the
-// logger it is given, so "module" is bound here for the module filter to apply.
-func newEventsService(ctx context.Context, node sdkclient.CometRPC, bus pubsub.Bus, logger log.Logger) (events.Service, error) {
-	return events.NewEvents(ctx, node, "provider-cli", bus, events.WithLogger(logger.With("module", "events")))
+// newEventsService starts the chain event service on a connection of its own to the RPC
+// node at nodeURI, the node the rest of the provider uses, so its block fetches never
+// queue behind the provider's chain queries. It fails only if nodeURI is unusable or the
+// node does not answer a status query: a websocket it cannot reach is redialed in the
+// background while events keep flowing by polling, so it does not hold up startup. The
+// service adds "cmp" and "name" to the logger it is given, but not "module", so that is
+// bound here for the module filter to apply.
+func newEventsService(ctx context.Context, nodeURI string, bus pubsub.Bus, logger log.Logger) (events.Service, error) {
+	return events.NewEvents(ctx, nodeURI, "provider-cli", bus, events.WithLogger(logger.With("module", "events")))
 }
 
 // attestationSidecarEnv returns the environment injected into attestation sidecars:
