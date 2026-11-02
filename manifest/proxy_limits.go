@@ -7,7 +7,7 @@ import (
 )
 
 // Upper bounds on tenant-supplied nginx proxy buffer options. These render into the
-// shared gateway data plane (NGF SnippetsFilter or ingress-nginx annotations) and
+// shared gateway data plane (an NGF SnippetsFilter) and
 // nginx allocates the buffer pool per proxied connection, so without a cap one tenant
 // could force the shared gateway to allocate arbitrary memory per connection and
 // starve or OOM every co-tenant. All sizes are bytes.

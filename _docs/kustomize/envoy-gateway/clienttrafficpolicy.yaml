@@ -1,0 +1,19 @@
+---
+# Gateway-wide defaults. A tenant route's BackendTrafficPolicy replaces, rather than
+# merges with, any Gateway-level one, so the provider renders every route policy
+# complete; this policy only covers the client side.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: ClientTrafficPolicy
+metadata:
+  name: akash-client-defaults
+  namespace: akash-gateway
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: akash-gateway
+  timeout:
+    http:
+      streamIdleTimeout: 60s
+    tcp:
+      idleTimeout: 1h

@@ -27,6 +27,7 @@ import (
 	mvbeta "pkg.akt.dev/go/node/market/v1beta5"
 
 	"github.com/akash-network/provider/cluster/kube/builder"
+	"github.com/akash-network/provider/cluster/kube/gateway"
 	providerCmd "github.com/akash-network/provider/cmd/provider-services/cmd"
 	ptestutil "github.com/akash-network/provider/testutil/provider"
 	"github.com/akash-network/provider/tools/fromctx"
@@ -45,7 +46,7 @@ var snippetsFilterGVR = schema.GroupVersionResource{
 }
 
 // E2EGatewayAPI is the test suite for Gateway API integration tests.
-// It embeds IntegrationTestSuite with gatewayAPIMode enabled.
+// It runs against whichever Gateway API implementation owns akash-gateway.
 type E2EGatewayAPI struct {
 	IntegrationTestSuite
 	dc dynamic.Interface
@@ -170,8 +171,8 @@ func (s *E2EGatewayAPI) TestE2EGatewayAPIHTTPRouteCreation() {
 		s.verifyHTTPRouteParentRef(ns, "gateway-test.localhost", "akash-gateway", "akash-gateway")
 	})
 
-	s.T().Run("HTTPRoute references SnippetsFilter with http_options", func(t *testing.T) {
-		s.verifyHTTPRouteSnippet(ns, "gateway-test.localhost")
+	s.T().Run("http_options applied by the gateway implementation", func(t *testing.T) {
+		s.verifyHTTPRouteOptions(ns, "gateway-test.localhost")
 	})
 
 	// Verify provider status
@@ -409,6 +410,61 @@ func (s *E2EGatewayAPI) verifyHTTPRouteParentRef(namespace, routeName, gatewayNa
 	}
 }
 
+// verifyHTTPRouteOptions checks the http_options the way the implementation that
+// owns akash-gateway applies them.
+func (s *E2EGatewayAPI) verifyHTTPRouteOptions(namespace, routeName string) {
+	if s.dc == nil {
+		s.T().Skip("dynamic client not available")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
+	defer cancel()
+
+	impl, err := gateway.DetectProvider(ctx, s.dc, "akash-gateway", "akash-gateway")
+	require.NoError(s.T(), err)
+
+	if impl == "envoy" {
+		s.verifyHTTPRoutePolicies(namespace, routeName)
+		return
+	}
+	s.verifyHTTPRouteSnippet(namespace, routeName)
+}
+
+// verifyHTTPRoutePolicies checks that an Envoy route references no extension,
+// disables the total request timeout, and has a complete BackendTrafficPolicy
+// carrying the SDL timeouts (read/send 60000 ms -> 1m idle; connect unset -> the 1m
+// nginx default).
+func (s *E2EGatewayAPI) verifyHTTPRoutePolicies(namespace, routeName string) {
+	ctx, cancel := context.WithTimeout(s.ctx, 10*time.Second)
+	defer cancel()
+
+	route, err := s.dc.Resource(httpRouteGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	require.NoError(s.T(), err)
+
+	rules, found, err := unstructured.NestedSlice(route.Object, "spec", "rules")
+	require.NoError(s.T(), err)
+	require.True(s.T(), found)
+	for _, r := range rules {
+		rule := r.(map[string]interface{})
+		_, hasFilters := rule["filters"]
+		assert.False(s.T(), hasFilters, "Envoy routes reference no extension")
+		timeout, _, _ := unstructured.NestedString(rule, "timeouts", "request")
+		assert.Equal(s.T(), "0s", timeout)
+	}
+
+	btp, err := s.dc.Resource(gateway.BackendTrafficPolicyGVR).Namespace(namespace).Get(ctx, routeName, metav1.GetOptions{})
+	require.NoError(s.T(), err, "BackendTrafficPolicy %s should exist", routeName)
+
+	idle, _, _ := unstructured.NestedString(btp.Object, "spec", "timeout", "http", "streamIdleTimeout")
+	connect, _, _ := unstructured.NestedString(btp.Object, "spec", "timeout", "tcp", "connectTimeout")
+	assert.Equal(s.T(), "1m", idle)
+	assert.Equal(s.T(), "1m", connect)
+
+	ancestors, _, _ := unstructured.NestedSlice(btp.Object, "status", "ancestors")
+	assert.NotEmpty(s.T(), ancestors, "Envoy Gateway should report status on the policy")
+}
+
 // verifyHTTPRouteSnippet checks that the HTTPRoute references a per-route
 // SnippetsFilter through an ExtensionRef filter, and that the SnippetsFilter
 // carries the SDL http_options as nginx directives. NGF applies http_options via
@@ -478,9 +534,5 @@ func (s *E2EGatewayAPI) verifyHTTPRouteSnippet(namespace, routeName string) {
 // TestGatewayAPISuite runs the Gateway API e2e test suite
 func TestGatewayAPISuite(t *testing.T) {
 	integrationTestOnly(t)
-	suite.Run(t, &E2EGatewayAPI{
-		IntegrationTestSuite: IntegrationTestSuite{
-			gatewayAPIMode: true,
-		},
-	})
+	suite.Run(t, new(E2EGatewayAPI))
 }

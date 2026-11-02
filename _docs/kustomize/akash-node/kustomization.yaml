@@ -5,7 +5,7 @@ namespace: akash-services
 resources:
   - deployment.yaml
   - service.yaml
-  - ingress.yaml
+  - route.yaml
 commonLabels:
   app: akash-node
   akash.network/component: akash-node

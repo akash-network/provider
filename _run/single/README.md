@@ -95,10 +95,11 @@ make kind-cluster-setup
 KIND_CONFIG=calico make kind-cluster-setup
 ```
 
-Check all pods in kube-system and ingress-nginx namespaces are in Running state.
+Check all pods in kube-system and akash-gateway namespaces are in Running state.
 If some pods are in Pending stay give it a little wait and check again
 ```shell
-kubectl --context kind-single -n ingress-nginx -n kube-system get pods
+kubectl --context kind-single get pods -n kube-system
+kubectl --context kind-single get pods -n akash-gateway
 ```
 
 ### (Optional) Upload a local docker image

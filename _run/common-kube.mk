@@ -5,10 +5,10 @@ KUBE_CREATE                := $(AP_RUN_DIR)/.kube-create
 include ../common-kustomize.mk
 include ../common-kind.mk
 include ../common-helm.mk
+include ../common-gateway.mk
 
 KUBE_UPLOAD_AKASH_IMAGE    ?= false
 KUBE_ROLLOUT_TIMEOUT       ?= 180
-INGRESS_CONFIG_PATH        ?= ../ingress-nginx.yaml
 CALICO_MANIFEST            ?= https://github.com/projectcalico/calico/blob/v3.25.0/manifests/calico.yaml
 CRD_FILE                   ?= $(AP_ROOT)/pkg/apis/akash.network/crd.yaml
 
@@ -141,8 +141,7 @@ kube-setup-ingress: kube-setup-ingress-$(KIND_CONFIG)
 kube-setup-ingress-calico:
 	kubectl apply -f "$(CALICO_MANIFEST)"
 	# Calico needs to be managing networking before finishing setup
-	kubectl apply -f "$(INGRESS_CONFIG_PATH)"
-	kubectl rollout status deployment -n ingress-nginx ingress-nginx-controller --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	$(MAKE) kube-setup-gateway
 	kubectl apply -f "$(METALLB_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_IP_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_SERVICE_PATH)"
@@ -150,16 +149,11 @@ kube-setup-ingress-calico:
 
 .PHONY: kube-setup-ingress-default
 kube-setup-ingress-default:
-	kubectl apply -f "$(INGRESS_CONFIG_PATH)"
-	kubectl rollout status deployment -n ingress-nginx ingress-nginx-controller --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
+	$(MAKE) kube-setup-gateway
 	kubectl apply -f "$(METALLB_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_IP_CONFIG_PATH)"
 	kubectl apply -f "$(METALLB_SERVICE_PATH)"
 	"$(SETUP_KIND)"
-
-.PHONY: kube-status-ingress-%
-kube-status-ingress-%:
-	kubectl rollout status -n akash-services ingress $* --timeout=$(KUBE_ROLLOUT_TIMEOUT)s
 
 .PHONY: kube-deployment-rollout-operator-inventory
 kube-deployment-rollout-operator-inventory:

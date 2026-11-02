@@ -325,18 +325,20 @@ func IsInventoryUnderTestFromCtx(ctx context.Context) bool {
 
 // GatewayConfig holds all gateway-related configuration stored in context.
 type GatewayConfig struct {
-	IngressMode string
-	Name        string
-	Namespace   string
-	Provider    string
+	Name      string
+	Namespace string
+	// Provider is the Gateway API implementation, or "auto" to detect it from the
+	// Gateway's GatewayClass.
+	Provider string
 }
 
 func GatewayConfigFromCtx(ctx context.Context) (GatewayConfig, error) {
 	val := ctx.Value(CtxKeyGatewayConfig)
 	if val == nil {
 		return GatewayConfig{
-			IngressMode: "ingress",
-			Provider:    "nginx",
+			Name:      "akash-gateway",
+			Namespace: "akash-gateway",
+			Provider:  "auto",
 		}, nil
 	}
 
