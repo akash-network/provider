@@ -1,0 +1,36 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devkit
+  labels:
+    app.kubernetes.io/name: devkit
+    app.kubernetes.io/instance: devkit
+    app.kubernetes.io/component: release-feed
+    app.kubernetes.io/part-of: provisor
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: devkit
+      app.kubernetes.io/instance: devkit
+      app.kubernetes.io/component: release-feed
+      app.kubernetes.io/part-of: provisor
+  replicas: 1
+  revisionHistoryLimit: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: devkit
+        app.kubernetes.io/instance: devkit
+        app.kubernetes.io/component: release-feed
+        app.kubernetes.io/part-of: provisor
+    spec:
+      containers:
+        - name: devkit
+          image: ghcr.io/akash-network/provisor:stable
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/bin/devkit"]
+          args: ["serve", "--addr=0.0.0.0:8099", "--public-addr=devkit.akash-provisor.svc.cluster.local:8099"]
+          ports:
+            - name: http
+              containerPort: 8099

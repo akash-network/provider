@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devkit
+  labels:
+    app.kubernetes.io/name: devkit
+    app.kubernetes.io/instance: devkit
+    app.kubernetes.io/component: release-feed
+    app.kubernetes.io/part-of: provisor
+spec:
+  selector:
+    app.kubernetes.io/name: devkit
+    app.kubernetes.io/instance: devkit
+    app.kubernetes.io/component: release-feed
+    app.kubernetes.io/part-of: provisor
+  ports:
+    - name: http
+      port: 8099

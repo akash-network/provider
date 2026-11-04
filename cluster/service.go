@@ -66,7 +66,8 @@ type service struct {
 	statusV1ch                     chan chan<- uint32
 	managers                       map[mtypes.LeaseID]*deploymentManager
 
-	managerch chan *deploymentManager
+	managerch           chan *deploymentManager
+	recoveryDeploySlots chan struct{}
 
 	log log.Logger
 	lc  lifecycle.Lifecycle
@@ -156,6 +157,11 @@ func NewService(
 		return nil, err
 	}
 
+	var recoveryDeploySlots chan struct{} // nil means unbounded; a zero-capacity channel would block forever
+	if cfg.LeaseRecoveryConcurrency > 0 {
+		recoveryDeploySlots = make(chan struct{}, cfg.LeaseRecoveryConcurrency)
+	}
+
 	s := &service{
 		session:                        session,
 		client:                         client,
@@ -167,6 +173,7 @@ func NewService(
 		statusV1ch:                     make(chan chan<- uint32),
 		managers:                       make(map[mtypes.LeaseID]*deploymentManager),
 		managerch:                      make(chan *deploymentManager),
+		recoveryDeploySlots:            recoveryDeploySlots,
 		checkDeploymentExistsRequestCh: make(chan checkDeploymentExistsRequest),
 		log:                            log,
 		lc:                             lc,

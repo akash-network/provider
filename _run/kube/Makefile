@@ -1,5 +1,6 @@
 GATEWAY_API          ?= false
 CONFIDENTIAL_COMPUTE ?= false
+PROVISOR             ?= false
 
 KUBE_SETUP_PREREQUISITES   ?= \
 
@@ -21,6 +22,10 @@ KUSTOMIZE_INSTALLS ?= \
 
 ifeq ($(CONFIDENTIAL_COMPUTE),true)
 KUSTOMIZE_INSTALLS += confidential-compute
+endif
+
+ifeq ($(PROVISOR),true)
+KUSTOMIZE_INSTALLS += provisor
 endif
 
 include ../common.mk
@@ -55,6 +60,19 @@ DOCKER_LOAD_IMAGES += $(ATTESTATION_SIDECAR_IMAGE)
 kube-prepare-images: kube-prepare-image-attestation-sidecar
 else
 SDL_PATH                   ?= grafana.yaml
+endif
+
+# Deliberately not registry-qualified. This image bakes the dev signing
+# private keys in so devkit can sign, and it is only ever loaded into kind,
+# never pushed. A $(DEV_REGISTRY)-prefixed tag would invite exactly that.
+# Defined outside the PROVISOR gate so the image targets below also work
+# when invoked directly to rebuild after a code change.
+PROVISOR_IMAGE ?= provisor-dev:$(DEV_COMMIT)
+
+ifeq ($(PROVISOR),true)
+DOCKER_LOAD_IMAGES += $(PROVISOR_IMAGE)
+
+kube-prepare-images: kube-prepare-image-provisor
 endif
 
 GATEWAY_HOSTNAME ?= localhost
@@ -111,6 +129,42 @@ ifneq ($(SKIP_BUILD), true)
 	@echo "  [CC] Building attestation sidecar image..."
 	$(MAKE) -C $(AP_ROOT)/sidecar/attestation docker DEV_REGISTRY=$(DEV_REGISTRY) DEV_COMMIT=$(DEV_COMMIT)
 endif
+
+.PHONY: kustomize-set-image-provisor
+kustomize-set-image-provisor:
+	$(SETUP_KUBE) kustomize image "containers/0" "$(PROVISOR_IMAGE)" > "$(KUSTOMIZE_DIR)/provisor/docker-image-feed.yaml"
+	$(SETUP_KUBE) kustomize image "containers/0" "$(PROVISOR_IMAGE)" > "$(KUSTOMIZE_DIR)/provisor/docker-image-fetch.yaml"
+
+.PHONY: kustomize-configure-provisor
+kustomize-configure-provisor:
+	@echo "  [PROVISOR] No service configuration needed"
+
+# trust.Load() embeds roots/*.json at compile time via go:embed, so the
+# image must not be built until dev keys (and trust/roots/dev.json) exist,
+# or devkit/provisor-fetch will reject every document with UnknownSigningKey.
+.PHONY: provisor-devkeys
+provisor-devkeys:
+	cd $(AP_ROOT)/provisor && test -f trust/roots/dev.json || go run ./cmd/devkit keys
+
+.PHONY: kube-prepare-image-provisor
+kube-prepare-image-provisor: provisor-devkeys
+ifneq ($(SKIP_BUILD), true)
+	@echo "  [PROVISOR] Building provisor image..."
+	docker build -t $(PROVISOR_IMAGE) $(AP_ROOT)/provisor
+endif
+
+.PHONY: provisor-fetch-run
+provisor-fetch-run:
+	kubectl -n akash-provisor delete job/provisor-fetch --ignore-not-found
+	$(MAKE) kustomize-deploy-provisor
+	kubectl -n akash-provisor patch job/provisor-fetch --type=merge -p '{"spec":{"suspend":false}}'
+
+.PHONY: provisor-fetch-logs
+# Selects by job-name label rather than `logs job/...`, which picks one pod
+# arbitrarily and so reports a lost startup race instead of the retry that
+# succeeded.
+provisor-fetch-logs:
+	kubectl -n akash-provisor logs -l batch.kubernetes.io/job-name=provisor-fetch --tail=-1 --prefix
 
 .PHONY: clean-kube
 clean-kube:
