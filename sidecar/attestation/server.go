@@ -25,9 +25,16 @@ type QuoteRequest struct {
 }
 
 // GPUReportEntry holds attestation evidence for a single GPU in the response.
+// Architecture and UUID are collected directly from NVML alongside the signed
+// evidence; callers must not replace them with tenant-provided metadata.
 type GPUReportEntry struct {
-	DeviceIndex uint32 `json:"device_index"`
-	Report      string `json:"report"` // base64
+	DeviceIndex       uint32 `json:"device_index"`
+	Architecture      string `json:"architecture"`
+	UUID              string `json:"uuid"`
+	Report            string `json:"report"` // base64 legacy report || CEC || certificate chain
+	AttestationReport string `json:"attestation_report"`
+	CECReport         string `json:"cec_report,omitempty"`
+	CertificateChain  string `json:"certificate_chain,omitempty"`
 }
 
 // QuoteResponse is the response body for POST /quote.
@@ -39,8 +46,9 @@ type QuoteResponse struct {
 	TEEPlatform string `json:"tee_platform"` // "snp", "tdx", "snp-gpu", "tdx-gpu"
 	AuxBlob     string `json:"auxblob"`      // empty on NVIDIA-patched kernel
 
-	// GPUReports contains per-device attestation evidence for ALL CC-capable GPUs.
-	// Each entry includes the device index and its hardware-signed report.
+	// GPUReports contains separately framed attestation evidence for every
+	// CC-capable GPU. Report is retained as a legacy aggregate. The explicit
+	// fields are an additive protocol v4 extension.
 	GPUReports []GPUReportEntry `json:"gpu_reports,omitempty"`
 
 	// TLSBound indicates whether report_data was computed with TLS channel binding.
@@ -126,8 +134,13 @@ func quoteHandler(provider tee.Provider, binding *TLSBinding) http.HandlerFunc {
 			resp.GPUReports = make([]GPUReportEntry, len(report.GPUReports))
 			for i, gr := range report.GPUReports {
 				resp.GPUReports[i] = GPUReportEntry{
-					DeviceIndex: gr.DeviceIndex,
-					Report:      base64.StdEncoding.EncodeToString(gr.Report),
+					DeviceIndex:       gr.DeviceIndex,
+					Architecture:      gr.Architecture,
+					UUID:              gr.UUID,
+					Report:            base64.StdEncoding.EncodeToString(gr.Report),
+					AttestationReport: base64.StdEncoding.EncodeToString(gr.AttestationReport),
+					CECReport:         base64.StdEncoding.EncodeToString(gr.CECReport),
+					CertificateChain:  base64.StdEncoding.EncodeToString(gr.CertificateChain),
 				}
 			}
 		}
