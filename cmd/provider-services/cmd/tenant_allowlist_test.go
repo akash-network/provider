@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,15 @@ func TestParseTenantAllowlistSplitsCommasAndWhitespace(t *testing.T) {
 		Tenants:  []string{tenantA, tenantB, tenantC},
 		Granters: []string{granterA, granterB},
 	}, allowlist)
+}
+
+func TestParseTenantAllowlistStoresUppercaseAddressesInCanonicalForm(t *testing.T) {
+	tenant, granter := testutil.AccAddress(t).String(), testutil.AccAddress(t).String()
+
+	allowlist, err := parseTenantAllowlist([]string{strings.ToUpper(tenant)}, []string{strings.ToUpper(granter)})
+
+	require.NoError(t, err)
+	require.Equal(t, bidengine.TenantAllowlist{Tenants: []string{tenant}, Granters: []string{granter}}, allowlist)
 }
 
 func TestParseTenantAllowlistRejectsInvalidTenant(t *testing.T) {

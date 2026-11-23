@@ -29,10 +29,11 @@ func parseAddressList(flag string, values []string) ([]string, error) {
 	var addresses []string
 	for _, value := range values {
 		for _, address := range strings.FieldsFunc(value, isAddressSeparator) {
-			if _, err := sdk.AccAddressFromBech32(address); err != nil {
+			decoded, err := sdk.AccAddressFromBech32(address)
+			if err != nil {
 				return nil, fmt.Errorf(`flag "%s" contains invalid address %q: %w`, flag, address, err)
 			}
-			addresses = append(addresses, address)
+			addresses = append(addresses, decoded.String())
 		}
 	}
 
