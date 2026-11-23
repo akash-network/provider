@@ -348,7 +348,7 @@ loop:
 			group = &res
 
 			shouldBidCh = runner.Do(func() runner.Result {
-				return runner.NewResult(o.shouldBid(group))
+				return runner.NewResult(o.shouldBid(ctx, group))
 			})
 
 		case result := <-shouldBidCh:
@@ -527,7 +527,7 @@ loop:
 	}
 }
 
-func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
+func (o *order) shouldBid(ctx context.Context, group *dtypes.Group) (bool, error) {
 	// does provider have required attributes?
 	if !group.GroupSpec.MatchAttributes(o.session.Provider().Attributes) {
 		o.log.Debug("unable to fulfill: incompatible provider attributes")
@@ -597,5 +597,28 @@ func (o *order) shouldBid(group *dtypes.Group) (bool, error) {
 			"err", err)
 		return false, nil
 	}
-	return true, nil
+
+	return o.isTenantAllowed(ctx, group.ID.Owner)
+}
+
+func (o *order) isTenantAllowed(ctx context.Context, tenant string) (bool, error) {
+	allowlist := o.cfg.TenantAllowlist
+	if !allowlist.IsEnabled() || allowlist.listsTenant(tenant) {
+		return true, nil
+	}
+
+	allowed := false
+	if len(allowlist.Granters) > 0 {
+		var err error
+		allowed, err = allowlist.hasGrantFromListedGranter(ctx, o.session.Client().Query().Feegrant(), tenant)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if !allowed {
+		o.log.Info("unable to fulfill: tenant is not allowlisted", "tenant", tenant)
+	}
+
+	return allowed, nil
 }

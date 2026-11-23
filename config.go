@@ -28,6 +28,7 @@ type Config struct {
 	RPCQueryTimeout          time.Duration
 	CachedResultMaxAge       time.Duration
 	ReclamationWindow        *time.Duration
+	BidTenantAllowlist       bidengine.TenantAllowlist
 	cluster.Config
 }
 

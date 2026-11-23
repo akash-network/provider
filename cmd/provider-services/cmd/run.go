@@ -104,6 +104,8 @@ const (
 	FlagAuthPem                          = "auth-pem"
 	FlagDeploymentRuntimeClass           = "deployment-runtime-class"
 	FlagBidTimeout                       = "bid-timeout"
+	FlagBidAllowedTenants                = "bid-allowed-tenants"
+	FlagBidAllowedTenantGranters         = "bid-allowed-tenant-granters"
 	FlagReclamationWindow                = "reclamation-window"
 	FlagReclamationRPCTimeout            = "reclamation-rpc-timeout"
 	FlagReclamationCloseRetryInterval    = "reclamation-close-retry-interval"
@@ -529,6 +531,11 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	tenantAllowlist, err := parseTenantAllowlist(viper.GetStringSlice(FlagBidAllowedTenants), viper.GetStringSlice(FlagBidAllowedTenantGranters))
+	if err != nil {
+		return err
+	}
+
 	logger := ctxlog.LogcFromCtx(cmd.Context()).With("module", "provider")
 
 	runMigrations := viper.GetBool(FlagMigrationsEnabled)
@@ -696,6 +703,10 @@ func doRunCmd(ctx context.Context, cmd *cobra.Command, _ []string) error {
 
 	if reclamationWindow > 0 {
 		config.ReclamationWindow = &reclamationWindow
+	}
+	config.BidTenantAllowlist = tenantAllowlist
+	if tenantAllowlist.IsEnabled() {
+		logger.Info("bidding restricted to allowlisted tenants", "tenants", len(tenantAllowlist.Tenants), "granters", tenantAllowlist.Granters)
 	}
 	if reclamationRPCTimeout > 0 {
 		config.ReclamationRPCTimeout = reclamationRPCTimeout

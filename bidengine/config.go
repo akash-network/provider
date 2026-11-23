@@ -16,4 +16,5 @@ type Config struct {
 	Attributes        atttypes.Attributes
 	MaxGroupVolumes   int
 	ReclamationWindow *time.Duration
+	TenantAllowlist   TenantAllowlist
 }

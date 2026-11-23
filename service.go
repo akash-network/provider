@@ -93,6 +93,7 @@ func NewService(ctx context.Context,
 		Attributes:        cfg.Attributes,
 		MaxGroupVolumes:   cfg.MaxGroupVolumes,
 		ReclamationWindow: cfg.ReclamationWindow,
+		TenantAllowlist:   cfg.BidTenantAllowlist,
 	})
 	if err != nil {
 		errmsg := "creating bidengine service"

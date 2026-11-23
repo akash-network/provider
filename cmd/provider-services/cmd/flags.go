@@ -183,6 +183,16 @@ func addRunFlags(cmd *cobra.Command) error {
 		return err
 	}
 
+	cmd.Flags().StringSlice(FlagBidAllowedTenants, nil, "tenant addresses to bid for; when this or --bid-allowed-tenant-granters is set, every other tenant is declined")
+	if err := viper.BindPFlag(FlagBidAllowedTenants, cmd.Flags().Lookup(FlagBidAllowedTenants)); err != nil {
+		return err
+	}
+
+	cmd.Flags().StringSlice(FlagBidAllowedTenantGranters, nil, "addresses whose fee grant to a tenant allows bidding for that tenant")
+	if err := viper.BindPFlag(FlagBidAllowedTenantGranters, cmd.Flags().Lookup(FlagBidAllowedTenantGranters)); err != nil {
+		return err
+	}
+
 	cmd.Flags().Duration(FlagReclamationWindow, 0, "reclamation window duration to offer in bids (e.g. 24h, 720h). 0 means no reclamation offered")
 	if err := viper.BindPFlag(FlagReclamationWindow, cmd.Flags().Lookup(FlagReclamationWindow)); err != nil {
 		return err
